@@ -1,0 +1,41 @@
+# Build directories
+build/
+out/
+bin/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+!CMakeLists.txt
+!cmake/*.cmake
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.vcxproj.user
+*.suo
+*.sln.docstates
+Debug/
+Release/
+x86/
+bat-build/
+
+# Executables and libraries
+*.exe
+*.a
+*.so
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+
+# Additional common patterns
+*.log
+*.tmp
+*.temp
+*~
