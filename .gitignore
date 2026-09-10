@@ -39,3 +39,36 @@ bat-build/
 *.tmp
 *.temp
 *~
+
+# Node / web app
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+.env
+.env.local
+
+# Python / backend
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Scan data (photos + generated .ply — large, not source)
+/scans/
+*.ply
+
+# More C++ / tooling
+compile_commands.json
+.cache/
+CTestTestfile.cmake
+_deps/          # CMake FetchContent downloads (like node_modules for C++)
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
