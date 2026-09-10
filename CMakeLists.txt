@@ -48,8 +48,8 @@ source_group(
 )
 
 # Copy assets at configure time (happens when CMake runs)
-file(COPY "${CMAKE_SOURCE_DIR}/assets" 
-     DESTINATION "${CMAKE_BINARY_DIR}")
+#file(COPY "${CMAKE_SOURCE_DIR}/assets" 
+#    DESTINATION "${CMAKE_BINARY_DIR}")
 
 # ======================= Target Creation =========================
 
@@ -98,8 +98,8 @@ set_source_files_properties(
 )
 
 # Copy shaders to build directory
-file(COPY ${CMAKE_SOURCE_DIR}/src/shaders
-     DESTINATION ${CMAKE_BINARY_DIR})
+#file(COPY ${CMAKE_SOURCE_DIR}/src/shaders
+#     DESTINATION ${CMAKE_BINARY_DIR})
 
 # ======================= Include Directories =========================
 
@@ -133,23 +133,3 @@ elseif(APPLE)
 elseif(UNIX)
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE GL X11 pthread dl)
 endif()
-
-# ======================= Runtime Data Copy =========================
-
-# Copy shaders folder
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-          "${CMAKE_SOURCE_DIR}/src/shaders" "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/shaders")
-
-# Copy assets folder
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-          "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/assets")
-
-
-add_custom_command(TARGET StructSquad POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/library/FMOD Studio API Windows/api/core/lib/x64/fmod.dll"
-        "${CMAKE_SOURCE_DIR}/library/FMOD Studio API Windows/api/core/lib/x64/fmodL.dll"
-        $<TARGET_FILE_DIR:StructSquad>
-)
