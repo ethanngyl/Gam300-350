@@ -27,6 +27,7 @@ endif()
 # Global compile flags and macros
 add_definitions(-DGLEW_STATIC)
 add_definitions(-DUSE_CSD3151_AUTOMATION=0) # Used for instructor's automation
+add_compile_definitions(ENGINE_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
 # ======================= Source Configuration =========================
 
@@ -81,7 +82,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     libglew_static
     imgui
     stb
-    fmod
+    happly
     Freetype::Freetype
     lua_static  
     nlohmann_json::nlohmann_json
@@ -125,6 +126,13 @@ endif()
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
     WIN32_EXECUTABLE TRUE  # This makes it a Windows GUI app
 )
+# WIN32_EXECUTABLE links against WinMain by default; keep a plain int main()
+# by pointing the entry point back at the standard CRT startup.
+if (MSVC)
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
+        LINK_FLAGS "/ENTRY:mainCRTStartup"
+    )
+endif()
 # Add platform-specific OpenGL libraries
 if(WIN32)
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE opengl32)
