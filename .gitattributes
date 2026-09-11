@@ -1,0 +1,14 @@
+# Normalize line endings for everyone, independent of each person's core.autocrlf.
+# Text files are stored as LF in the repo and checked out with native endings
+# (CRLF on Windows). Your repo is already all-LF in storage, so this changes nothing
+# about what's committed — it just makes the policy explicit and teammate-proof.
+* text=auto
+
+# Windows batch files should stay CRLF on checkout.
+*.bat text eol=crlf
+
+# Store large 3D Gaussian Splatting point clouds in Git LFS, not plain git.
+# These files are big binaries; committing them normally would bloat history permanently.
+*.ply             filter=lfs diff=lfs merge=lfs -text
+*.compressed.ply  filter=lfs diff=lfs merge=lfs -text
+*.spz             filter=lfs diff=lfs merge=lfs -text
