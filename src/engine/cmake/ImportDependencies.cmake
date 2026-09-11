@@ -261,6 +261,25 @@ macro(import_lua)
     endif()
 endmacro()
 
+# Macro to import happly (header-only .ply reader/writer)
+macro(import_happly)
+    if(NOT TARGET happly)
+        message(STATUS "Importing happly...")
+        FetchContent_Declare(
+            happly
+            GIT_REPOSITORY https://github.com/nmwsharp/happly.git
+            GIT_TAG 983e8edf73c515511720f61d3142cb842bc144d9
+        )
+        FetchContent_Populate(happly)
+
+        # happly is header-only: single happly.h at the repo root
+        add_library(happly INTERFACE)
+        target_include_directories(happly INTERFACE ${happly_SOURCE_DIR})
+
+        message(STATUS "happly imported successfully")
+    endif()
+endmacro()
+
 # Main function to import all dependencies
 function(importDependencies)
     message(STATUS "=== Importing Dependencies ===")
@@ -274,5 +293,6 @@ function(importDependencies)
     import_stb()
     import_nlohmann_json()
     import_lua()
+    import_happly()
     message(STATUS "=== All Dependencies Imported ===")
 endfunction()
