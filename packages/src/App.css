@@ -1,184 +1,627 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+:root {
+    --bg: #171a24;
+    --surface: #1f2330;
+    --surface-raised: #262b3d;
+    --border: rgba(237, 238, 243, 0.12);
+    --border-strong: rgba(237, 238, 243, 0.22);
+    --text: #edeef3;
+    --text-muted: #8c93a8;
+    --accent: #e38b57;
+    --accent-dim: rgba(227, 139, 87, 0.16);
+    --mesh: #6ee7c8;
+    --mesh-dim: rgba(110, 231, 200, 0.14);
+    --radius-sm: 4px;
+    --radius-md: 8px;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
+* {
+    box-sizing: border-box;
 }
 
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
+html {
+    scroll-behavior: smooth;
 }
 
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
     }
-  }
 
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
-#docs {
-  border-right: 1px solid var(--border);
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
 
-  @media (max-width: 1024px) {
-    border-right: none;
+h1, h2, h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    line-height: 1.15;
+    margin: 0;
+}
+
+p {
+    color: var(--text-muted);
+    max-width: 52ch;
+    margin: 0;
+}
+
+a {
+    color: inherit;
+}
+
+    a:focus-visible,
+    button:focus-visible {
+        outline: 2px solid var(--mesh);
+        outline-offset: 3px;
+    }
+
+.wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px;
+}
+
+/* ---------- Nav ---------- */
+
+.nav {
     border-bottom: 1px solid var(--border);
-  }
+    position: sticky;
+    top: 0;
+    background: rgba(23, 26, 36, 0.88);
+    backdrop-filter: blur(8px);
+    z-index: 10;
 }
 
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
+    .nav .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 72px;
+    }
 
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
+.logo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
     display: flex;
-    padding: 6px 12px;
+    align-items: baseline;
+    gap: 2px;
+}
+
+    .logo span {
+        color: var(--accent);
+    }
+
+.nav-links {
+    display: flex;
+    gap: 32px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+    .nav-links a {
+        text-decoration: none;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+        transition: color 0.15s ease;
+    }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+.nav-cta {
+    display: none;
+}
+
+@media (min-width: 720px) {
+    .nav-cta {
+        display: inline-flex;
+    }
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 12px 22px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
 
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
+.btn-primary {
+    background: var(--accent);
+    color: #1a1204;
+}
 
-  @media (max-width: 1024px) {
+    .btn-primary:hover {
+        background: #ec9a68;
+    }
+
+.btn-ghost {
+    background: transparent;
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+    .btn-ghost:hover {
+        border-color: var(--mesh);
+    }
+
+/* ---------- Hero ---------- */
+
+.hero {
+    padding: 96px 0 88px;
+}
+
+    .hero .wrap {
+        display: grid;
+        gap: 56px;
+        align-items: center;
+    }
+
+@media (min-width: 940px) {
+    .hero .wrap {
+        grid-template-columns: 1.05fr 0.95fr;
+    }
+}
+
+.hero-copy h1 {
+    font-size: clamp(2.4rem, 4.6vw, 3.6rem);
+    letter-spacing: -0.02em;
+}
+
+.hero-copy p {
     margin-top: 20px;
+    font-size: 1.08rem;
+}
+
+.hero-actions {
+    margin-top: 32px;
+    display: flex;
     flex-wrap: wrap;
+    gap: 14px;
+}
+
+.hero-note {
+    margin-top: 28px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+    .hero-note .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--mesh);
+        flex: none;
+    }
+
+/* ---------- Viewfinder / 3D scene ---------- */
+
+.viewfinder {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    max-width: 420px;
+    margin: 0 auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: linear-gradient(var(--border) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, var(--border) 1px, transparent 1px) 0 0 / 32px 32px, var(--surface);
+    display: flex;
+    align-items: center;
     justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
+    overflow: hidden;
 }
 
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
-}
-
-.ticks {
-  position: relative;
-  width: 100%;
-
-  &::before,
-  &::after {
-    content: '';
+.corner-marks span {
     position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
-
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
-  }
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--mesh);
+    opacity: 0.75;
 }
+
+.corner-marks .tl {
+    top: 14px;
+    left: 14px;
+    border-right: none;
+    border-bottom: none;
+}
+
+.corner-marks .tr {
+    top: 14px;
+    right: 14px;
+    border-left: none;
+    border-bottom: none;
+}
+
+.corner-marks .bl {
+    bottom: 14px;
+    left: 14px;
+    border-right: none;
+    border-top: none;
+}
+
+.corner-marks .br {
+    bottom: 14px;
+    right: 14px;
+    border-left: none;
+    border-top: none;
+}
+
+.scan-tag {
+    position: absolute;
+    top: 16px;
+    left: 46px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--mesh);
+    background: rgba(110, 231, 200, 0.1);
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid rgba(110, 231, 200, 0.3);
+}
+
+.cube-stage {
+    perspective: 900px;
+    width: 160px;
+    height: 160px;
+}
+
+.cube {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    animation: spin 16s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotateX(-18deg) rotateY(0deg);
+    }
+
+    to {
+        transform: rotateX(-18deg) rotateY(360deg);
+    }
+}
+
+.cube-face {
+    position: absolute;
+    width: 160px;
+    height: 160px;
+    border: 1px solid var(--mesh);
+    background: repeating-linear-gradient(0deg, var(--mesh-dim) 0 1px, transparent 1px 40px), repeating-linear-gradient(90deg, var(--mesh-dim) 0 1px, transparent 1px 40px), rgba(110, 231, 200, 0.05);
+}
+
+    .cube-face.front {
+        transform: translateZ(80px);
+    }
+
+    .cube-face.back {
+        transform: rotateY(180deg) translateZ(80px);
+    }
+
+    .cube-face.right {
+        transform: rotateY(90deg) translateZ(80px);
+    }
+
+    .cube-face.left {
+        transform: rotateY(-90deg) translateZ(80px);
+    }
+
+    .cube-face.top {
+        transform: rotateX(90deg) translateZ(80px);
+    }
+
+    .cube-face.bottom {
+        transform: rotateX(-90deg) translateZ(80px);
+    }
+
+/* ---------- Section shared ---------- */
+
+section {
+    padding: 88px 0;
+    border-top: 1px solid var(--border);
+}
+
+.section-head {
+    max-width: 640px;
+    margin-bottom: 56px;
+}
+
+    .section-head h2 {
+        font-size: clamp(1.7rem, 3vw, 2.2rem);
+        letter-spacing: -0.01em;
+    }
+
+    .section-head p {
+        margin-top: 14px;
+        font-size: 1.02rem;
+    }
+
+/* ---------- Workflow ---------- */
+
+.workflow-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--border);
+}
+
+.workflow-item {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 24px;
+    padding: 32px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+}
+
+@media (min-width: 720px) {
+    .workflow-item {
+        grid-template-columns: 64px 1fr 1fr;
+    }
+}
+
+.workflow-num {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--accent);
+    font-size: 0.95rem;
+    padding-top: 4px;
+}
+
+.workflow-item h3 {
+    font-size: 1.2rem;
+}
+
+.workflow-item p {
+    margin-top: 10px;
+}
+
+.workflow-item .workflow-detail {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    max-width: 44ch;
+}
+
+/* ---------- Scene builder mockup ---------- */
+
+.builder-panel {
+    position: relative;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--surface);
+}
+
+.builder-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-raised);
+}
+
+    .builder-bar .dots {
+        display: flex;
+        gap: 6px;
+    }
+
+        .builder-bar .dots i {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--border-strong);
+            display: block;
+        }
+
+    .builder-bar .filename {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+    }
+
+.builder-body {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    min-height: 340px;
+}
+
+.builder-sidebar {
+    border-right: 1px solid var(--border);
+    padding: 18px;
+}
+
+    .builder-sidebar h4 {
+        font-family: 'IBM Plex Mono', monospace;
+        font-weight: 500;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        margin: 0 0 14px;
+        text-transform: lowercase;
+    }
+
+.model-chip {
+    /* Now a real <button> in the JSX, so we reset the button defaults
+     the browser adds: no background, no built-in border, and it
+     needs "width: 100%" + "text-align: left" since buttons don't
+     stretch or left-align their text automatically. */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-family: inherit;
+    text-align: left;
+    margin-bottom: 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+    .model-chip:hover {
+        border-color: var(--border-strong);
+    }
+
+    .model-chip .swatch {
+        width: 20px;
+        height: 20px;
+        border-radius: 3px;
+        flex: none;
+        background: var(--mesh-dim);
+        border: 1px solid var(--mesh);
+    }
+
+    .model-chip.is-active {
+        background: var(--accent-dim);
+        border-color: rgba(227, 139, 87, 0.4);
+        color: var(--text);
+    }
+
+        .model-chip.is-active .swatch {
+            background: var(--accent-dim);
+            border-color: var(--accent);
+        }
+
+.builder-viewport {
+    position: relative;
+    background: linear-gradient(var(--border) 1px, transparent 1px) 0 0 / 28px 28px, linear-gradient(90deg, var(--border) 1px, transparent 1px) 0 0 / 28px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.viewport-object {
+    width: 120px;
+    height: 90px;
+    border: 1.5px solid var(--mesh);
+    background: repeating-linear-gradient(45deg, var(--mesh-dim) 0 1px, transparent 1px 14px);
+    transform: perspective(500px) rotateX(28deg) rotateY(-22deg);
+    border-radius: 2px;
+}
+
+.viewport-toolbar {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px;
+}
+
+    .viewport-toolbar button {
+        /* Now a real <button> instead of a static <span>, so we reset the
+     browser's default button styling (background/border/cursor). */
+        width: 30px;
+        height: 30px;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        background: transparent;
+        cursor: pointer;
+        padding: 0;
+    }
+
+        .viewport-toolbar button.on {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+/* ---------- Final CTA ---------- */
+
+.final-cta {
+    text-align: left;
+}
+
+    .final-cta .wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+    }
+
+@media (min-width: 780px) {
+    .final-cta .wrap {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+.final-cta h2 {
+    font-size: clamp(1.6rem, 3.4vw, 2.1rem);
+    max-width: 20ch;
+}
+
+.final-cta .actions {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+/* ---------- Footer ---------- */
+
+footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 0;
+}
+
+    footer .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+
+    footer ul {
+        list-style: none;
+        display: flex;
+        gap: 22px;
+        margin: 0;
+        padding: 0;
+    }
+
+    footer a {
+        text-decoration: none;
+        color: var(--text-muted);
+    }
+
+        footer a:hover {
+            color: var(--text);
+        }
