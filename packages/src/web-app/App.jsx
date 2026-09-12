@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import CameraCapture from './CameraCapture.jsx';
+import CameraCapture from '../CameraCapture.jsx';
 import './App.css';
 
 const MODELS = ['ceramic mug', 'desk lamp', 'notebook', 'plant pot'];
