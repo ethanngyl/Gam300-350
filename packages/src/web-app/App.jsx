@@ -1,11 +1,20 @@
 import { useState } from 'react';
+import CameraCapture from './CameraCapture.jsx';
 import './App.css';
 
 const MODELS = ['ceramic mug', 'desk lamp', 'notebook', 'plant pot'];
-
 const TOOLS = ['move', 'rotate', 'scale', 'delete'];
 
 function App() {
+
+    const [showCapture, setShowCapture] = useState(false);
+
+    function handleBatchReady(files) {
+        console.log('Batch ready to upload:', files);
+        // TODO
+        // build a FormData from `files` and fetch() it here.
+    }
+
     // useState gives this component "memory" that persists between
     // renders. Every time it changes, React automatically re-draws
     // whatever part of the page depends on it.
@@ -17,6 +26,10 @@ function App() {
     // Tracks which toolbar tool is active in the viewport mockup.
     const [activeTool, setActiveTool] = useState('move');
 
+    if (showCapture) {
+        return <CameraCapture onBatchReady={handleBatchReady} />;
+    }
+
     return (
         <>
             <header className="nav">
@@ -27,7 +40,12 @@ function App() {
                         <li><a href="#builder">Scene builder</a></li>
                         <li><a href="#get-started">Get started</a></li>
                     </ul>
-                    <a href="#get-started" className="btn btn-primary nav-cta">Start scanning</a>
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => setShowCapture(true)}
+                    >
+                        Start scanning
+                    </button>
                 </div>
             </header>
 
@@ -42,7 +60,12 @@ function App() {
                                 light, and arrange your scans without leaving the browser.
                             </p>
                             <div className="hero-actions">
-                                <a href="#get-started" className="btn btn-primary">Start scanning</a>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={() => setShowCapture(true)}
+                                >
+                                    Start scanning
+                                </button>
                                 <a href="#workflow" className="btn btn-ghost">See how it works</a>
                             </div>
                             <div className="hero-note">
@@ -163,7 +186,12 @@ function App() {
                     <div className="wrap">
                         <h2>Your first scan takes about five minutes.</h2>
                         <div className="actions">
-                            <a href="#" className="btn btn-primary">Start scanning</a>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => setShowCapture(true)}
+                            >
+                                Start scanning
+                            </button>
                             <a href="#" className="btn btn-ghost">Read the docs</a>
                         </div>
                     </div>
