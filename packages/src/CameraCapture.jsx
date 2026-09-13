@@ -1,29 +1,29 @@
+// src/CameraCapture.jsx
 import { useRef, useState, useEffect, useCallback } from 'react';
 import './CameraCapture.css';
 
 function CameraCapture({ onBatchReady }) {
-    // Refs point directly at DOM elements — the <video> tag showing the
-    // live camera feed, and a hidden <canvas> we use to "screenshot" a
-    // single frame out of that video when the user taps capture.
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
+    // A ref to the hidden <input type="file"> — clicking a styled button
+    // will programmatically "click" this invisible input to open the
+    // OS's native file picker popup.
+    const fileInputRef = useRef(null);
 
-    // The camera's live feed, once permission is granted.
     const [stream, setStream] = useState(null);
-    // Each captured photo, stored as a data URL (base64 image string)
-    // so we can both display a thumbnail AND later convert it to a
-    // file for upload.
-    const [photos, setPhotos] = useState([]);
     const [error, setError] = useState(null);
 
-    // Ask the browser for camera access as soon as this component mounts.
+    // Tracks whether the user is currently dragging a file over the
+    // drop zone, purely so we can highlight it visually.
+    const [isDragging, setIsDragging] = useState(false);
+
+    const [photos, setPhotos] = useState([]);
+
     useEffect(() => {
         async function startCamera() {
             try {
                 const mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        // 'environment' = the back/rear camera, which is what you
-                        // want for scanning an object (not the selfie camera).
                         facingMode: 'environment',
                         width: { ideal: 1920 },
                         height: { ideal: 1080 },
@@ -34,18 +34,13 @@ function CameraCapture({ onBatchReady }) {
                     videoRef.current.srcObject = mediaStream;
                 }
             } catch (err) {
-                // Common causes: user denied permission, no camera present,
-                // or the page isn't served over HTTPS (browsers block camera
-                // access on plain HTTP except on localhost).
-                setError('Camera access failed: ' + err.message);
+                // Camera failing to start (denied permission, no camera, etc.)
+                setError('Camera unavailable: ' + err.message);
             }
         }
 
         startCamera();
 
-        // Cleanup: when this component unmounts (user navigates away),
-        // stop the camera so the browser's "camera in use" indicator
-        // turns off and the hardware is released.
         return () => {
             if (stream) {
                 stream.getTracks().forEach((track) => track.stop());
@@ -54,51 +49,86 @@ function CameraCapture({ onBatchReady }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    useEffect(() => {
+        return () => {
+            photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+        };
+    }, [photos]);
+
+
+    const addFiles = useCallback((fileList) => {
+        const newPhotos = Array.from(fileList)
+            // Only accept actual images into the batch.
+            .filter((file) => file.type.startsWith('image/'))
+            .map((file) => ({
+                id: `${file.name}-${file.lastModified}-${Math.random()}`,
+                url: URL.createObjectURL(file),
+                file,
+            }));
+
+        setPhotos((prev) => [...prev, ...newPhotos]);
+    }, []);
+
     const capturePhoto = useCallback(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) return;
 
-        // Size the hidden canvas to match the video's actual resolution,
-        // then draw the CURRENT frame onto it — this is how you "freeze"
-        // one moment of a live video feed into a still image.
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Convert the canvas's pixels into a JPEG data URL we can store
-        // in state and display as a thumbnail.
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        canvas.toBlob(
+            (blob) => {
+                if (!blob) return;
+                const file = new File([blob], `capture-${Date.now()}.jpg`, {
+                    type: 'image/jpeg',
+                });
+                addFiles([file]);
+            },
+            'image/jpeg',
+            0.9
+        );
+    }, [addFiles]);
 
-        setPhotos((prev) => [...prev, dataUrl]);
-    }, []);
-
-    const retakeLast = useCallback(() => {
-        setPhotos((prev) => prev.slice(0, -1));
-    }, []);
-
-    const removePhoto = useCallback((index) => {
-        setPhotos((prev) => prev.filter((_, i) => i !== index));
-    }, []);
-
-    // Turns each data URL back into a real file object, ready to be
-    // sent as multipart form data to Ethan/Gabriel's POST /upload
-    // endpoint once it exists.
-    async function dataUrlToFile(dataUrl, filename) {
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
-        return new File([blob], filename, { type: 'image/jpeg' });
+    function handleBrowseClick() {
+        fileInputRef.current?.click();
     }
 
-    async function handleUploadBatch() {
-        const files = await Promise.all(
-            photos.map((dataUrl, i) => dataUrlToFile(dataUrl, `photo-${i}.jpg`))
-        );
+    function handleFileInputChange(e) {
+        if (e.target.files) {
+            addFiles(e.target.files);
+        }
 
-        // Hand the finished batch up to whatever parent component owns
-        // the upload flow — keeps this component only responsible for
-        // capturing, not for knowing about the backend.
+        e.target.value = '';
+    }
+
+    // Drag and drop functionality
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        setIsDragging(true);
+    }
+
+    function handleDragLeave() {
+        setIsDragging(false);
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files) {
+            addFiles(e.dataTransfer.files);
+        }
+    }
+
+    function removePhoto(id) {
+        setPhotos((prev) => prev.filter((p) => p.id !== id));
+    }
+
+    function handleUploadBatch() {
+        const files = photos.map((p) => p.file);
         if (onBatchReady) {
             onBatchReady(files);
         }
@@ -109,39 +139,62 @@ function CameraCapture({ onBatchReady }) {
             {error && <p className="capture-error">{error}</p>}
 
             <div className="capture-viewport">
-                {/* autoPlay + playsInline are required for the live feed to
-            actually show on mobile Safari/Chrome without extra taps. */}
                 <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
-                {/* This canvas is never shown — it's just scratch space used
-            inside capturePhoto() to grab a frame. */}
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
             </div>
 
-            <div className="capture-controls">
+            <button
+                className="btn btn-primary capture-btn"
+                onClick={capturePhoto}
+                disabled={!stream}
+            >
+                Capture photo
+            </button>
+
+            {/* Drag-and-drop zone + file picker */}
+            <div
+                className={isDragging ? 'capture-dropzone is-dragging' : 'capture-dropzone'}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={handleBrowseClick}
+                role="button"
+                tabIndex={0}
+            >
+                <p>Drag and drop images here</p>
+                <p className="capture-dropzone-or">or</p>
                 <button
-                    className="btn btn-primary capture-btn"
-                    onClick={capturePhoto}
-                    disabled={!stream}
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleBrowseClick();
+                    }}
                 >
-                    Capture photo
+                    Browse files
                 </button>
-                <span className="capture-count">{photos.length} captured</span>
-                {photos.length > 0 && (
-                    <button className="btn btn-ghost" onClick={retakeLast}>
-                        Retake last
-                    </button>
-                )}
+
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileInputChange}
+                    style={{ display: 'none' }}
+                />
             </div>
+
+            <span className="capture-count">{photos.length} photo{photos.length === 1 ? '' : 's'} in batch</span>
 
             {photos.length > 0 && (
                 <div className="capture-thumbnails">
-                    {photos.map((src, i) => (
-                        <div key={i} className="capture-thumb">
-                            <img src={src} alt={`capture ${i + 1}`} />
+                    {photos.map((photo) => (
+                        <div key={photo.id} className="capture-thumb">
+                            <img src={photo.url} alt="" />
                             <button
                                 className="capture-thumb-remove"
-                                onClick={() => removePhoto(i)}
-                                aria-label={`Remove photo ${i + 1}`}
+                                onClick={() => removePhoto(photo.id)}
+                                aria-label="Remove photo"
                             >
                                 ×
                             </button>
