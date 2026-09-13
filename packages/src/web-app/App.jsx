@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import CameraCapture from '../CameraCapture.jsx';
+import CameraCapture from './CameraCapture.jsx';
 import './App.css';
 
 const MODELS = ['ceramic mug', 'desk lamp', 'notebook', 'plant pot'];
@@ -9,10 +9,25 @@ function App() {
 
     const [showCapture, setShowCapture] = useState(false);
 
-    function handleBatchReady(files) {
-        console.log('Batch ready to upload:', files);
-        // TODO
-        // build a FormData from `files` and fetch() it here.
+    async function handleBatchReady(files) {
+        if (!files || files.length === 0) return;
+
+        // Same multipart/form-data envelope test.html used.
+        const formData = new FormData();
+        for (const file of files) {
+            formData.append('images', file); // 'images' MUST match upload.array('images', 20)
+        }
+
+        try {
+            const res = await fetch('http://localhost:5005/upload', {
+                method: 'POST',
+                body: formData, // don't set Content-Type — the browser adds the boundary
+            });
+            const text = await res.text();
+            console.log(`Status ${res.status}:`, text);
+        } catch (err) {
+            console.error('Upload failed:', err);
+        }
     }
 
     // useState gives this component "memory" that persists between
