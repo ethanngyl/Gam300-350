@@ -42,6 +42,17 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window.handle(), true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
+
+    //Render 1 frame so not a white screen with not responding
+    {
+        glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        window.swapBuffers();
+        window.pollEvents(); //Loading takes awhile, stops "Not Responding" from appearing
+    }
+
+
     SplatRenderer renderer;
     std::string samplePath = std::string(ENGINE_ASSETS_DIR) + "/samples/sample_splat.ply";
     auto splats = LoadSplatPly(samplePath);
