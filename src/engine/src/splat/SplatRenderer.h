@@ -29,4 +29,6 @@ private:
     unsigned int m_vbo = 0;
     size_t m_count = 0;
     std::unique_ptr<Shader> m_shader;
+
+    std::vector<SplatVertex> m_splats; //Copy of splat data
 };

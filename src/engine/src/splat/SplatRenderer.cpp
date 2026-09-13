@@ -80,6 +80,7 @@ SplatRenderer::~SplatRenderer() {
 
 void SplatRenderer::setSplats(const std::vector<SplatVertex>& splats) {
     m_count = splats.size();
+    m_splats = splats;
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(splats.size() * sizeof(SplatVertex)),
