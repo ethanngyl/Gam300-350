@@ -88,6 +88,7 @@ void SplatRenderer::setSplats(const std::vector<SplatVertex>& splats) {
 
 void SplatRenderer::draw(const glm::mat4& viewProj, float viewportHeightPixels) const {
     if (m_count == 0) return;
+    glDisable(GL_DEPTH_TEST);
 
     m_shader->use();
     m_shader->setMat4("uViewProj", viewProj);
@@ -97,4 +98,6 @@ void SplatRenderer::draw(const glm::mat4& viewProj, float viewportHeightPixels) 
     glBindVertexArray(m_vao);
     glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(m_count));
     glBindVertexArray(0);
+
+    glEnable(GL_DEPTH_TEST);
 }
