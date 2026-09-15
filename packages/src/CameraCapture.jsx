@@ -5,7 +5,7 @@ import './CameraCapture.css';
 function CameraCapture({ onBatchReady }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    // A ref to the hidden <input type="file"> — clicking a styled button
+    // A ref to the hidden <input type="file"> â€” clicking a styled button
     // will programmatically "click" this invisible input to open the
     // OS's native file picker popup.
     const fileInputRef = useRef(null);
@@ -129,10 +129,18 @@ function CameraCapture({ onBatchReady }) {
 
     function handleUploadBatch() {
         const files = photos.map((p) => p.file);
+        console.log('Batch selected (not uploaded):', files);
+    }
+
+    // "Train model" is the only trigger that starts the reconstruction.
+    function handleTrain() {
+        const files = photos.map((p) => p.file);
         if (onBatchReady) {
             onBatchReady(files);
         }
     }
+
+    const MIN_PHOTOS = 8;
 
     return (
         <div className="capture">
@@ -196,7 +204,6 @@ function CameraCapture({ onBatchReady }) {
                                 onClick={() => removePhoto(photo.id)}
                                 aria-label="Remove photo"
                             >
-                                ×
                             </button>
                         </div>
                     ))}
@@ -210,6 +217,21 @@ function CameraCapture({ onBatchReady }) {
             >
                 Use this batch ({photos.length} photos)
             </button>
+
+            <button
+                className="btn btn-primary"
+                disabled={photos.length < MIN_PHOTOS}
+                onClick={handleTrain}
+                style={{ marginTop: '10px' }}
+            >
+                Train model
+            </button>
+
+            {photos.length > 0 && photos.length < MIN_PHOTOS && (
+                <p className="capture-count">
+                    Add at least {MIN_PHOTOS} photos to train (you have {photos.length}).
+                </p>
+            )}
         </div>
     );
 }
