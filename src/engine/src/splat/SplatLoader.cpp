@@ -36,7 +36,7 @@ std::vector<SplatVertex> LoadSplatPly(const std::string& path) {
 
             v.color = splat_decode::decodeColor(fDc0[i], fDc1[i], fDc2[i]);
             v.alpha = splat_decode::decodeOpacity(opacity[i]);
-
+            v.position = glm::vec3(x[i], -y[i], z[i]); //Upside down fix
             result.push_back(v);
         }
 
