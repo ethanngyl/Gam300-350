@@ -14,7 +14,7 @@ Camera::Camera(glm::vec3 target, float distance)
 
 void Camera::processDrag(double dx, double dy) {
     constexpr float kSensitivity = 0.005f;
-    m_yaw += static_cast<float>(dx) * kSensitivity;
+    m_yaw -= static_cast<float>(dx) * kSensitivity;
     m_pitch += static_cast<float>(dy) * kSensitivity;
     m_pitch = std::clamp(m_pitch, -kPitchLimit, kPitchLimit);
 }
