@@ -1,0 +1,57 @@
+// Everything here is from Claude, purely for testing purposes
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image Upload Test</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+    #result { margin-top: 16px; white-space: pre-wrap; font-family: monospace; }
+    input, button { font-size: 1rem; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <h1>Image Upload Test</h1>
+
+  <!-- 'multiple' lets you pick up to 20 files at once; 'accept' hints image types -->
+  <input type="file" id="fileInput" name="images" accept="image/*" multiple />
+  <button id="uploadBtn">Upload</button>
+
+  <div id="result"></div>
+
+  <script>
+    const btn = document.getElementById('uploadBtn');
+    const input = document.getElementById('fileInput');
+    const result = document.getElementById('result');
+
+    btn.addEventListener('click', async () => {
+      if (!input.files.length) {
+        result.textContent = 'No files selected.';
+        return;
+      }
+
+      // multipart/form-data is the format file uploads must use.
+      // FormData sets that up for us automatically.
+      const formData = new FormData();
+      for (const file of input.files) {
+        formData.append('images', file); // field name must match the server (multer) config
+      }
+
+      result.textContent = 'Uploading...';
+
+      try {
+        const res = await fetch('/upload', {
+          method: 'POST',
+          body: formData, // do NOT set Content-Type manually; the browser adds the boundary
+        });
+        const text = await res.text();
+        result.textContent = `Status ${res.status}\n${text}`;
+      } catch (err) {
+        result.textContent = 'Error: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>

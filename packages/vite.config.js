@@ -1,17 +1,17 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: {
-    // Forward API + result downloads to the reconstruction backend, so the
-    // frontend can just call /api/... with no CORS setup.
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-    },
+  // Try to keep the vite.config.js and packages.json file as one without copying
+  root: path.resolve(__dirname, 'src/web-app'),
+  build: {
+    outDir: path.resolve(__dirname, 'src/web-app/dist'),
+    emptyOutDir: true,
   },
 })
