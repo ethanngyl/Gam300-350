@@ -7,8 +7,10 @@
 # Windows batch files should stay CRLF on checkout.
 *.bat text eol=crlf
 
-# Store large 3D Gaussian Splatting point clouds in Git LFS, not plain git.
-# These files are big binaries; committing them normally would bloat history permanently.
-*.ply             filter=lfs diff=lfs merge=lfs -text
-*.compressed.ply  filter=lfs diff=lfs merge=lfs -text
-*.spz             filter=lfs diff=lfs merge=lfs -text
+# Gaussian splat point clouds (.ply / .spz) are git-IGNORED (see .gitignore) and shared
+# out-of-band (shared drive), NOT committed — they are large generated assets, not source.
+# Marked binary here only so git never line-ending-mangles one if a specific file is ever
+# deliberately force-added (git add -f).
+*.ply             -text
+*.compressed.ply  -text
+*.spz             -text
