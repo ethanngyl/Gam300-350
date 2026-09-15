@@ -25,6 +25,15 @@ void Camera::processScroll(double dy) {
     m_distance = std::clamp(m_distance, kMinDistance, kMaxDistance);
 }
 
+void Camera::processPan(double dx, double dy)
+{
+    constexpr float kPanSensitivity = 0.0005f;
+    glm::vec3 forward = glm::normalize(m_target - getPosition());
+    glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+    glm::vec3 up = glm::cross(right, forward);
+    glm::vec3 delta = (-right * static_cast<float>(dx) + up * static_cast<float>(dy)) * kPanSensitivity * m_distance; m_target += delta;
+}
+
 glm::vec3 Camera::getPosition() const {
     float x = m_distance * std::cos(m_pitch) * std::sin(m_yaw);
     float y = m_distance * std::sin(m_pitch);

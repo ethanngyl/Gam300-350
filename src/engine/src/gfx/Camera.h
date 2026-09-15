@@ -9,6 +9,7 @@ public:
 
     void processDrag(double dx, double dy);
     void processScroll(double dy);
+    void processPan(double dx, double dy);
 
     glm::mat4 getView() const;
     glm::mat4 getProjection(float aspect) const;

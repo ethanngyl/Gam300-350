@@ -23,12 +23,16 @@ int main() {
     Window window(1280, 720, "Codefine - Engine Foundation (M1)");
     Camera camera;
 
-    window.onMouseDrag = [&camera](double dx, double dy) {
+    window.onMouseRotate = [&camera](double dx, double dy) {
         camera.processDrag(dx, dy);
+    };
+    window.onMousePan = [&camera](double dx, double dy) {
+        camera.processPan(dx, dy);
     };
     window.onScroll = [&camera](double dy) {
         camera.processScroll(dy);
     };
+
     window.onKey = [&window](int key, int action) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
             glfwSetWindowShouldClose(window.handle(), GLFW_TRUE);
