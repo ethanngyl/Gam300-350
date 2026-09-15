@@ -14,21 +14,18 @@ Camera::Camera(glm::vec3 target, float distance)
 }
 
 void Camera::processDrag(double dx, double dy) {
-    constexpr float kSensitivity = 0.005f;
-    m_yaw -= static_cast<float>(dx) * kSensitivity;
-    m_pitch += static_cast<float>(dy) * kSensitivity;
+    m_yaw -= static_cast<float>(dx) * kRotateSensitivity;
+    m_pitch += static_cast<float>(dy) * kRotateSensitivity;
     m_pitch = std::clamp(m_pitch, -kPitchLimit, kPitchLimit);
 }
 
 void Camera::processScroll(double dy) {
-    constexpr float kZoomSpeed = 0.2f;
     m_distance -= static_cast<float>(dy) * m_distance * kZoomSpeed;
     m_distance = std::clamp(m_distance, kMinDistance, kMaxDistance);
 }
 
 void Camera::processPan(double dx, double dy)
 {
-    constexpr float kPanSensitivity = 0.0005f;
     glm::vec3 forward = glm::normalize(m_target - getPosition());
     glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
     glm::vec3 up = glm::cross(right, forward);
@@ -46,6 +43,13 @@ glm::vec3 Camera::getPosition() const {
 void Camera::ResetPosition()
 {
     m_target = m_orginalTarget;
+}
+
+void Camera::ResetSensivity()
+{
+    kRotateSensitivity = kOrginalRotateSensitivity;
+    kZoomSpeed = kOrginalZoomSpeed;
+    kPanSensitivity = kOrginalPanSensitivity;
 }
 
 glm::mat4 Camera::getView() const {

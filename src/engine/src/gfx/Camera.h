@@ -16,6 +16,8 @@ public:
     glm::vec3 getPosition() const;
 
     void ResetPosition();
+    void ResetSensivity();
+
 
 private:
     glm::vec3 m_orginalTarget; //Default target on constuct, used for reset
@@ -31,4 +33,15 @@ private:
     static constexpr float kMinDistance = 0.5f;
     static constexpr float kMaxDistance = 50.0f;
     static constexpr float kPitchLimit = 1.55f; // just under pi/2
+
+    //Default Modifiers
+    const float kOrginalRotateSensitivity = 0.005f;
+    const float kOrginalZoomSpeed = 0.2f;
+    const float kOrginalPanSensitivity = 0.0005f;
+
+    //Modifiers
+    float kRotateSensitivity = 0.005f;
+    float kZoomSpeed = 0.2f;
+    float kPanSensitivity = 0.0005f;
+
 };
