@@ -15,7 +15,10 @@ public:
     glm::mat4 getProjection(float aspect) const;
     glm::vec3 getPosition() const;
 
+    void ResetPosition();
+
 private:
+    glm::vec3 m_orginalTarget; //Default target on constuct, used for reset
     glm::vec3 m_target;
     float m_distance;
     float m_yaw;   // radians

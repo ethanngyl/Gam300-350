@@ -7,6 +7,7 @@
 
 Camera::Camera(glm::vec3 target, float distance)
     : m_target(target)
+    , m_orginalTarget(target)
     , m_distance(distance)
     , m_yaw(0.0f)
     , m_pitch(0.3f) {
@@ -31,7 +32,8 @@ void Camera::processPan(double dx, double dy)
     glm::vec3 forward = glm::normalize(m_target - getPosition());
     glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
     glm::vec3 up = glm::cross(right, forward);
-    glm::vec3 delta = (-right * static_cast<float>(dx) + up * static_cast<float>(dy)) * kPanSensitivity * m_distance; m_target += delta;
+    glm::vec3 delta = (-right * static_cast<float>(dx) + up * static_cast<float>(dy)) * kPanSensitivity * m_distance;
+    m_target += delta;
 }
 
 glm::vec3 Camera::getPosition() const {
@@ -39,6 +41,11 @@ glm::vec3 Camera::getPosition() const {
     float y = m_distance * std::sin(m_pitch);
     float z = m_distance * std::cos(m_pitch) * std::cos(m_yaw);
     return m_target + glm::vec3(x, y, z);
+}
+
+void Camera::ResetPosition()
+{
+    m_target = m_orginalTarget;
 }
 
 glm::mat4 Camera::getView() const {
