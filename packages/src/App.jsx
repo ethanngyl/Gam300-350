@@ -1,122 +1,55 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useCallback, useState } from 'react'
+import Uploader from './Uploader.jsx'
+import Progress from './Progress.jsx'
+import SplatViewer from './SplatViewer.jsx'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+// Allow deep-linking straight to a job (handy for resuming / testing):
+//   http://localhost:5173/?job=<id>
+const initialJob = new URLSearchParams(window.location.search).get('job')
+
+// Screens: 'upload' -> 'processing' -> 'result'
+export default function App() {
+  const [jobId, setJobId] = useState(initialJob)
+  const [screen, setScreen] = useState(initialJob ? 'processing' : 'upload')
+
+  const onJobCreated = useCallback((id) => {
+    setJobId(id)
+    setScreen('processing')
+    // reflect the job in the URL so a refresh resumes it
+    window.history.replaceState(null, '', `?job=${id}`)
+  }, [])
+
+  const onDone = useCallback(() => setScreen('result'), [])
+
+  const reset = useCallback(() => {
+    setJobId(null)
+    setScreen('upload')
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [])
+
+  if (screen === 'result' && jobId) {
+    return (
+      <>
+        <SplatViewer url={`/api/jobs/${jobId}/result.ply`} />
+        <div className="topbar">
+          <button className="ghost" onClick={reset}>
+            ← New model
+          </button>
+          <a className="ghost" href={`/api/jobs/${jobId}/result.ply`} download="model.ply">
+            Download .ply
+          </a>
+        </div>
+      </>
+    )
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <div className="center">
+      {screen === 'upload' && <Uploader onJobCreated={onJobCreated} />}
+      {screen === 'processing' && jobId && (
+        <Progress jobId={jobId} onDone={onDone} onCancel={reset} />
+      )}
+    </div>
   )
 }
-
-export default App
