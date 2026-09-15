@@ -59,6 +59,8 @@ venv/
 # Scan data (photos + generated .ply — large, not source)
 /scans/
 *.ply
+# ...except the shared sample splat everyone develops against
+!/src/engine/assets/samples/sample_splat.ply
 
 # More C++ / tooling
 compile_commands.json
