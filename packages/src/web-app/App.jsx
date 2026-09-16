@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import Processing from './Processing.jsx';
+import SplatViewer from './SplatViewer.jsx';
 import CameraCapture from './CameraCapture.jsx';
 import YoutubeIngest from './YoutubeIngest.jsx';
 import './App.css';
@@ -7,8 +9,15 @@ const MODELS = ['ceramic mug', 'desk lamp', 'notebook', 'plant pot'];
 const TOOLS = ['move', 'rotate', 'scale', 'delete'];
 
 function App() {
+    // Which screen is showing. The scan flow moves:
+    //   landing -> capture -> processing -> result
+    const [screen, setScreen] = useState('landing');
+    const [jobId, setJobId] = useState(null);
+    const [uploadError, setUploadError] = useState(null);
 
-    const [showCapture, setShowCapture] = useState(false);
+    // Sidebar/toolbar mockup state (landing page only).
+    const [activeModel, setActiveModel] = useState('ceramic mug');
+    const [activeTool, setActiveTool] = useState('move');
 
     async function handleBatchReady(files) {
         if (!files || files.length === 0) return;
@@ -31,23 +40,38 @@ function App() {
         }
     }
 
-    // useState gives this component "memory" that persists between
-    // renders. Every time it changes, React automatically re-draws
-    // whatever part of the page depends on it.
+    function reset() {
+        setJobId(null);
+        setUploadError(null);
+        setScreen('landing');
+    }
 
-    // Tracks which model in the sidebar is currently selected.
-    // Starts on 'ceramic mug'
-    const [activeModel, setActiveModel] = useState('ceramic mug');
-
-    // Tracks which toolbar tool is active in the viewport mockup.
-    const [activeTool, setActiveTool] = useState('move');
-
-    if (showCapture) {
+    if (screen === 'capture') {
         return (
-            <CameraCapture
-                onBatchReady={handleBatchReady}
-                onBack={() => setShowCapture(false)}
-            />
+            <>
+                {uploadError && (
+                    <p className="capture-error" style={{ textAlign: 'center' }}>{uploadError}</p>
+                )}
+                <CameraCapture onBatchReady={handleBatchReady} />
+            </>
+        );
+    }
+
+    if (screen === 'processing' && jobId) {
+        return <Processing jobId={jobId} onDone={() => setScreen('result')} onCancel={reset} />;
+    }
+
+    if (screen === 'result' && jobId) {
+        return (
+            <>
+                <SplatViewer url={`/jobs/${jobId}/result.ply`} />
+                <div style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, zIndex: 10 }}>
+                    <button className="btn btn-primary" onClick={reset}>← New scan</button>
+                    <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply">
+                        Download .ply
+                    </a>
+                </div>
+            </>
         );
     }
 
@@ -64,7 +88,7 @@ function App() {
                     </ul>
                     <button
                         className="btn btn-primary"
-                        onClick={() => setShowCapture(true)}
+                        onClick={() => setScreen('capture')}
                     >
                         Start scanning
                     </button>
@@ -84,7 +108,7 @@ function App() {
                             <div className="hero-actions">
                                 <button
                                     className="btn btn-primary"
-                                    onClick={() => setShowCapture(true)}
+                                    onClick={() => setScreen('capture')}
                                 >
                                     Start scanning
                                 </button>
@@ -220,7 +244,7 @@ function App() {
                         <div className="actions">
                             <button
                                 className="btn btn-primary"
-                                onClick={() => setShowCapture(true)}
+                                onClick={() => setScreen('capture')}
                             >
                                 Start scanning
                             </button>
