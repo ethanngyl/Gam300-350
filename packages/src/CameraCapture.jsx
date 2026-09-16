@@ -5,7 +5,7 @@ import './CameraCapture.css';
 function CameraCapture({ onBatchReady }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    // A ref to the hidden <input type="file"> — clicking a styled button
+    // A ref to the hidden <input type="file"> clicking a styled button
     // will programmatically "click" this invisible input to open the
     // OS's native file picker popup.
     const fileInputRef = useRef(null);
@@ -196,7 +196,7 @@ function CameraCapture({ onBatchReady }) {
                                 onClick={() => removePhoto(photo.id)}
                                 aria-label="Remove photo"
                             >
-                                ×
+                              
                             </button>
                         </div>
                     ))}

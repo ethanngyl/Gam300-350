@@ -14,4 +14,13 @@ export default defineConfig({
     outDir: path.resolve(__dirname, 'src/web-app/dist'),
     emptyOutDir: true,
   },
+  server: {
+    // Forward API calls to the reconstruction backend (server/index.js) in dev.
+    proxy: {
+      '/api': {
+        target: process.env.API_TARGET || 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
 })

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import CameraCapture from '../CameraCapture.jsx';
+import YoutubeIngest from './YoutubeIngest.jsx';
 import './App.css';
 
 const MODELS = ['ceramic mug', 'desk lamp', 'notebook', 'plant pot'];
@@ -37,6 +38,7 @@ function App() {
                     <div className="logo">Co<span>De</span>Fine</div>
                     <ul className="nav-links">
                         <li><a href="#workflow">How it works</a></li>
+                        <li><a href="#youtube">From a video</a></li>
                         <li><a href="#builder">Scene builder</a></li>
                         <li><a href="#get-started">Get started</a></li>
                     </ul>
@@ -129,6 +131,16 @@ function App() {
                                 <div className="workflow-detail">Exports as .glb, so it travels well outside CoDeFine too.</div>
                             </li>
                         </ol>
+                    </div>
+                </section>
+
+                <section id="youtube">
+                    <div className="wrap">
+                        <div className="section-head">
+                            <h2>Already have a video? Build from a YouTube link</h2>
+                            <p>Paste a link to a video that orbits the object. We extract evenly spaced frames and run them through the same reconstruction pipeline - no phone capture needed.</p>
+                        </div>
+                        <YoutubeIngest />
                     </div>
                 </section>
 
