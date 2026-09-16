@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import CameraCapture from '../CameraCapture.jsx';
+import CameraCapture from './CameraCapture.jsx';
 import YoutubeIngest from './YoutubeIngest.jsx';
 import './App.css';
 
