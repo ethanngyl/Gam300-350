@@ -62,6 +62,16 @@ venv/
 # ...except the shared sample splat everyone develops against
 !/src/engine/assets/samples/sample_splat.ply
 
+# Per-job working data (uploaded/extracted images, COLMAP db, splat output —
+# generated locally, not source). The frame extractor CLI also writes ./frames.
+/server/jobs/
+/frames/
+
+# External tools installed locally, never committed (tools/get-colmap.ps1 and
+# a matching Brush setup download these per-machine).
+/tools/colmap/
+/tools/brush/
+
 # More C++ / tooling
 compile_commands.json
 .cache/
