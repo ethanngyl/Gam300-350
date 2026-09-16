@@ -43,7 +43,12 @@ function App() {
     const [activeTool, setActiveTool] = useState('move');
 
     if (showCapture) {
-        return <CameraCapture onBatchReady={handleBatchReady} />;
+        return (
+            <CameraCapture
+                onBatchReady={handleBatchReady}
+                onBack={() => setShowCapture(false)}
+            />
+        );
     }
 
     return (
