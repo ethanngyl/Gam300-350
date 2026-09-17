@@ -26,7 +26,7 @@ export const config = {
     'C:\\Users\\xiong\\Documents\\gsplat-tools\\brush\\target\\release\\brush.exe',
 
   // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 7000,
+  trainIters: Number(process.env.TRAIN_ITERS) || 30000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
 
   // Use the GPU for COLMAP SIFT (requires the CUDA build of COLMAP).
