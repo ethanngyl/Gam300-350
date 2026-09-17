@@ -67,6 +67,58 @@ function run(job, bin, args, { cwd, onData } = {}) {
 }
 
 /**
+ * Extract frames from a YouTube URL into a job's images/ directory by running
+ * tools/youtube_frames.py. Resolves with the number of frames written.
+ * Reuses the same child-process logging as the rest of the pipeline.
+ */
+export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
+  const jobDir = path.join(config.jobsDir, job.id)
+  const imagesDir = path.join(jobDir, 'images')
+  await fsp.mkdir(imagesDir, { recursive: true })
+
+  job.status = 'running'
+  job.phase = 'extract'
+  job.progress = 0.02
+
+  await run(job, config.pythonBin, [
+    config.ytScript,
+    url,
+    '--output', imagesDir,
+    '--fps', String(fps ?? config.ytFps),
+    '--max-frames', String(maxFrames ?? config.ytMaxFrames),
+  ])
+
+  const frames = (await fsp.readdir(imagesDir)).filter((f) =>
+    /\.(jpe?g|png)$/i.test(f),
+  )
+  return frames.length
+}
+
+/**
+ * Create a reconstruction job seeded from a YouTube URL: extract frames, then
+ * run the normal reconstruction pipeline. Intended to be called in the
+ * background (not awaited) after responding to the client.
+ */
+export async function runYoutubePipeline(job, url, opts = {}) {
+  try {
+    const count = await extractYoutubeFrames(job, url, opts)
+    job.imageCount = count
+    if (count < 8) {
+      throw new Error(
+        `Extracted only ${count} frame(s). Need at least 8 for a reconstruction — ` +
+          'try a longer clip or a higher --fps.',
+      )
+    }
+  } catch (err) {
+    job.status = 'error'
+    job.error = err.message
+    appendLog(job, `\nERROR: ${err.message}`)
+    return
+  }
+  await runPipeline(job)
+}
+
+/**
  * Full reconstruction pipeline for one job directory.
  * Layout produced (INRIA/COLMAP convention that Brush reads):
  *   <jobDir>/images/         uploaded photos
@@ -137,7 +189,7 @@ export async function runPipeline(job) {
       [
         job.id, // dataset dir name, relative to cwd (jobsDir)
         '--max-resolution', String(config.maxResolution),
-        '--total-train-iters', String(config.trainIters),
+        '--total-steps', String(config.trainIters),
         '--export-path', `./${outDirName}/`,
         '--export-name', 'splat_{iter}.ply',
         '--export-every', String(config.trainIters),
@@ -167,7 +219,23 @@ export async function runPipeline(job) {
       throw new Error('Training finished but no .ply was exported.')
     }
     plys.sort() // splat_00500, splat_07000 ... lexical works with zero-padding
-    job.resultPath = path.join(outDir, plys[plys.length - 1])
+    const rawPly = path.join(outDir, plys[plys.length - 1])
+
+    // --- Normalize into the viewer's frame ---
+    // COLMAP reconstructs in an arbitrary world frame (object far from origin,
+    // arbitrary scale), which loads but renders off-screen in the viewer. Recenter
+    // + rescale into a result.ply that matches the shared sample's frame.
+    job.phase = 'normalize'
+    job.progress = 0.99
+    const finalPly = path.join(outDir, 'result.ply')
+    try {
+      await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
+      job.resultPath = finalPly
+    } catch (err) {
+      // Best-effort: if normalization fails, still hand back the raw export.
+      appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
+      job.resultPath = rawPly
+    }
 
     job.phase = 'done'
     job.progress = 1

@@ -15,6 +15,35 @@ function App() {
     const [uploadError, setUploadError] = useState(null);
 
     // Sidebar/toolbar mockup state (landing page only).
+    const [showCapture, setShowCapture] = useState(false);
+
+    async function handleBatchReady(files) {
+        if (!files || files.length === 0) return;
+
+        // Same multipart/form-data envelope test.html used.
+        const formData = new FormData();
+        for (const file of files) {
+            formData.append('images', file); // 'images' MUST match upload.array('images', 20)
+        }
+
+        try {
+            const res = await fetch('http://localhost:5005/upload', {
+                method: 'POST',
+                body: formData, // don't set Content-Type — the browser adds the boundary
+            });
+            const text = await res.text();
+            console.log(`Status ${res.status}:`, text);
+        } catch (err) {
+            console.error('Upload failed:', err);
+        }
+    }
+
+    // useState gives this component "memory" that persists between
+    // renders. Every time it changes, React automatically re-draws
+    // whatever part of the page depends on it.
+
+    // Tracks which model in the sidebar is currently selected.
+    // Starts on 'ceramic mug'
     const [activeModel, setActiveModel] = useState('ceramic mug');
     const [activeTool, setActiveTool] = useState('move');
 
@@ -69,6 +98,13 @@ function App() {
                 </div>
             </>
         );
+    if (showCapture) {
+        return (
+            <CameraCapture
+                onBatchReady={handleBatchReady}
+                onBack={() => setShowCapture(false)}
+            />
+        );
     }
 
     return (
@@ -78,6 +114,7 @@ function App() {
                     <div className="logo">Co<span>De</span>Fine</div>
                     <ul className="nav-links">
                         <li><a href="#workflow">How it works</a></li>
+                        <li><a href="#youtube">From a video</a></li>
                         <li><a href="#builder">Scene builder</a></li>
                         <li><a href="#get-started">Get started</a></li>
                     </ul>
@@ -170,6 +207,16 @@ function App() {
                                 <div className="workflow-detail">Exports as .glb, so it travels well outside CoDeFine too.</div>
                             </li>
                         </ol>
+                    </div>
+                </section>
+
+                <section id="youtube">
+                    <div className="wrap">
+                        <div className="section-head">
+                            <h2>Already have a video? Build from a YouTube link</h2>
+                            <p>Paste a link to a video that orbits the object. We extract evenly spaced frames and run them through the same reconstruction pipeline - no phone capture needed.</p>
+                        </div>
+                        <YoutubeIngest />
                     </div>
                 </section>
 

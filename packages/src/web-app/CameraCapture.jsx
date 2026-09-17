@@ -2,22 +2,21 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import './CameraCapture.css';
 
-function CameraCapture({ onBatchReady }) {
+function CameraCapture({ onBatchReady, onBack }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    // A ref to the hidden <input type="file"> — clicking a styled button
+    // A ref to the hidden <input type="file"> clicking a styled button
     // will programmatically "click" this invisible input to open the
     // OS's native file picker popup.
     const fileInputRef = useRef(null);
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
-
     // Tracks whether the user is currently dragging a file over the
     // drop zone, purely so we can highlight it visually.
     const [isDragging, setIsDragging] = useState(false);
-
     const [photos, setPhotos] = useState([]);
+    const [feedback, setFeedback] = useState(null);
 
     useEffect(() => {
         async function startCamera() {
@@ -55,6 +54,10 @@ function CameraCapture({ onBatchReady }) {
         };
     }, [photos]);
 
+    function showFeedback(message) {
+        setFeedback(message);
+        setTimeout(() => setFeedback(null), 2500);
+    }
 
     const addFiles = useCallback((fileList) => {
         const newPhotos = Array.from(fileList)
@@ -67,6 +70,10 @@ function CameraCapture({ onBatchReady }) {
             }));
 
         setPhotos((prev) => [...prev, ...newPhotos]);
+
+        if (newPhotos.length > 0) {
+            showFeedback(`${newPhotos.length} photo${newPhotos.length === 1 ? '' : 's'} added`);
+        }
     }, []);
 
     const capturePhoto = useCallback(() => {
@@ -144,6 +151,11 @@ function CameraCapture({ onBatchReady }) {
 
     return (
         <div className="capture">
+            <button className="btn btn-ghost capture-back" onClick={onBack}>
+                Back
+            </button>
+            {feedback && <div className="capture-feedback">{feedback}</div>}
+
             {error && <p className="capture-error">{error}</p>}
 
             <div className="capture-viewport">
@@ -159,7 +171,7 @@ function CameraCapture({ onBatchReady }) {
                 Capture photo
             </button>
 
-            {/* Drag-and-drop zone + file picker */}
+            {/* Drag-and-drop zone and file picker */}
             <div
                 className={isDragging ? 'capture-dropzone is-dragging' : 'capture-dropzone'}
                 onDragOver={handleDragOver}
@@ -169,7 +181,7 @@ function CameraCapture({ onBatchReady }) {
                 role="button"
                 tabIndex={0}
             >
-                <p>Drag and drop images here</p>
+                <p>Upload Photos</p>
                 <p className="capture-dropzone-or">or</p>
                 <button
                     type="button"
@@ -204,6 +216,7 @@ function CameraCapture({ onBatchReady }) {
                                 onClick={() => removePhoto(photo.id)}
                                 aria-label="Remove photo"
                             >
+                              
                             </button>
                         </div>
                     ))}
