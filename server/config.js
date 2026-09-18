@@ -46,7 +46,7 @@ export const config = {
   jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
 
   // External tool executables. Default to the repo-local copies that
-  // tools/get-colmap.ps1 (and a matching Brush setup) install into tools/,
+  // tools/get-tools.ps1 installs into tools/ (COLMAP + Brush),
   // so a fresh clone works without hardcoded per-machine paths. Override with
   // COLMAP_BIN / BRUSH_BIN to point at a copy installed elsewhere.
   colmapBin:

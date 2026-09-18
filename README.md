@@ -1,8 +1,8 @@
 # 3D Object Scanner & Visualizer
 
-> Working title — rename to your team's project name.
+> Team CoDefine - Real World Object Scanning to 3D Model Conversion
 
-Capture a real-world object from your phone and turn it into a viewable 3D model. The mobile front-end scans an object from multiple angles; a Python back-end reconstructs it with a photogrammetry + Gaussian Splatting pipeline; a custom renderer displays the result.
+Capture/Takes in real-world object images and turns it into an interactable 3D model. The front-end scans an object either via a camera, uploaded files or a youtube video from multiple angles; the Python back-end will then reconstruct it with photogrammetry + Gaussian splatting pipeline; the custom renderer displays the final result.
 
 ---
 
@@ -14,25 +14,7 @@ This project takes a set of photographs of a physical object and produces a 3D a
 - **Back-end (reconstruction pipeline):** a Python service that runs the captured images through COLMAP (structure-from-motion + multi-view stereo) to recover camera poses and a point cloud, then through Gaussian Splatting, and exports a renderable 3D asset.
 - **Engine (renderer/visualizer):** a custom 3D renderer that loads and displays the reconstructed asset.
 
-The goal of this project is the **end-to-end build** — owning the capture → reconstruction → render pipeline ourselves — rather than beating commercial scanners on output fidelity. Final output is intentionally functional over polished.
-
-## Pipeline
-
-```
-[Mobile Scanner]  ──photos──▶  [Ingest API]  ──▶  [Job Queue]  ──▶  [Reconstruction Worker]
-                                                                          │
-                                               COLMAP (SfM + MVS) ────────┤
-                                               Gaussian Splatting ────────┤
-                                               Surface / export ──────────┘
-                                                                          │
-                                                                          ▼
-                                                          [3D asset: .ply / .obj / .glb]
-                                                                          │
-                                                                          ▼
-                                                        [Custom 3D Renderer / Viewer]
-```
-
-> **Output representation is still being finalised.** COLMAP produces a point cloud; Gaussian Splatting produces a set of 3D Gaussians (a radiance field, exported as `.ply`); a triangle mesh (`.obj`/`.glb`) requires an additional surface-reconstruction/extraction step. The renderer's target format follows from that decision — see [Roadmap](#roadmap).
+The end goal of the project is to have as many additional features/solve current problems that similar existing applications are having in the market.
 
 ## Tech stack
 
@@ -43,90 +25,37 @@ The goal of this project is the **end-to-end build** — owning the capture → 
 | API / orchestration | Python _(e.g. FastAPI)_ |
 | Renderer (engine) | Custom 3D renderer _(target TBD — native C++/OpenGL or web)_ |
 
-## What is _not_ in this repository
+## Prerequisites/How to Set up
 
-COLMAP is an **external dependency**, not vendored source. It is installed on the machine (or run via container) and invoked by the pipeline — it is **not** committed to Git, the same way a compiler or database wouldn't be. Reconstruction **outputs** (point clouds, splat `.ply` files, meshes, intermediate images) are large and are also excluded.
+Application Installations:
+- Nodejs(Default Installation Settings): https://nodejs.org/en
+- Visual Studio Community 22/26(With CMake and C++ packages): https://visualstudio.microsoft.com/downloads/
+- Python 3.10 or later: https://www.python.org/downloads/
+- Git: https://git-scm.com/download/win
 
-Recommended `.gitignore` essentials:
+Package Installations:
+- Colmap/Brush: Open PowerShell in the tools folder, enter "powershell -ExecutionPolicy Bypass -File get-tools.ps1"
+- Express/React: Open Command Prompt in the packages folder, type "npm install"
 
-```gitignore
-# COLMAP / native binaries & build output
-colmap/
-*.bin
-build/
 
-# Reconstruction inputs & outputs (large; keep in shared storage, not Git)
-data/
-outputs/
-*.ply
-*.obj
-*.glb
+## Prerequisites/How to Run
+- Open the Command Prompt in the packages folder, type "run start.bat"
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-```
+## Current Features
+- Basic Frontend, allows for navigation to image capturing/uploading page
+- Capable of generating a downloadable .ply file from uploaded images
+- Youtube frame image extractor, images per frame can be modified
 
-Version-pin COLMAP declaratively (Docker tag, `requirements.txt`, or a note here) so the dependency is **reproducible without being stored**. If large artifacts ever need versioning, use Git LFS or object storage — not the main repo.
-
-## Prerequisites
-
-- **Python 3.10+**
-- **COLMAP** installed separately — via system package manager, the official prebuilt binaries, a CUDA-enabled Docker image, or the `pycolmap` Python bindings.
-- **A CUDA-capable GPU** for the dense reconstruction and Gaussian Splatting stages.
-- _(Later, once the pipeline is networked)_ **Redis**, if using a task queue for background jobs.
-
-## Setup
-
-```bash
-# 1. Clone
-git clone <repo-url>
-cd <repo>
-
-# 2. Python environment
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-# 3. Install COLMAP (NOT bundled) — pick one:
-#    - system package / prebuilt binary, then ensure `colmap` is on PATH
-#    - Docker image (recommended for consistent versions across the team)
-#    - pip install pycolmap
-```
-
-## Usage
-
-The first milestone runs as a **single one-shot script** — no server, nothing running when idle:
-
-```bash
-# Process one folder of captured images end-to-end
-python process.py ./data/my_object/
-```
-
-This runs the reconstruction pipeline once and exits. The networked flow (mobile upload → ingest API → background worker → viewer) is layered on only once the core pipeline is proven — see [Roadmap](#roadmap).
-
-## Roadmap
-
-- [ ] **Decide output representation** — point cloud vs. Gaussian splats vs. extracted mesh (drives the renderer's target format).
-- [ ] **Decide renderer target** — native custom engine vs. web. _(Note: standard Gaussian-splat renderers need compute shaders, which WebGL lacks — a web splat renderer needs WebGPU or a WebGL2 quad-splatting approach.)_
-- [ ] **M1 — Core pipeline (one-shot):** controlled captures of small objects on a rotating stand → COLMAP → reconstruction → export. Prove it end-to-end on a script.
-- [ ] **M2 — Custom renderer:** load and display the reconstructed asset.
-- [ ] **M3 — Mobile scanner:** capture flow with angle/coverage guidance.
-- [ ] **M4 — Networked flow:** ingest API + background worker (queue) so heavy work runs on demand and idles at ~zero.
-- [ ] **M5 — Robustness & larger objects, evaluation, polish.**
-
-## Requirements addressed
-
-- **Engine** — custom 3D renderer.
-- **Visualizer / Renderer** — reconstruction pipeline + viewer.
-- **Mobile** — phone-based scanner front-end.
+## Current Issues
+-  The model used for training is taxing and requires a strong GPU, the model training is reliant on a CUDA GPU meaning the host system will always need to remain online, other options are being explored at the moment.
+-  The youtube frame extractor can extract images but the quality and kind of images captured might not be compatible with colmap's requirements.
 
 ## Team
 
 Team Codefine GAM300-350
 
 | Name | Role |
+| --- | --- |
 | Ethan Ng | Tech/Team Lead |
 | Gerard | Design |
 | Clement Ang | Engine Champion |
