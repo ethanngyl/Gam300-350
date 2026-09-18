@@ -12,71 +12,17 @@ import multer from 'multer'
 
 import { config } from './config.js'
 import { jobs, makeJob, runPipeline } from './pipeline.js'
-const app = express()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const BASE_UPLOAD_DIR = path.join(__dirname, '/uploads')
-
-function makeOneFolder (req,file,next) {
-    // Create a unique folder name using the current timestamp and a random number
-    const uniqueFolderName = `${Date.now()}-${Math.round(Math.random() * 1E9)}`
-    const targetDir = path.join(BASE_UPLOAD_DIR, uniqueFolderName)
-
-    // Ensure the target directory exists (creates it if it doesn't)
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true })
-    }
-
-    req.batchDir = targetDir
-    next()
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-
-    // Pass the directory path to the callback
-    cb(null, req.batchDir);
-    //cb(null, 'uploads/') // Make sure this folder exists
-  },
-  filename: function (req, file, cb) {
-    cb(null, file.originalname)
-  }
-});
-
-async function onlyImages(req, res, next) {
-    if (!req.files || req.files.length === 0) return next();
-
-    try{
-        const {fileTypeFromBuffer} = await import('file-type')
-        const legalMimes = ['image/jpeg', 'image/png']
-
-        // Delete illegal files
-        for (const file of req.files) {
-            const buffer = fs.readFileSync(file.path)
-            const type = await fileTypeFromBuffer(buffer)
-
-            if (!type || !legalMimes.includes(type.mime)) {
-                // clean up every file already written for this batch
-                req.files.forEach(f => {if (fs.existsSync(f.path)) fs.unlinkSync(f.path)})    
-                return res.status(400).json ({
-                    error: 'invalid file content',
-                    detected: type ? type.mime : 'unknown'
-                })
-            }
-        }
-        
-        next()
-    }
-    catch (error) {
-        next(error)
-    }
-}
-
-const upload = multer({storage : storage})
 
 const PORT = process.env.PORT || 5005
 
+fs.mkdirSync(config.jobsDir, { recursive: true })
+
+const app = express()
+
+// Serve the built React frontend (run `npm run build` to produce web-app/dist).
 app.use(express.static(path.join(__dirname, '../web-app/dist')))
 
 // --- Upload handling --------------------------------------------------------
@@ -105,10 +51,41 @@ const upload = multer({
     cb(null, /^image\/(jpe?g|png)$/i.test(file.mimetype)),
 })
 
+// Content-level guard: multer's fileFilter only trusts the client-declared MIME
+// type. This re-inspects the actual bytes of every uploaded file and rejects the
+// whole batch (deleting the job folder) if any file isn't a real JPEG/PNG.
+async function onlyImages(req, res, next) {
+  const files = req.files || []
+  if (files.length === 0) return next()
+
+  try {
+    const { fileTypeFromBuffer } = await import('file-type')
+    const legalMimes = ['image/jpeg', 'image/png']
+
+    for (const file of files) {
+      const buffer = fs.readFileSync(file.path)
+      const type = await fileTypeFromBuffer(buffer)
+
+      if (!type || !legalMimes.includes(type.mime)) {
+        // Reject the batch: remove the job folder created up front by assignJobId.
+        fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+        return res.status(400).json({
+          error: 'Invalid file content -- only real JPEG or PNG images are accepted.',
+          detected: type ? type.mime : 'unknown',
+        })
+      }
+    }
+
+    next()
+  } catch (err) {
+    next(err)
+  }
+}
+
 // --- Routes -----------------------------------------------------------------
 // Create a reconstruction job from uploaded photos. Returns a job id immediately
 // and runs COLMAP + Brush in the background -- the frontend polls for status.
-app.post('/upload', assignJobId, upload.array('images', config.maxFiles), (req, res) => {
+app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => {
   const files = req.files || []
   if (files.length < 8) {
     return res.status(400).json({
