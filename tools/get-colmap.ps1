@@ -58,9 +58,12 @@ Write-Host ""
 Write-Host "COLMAP ready:" -ForegroundColor Green
 Write-Host "  $($exe.FullName)"
 Write-Host ""
-Write-Host "Start the server pointing at it (PowerShell):" -ForegroundColor Yellow
+Write-Host "config.js finds this automatically (it searches tools/colmap)." -ForegroundColor Yellow
+Write-Host "Restart the backend to pick it up:" -ForegroundColor Yellow
+Write-Host "  cd packages/src/backend; node server.js"
+Write-Host ""
+Write-Host "To point at a copy elsewhere instead, set COLMAP_BIN:" -ForegroundColor DarkGray
 Write-Host "  `$env:COLMAP_BIN = `"$($exe.FullName)`""
 if (-not $Cuda) {
-    Write-Host "  `$env:COLMAP_USE_GPU = `"0`"   # nocuda build has no GPU SIFT"
+    Write-Host "  (GPU SIFT is auto-disabled for the nocuda build; override with COLMAP_USE_GPU)" -ForegroundColor DarkGray
 }
-Write-Host "  cd server; npm start"
