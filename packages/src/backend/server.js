@@ -11,7 +11,7 @@ import express from 'express'
 import multer from 'multer'
 
 import { config } from './config.js'
-import { jobs, makeJob, runPipeline } from './pipeline.js'
+import { cancelJob, jobs, killChildren, makeJob, runPipeline, runYoutubePipeline } from './pipeline.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -21,6 +21,10 @@ const PORT = process.env.PORT || 5005
 fs.mkdirSync(config.jobsDir, { recursive: true })
 
 const app = express()
+
+// Parse JSON bodies (used by /jobs/from-youtube). Only applies to
+// application/json requests, so the multipart photo upload is unaffected.
+app.use(express.json())
 
 // Serve the built React frontend (run `npm run build` to produce web-app/dist).
 app.use(express.static(path.join(__dirname, '../web-app/dist')))
@@ -98,6 +102,33 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
+// Create a reconstruction job from a YouTube link. Frames are extracted server
+// side (tools/youtube_frames.py) into the job's images/ folder, then the same
+// COLMAP + Brush pipeline runs. Body: { url: string, fps?: number, maxFrames?: number }
+app.post('/jobs/from-youtube', (req, res) => {
+  const { url, fps, maxFrames } = req.body || {}
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'A valid http(s) YouTube URL is required.' })
+  }
+  if (!/(youtube\.com|youtu\.be)/i.test(url)) {
+    return res.status(400).json({ error: 'URL does not look like a YouTube link.' })
+  }
+
+  const jobId = crypto.randomUUID()
+  fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
+  const job = makeJob(jobId)
+  job.source = 'youtube'
+
+  const opts = {}
+  if (Number.isFinite(Number(fps)) && Number(fps) > 0) opts.fps = Number(fps)
+  if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
+    opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
+  }
+
+  runYoutubePipeline(job, url, opts) // fire-and-forget; the frontend polls /jobs/:id
+  res.status(202).json({ id: job.id })
+})
+
 // Poll a job's status (bounded log tail, not the full log).
 app.get('/jobs/:id', (req, res) => {
   const job = jobs.get(req.params.id)
@@ -114,6 +145,18 @@ app.get('/jobs/:id', (req, res) => {
   })
 })
 
+// Cancel a running job: kills its COLMAP / Brush / python process so the GPU
+// is freed immediately. Idempotent; a finished job answers 409.
+app.delete('/jobs/:id', (req, res) => {
+  const job = jobs.get(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
+  if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
+  if (!cancelJob(job)) {
+    return res.status(409).json({ error: `job already ${job.status}` })
+  }
+  res.json({ id: job.id, status: job.status })
+})
+
 // Download / stream the finished splat .ply.
 app.get('/jobs/:id/result.ply', (req, res) => {
   const job = jobs.get(req.params.id)
@@ -123,6 +166,44 @@ app.get('/jobs/:id/result.ply', (req, res) => {
   res.setHeader('Content-Type', 'application/octet-stream')
   res.sendFile(job.resultPath)
 })
+
+// --- Shutdown -----------------------------------------------------------------
+// Tool processes (COLMAP / Brush / python) outlive this process unless we stop
+// them explicitly. Kill them on every exit path so a Ctrl+C, a closed console
+// window, a nodemon restart or a crash never leaves Brush training as an
+// orphan on the GPU. Jobs live in memory only, so nothing else needs saving.
+let shuttingDown = false
+function shutdown(reason, exitCode = 0) {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`[backend] ${reason} -- stopping running tool processes`)
+  for (const job of jobs.values()) {
+    if (job.status === 'running') {
+      job.status = 'error'
+      job.error = 'Server shut down during processing.'
+    }
+  }
+  killChildren()
+  process.exit(exitCode)
+}
+
+// SIGINT: Ctrl+C. SIGTERM: nodemon / task manager / kill. SIGBREAK: Ctrl+Break
+// on Windows. SIGHUP: the console window was closed (Windows maps
+// CTRL_CLOSE_EVENT to it and gives the process a few seconds to react).
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP']) {
+  process.on(sig, () => shutdown(`received ${sig}`))
+}
+process.on('uncaughtException', (err) => {
+  console.error('[backend] uncaught exception:', err)
+  shutdown('crashed', 1)
+})
+process.on('unhandledRejection', (err) => {
+  console.error('[backend] unhandled rejection:', err)
+  shutdown('crashed', 1)
+})
+// Last resort for exit paths that bypass the handlers above (e.g. an explicit
+// process.exit elsewhere). killChildren() is synchronous, so it works here.
+process.on('exit', () => killChildren())
 
 app.listen(PORT, () => {
   console.log(`[backend] http://localhost:${PORT}`)
