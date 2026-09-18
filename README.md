@@ -62,7 +62,3 @@ Team Codefine GAM300-350
 | Xiong Yang | Gaussian/Colmap |
 | Gabriel | Frontend |
 | Bryan Lim | Backend |
-
-
-
-_TBD — confirm against course/IP requirements before publishing._
