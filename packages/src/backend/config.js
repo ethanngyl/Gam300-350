@@ -82,7 +82,7 @@ const colmapUseGpu =
  */
 export const config = {
   // HTTP port the API listens on (Vite proxies /api here in dev).
-  port: Number(process.env.PORT) || 3001,
+  port: Number(process.env.PORT) || 5005,
 
   // Where per-job working directories live (uploads, COLMAP db, splat output).
   jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),

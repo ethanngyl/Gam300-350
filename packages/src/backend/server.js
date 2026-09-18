@@ -94,7 +94,7 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   }
   const job = makeJob(req.jobId)
   job.imageCount = files.length
-  runPipeline(job) // fire-and-forget; do not await
+  //runPipeline(job) // fire-and-forget; do not await
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
