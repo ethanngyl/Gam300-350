@@ -97,9 +97,13 @@ void Window::cursorPosCallback(GLFWwindow* w, double x, double y) {
     self->m_lastX = x;
     self->m_lastY = y;
 
-    if (self->m_dragging && self->onMouseDrag) {
-        self->onMouseDrag(dx, dy);
+
+    if (self->m_rotating && self->onMouseRotate) {
+        self->onMouseRotate(dx, dy);
     }
+
+    if (self->m_panning && self->onMousePan)
+        self->onMousePan(dx, dy);
 }
 
 void Window::mouseButtonCallback(GLFWwindow* w, int button, int action, int /*mods*/) {
@@ -108,10 +112,21 @@ void Window::mouseButtonCallback(GLFWwindow* w, int button, int action, int /*mo
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
-            self->m_dragging = true;
+            self->m_rotating = true;
             glfwGetCursorPos(w, &self->m_lastX, &self->m_lastY);
         } else if (action == GLFW_RELEASE) {
-            self->m_dragging = false;
+            self->m_rotating = false;
+        }
+    }
+
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT) 
+    {
+        if (action == GLFW_PRESS) {
+            self->m_panning = true;
+            glfwGetCursorPos(w, &self->m_lastX, &self->m_lastY);
+        }
+        else if (action == GLFW_RELEASE) {
+            self->m_panning = false;
         }
     }
 }

@@ -9,12 +9,18 @@ public:
 
     void processDrag(double dx, double dy);
     void processScroll(double dy);
+    void processPan(double dx, double dy);
 
     glm::mat4 getView() const;
     glm::mat4 getProjection(float aspect) const;
     glm::vec3 getPosition() const;
 
+    void ResetPosition();
+    void ResetSensivity();
+
+
 private:
+    glm::vec3 m_orginalTarget; //Default target on constuct, used for reset
     glm::vec3 m_target;
     float m_distance;
     float m_yaw;   // radians
@@ -27,4 +33,15 @@ private:
     static constexpr float kMinDistance = 0.5f;
     static constexpr float kMaxDistance = 50.0f;
     static constexpr float kPitchLimit = 1.55f; // just under pi/2
+
+    //Default Modifiers
+    const float kOrginalRotateSensitivity = 0.005f;
+    const float kOrginalZoomSpeed = 0.2f;
+    const float kOrginalPanSensitivity = 0.0005f;
+
+    //Modifiers
+    float kRotateSensitivity = 0.005f;
+    float kZoomSpeed = 0.2f;
+    float kPanSensitivity = 0.0005f;
+
 };
