@@ -60,5 +60,5 @@ Team Codefine GAM300-350
 | Gerard | Design |
 | Clement Ang | Engine Champion |
 | Xiong Yang | Gaussian/Colmap |
-| Gabriel | Frontend |
-| Bryan Lim | Backend |
+| Bryan Lim | Frontend |
+| Gabriel | Backend |
