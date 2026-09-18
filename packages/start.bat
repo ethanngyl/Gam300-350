@@ -48,38 +48,42 @@ echo.
 echo [3/5] Checking for external tools...
 
 REM COLMAP / Brush: ask the backend's own config.js where it resolves each
-REM binary (repo tools\, sibling ..\gsplat-tools, or COLMAP_BIN / BRUSH_BIN),
-REM and only run the tools\get-*.ps1 downloader when that file doesn't exist.
-REM The node checks stay outside the if-blocks: their parentheses would
-REM otherwise terminate the block early.
+REM binary (repo tools\, sibling ..\gsplat-tools, or COLMAP_BIN / BRUSH_BIN).
+REM Whatever already exists is skipped via get-tools.ps1's -Skip* switches, so
+REM only the missing tool(s) get downloaded. The node checks stay outside the
+REM if-blocks: their parentheses would otherwise terminate the block early.
+set "NEED_TOOLS=0"
+set "SKIP_COLMAP="
+set "SKIP_BRUSH="
+
 node -e "import('./src/backend/config.js').then(m=>import('node:fs').then(fs=>process.exit(fs.existsSync(m.config.colmapBin)?0:1)))"
 if errorlevel 1 (
-    echo     COLMAP not found - downloading into the tools folder - one-time, about 130 MB...
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%TOOLS%\get-colmap.ps1"
-    if errorlevel 1 (
-        echo.
-        echo *** Could not download COLMAP. Check your internet connection, then run
-        echo *** tools\get-colmap.ps1 by hand to see the full error.
-        pause
-        exit /b 1
-    )
+    echo     COLMAP not found - will download it - about 130 MB.
+    set "NEED_TOOLS=1"
 ) else (
     echo     COLMAP found.
+    set "SKIP_COLMAP=-SkipColmap"
 )
 
 node -e "import('./src/backend/config.js').then(m=>import('node:fs').then(fs=>process.exit(fs.existsSync(m.config.brushBin)?0:1)))"
 if errorlevel 1 (
-    echo     Brush not found - downloading into the tools folder - one-time, about 160 MB...
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%TOOLS%\get-brush.ps1"
+    echo     Brush not found - will download it - about 160 MB.
+    set "NEED_TOOLS=1"
+) else (
+    echo     Brush found.
+    set "SKIP_BRUSH=-SkipBrush"
+)
+
+if "%NEED_TOOLS%"=="1" (
+    echo     Downloading into the tools folder - one-time...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%TOOLS%\get-tools.ps1" %SKIP_COLMAP% %SKIP_BRUSH%
     if errorlevel 1 (
         echo.
-        echo *** Could not download Brush. Check your internet connection, then run
-        echo *** tools\get-brush.ps1 by hand to see the full error.
+        echo *** Could not download COLMAP / Brush. Check your internet connection, then
+        echo *** run tools\get-tools.ps1 by hand to see the full error.
         pause
         exit /b 1
     )
-) else (
-    echo     Brush found.
 )
 
 REM cloudflared: single-file exe from GitHub, saved as tools\cloudflared.exe.
