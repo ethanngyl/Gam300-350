@@ -33,9 +33,18 @@ Application Installations:
 - Python 3.10 or later: https://www.python.org/downloads/
 - Git: https://git-scm.com/download/win
 
-## How to Run
+## How to Run Web Application
 - Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
 
+## How to Run Engine
+- Go to the src/engine folder
+- Double click run.bat to generate the build folder
+- Click on the icon to reveal hidden folders
+- Under the build folder double click on Codefine.sln
+- Once you are in the solution, right click on codefine and set it as the start up project
+- Start the debugger
+- .ply files can be added into the src/engine/assets folder
+- 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
 - Capable of generating a downloadable .ply file from uploaded images
