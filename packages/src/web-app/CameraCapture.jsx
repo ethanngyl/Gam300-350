@@ -310,20 +310,20 @@ function CameraCapture({ onBatchReady, onBack }) {
                                 onClick={() => removePhoto(photo.id)}
                                 aria-label="Remove photo"
                             >
-                                ×
+                                x
                             </button>
                         </div>
                     ))}
                 </div>
             )}
 
-            <button
+            {/* <button
                 className={`btn btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                 disabled={photos.length === 0}
                 onClick={handleUploadBatch}
             >
                 {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
-            </button>
+            </button> */}
         </div>
     );
 }
