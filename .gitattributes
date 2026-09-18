@@ -3,10 +3,8 @@
 # (CRLF on Windows). Your repo is already all-LF in storage, so this changes nothing
 # about what's committed — it just makes the policy explicit and teammate-proof.
 * text=auto
-
 # Windows batch files should stay CRLF on checkout.
 *.bat text eol=crlf
-
 # Gaussian splat point clouds (.ply / .spz) are git-IGNORED (see .gitignore) and shared
 # out-of-band (shared drive), NOT committed — they are large generated assets, not source.
 # Marked binary here only so git never line-ending-mangles one if a specific file is ever
@@ -14,3 +12,5 @@
 *.ply             -text
 *.compressed.ply  -text
 *.spz             -text
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
