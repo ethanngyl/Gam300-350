@@ -8,7 +8,7 @@ import { config } from './config.js'
  * In-memory job store. Single-user demo, so no database — jobs live for the
  * lifetime of the server process. Each job:
  *   { id, status, phase, progress, log[], error, createdAt, resultPath }
- * status: queued | running | done | error
+ * status: queued | running | done | error | cancelled
  * phase:  upload | extract | colmap-features | colmap-matching | colmap-mapping
  *         | training | normalize | done
  */
@@ -24,6 +24,8 @@ function makeJob(id) {
     error: null,
     createdAt: Date.now(),
     resultPath: null,
+    cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
+    child: null, // the tool process currently running for this job, if any
   }
   jobs.set(id, job)
   return job
@@ -51,24 +53,51 @@ const liveChildren = new Set()
  * is safe to call from process 'exit' handlers, where async work never runs.
  */
 export function killChildren() {
-  for (const child of liveChildren) {
-    liveChildren.delete(child)
-    if (child.exitCode !== null || child.signalCode !== null) continue
-    try {
-      if (process.platform === 'win32') {
-        // child.kill() only hits the direct child; taskkill /T takes the tree.
-        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
-          windowsHide: true,
-          stdio: 'ignore',
-          timeout: 5000,
-        })
-      } else {
+  for (const child of liveChildren) killChild(child)
+}
+
+/** Terminate one tool process and everything it spawned. Synchronous. */
+function killChild(child) {
+  liveChildren.delete(child)
+  if (child.exitCode !== null || child.signalCode !== null) return
+  try {
+    if (process.platform === 'win32') {
+      // child.kill() only hits the direct child; taskkill /T takes the tree.
+      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore',
+        timeout: 5000,
+      })
+    } else {
+      // Children are spawned detached (own process group) so killing the
+      // negative pid takes the whole group, e.g. python + yt-dlp + ffmpeg.
+      try {
+        process.kill(-child.pid, 'SIGKILL')
+      } catch {
         child.kill('SIGKILL')
       }
-    } catch {
-      // Best-effort: the process may already be gone.
     }
+  } catch {
+    // Best-effort: the process may already be gone.
   }
+}
+
+/**
+ * Cancel a job: kill whatever tool is running for it (COLMAP / Brush / python)
+ * and stop the pipeline from starting the next stage. Returns false if the job
+ * had already finished. The pipeline's catch block sees job.cancelled and
+ * leaves status as 'cancelled' instead of 'error'.
+ */
+export function cancelJob(job) {
+  if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
+    return false
+  }
+  job.cancelled = true
+  job.status = 'cancelled'
+  job.error = 'Cancelled by user'
+  appendLog(job, '\nCancelled by user.')
+  if (job.child) killChild(job.child)
+  return true
 }
 
 /**
@@ -78,9 +107,20 @@ export function killChildren() {
  */
 function run(job, bin, args, { cwd, onData } = {}) {
   return new Promise((resolve, reject) => {
+    // Cancelled between stages: don't start the next tool.
+    if (job.cancelled) return reject(new Error('Cancelled by user'))
     appendLog(job, `\n$ ${path.basename(bin)} ${args.join(' ')}`)
-    const child = spawn(bin, args, { cwd, windowsHide: true })
+    // windowsHide: no console window per tool on Windows. detached (macOS /
+    // Linux only): put the tool in its own process group so killChildren can
+    // take down its subprocesses too; stdio stays piped so it doesn't outlive
+    // us unnoticed.
+    const child = spawn(bin, args, {
+      cwd,
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    })
     liveChildren.add(child)
+    job.child = child
 
     const handle = (buf) => {
       const text = buf.toString()
@@ -94,11 +134,14 @@ function run(job, bin, args, { cwd, onData } = {}) {
 
     child.on('error', (err) => {
       liveChildren.delete(child)
+      if (job.child === child) job.child = null
       reject(new Error(`Failed to start ${bin}: ${err.message}`))
     })
     child.on('close', (code, signal) => {
       liveChildren.delete(child)
-      if (code === 0) resolve()
+      if (job.child === child) job.child = null
+      if (job.cancelled) reject(new Error('Cancelled by user'))
+      else if (code === 0) resolve()
       else if (code === null)
         reject(new Error(`${path.basename(bin)} was killed (${signal ?? 'terminated'})`))
       else reject(new Error(`${path.basename(bin)} exited with code ${code}`))
@@ -151,9 +194,11 @@ export async function runYoutubePipeline(job, url, opts = {}) {
       )
     }
   } catch (err) {
-    job.status = 'error'
-    job.error = err.message
-    appendLog(job, `\nERROR: ${err.message}`)
+    if (!job.cancelled) {
+      job.status = 'error'
+      job.error = err.message
+      appendLog(job, `\nERROR: ${err.message}`)
+    }
     return
   }
   await runPipeline(job)
@@ -175,6 +220,7 @@ export async function runPipeline(job) {
   const sparseDir = path.join(jobDir, 'sparse')
 
   try {
+    if (job.cancelled) return
     job.status = 'running'
 
     // --- COLMAP: feature extraction ---
@@ -287,6 +333,7 @@ export async function runPipeline(job) {
     job.status = 'done'
     appendLog(job, `\nDone. Result: ${job.resultPath}`)
   } catch (err) {
+    if (job.cancelled) return // cancelJob already set status/error
     job.status = 'error'
     job.error = err.message
     appendLog(job, `\nERROR: ${err.message}`)
