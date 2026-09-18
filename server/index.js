@@ -4,11 +4,12 @@ import path from 'node:path'
 import express from 'express'
 import multer from 'multer'
 import { config } from './config.js'
-import { jobs, makeJob, runPipeline } from './pipeline.js'
+import { jobs, makeJob, runPipeline, runYoutubePipeline } from './pipeline.js'
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
 
 const app = express()
+app.use(express.json())
 
 // --- Upload handling ---------------------------------------------------------
 // Assign a job id up front so all files in the request land in one job folder.
@@ -52,6 +53,34 @@ app.post('/api/jobs', assignJobId, upload.array('photos', config.maxFiles), (req
   // Kick off the pipeline in the background; respond immediately.
   runPipeline(job)
   res.status(202).json({ id: job.id, imageCount: files.length })
+})
+
+// Create a reconstruction job from a YouTube link. Frames are extracted server
+// side into the job's images/ folder, then the normal pipeline runs.
+// Body: { url: string, fps?: number, maxFrames?: number }
+app.post('/api/jobs/from-youtube', (req, res) => {
+  const { url, fps, maxFrames } = req.body || {}
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'A valid http(s) YouTube URL is required.' })
+  }
+  if (!/(youtube\.com|youtu\.be)/i.test(url)) {
+    return res.status(400).json({ error: 'URL does not look like a YouTube link.' })
+  }
+
+  const jobId = crypto.randomUUID()
+  fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
+  const job = makeJob(jobId)
+  job.source = 'youtube'
+
+  const opts = {}
+  if (Number.isFinite(Number(fps)) && Number(fps) > 0) opts.fps = Number(fps)
+  if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
+    opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
+  }
+
+  // Extract + reconstruct in the background; respond immediately.
+  runYoutubePipeline(job, url, opts)
+  res.status(202).json({ id: job.id })
 })
 
 // Poll a job's status. Returns a bounded log tail, not the full log.

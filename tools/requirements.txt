@@ -1,0 +1,4 @@
+# Dependencies for youtube_frames.py
+# Install with:  pip install -r tools/requirements.txt
+yt-dlp>=2024.1.0
+opencv-python>=4.8.0
