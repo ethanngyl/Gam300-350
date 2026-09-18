@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -66,12 +67,41 @@ const brushBin =
     path.join(toolsDir, 'brush', 'brush.exe'),
   )
 
-// GPU SIFT needs the CUDA build of COLMAP. get-colmap.ps1 installs the
-// "nocuda" build by default (its folder name contains "nocuda"), which has no
-// GPU support, so default GPU off for that build and on otherwise.
-// Override explicitly with COLMAP_USE_GPU=0|1.
+// Check if the COLMAP binary is a CUDA build by running it with `-h` and looking
+function colmapHasCuda(exe) {
+  try {
+    const r = spawnSync(exe, ['-h'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    return /with CUDA/i.test(`${r.stdout ?? ''}${r.stderr ?? ''}`)
+  } catch {
+    return false
+  }
+}
 const colmapUseGpu =
-  process.env.COLMAP_USE_GPU ?? (/nocuda/i.test(colmapBin) ? '0' : '1')
+  process.env.COLMAP_USE_GPU ?? (colmapHasCuda(colmapBin) ? '1' : '0')
+
+// Passing the wrong name makes Brush exit with code 2 before training starts. 
+// Ask the binary once which one it understands. Override with BRUSH_ITERS_FLAG if the probe can't run.
+//   v0.3.0 release : --total-steps
+//   main branch    : --total-train-iters
+function brushItersFlag(exe) {
+  try {
+    const r = spawnSync(exe, ['--help'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
+    if (/--total-steps\b/.test(help)) return '--total-steps'
+  } catch {
+    // Fall through to the source-build name.
+  }
+  return '--total-train-iters'
+}
+const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushBin)
 
 /**
  * Central config for the reconstruction backend.
@@ -94,6 +124,8 @@ export const config = {
   // Training knobs. Fewer iterations = faster demo, lower quality.
   trainIters: Number(process.env.TRAIN_ITERS) || 30000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
+  // Name of Brush's iteration-count flag for the installed build (see above).
+  brushItersFlag: brushItersFlagName,
 
   // Use the GPU for COLMAP SIFT (requires the CUDA build of COLMAP).
   colmapUseGpu,
@@ -101,4 +133,17 @@ export const config = {
   // Upload limits.
   maxFiles: 300,
   maxFileSizeMB: 30,
+
+  // --- Python post-processing / ingest scripts (repo tools/ dir) -------------
+  // Interpreter used to run them. Needs `pip install -r tools/requirements.txt`
+  // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
+  pythonBin: process.env.PYTHON_BIN || 'python',
+  // Extracts evenly spaced frames from a YouTube video into a job's images/.
+  ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
+  // Default extraction rate (frames per second) and cap on frames pulled.
+  ytFps: Number(process.env.YT_FPS) || 2,
+  ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
+  // Recenters/rescales the trained splat into the viewer's frame.
+  normalizeScript:
+    process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
 }

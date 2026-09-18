@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -9,7 +9,8 @@ import { config } from './config.js'
  * lifetime of the server process. Each job:
  *   { id, status, phase, progress, log[], error, createdAt, resultPath }
  * status: queued | running | done | error
- * phase:  upload | colmap-features | colmap-matching | colmap-mapping | training | done
+ * phase:  upload | extract | colmap-features | colmap-matching | colmap-mapping
+ *         | training | normalize | done
  */
 export const jobs = new Map()
 
@@ -37,6 +38,40 @@ function appendLog(job, line) {
 }
 
 /**
+ * Every tool process currently running (COLMAP, Brush, python). Tracked so the
+ * server can terminate them on shutdown -- on Windows a child is NOT killed
+ * when its parent Node process dies, so without this a restart leaves Brush
+ * training as an orphan, hogging the GPU for a job nobody can poll anymore.
+ */
+const liveChildren = new Set()
+
+/**
+ * Terminate every live tool process (and their own children, e.g. the
+ * yt-dlp/ffmpeg that youtube_frames.py spawns). Synchronous on purpose so it
+ * is safe to call from process 'exit' handlers, where async work never runs.
+ */
+export function killChildren() {
+  for (const child of liveChildren) {
+    liveChildren.delete(child)
+    if (child.exitCode !== null || child.signalCode !== null) continue
+    try {
+      if (process.platform === 'win32') {
+        // child.kill() only hits the direct child; taskkill /T takes the tree.
+        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+          timeout: 5000,
+        })
+      } else {
+        child.kill('SIGKILL')
+      }
+    } catch {
+      // Best-effort: the process may already be gone.
+    }
+  }
+}
+
+/**
  * Spawn a child process and resolve on exit 0, reject otherwise.
  * Streams stdout/stderr into the job log, and lets an optional onData hook
  * parse lines for progress.
@@ -45,6 +80,7 @@ function run(job, bin, args, { cwd, onData } = {}) {
   return new Promise((resolve, reject) => {
     appendLog(job, `\n$ ${path.basename(bin)} ${args.join(' ')}`)
     const child = spawn(bin, args, { cwd, windowsHide: true })
+    liveChildren.add(child)
 
     const handle = (buf) => {
       const text = buf.toString()
@@ -56,23 +92,81 @@ function run(job, bin, args, { cwd, onData } = {}) {
     child.stdout.on('data', handle)
     child.stderr.on('data', handle)
 
-    child.on('error', (err) =>
-      reject(new Error(`Failed to start ${bin}: ${err.message}`)),
-    )
-    child.on('close', (code) => {
+    child.on('error', (err) => {
+      liveChildren.delete(child)
+      reject(new Error(`Failed to start ${bin}: ${err.message}`))
+    })
+    child.on('close', (code, signal) => {
+      liveChildren.delete(child)
       if (code === 0) resolve()
+      else if (code === null)
+        reject(new Error(`${path.basename(bin)} was killed (${signal ?? 'terminated'})`))
       else reject(new Error(`${path.basename(bin)} exited with code ${code}`))
     })
   })
 }
 
 /**
+ * Extract frames from a YouTube URL into a job's images/ directory by running
+ * tools/youtube_frames.py. Resolves with the number of frames written. The
+ * script's own progress/error lines land in the job log like any other stage,
+ * so a missing yt-dlp/opencv install surfaces as an actionable error.
+ */
+export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
+  const jobDir = path.join(config.jobsDir, job.id)
+  const imagesDir = path.join(jobDir, 'images')
+  await fsp.mkdir(imagesDir, { recursive: true })
+
+  job.status = 'running'
+  job.phase = 'extract'
+  job.progress = 0.02
+
+  await run(job, config.pythonBin, [
+    config.ytScript,
+    url,
+    '--output', imagesDir,
+    '--fps', String(fps ?? config.ytFps),
+    '--max-frames', String(maxFrames ?? config.ytMaxFrames),
+  ])
+
+  const frames = (await fsp.readdir(imagesDir)).filter((f) =>
+    /\.(jpe?g|png)$/i.test(f),
+  )
+  return frames.length
+}
+
+/**
+ * Create a reconstruction job seeded from a YouTube URL: extract frames, then
+ * run the normal reconstruction pipeline. Intended to be called in the
+ * background (not awaited) after responding to the client.
+ */
+export async function runYoutubePipeline(job, url, opts = {}) {
+  try {
+    const count = await extractYoutubeFrames(job, url, opts)
+    job.imageCount = count
+    if (count < 8) {
+      throw new Error(
+        `Extracted only ${count} frame(s). Need at least 8 for a reconstruction — ` +
+          'try a longer clip or a higher fps.',
+      )
+    }
+  } catch (err) {
+    job.status = 'error'
+    job.error = err.message
+    appendLog(job, `\nERROR: ${err.message}`)
+    return
+  }
+  await runPipeline(job)
+}
+
+/**
  * Full reconstruction pipeline for one job directory.
  * Layout produced (INRIA/COLMAP convention that Brush reads):
- *   <jobDir>/images/         uploaded photos
- *   <jobDir>/database.db     COLMAP feature database
- *   <jobDir>/sparse/0/       COLMAP sparse model (poses + points)
- *   <jobsDir>/<id>_out/      Brush splat .ply exports
+ *   <jobDir>/images/              uploaded photos (or extracted video frames)
+ *   <jobDir>/database.db          COLMAP feature database
+ *   <jobDir>/sparse/0/            COLMAP sparse model (poses + points)
+ *   <jobsDir>/<id>_out/           Brush splat .ply exports
+ *   <jobsDir>/<id>_out/result.ply the export normalized into the viewer's frame
  */
 export async function runPipeline(job) {
   const jobDir = path.join(config.jobsDir, job.id)
@@ -137,7 +231,7 @@ export async function runPipeline(job) {
       [
         job.id, // dataset dir name, relative to cwd (jobsDir)
         '--max-resolution', String(config.maxResolution),
-        '--total-train-iters', String(config.trainIters),
+        config.brushItersFlag, String(config.trainIters),
         '--export-path', `./${outDirName}/`,
         '--export-name', 'splat_{iter}.ply',
         '--export-every', String(config.trainIters),
@@ -161,13 +255,32 @@ export async function runPipeline(job) {
     // --- Locate the exported .ply (highest iteration) ---
     const outDir = path.join(config.jobsDir, outDirName)
     const plys = fs.existsSync(outDir)
-      ? (await fsp.readdir(outDir)).filter((f) => f.toLowerCase().endsWith('.ply'))
+      ? (await fsp.readdir(outDir)).filter(
+          (f) => f.toLowerCase().endsWith('.ply') && f !== 'result.ply',
+        )
       : []
     if (plys.length === 0) {
       throw new Error('Training finished but no .ply was exported.')
     }
     plys.sort() // splat_00500, splat_07000 ... lexical works with zero-padding
-    job.resultPath = path.join(outDir, plys[plys.length - 1])
+    const rawPly = path.join(outDir, plys[plys.length - 1])
+
+    // --- Normalize into the viewer's frame ---
+    // COLMAP reconstructs in an arbitrary world frame (object far from the
+    // origin, arbitrary scale), which loads but can render off-screen in the
+    // viewer. Recenter + rescale into result.ply. The PLY header, including
+    // Brush's "Vertical axis" comment the viewer reads, is preserved verbatim.
+    job.phase = 'normalize'
+    job.progress = 0.99
+    const finalPly = path.join(outDir, 'result.ply')
+    try {
+      await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
+      job.resultPath = finalPly
+    } catch (err) {
+      // Best-effort: if normalization fails, still hand back the raw export.
+      appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
+      job.resultPath = rawPly
+    }
 
     job.phase = 'done'
     job.progress = 1
