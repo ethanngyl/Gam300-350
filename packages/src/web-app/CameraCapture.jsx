@@ -187,12 +187,20 @@ function CameraCapture({ onBatchReady, onBack }) {
 
     function handleUploadBatch() {
         const files = photos.map((p) => p.file);
+        console.log('Batch selected (not uploaded):', files);
+    }
+
+    // "Train model" is the only trigger that starts the reconstruction.
+    function handleTrain() {
+        const files = photos.map((p) => p.file);
         if (onBatchReady) {
             onBatchReady(files);
         }
         setIsBatchSent(true);
         setTimeout(() => setIsBatchSent(false), 2000)
     }
+
+    const MIN_PHOTOS = 8;
 
     return (
         <div className="capture">
@@ -324,6 +332,23 @@ function CameraCapture({ onBatchReady, onBack }) {
             >
                 {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
             </button> */}
+
+            {/* "Train model" is the only trigger that starts the reconstruction
+                (see handleTrain). Keep this when reworking the layout. */}
+            <button
+                className="btn btn-primary"
+                disabled={photos.length < MIN_PHOTOS}
+                onClick={handleTrain}
+                style={{ marginTop: '10px' }}
+            >
+                Train model
+            </button>
+
+            {photos.length > 0 && photos.length < MIN_PHOTOS && (
+                <p className="capture-count">
+                    Add at least {MIN_PHOTOS} photos to train (you have {photos.length}).
+                </p>
+            )}
         </div>
     );
 }

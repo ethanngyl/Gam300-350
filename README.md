@@ -33,13 +33,8 @@ Application Installations:
 - Python 3.10 or later: https://www.python.org/downloads/
 - Git: https://git-scm.com/download/win
 
-Package Installations:
-- Colmap/Brush: Open PowerShell in the tools folder, enter "powershell -ExecutionPolicy Bypass -File get-tools.ps1"
-- Express/React: Open Command Prompt in the packages folder, type "npm install"
-
-
 ## How to Run
-- Double click start.bat in the packages folder
+- Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
