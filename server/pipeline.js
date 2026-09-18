@@ -23,6 +23,7 @@ function makeJob(id) {
     error: null,
     createdAt: Date.now(),
     resultPath: null,
+    detail: null, // short human-readable sub-status, e.g. "Downloading video… 40%"
   }
   jobs.set(id, job)
   return job
@@ -39,12 +40,21 @@ function appendLog(job, line) {
 /**
  * Spawn a child process and resolve on exit 0, reject otherwise.
  * Streams stdout/stderr into the job log, and lets an optional onData hook
- * parse lines for progress.
+ * parse lines for progress. With timeoutMs, the tool is killed if it runs
+ * longer than that.
  */
-function run(job, bin, args, { cwd, onData } = {}) {
+function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
   return new Promise((resolve, reject) => {
     appendLog(job, `\n$ ${path.basename(bin)} ${args.join(' ')}`)
     const child = spawn(bin, args, { cwd, windowsHide: true })
+
+    let timedOut = false
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          timedOut = true
+          child.kill()
+        }, timeoutMs)
+      : null
 
     const handle = (buf) => {
       const text = buf.toString()
@@ -56,20 +66,60 @@ function run(job, bin, args, { cwd, onData } = {}) {
     child.stdout.on('data', handle)
     child.stderr.on('data', handle)
 
-    child.on('error', (err) =>
-      reject(new Error(`Failed to start ${bin}: ${err.message}`)),
-    )
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      reject(new Error(`Failed to start ${bin}: ${err.message}`))
+    })
     child.on('close', (code) => {
-      if (code === 0) resolve()
+      clearTimeout(timer)
+      if (timedOut)
+        reject(new Error(`${path.basename(bin)} timed out after ${+(timeoutMs / 60000).toFixed(1)} min`))
+      else if (code === 0) resolve()
       else reject(new Error(`${path.basename(bin)} exited with code ${code}`))
     })
   })
 }
 
+const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/
+const YT_HOSTS = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'music.youtube.com',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+])
+
+/**
+ * Return https://www.youtube.com/watch?v=<id> for a single-video YouTube URL,
+ * or null for anything else (other hosts, playlists, channels, bad IDs).
+ * Rebuilding from the ID alone also strips list=/index= so yt-dlp can never be
+ * handed a playlist. tools/youtube_frames.py applies the same rule.
+ */
+export function canonicalYoutubeUrl(input) {
+  let u
+  try {
+    u = new URL(String(input).trim())
+  } catch {
+    return null
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+  if (u.username || u.password || u.port) return null
+  const host = u.hostname.toLowerCase()
+  let id = null
+  if (host === 'youtu.be') id = u.pathname.split('/')[1]
+  else if (YT_HOSTS.has(host)) {
+    if (u.pathname === '/watch') id = u.searchParams.get('v')
+    else id = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/]+)/)?.[1]
+  }
+  return id && YT_ID_RE.test(id) ? `https://www.youtube.com/watch?v=${id}` : null
+}
+
 /**
  * Extract frames from a YouTube URL into a job's images/ directory by running
- * tools/youtube_frames.py. Resolves with the number of frames written.
- * Reuses the same child-process logging as the rest of the pipeline.
+ * tools/youtube_frames.py. Resolves with the number of frames written. The
+ * script reports "PROGRESS <stage> <0..1>" lines, which drive job.detail, and
+ * "ERROR: ..." lines, which become the job's error instead of a bare exit code.
  */
 export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
   const jobDir = path.join(config.jobsDir, job.id)
@@ -78,15 +128,52 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
 
   job.status = 'running'
   job.phase = 'extract'
-  job.progress = 0.02
+  job.progress = 0
+  job.detail = 'Fetching video info…'
 
-  await run(job, config.pythonBin, [
-    config.ytScript,
-    url,
-    '--output', imagesDir,
-    '--fps', String(fps ?? config.ytFps),
-    '--max-frames', String(maxFrames ?? config.ytMaxFrames),
-  ])
+  // Extraction owns the 0..0.05 slice of the bar (COLMAP starts at 0.05);
+  // job.detail carries the finer-grained per-stage percentage.
+  let scriptError = null
+  const onData = (line) => {
+    const p = line.match(/^PROGRESS (download|extract) ([\d.]+)/)
+    if (p) {
+      const frac = Number(p[2])
+      const pct = Math.round(frac * 100)
+      if (p[1] === 'download') {
+        job.progress = 0.03 * frac
+        job.detail = `Downloading video… ${pct}%`
+      } else {
+        job.progress = 0.03 + 0.02 * frac
+        job.detail = `Extracting frames… ${pct}%`
+      }
+      return
+    }
+    const e = line.match(/^ERROR:\s*(.+)/)
+    if (e) scriptError = e[1]
+  }
+
+  try {
+    await run(
+      job,
+      config.pythonBin,
+      [
+        config.ytScript,
+        url,
+        '--output', imagesDir,
+        '--fps', String(fps ?? config.ytFps),
+        '--max-frames', String(maxFrames ?? config.ytMaxFrames),
+        '--max-duration', String(config.ytMaxDurationSec),
+        // Lets yt-dlp use this very Node binary as its JavaScript runtime.
+        '--node-path', process.execPath,
+      ],
+      { onData, timeoutMs: config.ytTimeoutMin * 60_000 },
+    )
+  } catch (err) {
+    if (scriptError) throw new Error(scriptError)
+    throw err
+  } finally {
+    job.detail = null
+  }
 
   const frames = (await fsp.readdir(imagesDir)).filter((f) =>
     /\.(jpe?g|png)$/i.test(f),

@@ -4,7 +4,7 @@ import path from 'node:path'
 import express from 'express'
 import multer from 'multer'
 import { config } from './config.js'
-import { jobs, makeJob, runPipeline, runYoutubePipeline } from './pipeline.js'
+import { canonicalYoutubeUrl, jobs, makeJob, runPipeline, runYoutubePipeline } from './pipeline.js'
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
 
@@ -60,11 +60,12 @@ app.post('/api/jobs', assignJobId, upload.array('photos', config.maxFiles), (req
 // Body: { url: string, fps?: number, maxFrames?: number }
 app.post('/api/jobs/from-youtube', (req, res) => {
   const { url, fps, maxFrames } = req.body || {}
-  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
-    return res.status(400).json({ error: 'A valid http(s) YouTube URL is required.' })
-  }
-  if (!/(youtube\.com|youtu\.be)/i.test(url)) {
-    return res.status(400).json({ error: 'URL does not look like a YouTube link.' })
+  // Only single YouTube videos; the canonical form drops any playlist params.
+  const videoUrl = canonicalYoutubeUrl(url)
+  if (!videoUrl) {
+    return res.status(400).json({
+      error: 'Please use a link to a single YouTube video (youtube.com/watch?v=…, youtu.be/…, or youtube.com/shorts/…).',
+    })
   }
 
   const jobId = crypto.randomUUID()
@@ -73,13 +74,15 @@ app.post('/api/jobs/from-youtube', (req, res) => {
   job.source = 'youtube'
 
   const opts = {}
-  if (Number.isFinite(Number(fps)) && Number(fps) > 0) opts.fps = Number(fps)
+  if (Number.isFinite(Number(fps)) && Number(fps) > 0) {
+    opts.fps = Math.min(Number(fps), config.ytMaxFps)
+  }
   if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
     opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
   }
 
   // Extract + reconstruct in the background; respond immediately.
-  runYoutubePipeline(job, url, opts)
+  runYoutubePipeline(job, videoUrl, opts)
   res.status(202).json({ id: job.id })
 })
 
@@ -92,6 +95,7 @@ app.get('/api/jobs/:id', (req, res) => {
     status: job.status,
     phase: job.phase,
     progress: job.progress,
+    detail: job.detail,
     error: job.error,
     imageCount: job.imageCount ?? null,
     hasResult: job.status === 'done' && !!job.resultPath,

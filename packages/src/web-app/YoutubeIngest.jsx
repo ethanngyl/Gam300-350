@@ -1,9 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './YoutubeIngest.css';
 
-// Rough client-side check so we can give instant feedback before hitting the
-// server (the server validates again authoritatively).
-const YT_RE = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i;
+// Client-side check for instant feedback; mirrors canonicalYoutubeUrl() in the
+// backend's pipeline.js, which validates again authoritatively. Accepts a
+// single video only (watch?v=, youtu.be/, shorts/, embed/, live/).
+const YT_HOSTS = new Set([
+    'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com',
+    'youtube-nocookie.com', 'www.youtube-nocookie.com',
+]);
+
+// Returns the URL to submit (scheme added if the user left it off), or null.
+function normalizeYoutubeUrl(input) {
+    const withScheme = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+    let u;
+    try {
+        u = new URL(withScheme);
+    } catch {
+        return null;
+    }
+    const host = u.hostname.toLowerCase();
+    let id = null;
+    if (host === 'youtu.be') id = u.pathname.split('/')[1];
+    else if (YT_HOSTS.has(host)) {
+        id = u.pathname === '/watch'
+            ? u.searchParams.get('v')
+            : u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/]+)/)?.[1];
+    }
+    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? withScheme : null;
+}
+
+const FINISHED = ['done', 'error', 'cancelled'];
 
 // Parse a response as JSON, but turn the browser's cryptic
 // "Failed to execute 'json' on 'Response'" into an actionable message. That
@@ -62,7 +88,7 @@ function YoutubeIngest() {
                     if (!res.ok) throw new Error(`Status ${res.status}`);
                     const data = await parseJson(res);
                     setJob(data);
-                    if (data.status === 'done' || data.status === 'error') {
+                    if (FINISHED.includes(data.status)) {
                         stopPolling();
                     }
                 } catch (err) {
@@ -78,9 +104,9 @@ function YoutubeIngest() {
         e.preventDefault();
         setError(null);
 
-        const trimmed = url.trim();
-        if (!YT_RE.test(trimmed)) {
-            setError('Please enter a valid YouTube link (youtube.com or youtu.be).');
+        const trimmed = normalizeYoutubeUrl(url.trim());
+        if (!trimmed) {
+            setError('Please enter a link to a single YouTube video (not a playlist or channel).');
             return;
         }
 
@@ -103,7 +129,7 @@ function YoutubeIngest() {
         }
     }
 
-    const busy = submitting || (job && job.status !== 'done' && job.status !== 'error');
+    const busy = submitting || (job && !FINISHED.includes(job.status));
     const pct = job ? Math.round((job.progress || 0) * 100) : 0;
     const phaseLabel = job ? PHASE_LABELS[job.phase] || job.phase : '';
 
@@ -138,8 +164,9 @@ function YoutubeIngest() {
                     </button>
                 </div>
                 <p className="yt-hint">
-                    We pull evenly spaced frames from the video and feed them straight into the
-                    reconstruction pipeline. Higher fps = more frames = slower, more detailed scans.
+                    We pull evenly spaced frames from across the whole video (up to 20 minutes),
+                    skip blurry and duplicate ones, and feed them straight into the reconstruction
+                    pipeline. Higher fps = more frames = slower, more detailed scans.
                 </p>
             </form>
 
@@ -149,7 +176,7 @@ function YoutubeIngest() {
                 <div className="yt-status">
                     <div className="yt-status-head">
                         <span className={`yt-badge yt-badge-${job.status}`}>{job.status}</span>
-                        <span className="yt-phase">{phaseLabel}</span>
+                        <span className="yt-phase">{job.detail || phaseLabel}</span>
                         {job.imageCount != null && (
                             <span className="yt-frames">{job.imageCount} frames</span>
                         )}
