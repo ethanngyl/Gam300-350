@@ -59,8 +59,20 @@ venv/
 # Scan data (photos + generated .ply — large, not source)
 /scans/
 *.ply
+
+# Extracted images (YouTube frame extractor output — generated, not source):
+# per-job working dirs under server/jobs/ hold uploaded/extracted images/,
+# and the CLI (tools/youtube_frames.py) writes to ./frames by default.
+/server/jobs/
+/frames/
 # ...except the shared sample splat everyone develops against
 !/src/engine/assets/samples/sample_splat.ply
+
+# External tools installed locally, never committed (see tools/get-colmap.ps1
+# and tools/get-brush.ps1). Downloaded per-machine; the server finds them via
+# config.js defaults or the COLMAP_BIN / BRUSH_BIN env vars.
+/tools/colmap/
+/tools/brush/
 
 # More C++ / tooling
 compile_commands.json
