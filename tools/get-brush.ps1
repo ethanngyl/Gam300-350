@@ -59,8 +59,8 @@ Write-Host "Brush ready:" -ForegroundColor Green
 Write-Host "  $($exe.FullName)"
 Write-Host ""
 Write-Host "config.js finds this automatically (it searches tools/brush)." -ForegroundColor Yellow
-Write-Host "Restart the server to pick it up:" -ForegroundColor Yellow
-Write-Host "  cd server; npm start"
+Write-Host "Restart the backend to pick it up:" -ForegroundColor Yellow
+Write-Host "  cd packages/src/backend; node server.js"
 Write-Host ""
 Write-Host "To point at a copy elsewhere instead, set BRUSH_BIN:" -ForegroundColor DarkGray
 Write-Host "  `$env:BRUSH_BIN = `"$($exe.FullName)`""
