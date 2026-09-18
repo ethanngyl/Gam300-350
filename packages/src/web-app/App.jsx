@@ -1,13 +1,20 @@
 import { useState } from 'react';
-import CameraCapture from './CameraCapture.jsx';
-import YoutubeIngest from './YoutubeIngest.jsx';
+import CameraCapture from '../CameraCapture.jsx';
+import Processing from './Processing.jsx';
+import SplatViewer from './SplatViewer.jsx';
 import './App.css';
 
 const MODELS = ['ceramic mug', 'desk lamp', 'notebook', 'plant pot'];
 const TOOLS = ['move', 'rotate', 'scale', 'delete'];
 
 function App() {
+    // Which screen is showing. The scan flow moves:
+    //   landing -> capture -> processing -> result
+    const [screen, setScreen] = useState('landing');
+    const [jobId, setJobId] = useState(null);
+    const [uploadError, setUploadError] = useState(null);
 
+    // Sidebar/toolbar mockup state (landing page only).
     const [showCapture, setShowCapture] = useState(false);
 
     async function handleBatchReady(files) {
@@ -38,10 +45,59 @@ function App() {
     // Tracks which model in the sidebar is currently selected.
     // Starts on 'ceramic mug'
     const [activeModel, setActiveModel] = useState('ceramic mug');
-
-    // Tracks which toolbar tool is active in the viewport mockup.
     const [activeTool, setActiveTool] = useState('move');
 
+    // Called by CameraCapture with the captured/selected File objects. Uploads
+    // them to the backend (which starts COLMAP + Brush) and switches to the
+    // processing screen, which polls the job for progress.
+    async function handleBatchReady(files) {
+        setUploadError(null);
+        try {
+            const form = new FormData();
+            for (const file of files) form.append('images', file); // field name must be 'images'
+            const res = await fetch('/upload', { method: 'POST', body: form });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Upload failed');
+            setJobId(data.id);
+            setScreen('processing');
+        } catch (err) {
+            setUploadError(err.message);
+        }
+    }
+
+    function reset() {
+        setJobId(null);
+        setUploadError(null);
+        setScreen('landing');
+    }
+
+    if (screen === 'capture') {
+        return (
+            <>
+                {uploadError && (
+                    <p className="capture-error" style={{ textAlign: 'center' }}>{uploadError}</p>
+                )}
+                <CameraCapture onBatchReady={handleBatchReady} />
+            </>
+        );
+    }
+
+    if (screen === 'processing' && jobId) {
+        return <Processing jobId={jobId} onDone={() => setScreen('result')} onCancel={reset} />;
+    }
+
+    if (screen === 'result' && jobId) {
+        return (
+            <>
+                <SplatViewer url={`/jobs/${jobId}/result.ply`} />
+                <div style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, zIndex: 10 }}>
+                    <button className="btn btn-primary" onClick={reset}>← New scan</button>
+                    <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply">
+                        Download .ply
+                    </a>
+                </div>
+            </>
+        );
     if (showCapture) {
         return (
             <CameraCapture
@@ -64,7 +120,7 @@ function App() {
                     </ul>
                     <button
                         className="btn btn-primary"
-                        onClick={() => setShowCapture(true)}
+                        onClick={() => setScreen('capture')}
                     >
                         Start scanning
                     </button>
@@ -84,7 +140,7 @@ function App() {
                             <div className="hero-actions">
                                 <button
                                     className="btn btn-primary"
-                                    onClick={() => setShowCapture(true)}
+                                    onClick={() => setScreen('capture')}
                                 >
                                     Start scanning
                                 </button>
@@ -220,7 +276,7 @@ function App() {
                         <div className="actions">
                             <button
                                 className="btn btn-primary"
-                                onClick={() => setShowCapture(true)}
+                                onClick={() => setScreen('capture')}
                             >
                                 Start scanning
                             </button>
