@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SplatData.h"
+#include "SplatModel.h"
 #include "../gfx/Shader.h"
 
 #include <glm/glm.hpp>
@@ -32,4 +33,6 @@ private:
     std::unique_ptr<Shader> m_shader;
 
     std::vector<SplatVertex> m_splats; //Copy of splat data
+
+    std::vector<SplatModel> m_splatModels;
 };
