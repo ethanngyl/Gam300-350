@@ -38,8 +38,8 @@ Package Installations:
 - Express/React: Open Command Prompt in the packages folder, type "npm install"
 
 
-## Prerequisites/How to Run
-- Open the Command Prompt in the packages folder, type "run start.bat"
+## How to Run
+- Double click start.bat in the packages folder
 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
