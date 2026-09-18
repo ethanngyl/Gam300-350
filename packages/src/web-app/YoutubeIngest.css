@@ -1,0 +1,162 @@
+/* YouTube-link ingest section. Reuses the global tokens from App.css
+   (--surface, --accent, --mesh, etc.) so it matches the rest of the page. */
+
+.yt {
+    max-width: 760px;
+}
+
+.yt-form {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 24px;
+}
+
+.yt-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.yt-input {
+    flex: 1 1 320px;
+    min-width: 0;
+    padding: 12px 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+
+.yt-input:focus-visible {
+    outline: 2px solid var(--mesh);
+    outline-offset: 1px;
+}
+
+.yt-fps {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.yt-fps input {
+    width: 64px;
+    padding: 12px 10px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+
+.yt-hint {
+    margin-top: 14px;
+    font-size: 0.85rem;
+    max-width: none;
+}
+
+.yt-error {
+    margin-top: 16px;
+    color: #f0857a;
+    font-size: 0.9rem;
+}
+
+/* ---------- Job status ---------- */
+
+.yt-status {
+    margin-top: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+}
+
+.yt-status-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.yt-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 9px;
+    border-radius: 3px;
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+}
+
+.yt-badge-running {
+    color: var(--mesh);
+    border-color: rgba(110, 231, 200, 0.4);
+    background: var(--mesh-dim);
+}
+
+.yt-badge-done {
+    color: var(--mesh);
+    border-color: rgba(110, 231, 200, 0.55);
+    background: var(--mesh-dim);
+}
+
+.yt-badge-error {
+    color: #f0857a;
+    border-color: rgba(240, 133, 122, 0.45);
+    background: rgba(240, 133, 122, 0.12);
+}
+
+.yt-phase {
+    font-size: 0.92rem;
+    color: var(--text);
+}
+
+.yt-frames {
+    margin-left: auto;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.yt-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--surface-raised);
+    overflow: hidden;
+}
+
+.yt-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.4s ease;
+}
+
+.yt-download {
+    margin-top: 16px;
+}
+
+.yt-log {
+    margin-top: 16px;
+    margin-bottom: 0;
+    max-height: 200px;
+    overflow: auto;
+    padding: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    white-space: pre-wrap;
+    word-break: break-word;
+}

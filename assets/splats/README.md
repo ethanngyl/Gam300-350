@@ -12,8 +12,10 @@ Trained 3D Gaussian Splatting point clouds (`.ply`) live here.
 
 ## Important
 
-- `.ply` files are tracked by **Git LFS** (see `../../.gitattributes`). Do not disable this —
-  committing them as plain git would permanently bloat the repo.
+- `.ply` files are **git-ignored** (see the `*.ply` rule in the repo `.gitignore`). They are
+  large generated assets, **not committed** to the repo — do not force-add them.
+- **How to get the splat:** copy the `.ply` into this folder from the shared drive
+  (or generate your own). The engine loads it locally from `assets/splats/`.
 - The authoring tools (COLMAP, Brush) live **outside** this repo in `gsplat-tools/`.
-  Only the trained `.ply` asset belongs here; teammates render it with the engine's
-  OpenGL splat renderer and never need CUDA, COLMAP, or Brush.
+  Teammates render the `.ply` with the engine's OpenGL splat renderer and never need
+  CUDA, COLMAP, or Brush.
