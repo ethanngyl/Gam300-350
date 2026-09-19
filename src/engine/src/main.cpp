@@ -102,7 +102,7 @@ int main() {
             std::cerr << "[main] no splats loaded from '" << path.string() << "'" << std::endl;
             return false;
         }
-        renderer.setSplats(splats);
+        renderer.SetSplats(splats);
         loadedPath = path.string();
         std::cout << "[main] loaded " << splats.size() << " splats from '" << path.string() << "'" << std::endl;
         return true;
@@ -131,7 +131,7 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glm::mat4 viewProj = camera.getProjection(aspect) * camera.getView();
-        renderer.draw(viewProj, static_cast<float>(height));
+        renderer.Draw(viewProj, static_cast<float>(height));
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -139,7 +139,7 @@ int main() {
 
         ImGui::Begin("Engine Stats");
         ImGui::Text("FPS: %.1f", fps);
-        ImGui::Text("Splats loaded: %zu", renderer.splatCount());
+        ImGui::Text("Splats loaded: %zu", renderer.SplatCount());
         ImGui::End();
 
         // ------------------------------------------------------------------

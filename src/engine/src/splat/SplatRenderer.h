@@ -21,18 +21,14 @@ public:
     SplatRenderer(const SplatRenderer&) = delete;
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
-    void setSplats(const std::vector<SplatVertex>& splats);
-    void draw(const glm::mat4& viewProj, float viewportHeightPixels) const;
+    void SetSplats(const std::vector<SplatVertex>& splats);
+    void Draw(const glm::mat4& viewProj, float viewportHeightPixels) const;
 
-    size_t splatCount() const { return m_count; }
+    size_t ModelCount() const { return m_modelCount; }
+    size_t SplatCount() const;
 
 private:
-    unsigned int m_vao = 0;
-    unsigned int m_vbo = 0;
-    size_t m_count = 0;
-    std::unique_ptr<Shader> m_shader;
-
-    std::vector<SplatVertex> m_splats; //Copy of splat data
-
-    std::vector<SplatModel> m_splatModels;
+    size_t m_modelCount = 0; //Number of models
+    std::shared_ptr<Shader> m_shader; //Shared pointer of shader used
+    std::vector<std::unique_ptr<SplatModel>> m_splatModels; //Vector storing the splat model unique ptrs
 };
