@@ -24,7 +24,6 @@ function makeJob(id) {
     error: null,
     createdAt: Date.now(),
     resultPath: null,
-    detail: null, // short human-readable sub-status, e.g. "Downloading video… 40%"
     cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
     child: null, // the tool process currently running for this job, if any
   }
@@ -124,14 +123,6 @@ function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
     liveChildren.add(child)
     job.child = child
 
-    let timedOut = false
-    const timer = timeoutMs
-      ? setTimeout(() => {
-          timedOut = true
-          killChild(child)
-        }, timeoutMs)
-      : null
-
     const handle = (buf) => {
       const text = buf.toString()
       for (const line of text.split(/\r?\n/)) {
@@ -153,8 +144,6 @@ function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
       liveChildren.delete(child)
       if (job.child === child) job.child = null
       if (job.cancelled) reject(new Error('Cancelled by user'))
-      else if (timedOut)
-        reject(new Error(`${path.basename(bin)} timed out after ${+(timeoutMs / 60000).toFixed(1)} min`))
       else if (code === 0) resolve()
       else if (code === null)
         reject(new Error(`${path.basename(bin)} was killed (${signal ?? 'terminated'})`))

@@ -37,6 +37,15 @@ Application Installations:
 - Windows: Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
 - macOS (Apple Silicon): Open the terminal in the packages folder and enter "./start.sh"
 
+## How to Run Engine
+- Go to the src/engine folder
+- Double click run.bat to generate the build folder
+- Click on the icon to reveal hidden folders
+- Under the build folder double click on Codefine.sln
+- Once you are in the solution, right click on codefine and set it as the start up project
+- Start the debugger
+- .ply files can be added into the src/engine/assets folder
+- 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
 - Capable of generating a downloadable .ply file from uploaded images
@@ -56,5 +65,5 @@ Team Codefine GAM300-350
 | Gerard | Design |
 | Clement Ang | Engine Champion |
 | Xiong Yang | Gaussian/Colmap |
-| Gabriel | Frontend |
-| Bryan Lim | Backend |
+| Bryan Lim | Frontend |
+| Gabriel | Backend |
