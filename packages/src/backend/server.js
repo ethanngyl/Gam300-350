@@ -98,6 +98,47 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
+// List every job folder that has uploaded images. Reads the disk (not the in-memory
+// `jobs` Map) so photos from before a server restart still show up.
+const IMAGE_EXT_RE = /\.(jpe?g|png)$/i
+
+app.get('/jobs', (_req, res) => {
+  try {
+    const result = fs
+      .readdirSync(config.jobsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => {
+        const imagesDir = path.join(config.jobsDir, entry.name, 'images')
+        let names = []
+        try {
+          names = fs.readdirSync(imagesDir).filter((n) => IMAGE_EXT_RE.test(n)).sort()
+        } catch {
+          // job folder without an images/ subfolder -- skipped below
+        }
+        return {
+          id: entry.name,
+          images: names.map((name) => ({ name, url: `/jobs/${entry.name}/images/${name}` })),
+        }
+      })
+      .filter((job) => job.images.length > 0)
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Serve a single uploaded image. id/name are whitelisted to plain filename
+// characters so a request can't use `..` or slashes to escape the jobs folder.
+app.get('/jobs/:id/images/:name', (req, res) => {
+  const { id, name } = req.params
+  if (!/^[\w-]+$/.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) {
+    return res.status(404).json({ error: 'image not found' })
+  }
+  res.sendFile(path.join(config.jobsDir, id, 'images', name), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
+  })
+})
+
 // Poll a job's status (bounded log tail, not the full log).
 app.get('/jobs/:id', (req, res) => {
   const job = jobs.get(req.params.id)

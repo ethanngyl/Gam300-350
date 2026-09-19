@@ -3,6 +3,7 @@ import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
 import SplatViewer from './SplatViewer.jsx';
 import YoutubeIngest from './YoutubeIngest.jsx';
+import ImageGallery from './ImageGallery.jsx';
 import './App.css';
 
 const MODELS = ['ceramic mug', 'desk lamp', 'notebook', 'plant pot'];
@@ -80,6 +81,10 @@ function App() {
         );
     }
 
+    if (screen === 'gallery') {
+        return <ImageGallery onBack={() => setScreen('landing')} />;
+    }
+
     if (showCapture) {
             return (
                 <CameraCapture
@@ -100,6 +105,12 @@ function App() {
                             <li><a href="#builder">Scene builder</a></li>
                             <li><a href="#get-started">Get started</a></li>
                         </ul>
+                        <button
+                            className="btn btn-ghost"
+                            onClick={() => setScreen('gallery')}
+                        >
+                            Gallery
+                        </button>
                         <button
                             className="btn btn-primary"
                             onClick={() => setScreen('capture')}
