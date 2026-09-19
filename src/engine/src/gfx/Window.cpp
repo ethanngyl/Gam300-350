@@ -108,9 +108,9 @@ void Window::cursorPosCallback(GLFWwindow* w, double x, double y) {
 
 void Window::mouseButtonCallback(GLFWwindow* w, int button, int action, int /*mods*/) {
     auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w));
-    if (!self) return;
-
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (!self) return; 
+    
+    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         if (action == GLFW_PRESS) {
             self->m_rotating = true;
             glfwGetCursorPos(w, &self->m_lastX, &self->m_lastY);
@@ -119,7 +119,7 @@ void Window::mouseButtonCallback(GLFWwindow* w, int button, int action, int /*mo
         }
     }
 
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT) 
+    else if (button == GLFW_MOUSE_BUTTON_LEFT)
     {
         if (action == GLFW_PRESS) {
             self->m_panning = true;
