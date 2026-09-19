@@ -48,13 +48,17 @@ void main() {
 SplatRenderer::SplatRenderer() {
     m_shader = std::make_unique<Shader>(kVertexShaderSrc, kFragmentShaderSrc);
 
+    //Alloclate the vao/vbo buffers
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
 
+    //Set these as the active buffers, further functions calling the buffers will ref these
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
+    //Enables array from buffer, else it will read default values (0)
     glEnableVertexAttribArray(0);
+    //Set how to read the btyes, casted as SplatVertex, same for the rest
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SplatVertex),
         reinterpret_cast<void*>(offsetof(SplatVertex, position)));
 
@@ -70,6 +74,7 @@ SplatRenderer::SplatRenderer() {
     glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(SplatVertex),
         reinterpret_cast<void*>(offsetof(SplatVertex, alpha)));
 
+    ///Unbinds the vao but setting it to 0
     glBindVertexArray(0);
 }
 
