@@ -15,12 +15,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    // Forward API calls to the reconstruction backend (server/index.js) in dev.
+    // In dev the app is served by Vite (5173) but the backend runs on 5005.
+    // Forward the API calls there so the frontend can use relative URLs
+    // (/upload, /jobs) that also work in production, where server.js serves
+    // the built app on the same origin.
     proxy: {
-      '/api': {
-        target: process.env.API_TARGET || 'http://localhost:3001',
-        changeOrigin: true,
-      },
+      '/upload': 'http://localhost:5005',
+      '/jobs': 'http://localhost:5005',
     },
   },
 })

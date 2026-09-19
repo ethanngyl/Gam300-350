@@ -16,7 +16,7 @@ async function parseJson(res) {
     } catch {
         throw new Error(
             "Couldn't reach the reconstruction server. Make sure it's running " +
-            '(cd server && npm start) on port 3001.',
+            '(cd packages/src/backend && node server.js) on port 5005.',
         );
     }
 }
@@ -28,6 +28,7 @@ const PHASE_LABELS = {
     'colmap-matching': 'Matching images',
     'colmap-mapping': 'Recovering camera poses',
     training: 'Training gaussian splat',
+    normalize: 'Framing the model',
     done: 'Done',
     upload: 'Preparing',
 };
@@ -57,7 +58,7 @@ function YoutubeIngest() {
             stopPolling();
             pollRef.current = setInterval(async () => {
                 try {
-                    const res = await fetch(`/api/jobs/${id}`);
+                    const res = await fetch(`/jobs/${id}`);
                     if (!res.ok) throw new Error(`Status ${res.status}`);
                     const data = await parseJson(res);
                     setJob(data);
@@ -86,7 +87,7 @@ function YoutubeIngest() {
         setSubmitting(true);
         setJob(null);
         try {
-            const res = await fetch('/api/jobs/from-youtube', {
+            const res = await fetch('/jobs/from-youtube', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: trimmed, fps: Number(fps) || undefined }),
@@ -161,7 +162,7 @@ function YoutubeIngest() {
                     {job.error && <p className="yt-error">{job.error}</p>}
 
                     {job.status === 'done' && (
-                        <a className="btn btn-primary yt-download" href={`/api/jobs/${job.id}/result.ply`}>
+                        <a className="btn btn-primary yt-download" href={`/jobs/${job.id}/result.ply`}>
                             Download result (.ply)
                         </a>
                     )}

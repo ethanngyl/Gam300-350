@@ -18,10 +18,11 @@
     config.js (or the COLMAP_BIN / BRUSH_BIN env vars). At the end it prints the
     env-var values to point the server at both.
 
-.PARAMETER Cuda
-    Download the larger CUDA COLMAP build (~380 MB, needs an NVIDIA GPU) instead
-    of the default CPU-only build (~128 MB). Use this only if you have CUDA and
-    want GPU feature extraction. (Brush always needs a GPU regardless.)
+.PARAMETER NoCuda
+    Download the smaller CPU-only COLMAP build (~128 MB) instead of the default
+    CUDA build (~380 MB). Use this only if you do NOT have an NVIDIA GPU. The
+    default CUDA build gives GPU feature extraction. (Brush always needs a GPU
+    regardless.)
 
 .PARAMETER ColmapVersion
     COLMAP release tag to fetch. Defaults to 4.2.0.
@@ -39,10 +40,10 @@
     powershell -ExecutionPolicy Bypass -File tools/get-tools.ps1
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File tools/get-tools.ps1 -Cuda
+    powershell -ExecutionPolicy Bypass -File tools/get-tools.ps1 -NoCuda
 #>
 param(
-    [switch]$Cuda,
+    [switch]$NoCuda,
     [string]$ColmapVersion = "4.2.0",
     [string]$BrushVersion  = "v0.3.0",
     [switch]$SkipColmap,
@@ -81,7 +82,7 @@ $colmapExe = $null
 $brushExe  = $null
 
 if (-not $SkipColmap) {
-    $flavor  = if ($Cuda) { "cuda" } else { "nocuda" }
+    $flavor  = if ($NoCuda) { "nocuda" } else { "cuda" }
     $zipName = "colmap-x64-windows-$flavor.zip"
     $url     = "https://github.com/colmap/colmap/releases/download/$ColmapVersion/$zipName"
 
@@ -124,7 +125,7 @@ Write-Host "config.js finds these automatically (it searches tools/colmap and to
 Write-Host "To point at copies elsewhere, set these before starting the server (PowerShell):" -ForegroundColor Yellow
 if ($colmapExe) {
     Write-Host "  `$env:COLMAP_BIN = `"$($colmapExe.FullName)`""
-    if (-not $Cuda) {
+    if ($NoCuda) {
         Write-Host "  `$env:COLMAP_USE_GPU = `"0`"   # nocuda build has no GPU SIFT"
     }
 }
