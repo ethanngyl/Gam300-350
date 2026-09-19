@@ -5,6 +5,8 @@
 * text=auto
 # Windows batch files should stay CRLF on checkout.
 *.bat text eol=crlf
+# Shell scripts must stay LF, or bash on macOS fails on the stray \r.
+*.sh text eol=lf
 # Gaussian splat point clouds (.ply / .spz) are git-IGNORED (see .gitignore) and shared
 # out-of-band (shared drive), NOT committed — they are large generated assets, not source.
 # Marked binary here only so git never line-ending-mangles one if a specific file is ever

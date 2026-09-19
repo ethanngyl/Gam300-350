@@ -34,7 +34,8 @@ Application Installations:
 - Git: https://git-scm.com/download/win
 
 ## How to Run
-- Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
+- Windows: Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
+- macOS (Apple Silicon): Open the terminal in the packages folder and enter "./start.sh"
 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
