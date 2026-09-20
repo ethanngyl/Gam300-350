@@ -33,8 +33,9 @@ Application Installations:
 - Python 3.10 or later: https://www.python.org/downloads/
 - Git: https://git-scm.com/download/win
 
-## How to Run Web Application
-- Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
+## How to Run
+- Windows: Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
+- macOS (Apple Silicon): Open the terminal in the packages folder and enter "./start.sh"
 
 ## How to Run Engine
 - Go to the src/engine folder

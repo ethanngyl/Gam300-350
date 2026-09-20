@@ -40,9 +40,24 @@ function findExe(roots, re, fallback) {
   return fallback
 }
 
+/** Absolute path of `name` if it's on PATH (e.g. a Homebrew install), else null. */
+function findOnPath(name) {
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue
+    const full = path.join(dir, name)
+    if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
+  }
+  return null
+}
+
+// Windows builds ship .exe files; the macOS / Linux builds have no extension
+// (COLMAP.app/Contents/MacOS/colmap, brush-app-*/brush_app).
+const isWindows = process.platform === 'win32'
+const exeSuffix = isWindows ? '.exe' : ''
+
 // Resolve tool binaries. Precedence: explicit env var > repo-local tools/ (from
-// the get-*.ps1 scripts) > sibling ../gsplat-tools. More specific roots are
-// listed first so a release build wins over a debug build.
+// get-tools.ps1 / get-tools.sh) > sibling ../gsplat-tools > PATH. More specific
+// roots are listed first so a release build wins over a debug build.
 const colmapBin =
   process.env.COLMAP_BIN ||
   findExe(
@@ -51,8 +66,9 @@ const colmapBin =
       path.join(siblingToolsDir, 'bin'),
       siblingToolsDir,
     ],
-    /^colmap\.exe$/i,
-    path.join(toolsDir, 'colmap', 'bin', 'colmap.exe'),
+    isWindows ? /^colmap\.exe$/i : /^colmap$/,
+    findOnPath(`colmap${exeSuffix}`) ||
+      path.join(toolsDir, 'colmap', 'bin', `colmap${exeSuffix}`),
   )
 
 const brushBin =
@@ -63,8 +79,9 @@ const brushBin =
       path.join(siblingToolsDir, 'brush', 'target', 'release'),
       siblingToolsDir,
     ],
-    /^brush.*\.exe$/i,
-    path.join(toolsDir, 'brush', 'brush.exe'),
+    isWindows ? /^brush.*\.exe$/i : /^brush[\w-]*$/i,
+    findOnPath(`brush_app${exeSuffix}`) ||
+      path.join(toolsDir, 'brush', `brush${exeSuffix}`),
   )
 
 // Check if the COLMAP binary is a CUDA build by running it with `-h` and looking
@@ -137,12 +154,20 @@ export const config = {
   // --- Python post-processing / ingest scripts (repo tools/ dir) -------------
   // Interpreter used to run them. Needs `pip install -r tools/requirements.txt`
   // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
-  pythonBin: process.env.PYTHON_BIN || 'python',
+  // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
+  // to its virtualenv's interpreter).
+  pythonBin: process.env.PYTHON_BIN || (isWindows ? 'python' : 'python3'),
   // Extracts evenly spaced frames from a YouTube video into a job's images/.
   ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
   // Default extraction rate (frames per second) and cap on frames pulled.
   ytFps: Number(process.env.YT_FPS) || 2,
   ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
+  // Upper bound on the requested extraction rate.
+  ytMaxFps: 30,
+  // Videos longer than this are refused before anything is downloaded.
+  ytMaxDurationSec: Number(process.env.YT_MAX_DURATION) || 20 * 60,
+  // Kill the download + extraction if it runs longer than this.
+  ytTimeoutMin: Number(process.env.YT_TIMEOUT_MIN) || 30,
   // Recenters/rescales the trained splat into the viewer's frame.
   normalizeScript:
     process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),

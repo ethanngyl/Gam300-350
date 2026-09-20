@@ -88,4 +88,10 @@ export const config = {
   // Default extraction rate (frames per second) and cap on frames pulled.
   ytFps: Number(process.env.YT_FPS) || 2,
   ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
+  // Upper bound on the requested extraction rate.
+  ytMaxFps: 30,
+  // Videos longer than this are refused before anything is downloaded.
+  ytMaxDurationSec: Number(process.env.YT_MAX_DURATION) || 20 * 60,
+  // Kill the download + extraction if it runs longer than this.
+  ytTimeoutMin: Number(process.env.YT_TIMEOUT_MIN) || 30,
 }
