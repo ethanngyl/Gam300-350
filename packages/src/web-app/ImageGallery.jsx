@@ -50,7 +50,12 @@ function ImageGallery({ onBack }) {
                     </h3>
                     <div className="gallery-grid">
                         {job.images.map((img) => (
-                            <a key={img.name} href={img.url} target="_blank" rel="noreferrer">
+                            <a
+                                key={img.name}
+                                href={img.url}
+                                download={`${job.id.slice(0, 8)}-${img.name}`}
+                                title="Click to download"
+                            >
                                 <img
                                     src={img.url}
                                     alt={`Job ${job.id.slice(0, 8)} - ${img.name}`}
