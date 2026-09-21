@@ -13,6 +13,7 @@ struct SplatVertex {
     float pointSize; // world-space splat radius, decoded from scale_0..2
     glm::vec3 color;  // decoded from f_dc_0..2 (SH DC term)
     float alpha;      // decoded from opacity
+    float modelID;
 };
 
 namespace splat_decode {

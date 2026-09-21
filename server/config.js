@@ -46,7 +46,7 @@ export const config = {
   jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
 
   // External tool executables. Default to the repo-local copies that
-  // tools/get-colmap.ps1 (and a matching Brush setup) install into tools/,
+  // tools/get-tools.ps1 installs into tools/ (COLMAP + Brush),
   // so a fresh clone works without hardcoded per-machine paths. Override with
   // COLMAP_BIN / BRUSH_BIN to point at a copy installed elsewhere.
   colmapBin:
@@ -88,4 +88,10 @@ export const config = {
   // Default extraction rate (frames per second) and cap on frames pulled.
   ytFps: Number(process.env.YT_FPS) || 2,
   ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
+  // Upper bound on the requested extraction rate.
+  ytMaxFps: 30,
+  // Videos longer than this are refused before anything is downloaded.
+  ytMaxDurationSec: Number(process.env.YT_MAX_DURATION) || 20 * 60,
+  // Kill the download + extraction if it runs longer than this.
+  ytTimeoutMin: Number(process.env.YT_TIMEOUT_MIN) || 30,
 }

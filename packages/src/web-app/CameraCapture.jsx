@@ -1,24 +1,31 @@
-// src/CameraCapture.jsx
-import { useRef, useState, useEffect, useCallback } from 'react';
+﻿import { useRef, useState, useEffect, useCallback } from 'react';
 import './CameraCapture.css';
+
+const HARD_CAP = 200;
 
 function CameraCapture({ onBatchReady, onBack }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    // A ref to the hidden <input type="file"> clicking a styled button
-    // will programmatically "click" this invisible input to open the
-    // OS's native file picker popup.
     const fileInputRef = useRef(null);
+    const streamRef = useRef(null);
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
-    // Tracks whether the user is currently dragging a file over the
-    // drop zone, purely so we can highlight it visually.
     const [isDragging, setIsDragging] = useState(false);
     const [photos, setPhotos] = useState([]);
-    const [feedback, setFeedback] = useState(null);
+
+    const [captureFeedback, setCaptureFeedback] = useState(null);
+    const [uploadFeedback, setUploadFeedback] = useState(null);
+    const [isBatchSent, setIsBatchSent] = useState(false);
+
+    const [captureMode, setCaptureMode] = useState('manual');
+    const [isAutoCapturing, setIsAutoCapturing] = useState(false);
+    const [intervalSeconds, setIntervalSeconds] = useState(2);
+    const [maxCaptures, setMaxCaptures] = useState(50);
 
     useEffect(() => {
+        let cancelled = false;
+
         async function startCamera() {
             try {
                 const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -28,24 +35,33 @@ function CameraCapture({ onBatchReady, onBack }) {
                         height: { ideal: 1080 },
                     },
                 });
+
+                if (cancelled) {
+                    mediaStream.getTracks().forEach((track) => track.stop());
+                    return;
+                }
+
+                streamRef.current = mediaStream;
                 setStream(mediaStream);
                 if (videoRef.current) {
                     videoRef.current.srcObject = mediaStream;
                 }
             } catch (err) {
-                // Camera failing to start (denied permission, no camera, etc.)
-                setError('Camera unavailable: ' + err.message);
+                if (!cancelled) {
+                    setError('Camera unavailable: ' + err.message);
+                }
             }
         }
 
         startCamera();
 
         return () => {
-            if (stream) {
-                stream.getTracks().forEach((track) => track.stop());
+            cancelled = true;
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop());
+                streamRef.current = null;
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -54,14 +70,8 @@ function CameraCapture({ onBatchReady, onBack }) {
         };
     }, [photos]);
 
-    function showFeedback(message) {
-        setFeedback(message);
-        setTimeout(() => setFeedback(null), 2500);
-    }
-
     const addFiles = useCallback((fileList) => {
         const newPhotos = Array.from(fileList)
-            // Only accept actual images into the batch.
             .filter((file) => file.type.startsWith('image/'))
             .map((file) => ({
                 id: `${file.name}-${file.lastModified}-${Math.random()}`,
@@ -71,12 +81,10 @@ function CameraCapture({ onBatchReady, onBack }) {
 
         setPhotos((prev) => [...prev, ...newPhotos]);
 
-        if (newPhotos.length > 0) {
-            showFeedback(`${newPhotos.length} photo${newPhotos.length === 1 ? '' : 's'} added`);
-        }
+        return newPhotos.length;
     }, []);
 
-    const capturePhoto = useCallback(() => {
+    const capturePhoto = useCallback((showFeedback = true) => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) return;
@@ -93,11 +101,37 @@ function CameraCapture({ onBatchReady, onBack }) {
                     type: 'image/jpeg',
                 });
                 addFiles([file]);
+
+                if (showFeedback) {
+                    setCaptureFeedback('Photo captured');
+                    setTimeout(() => setCaptureFeedback(null), 2000);
+                }
             },
             'image/jpeg',
             0.9
         );
     }, [addFiles]);
+
+    useEffect(() => {
+        if (captureMode !== 'auto' || !isAutoCapturing) return;
+
+        const id = setInterval(() => {
+            if (photos.length >= maxCaptures) {
+                setIsAutoCapturing(false);
+                return;
+            }
+            capturePhoto(false);
+        }, intervalSeconds * 1000);
+
+        return () => clearInterval(id);
+    }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto, photos.length]);
+
+    function handleModeChange(mode) {
+        setCaptureMode(mode);
+        if (mode === 'manual') {
+            setIsAutoCapturing(false);
+        }
+    }
 
     function handleBrowseClick() {
         fileInputRef.current?.click();
@@ -105,13 +139,15 @@ function CameraCapture({ onBatchReady, onBack }) {
 
     function handleFileInputChange(e) {
         if (e.target.files) {
-            addFiles(e.target.files);
+            const addedCount = addFiles(e.target.files);
+            if (addedCount > 0) {
+                setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
+                setTimeout(() => setUploadFeedback(null), 2000);
+            }
         }
 
         e.target.value = '';
     }
-
-    // Drag and drop functionality
 
     function handleDragOver(e) {
         e.preventDefault();
@@ -126,7 +162,11 @@ function CameraCapture({ onBatchReady, onBack }) {
         e.preventDefault();
         setIsDragging(false);
         if (e.dataTransfer.files) {
-            addFiles(e.dataTransfer.files);
+            const addedCount = addFiles(e.dataTransfer.files);
+            if (addedCount > 0) {
+                setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
+                setTimeout(() => setUploadFeedback(null), 2000);
+            }
         }
     }
 
@@ -148,16 +188,16 @@ function CameraCapture({ onBatchReady, onBack }) {
         if (onBatchReady) {
             onBatchReady(files);
         }
-    }
 
-    const MIN_PHOTOS = 8;
+        setIsBatchSent(true);
+        setTimeout(() => setIsBatchSent(false), 2000);
+    }
 
     return (
         <div className="capture">
-            <button className="btn btn-ghost capture-back" onClick={onBack}>
+            <button className="forma-btn capture-back" onClick={onBack}>
                 Back
             </button>
-            {feedback && <div className="capture-feedback">{feedback}</div>}
 
             {error && <p className="capture-error">{error}</p>}
 
@@ -166,15 +206,78 @@ function CameraCapture({ onBatchReady, onBack }) {
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
             </div>
 
-            <button
-                className="btn btn-primary capture-btn"
-                onClick={capturePhoto}
-                disabled={!stream}
-            >
-                Capture photo
-            </button>
+            <div className="capture-mode-toggle">
+                <button
+                    className={captureMode === 'manual' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                    onClick={() => handleModeChange('manual')}
+                >
+                    Manual
+                </button>
+                <button
+                    className={captureMode === 'auto' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                    onClick={() => handleModeChange('auto')}
+                >
+                    Auto capture
+                </button>
+            </div>
 
-            {/* Drag-and-drop zone and file picker */}
+            {captureFeedback && <div className="capture-feedback">{captureFeedback}</div>}
+
+            {captureMode === 'manual' ? (
+                <button
+                    className="forma-btn forma-btn-primary capture-btn"
+                    onClick={() => capturePhoto(true)}
+                    disabled={!stream}
+                >
+                    Capture photo
+                </button>
+            ) : (
+                <div className="capture-auto-controls">
+                    <button
+                        className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                        onClick={() => setIsAutoCapturing((prev) => !prev)}
+                        disabled={!stream}
+                    >
+                        {isAutoCapturing ? 'Stop auto-capture' : 'Start auto-capture'}
+                    </button>
+
+                    <label className="capture-interval-label">
+                        every
+                        <select
+                            value={intervalSeconds}
+                            onChange={(e) => setIntervalSeconds(Number(e.target.value))}
+                            disabled={isAutoCapturing}
+                        >
+                            <option value={1}>1s</option>
+                            <option value={2}>2s</option>
+                            <option value={3}>3s</option>
+                            <option value={5}>5s</option>
+                        </select>
+                    </label>
+
+                    <label className="capture-interval-label">
+                        max
+                        <select
+                            value={maxCaptures}
+                            onChange={(e) => setMaxCaptures(Number(e.target.value))}
+                            disabled={isAutoCapturing}
+                        >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                            <option value={HARD_CAP}>{HARD_CAP}</option>
+                        </select>
+                    </label>
+
+                    {isAutoCapturing && (
+                        <span className="capture-auto-status">
+                            Capturing every {intervalSeconds}s… ({photos.length}/{maxCaptures})
+                        </span>
+                    )}
+                </div>
+            )}
+
             <div
                 className={isDragging ? 'capture-dropzone is-dragging' : 'capture-dropzone'}
                 onDragOver={handleDragOver}
@@ -188,7 +291,7 @@ function CameraCapture({ onBatchReady, onBack }) {
                 <p className="capture-dropzone-or">or</p>
                 <button
                     type="button"
-                    className="btn btn-ghost"
+                    className="forma-btn"
                     onClick={(e) => {
                         e.stopPropagation();
                         handleBrowseClick();
@@ -207,6 +310,8 @@ function CameraCapture({ onBatchReady, onBack }) {
                 />
             </div>
 
+            {uploadFeedback && <div className="capture-feedback">{uploadFeedback}</div>}
+
             <span className="capture-count">{photos.length} photo{photos.length === 1 ? '' : 's'} in batch</span>
 
             {photos.length > 0 && (
@@ -219,7 +324,7 @@ function CameraCapture({ onBatchReady, onBack }) {
                                 onClick={() => removePhoto(photo.id)}
                                 aria-label="Remove photo"
                             >
-                              
+                                ×
                             </button>
                         </div>
                     ))}
@@ -227,27 +332,12 @@ function CameraCapture({ onBatchReady, onBack }) {
             )}
 
             <button
-                className="btn btn-primary"
+                className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                 disabled={photos.length === 0}
                 onClick={handleUploadBatch}
             >
-                Use this batch ({photos.length} photos)
+                {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
             </button>
-
-            <button
-                className="btn btn-primary"
-                disabled={photos.length < MIN_PHOTOS}
-                onClick={handleTrain}
-                style={{ marginTop: '10px' }}
-            >
-                Train model
-            </button>
-
-            {photos.length > 0 && photos.length < MIN_PHOTOS && (
-                <p className="capture-count">
-                    Add at least {MIN_PHOTOS} photos to train (you have {photos.length}).
-                </p>
-            )}
         </div>
     );
 }

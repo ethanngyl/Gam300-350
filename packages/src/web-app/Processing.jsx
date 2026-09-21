@@ -7,12 +7,15 @@ const PHASE_LABELS = {
   'colmap-matching': 'Matching photos',
   'colmap-mapping': 'Recovering camera positions',
   training: 'Training 3D model',
+  normalize: 'Finalizing model',
   done: 'Done',
 }
 
 /**
  * Polls /jobs/:id until the reconstruction finishes, showing phase + progress.
- * Calls onDone() when the splat is ready, onCancel() to go back.
+ * Calls onDone() when the splat is ready, onCancel() to go back. Cancel first
+ * asks the server to kill the job's tool process so training doesn't keep
+ * hogging the GPU for a job nobody is watching.
  */
 export default function Processing({ jobId, onDone, onCancel }) {
   const [job, setJob] = useState(null)
@@ -39,6 +42,7 @@ export default function Processing({ jobId, onDone, onCancel }) {
           setFailed(data.error || 'Reconstruction failed')
           return
         }
+        if (data.status === 'cancelled') return // cancel() already navigated away
       } catch (err) {
         if (!stopped) setFailed(err.message)
         return
@@ -52,6 +56,13 @@ export default function Processing({ jobId, onDone, onCancel }) {
       clearTimeout(timer)
     }
   }, [jobId, onDone])
+
+  // Kill the server-side job, then leave. keepalive lets the request finish
+  // even if the page unloads; failures are ignored since we're leaving anyway.
+  function cancel() {
+    fetch(`/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => {})
+    onCancel()
+  }
 
   const pct = Math.round((job?.progress ?? 0) * 100)
   const label = PHASE_LABELS[job?.phase] ?? 'Working'
@@ -111,7 +122,7 @@ export default function Processing({ jobId, onDone, onCancel }) {
               {pct}%
             </div>
             <div style={{ marginTop: 18 }}>
-              <button className="btn btn-ghost" onClick={onCancel}>
+              <button className="btn btn-ghost" onClick={cancel}>
                 Cancel
               </button>
             </div>

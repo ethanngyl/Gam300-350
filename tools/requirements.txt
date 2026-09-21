@@ -1,4 +1,9 @@
 # Dependencies for youtube_frames.py
 # Install with:  pip install -r tools/requirements.txt
-yt-dlp>=2024.1.0
+# (packages/start.bat does this automatically.)
+#
+# [default] pulls in yt-dlp-ejs, which YouTube now requires. It also needs a
+# JavaScript runtime: the backend passes its own Node.js binary to the script.
+# Keep yt-dlp current -- YouTube changes regularly break older releases.
+yt-dlp[default]>=2025.11.12
 opencv-python>=4.8.0
