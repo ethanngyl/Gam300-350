@@ -93,19 +93,10 @@ function App() {
     }
 
     if (screen === 'gallery') {
-        return <ImageGallery onBack={() => setScreen('landing')} />;
+        return <ImageGallery onBack={backToDashboard} />;
     }
 
-    if (showCapture) {
-            return (
-                <CameraCapture
-                    onBatchReady={handleBatchReady}
-                    onBack={() => setShowCapture(false)}
-                />
-            );
-        }
-
-        return (
+        /*return (
             <>
                 <header className="nav">
                     <div className="wrap">
@@ -301,7 +292,8 @@ function App() {
                     </div>
                 </footer>
             </>
-        )
+        )*/
+
     if (screen === 'youtube') {
         return (
             <div style={{ minHeight: '100vh', background: '#0f1115', color: '#e8eaed', padding: 24 }}>
@@ -321,6 +313,7 @@ function App() {
                 <HomeScreen
                     onNewGeneration={() => setScreen('capture')}
                     onYoutube={() => setScreen('youtube')}
+                    onGallery={() => setScreen('gallery')}
                     onNavigate={setActiveTab}
                 />
             )}
