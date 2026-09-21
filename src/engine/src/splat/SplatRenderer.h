@@ -22,13 +22,38 @@ public:
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
     void SetSplats(const std::vector<SplatVertex>& splats);
-    void Draw(const glm::mat4& viewProj, float viewportHeightPixels) const;
+    //Updates a model
+    void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
+    //Moves model
+    void TranslateModel(SplatModel* model, const glm::vec3& delta);
+    void Draw(const glm::mat4& viewProj, float viewportHeightPixels, const glm::vec3& camPos);
 
     size_t ModelCount() const { return m_modelCount; }
+    size_t TotalCreatedCount() const { return m_totalCreatedCount; }
     size_t SplatCount() const;
 
 private:
+    void RebuildCombinedBuffer();
+
+    static constexpr int kMaxModels = 32; //Must match uModelTransforms[] size in the shader
+    static constexpr float kSortBudgetMs = 4.0f;
+    static constexpr int kDisableAfterFrames = 3;
+    static constexpr int kReenableAfterFrames = 120;
+
+    unsigned int m_vao = 0;
+    unsigned int m_vbo = 0;
+    unsigned int m_ebo = 0;
+
     size_t m_modelCount = 0; //Number of models
+    size_t m_totalCreatedCount = 0; //Total number of models ever created
+
+    bool m_modified = true;
+
+    mutable std::vector<SplatVertex> m_combined; //CPU copy for sorting
     std::shared_ptr<Shader> m_shader; //Shared pointer of shader used
-    std::vector<std::unique_ptr<SplatModel>> m_splatModels; //Vector storing the splat model unique ptrs
+    std::vector<std::unique_ptr<SplatModel>> m_models; //Vector storing the splat model unique ptrs
+
+    bool m_sortEnabled = false;
+    int m_framesOverBudget = 0;
+    int m_framesUnderBudget = 0;
 };

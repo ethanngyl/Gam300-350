@@ -131,7 +131,7 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glm::mat4 viewProj = camera.getProjection(aspect) * camera.getView();
-        renderer.Draw(viewProj, static_cast<float>(height));
+        renderer.Draw(viewProj, static_cast<float>(height), camera.getPosition());
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
