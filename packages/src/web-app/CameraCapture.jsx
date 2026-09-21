@@ -1,8 +1,7 @@
-﻿// src/CameraCapture.jsx
-import { useRef, useState, useEffect, useCallback } from 'react';
+﻿import { useRef, useState, useEffect, useCallback } from 'react';
 import './CameraCapture.css';
 
-const MAX_AUTO_CAPTURES = 200;
+const HARD_CAP = 200;
 
 function CameraCapture({ onBatchReady, onBack }) {
     const videoRef = useRef(null);
@@ -22,9 +21,9 @@ function CameraCapture({ onBatchReady, onBack }) {
     const [captureMode, setCaptureMode] = useState('manual');
     const [isAutoCapturing, setIsAutoCapturing] = useState(false);
     const [intervalSeconds, setIntervalSeconds] = useState(2);
+    const [maxCaptures, setMaxCaptures] = useState(50);
 
     useEffect(() => {
-
         let cancelled = false;
 
         async function startCamera() {
@@ -117,7 +116,7 @@ function CameraCapture({ onBatchReady, onBack }) {
         if (captureMode !== 'auto' || !isAutoCapturing) return;
 
         const id = setInterval(() => {
-            if (photos.length >= MAX_AUTO_CAPTURES) {
+            if (photos.length >= maxCaptures) {
                 setIsAutoCapturing(false);
                 return;
             }
@@ -125,7 +124,7 @@ function CameraCapture({ onBatchReady, onBack }) {
         }, intervalSeconds * 1000);
 
         return () => clearInterval(id);
-    }, [captureMode, isAutoCapturing, intervalSeconds, capturePhoto, photos.length]);
+    }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto, photos.length]);
 
     function handleModeChange(mode) {
         setCaptureMode(mode);
@@ -247,9 +246,24 @@ function CameraCapture({ onBatchReady, onBack }) {
                         </select>
                     </label>
 
+                    <label className="capture-interval-label">
+                        max
+                        <select
+                            value={maxCaptures}
+                            onChange={(e) => setMaxCaptures(Number(e.target.value))}
+                            disabled={isAutoCapturing}
+                        >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                            <option value={HARD_CAP}>{HARD_CAP}</option>
+                        </select>
+                    </label>
+
                     {isAutoCapturing && (
                         <span className="capture-auto-status">
-                            Capturing every {intervalSeconds}s… ({photos.length}/{MAX_AUTO_CAPTURES})
+                            Capturing every {intervalSeconds}s… ({photos.length}/{maxCaptures})
                         </span>
                     )}
                 </div>
@@ -313,7 +327,7 @@ function CameraCapture({ onBatchReady, onBack }) {
                 disabled={photos.length === 0}
                 onClick={handleUploadBatch}
             >
-                {isBatchSent ? '✓ Sent' : `Use this batch (${photos.length} photos)`}
+                {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
             </button>
         </div>
     );
