@@ -2,23 +2,18 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import './CameraCapture.css';
 
-const MAX_AUTO_CAPTURES = 100;
+const MAX_AUTO_CAPTURES = 200;
 
 function CameraCapture({ onBatchReady, onBack }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    // A ref to the hidden <input type="file"> clicking a styled button
-    // will programmatically "click" this invisible input to open the
-    // OS's native file picker popup.
     const fileInputRef = useRef(null);
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
-    // Tracks whether the user is currently dragging a file over the
-    // drop zone, purely so we can highlight it visually.
     const [isDragging, setIsDragging] = useState(false);
     const [photos, setPhotos] = useState([]);
-    //const [feedback, setFeedback] = useState(null);
+
     const [captureFeedback, setCaptureFeedback] = useState(null);
     const [uploadFeedback, setUploadFeedback] = useState(null);
     const [isBatchSent, setIsBatchSent] = useState(false);
@@ -26,7 +21,6 @@ function CameraCapture({ onBatchReady, onBack }) {
     const [captureMode, setCaptureMode] = useState('manual');
     const [isAutoCapturing, setIsAutoCapturing] = useState(false);
     const [intervalSeconds, setIntervalSeconds] = useState(2);
-
 
     useEffect(() => {
         async function startCamera() {
@@ -43,7 +37,6 @@ function CameraCapture({ onBatchReady, onBack }) {
                     videoRef.current.srcObject = mediaStream;
                 }
             } catch (err) {
-                // Camera fail to start
                 setError('Camera unavailable: ' + err.message);
             }
         }
@@ -64,14 +57,8 @@ function CameraCapture({ onBatchReady, onBack }) {
         };
     }, [photos]);
 
-    //function showFeedback(message) {
-    //    setFeedback(message);
-    //    setTimeout(() => setFeedback(null), 2500);
-    //}
-
     const addFiles = useCallback((fileList) => {
         const newPhotos = Array.from(fileList)
-            // Only accept actual images into the batch
             .filter((file) => file.type.startsWith('image/'))
             .map((file) => ({
                 id: `${file.name}-${file.lastModified}-${Math.random()}`,
@@ -82,7 +69,6 @@ function CameraCapture({ onBatchReady, onBack }) {
         setPhotos((prev) => [...prev, ...newPhotos]);
 
         return newPhotos.length;
-
     }, []);
 
     const capturePhoto = useCallback((showFeedback = true) => {
@@ -117,26 +103,18 @@ function CameraCapture({ onBatchReady, onBack }) {
         if (captureMode !== 'auto' || !isAutoCapturing) return;
 
         const id = setInterval(() => {
-            // Checks the cap right before capturing, using the functional
-            // form of setPhotos indirectly via photos.length.If the cap
-            // is hit, this stops the capture instead of taking another photo
-            setPhotos((current) => {
-                if (current.length >= MAX_AUTO_CAPTURES) {
-                    setIsAutoCapturing(false);
-                    return current;
-                }
-                return current;
-            });
-
+            if (photos.length >= MAX_AUTO_CAPTURES) {
+                setIsAutoCapturing(false);
+                return;
+            }
             capturePhoto(false);
         }, intervalSeconds * 1000);
 
         return () => clearInterval(id);
-    }, [captureMode, isAutoCapturing, intervalSeconds, capturePhoto]);
+    }, [captureMode, isAutoCapturing, intervalSeconds, capturePhoto, photos.length]);
 
     function handleModeChange(mode) {
         setCaptureMode(mode);
-        // Switching away from auto mode always stops the timer
         if (mode === 'manual') {
             setIsAutoCapturing(false);
         }
@@ -149,16 +127,14 @@ function CameraCapture({ onBatchReady, onBack }) {
     function handleFileInputChange(e) {
         if (e.target.files) {
             const addedCount = addFiles(e.target.files);
-            if (addedCount > 0)
-            {
+            if (addedCount > 0) {
                 setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
                 setTimeout(() => setUploadFeedback(null), 2000);
             }
         }
+
         e.target.value = '';
     }
-
-    // Drag and drop functionality
 
     function handleDragOver(e) {
         e.preventDefault();
@@ -187,24 +163,17 @@ function CameraCapture({ onBatchReady, onBack }) {
 
     function handleUploadBatch() {
         const files = photos.map((p) => p.file);
-        console.log('Batch selected (not uploaded):', files);
-    }
-
-    // "Train model" is the only trigger that starts the reconstruction.
-    function handleTrain() {
-        const files = photos.map((p) => p.file);
         if (onBatchReady) {
             onBatchReady(files);
         }
-        setIsBatchSent(true);
-        setTimeout(() => setIsBatchSent(false), 2000)
-    }
 
-    const MIN_PHOTOS = 8;
+        setIsBatchSent(true);
+        setTimeout(() => setIsBatchSent(false), 2000);
+    }
 
     return (
         <div className="capture">
-            <button className="btn btn-ghost capture-back" onClick={onBack}>
+            <button className="forma-btn capture-back" onClick={onBack}>
                 Back
             </button>
 
@@ -217,13 +186,13 @@ function CameraCapture({ onBatchReady, onBack }) {
 
             <div className="capture-mode-toggle">
                 <button
-                    className={captureMode === 'manual' ? 'btn btn-primary' : 'btn btn-ghost'}
+                    className={captureMode === 'manual' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
                     onClick={() => handleModeChange('manual')}
                 >
                     Manual
                 </button>
                 <button
-                    className={captureMode === 'auto' ? 'btn btn-primary' : 'btn btn-ghost'}
+                    className={captureMode === 'auto' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
                     onClick={() => handleModeChange('auto')}
                 >
                     Auto capture
@@ -234,7 +203,7 @@ function CameraCapture({ onBatchReady, onBack }) {
 
             {captureMode === 'manual' ? (
                 <button
-                    className="btn btn-primary capture-btn"
+                    className="forma-btn forma-btn-primary capture-btn"
                     onClick={() => capturePhoto(true)}
                     disabled={!stream}
                 >
@@ -243,7 +212,7 @@ function CameraCapture({ onBatchReady, onBack }) {
             ) : (
                 <div className="capture-auto-controls">
                     <button
-                        className={isAutoCapturing ? 'btn btn-primary' : 'btn btn-ghost'}
+                        className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
                         onClick={() => setIsAutoCapturing((prev) => !prev)}
                         disabled={!stream}
                     >
@@ -266,7 +235,7 @@ function CameraCapture({ onBatchReady, onBack }) {
 
                     {isAutoCapturing && (
                         <span className="capture-auto-status">
-                                Capturing every {intervalSeconds}s… ({photos.length}/{MAX_AUTO_CAPTURES})
+                            Capturing every {intervalSeconds}s… ({photos.length}/{MAX_AUTO_CAPTURES})
                         </span>
                     )}
                 </div>
@@ -285,7 +254,7 @@ function CameraCapture({ onBatchReady, onBack }) {
                 <p className="capture-dropzone-or">or</p>
                 <button
                     type="button"
-                    className="btn btn-ghost"
+                    className="forma-btn"
                     onClick={(e) => {
                         e.stopPropagation();
                         handleBrowseClick();
@@ -318,37 +287,20 @@ function CameraCapture({ onBatchReady, onBack }) {
                                 onClick={() => removePhoto(photo.id)}
                                 aria-label="Remove photo"
                             >
-                                x
+                                ×
                             </button>
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* <button
-                className={`btn btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
+            <button
+                className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                 disabled={photos.length === 0}
                 onClick={handleUploadBatch}
             >
-                {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
-            </button> */}
-
-            {/* "Train model" is the only trigger that starts the reconstruction
-                (see handleTrain). Keep this when reworking the layout. */}
-            <button
-                className="btn btn-primary"
-                disabled={photos.length < MIN_PHOTOS}
-                onClick={handleTrain}
-                style={{ marginTop: '10px' }}
-            >
-                Train model
+                {isBatchSent ? '✓ Sent' : `Use this batch (${photos.length} photos)`}
             </button>
-
-            {photos.length > 0 && photos.length < MIN_PHOTOS && (
-                <p className="capture-count">
-                    Add at least {MIN_PHOTOS} photos to train (you have {photos.length}).
-                </p>
-            )}
         </div>
     );
 }

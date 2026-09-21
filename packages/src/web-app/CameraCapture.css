@@ -1,4 +1,8 @@
 .capture {
+    background: var(--forma-bg);
+    color: var(--forma-text);
+    min-height: 100vh;
+    font-family: 'IBM Plex Sans', sans-serif;
     max-width: 480px;
     margin: 0 auto;
     padding: 24px;
@@ -7,18 +11,22 @@
     gap: 16px;
 }
 
+.capture-back {
+    align-self: flex-start;
+}
+
 .capture-error {
-    color: var(--accent);
+    color: var(--forma-red);
     font-size: 0.9rem;
 }
 
 .capture-viewport {
     position: relative;
     aspect-ratio: 4 / 3;
-    border-radius: var(--radius-md);
+    border-radius: 10px;
     overflow: hidden;
-    border: 1px solid var(--border-strong);
-    background: var(--surface);
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel);
 }
 
 .capture-video {
@@ -27,17 +35,84 @@
     object-fit: cover;
 }
 
-.capture-controls {
+.capture-mode-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+.capture-auto-controls {
     display: flex;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
 }
 
+.capture-interval-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--forma-text-muted);
+}
+
+    .capture-interval-label select {
+        background: var(--forma-panel-alt);
+        color: var(--forma-text);
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-family: inherit;
+    }
+
+.capture-auto-status {
+    font-size: 0.85rem;
+    color: var(--forma-blue);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+.capture-feedback {
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid var(--forma-blue);
+    color: var(--forma-text);
+    font-size: 0.85rem;
+    padding: 8px 14px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.capture-dropzone {
+    border: 2px dashed var(--forma-border-strong);
+    border-radius: 10px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--forma-text-muted);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+    .capture-dropzone:hover {
+        border-color: var(--forma-blue);
+    }
+
+    .capture-dropzone.is-dragging {
+        border-color: var(--forma-blue);
+        background: rgba(59, 130, 246, 0.08);
+        color: var(--forma-text);
+    }
+
+    .capture-dropzone p {
+        margin: 4px 0;
+    }
+
+.capture-dropzone-or {
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
 .capture-count {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--forma-text-muted);
 }
 
 .capture-thumbnails {
@@ -50,9 +125,9 @@
     position: relative;
     width: 64px;
     height: 64px;
-    border-radius: var(--radius-sm);
+    border-radius: 6px;
     overflow: hidden;
-    border: 1px solid var(--border);
+    border: 1px solid var(--forma-border);
 }
 
     .capture-thumb img {
@@ -77,91 +152,13 @@
     cursor: pointer;
 }
 
-.capture-dropzone {
-    border: 2px dashed var(--border-strong);
-    border-radius: var(--radius-md);
-    padding: 32px 20px;
-    text-align: center;
-    cursor: pointer;
-    color: var(--text-muted);
-    transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-    .capture-dropzone:hover {
-        border-color: var(--mesh);
-    }
-
-    .capture-dropzone.is-dragging {
-        border-color: var(--mesh);
-        background: var(--mesh-dim);
-        color: var(--text);
-    }
-
-    .capture-dropzone p {
-        margin: 4px 0;
-    }
-
-.capture-dropzone-or {
-    font-size: 0.8rem;
-    opacity: 0.7;
-}
-
-.capture-back {
-    align-self: flex-start;
-}
-
-.capture-feedback {
-    background: var(--mesh-dim);
-    border: 1px solid var(--mesh);
-    color: var(--text);
-    font-size: 0.85rem;
-    padding: 8px 14px;
-    border-radius: var(--radius-sm);
-    text-align: center;
-}
-
 .batch-btn.is-sent {
-    background: var(--mesh-dim);
-    border-color: var(--mesh);
-    color: var(--text);
+    background: rgba(34, 197, 94, 0.12);
+    border-color: var(--forma-green);
+    color: var(--forma-text);
 }
 
-.batch-btn.is-sent:hover {
-
-    background: var(--mesh-dim);
-    border-color: var(--mesh);
-}
-
-.capture-mode-toggle {
-    display: flex;
-    gap: 8px;
-}
-
-.capture-auto-controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.capture-interval-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
-
-    .capture-interval-label select {
-        background: var(--surface);
-        color: var(--text);
-        border: 1px solid var(--border-strong);
-        border-radius: var(--radius-sm);
-        padding: 4px 8px;
-        font-family: inherit;
+    .batch-btn.is-sent:hover {
+        background: rgba(34, 197, 94, 0.12);
+        border-color: var(--forma-green);
     }
-
-.capture-auto-status {
-    font-size: 0.85rem;
-    color: var(--mesh);
-}
