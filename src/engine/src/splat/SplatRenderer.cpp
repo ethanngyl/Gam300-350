@@ -172,7 +172,7 @@ void SplatRenderer::Draw(const glm::mat4& viewProj, float viewportHeightPixels, 
         glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(m_modelCount)); // failsafe fallback
 
         m_framesUnderBudget++;
-        if (m_framesUnderBudget >= kReenableAfterFrames) {
+        if (m_framesUnderBudget >= kReEnableAfterFrames) {
             m_sortEnabled = true;
             m_framesUnderBudget = 0;
         }
