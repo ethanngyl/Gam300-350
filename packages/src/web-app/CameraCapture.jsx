@@ -8,6 +8,7 @@ function CameraCapture({ onBatchReady, onBack }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
+    const streamRef = useRef(null);
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
@@ -23,6 +24,9 @@ function CameraCapture({ onBatchReady, onBack }) {
     const [intervalSeconds, setIntervalSeconds] = useState(2);
 
     useEffect(() => {
+
+        let cancelled = false;
+
         async function startCamera() {
             try {
                 const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -32,23 +36,33 @@ function CameraCapture({ onBatchReady, onBack }) {
                         height: { ideal: 1080 },
                     },
                 });
+
+                if (cancelled) {
+                    mediaStream.getTracks().forEach((track) => track.stop());
+                    return;
+                }
+
+                streamRef.current = mediaStream;
                 setStream(mediaStream);
                 if (videoRef.current) {
                     videoRef.current.srcObject = mediaStream;
                 }
             } catch (err) {
-                setError('Camera unavailable: ' + err.message);
+                if (!cancelled) {
+                    setError('Camera unavailable: ' + err.message);
+                }
             }
         }
 
         startCamera();
 
         return () => {
-            if (stream) {
-                stream.getTracks().forEach((track) => track.stop());
+            cancelled = true;
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((track) => track.stop());
+                streamRef.current = null;
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
