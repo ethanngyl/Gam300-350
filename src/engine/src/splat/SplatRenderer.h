@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SplatData.h"
+#include "SplatModel.h"
 #include "../gfx/Shader.h"
 
 #include <glm/glm.hpp>
@@ -20,16 +21,39 @@ public:
     SplatRenderer(const SplatRenderer&) = delete;
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
-    void setSplats(const std::vector<SplatVertex>& splats);
-    void draw(const glm::mat4& viewProj, float viewportHeightPixels) const;
+    void SetSplats(const std::vector<SplatVertex>& splats);
+    //Updates a model
+    void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
+    //Moves model
+    void TranslateModel(SplatModel* model, const glm::vec3& delta);
+    void Draw(const glm::mat4& viewProj, float viewportHeightPixels, const glm::vec3& camPos);
 
-    size_t splatCount() const { return m_count; }
+    size_t ModelCount() const { return m_modelCount; }
+    size_t TotalCreatedCount() const { return m_totalCreatedCount; }
+    size_t SplatCount() const;
 
 private:
-    unsigned int m_vao = 0;
-    unsigned int m_vbo = 0;
-    size_t m_count = 0;
-    std::unique_ptr<Shader> m_shader;
+    void RebuildCombinedBuffer();
 
-    std::vector<SplatVertex> m_splats; //Copy of splat data
+    //Sorting Vars
+    static constexpr int kMaxModels = 32; //Must match uModelTransforms[] size in the shader
+    static constexpr float kSortBudgetMs = 4.0f; //Alloclated sorting time
+    static constexpr int kDisableAfterFrames = 3; //How many frames overbudget to disable
+    static constexpr int kReEnableAfterFrames = 120; //How many frames to reenable sorting
+    bool m_sortEnabled = false;
+    int m_framesOverBudget = 0;
+    int m_framesUnderBudget = 0;
+
+    unsigned int m_vao = 0; //Vertex Array Object, holds attributes (e.g. glVertexAttribPointer) and which vbo/ebo are bound
+    unsigned int m_vbo = 0; //Vertex Buffer Object, holds splat data
+    unsigned int m_ebo = 0; //Element Buffer Object, holds draw order
+
+    size_t m_modelCount = 0; //Number of models
+    size_t m_totalCreatedCount = 0; //Total number of models ever created
+
+    bool m_modified = true;
+
+    std::vector<SplatVertex> m_combined; //CPU copy for sorting
+    std::shared_ptr<Shader> m_shader; //Shared pointer of shader used
+    std::vector<std::unique_ptr<SplatModel>> m_models; //Vector storing the splat model unique ptrs
 };

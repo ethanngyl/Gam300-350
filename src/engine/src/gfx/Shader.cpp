@@ -64,6 +64,13 @@ void Shader::setMat4(const std::string& name, const glm::mat4& value) const {
     glUniformMatrix4fv(glGetUniformLocation(m_id, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
 }
 
+void Shader::setMat4Array(const std::string& name, const std::vector<glm::mat4>& values) const {
+    for (size_t i = 0; i < values.size(); ++i) {
+        setMat4(name + "[" + std::to_string(i) + "]", values[i]);
+    }
+}
+
+
 void Shader::setFloat(const std::string& name, float value) const {
     glUniform1f(glGetUniformLocation(m_id, name.c_str()), value);
 }
