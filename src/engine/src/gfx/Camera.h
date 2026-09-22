@@ -1,15 +1,17 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include "../Manager/InputManager.h"
 
 // Simple orbit camera: rotates around a fixed target at a variable distance.
 class Camera {
 public:
     explicit Camera(glm::vec3 target = glm::vec3(0.0f), float distance = 3.0f);
 
-    void processDrag(double dx, double dy);
-    void processScroll(double dy);
-    void processPan(double dx, double dy);
+
+    void ProcessLeftClick(InputManager&, InputManager::INPUT_TYPE inputType);
+    void ProcessRightClick(InputManager&, InputManager::INPUT_TYPE inputType);
+    void ProcessScroll(InputManager&, InputManager::INPUT_TYPE);
 
     glm::mat4 getView() const;
     glm::mat4 getProjection(float aspect) const;

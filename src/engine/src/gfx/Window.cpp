@@ -97,37 +97,42 @@ void Window::cursorPosCallback(GLFWwindow* w, double x, double y) {
     self->m_lastX = x;
     self->m_lastY = y;
 
+    self->m_lastDX = dx;
+    self->m_lastDY = dy;
 
-    if (self->m_rotating && self->onMouseRotate) {
-        self->onMouseRotate(dx, dy);
+
+    if (self->onMouseClick)
+    {
+        if (self->m_rightClickHeld) {
+            self->onMouseClick(GLFW_MOUSE_BUTTON_RIGHT, GLFW_REPEAT, self->m_lastDX, self->m_lastDY);
+        }
+
+        if (self->m_leftClickHeld)
+            self->onMouseClick(GLFW_MOUSE_BUTTON_LEFT, GLFW_REPEAT, self->m_lastDX, self->m_lastDY);
     }
 
-    if (self->m_panning && self->onMousePan)
-        self->onMousePan(dx, dy);
 }
 
 void Window::mouseButtonCallback(GLFWwindow* w, int button, int action, int /*mods*/) {
     auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w));
     if (!self) return; 
     
-    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        if (action == GLFW_PRESS) {
-            self->m_rotating = true;
-            glfwGetCursorPos(w, &self->m_lastX, &self->m_lastY);
-        } else if (action == GLFW_RELEASE) {
-            self->m_rotating = false;
-        }
-    }
-
-    else if (button == GLFW_MOUSE_BUTTON_LEFT)
+    if (action == GLFW_PRESS)
     {
-        if (action == GLFW_PRESS) {
-            self->m_panning = true;
-            glfwGetCursorPos(w, &self->m_lastX, &self->m_lastY);
-        }
-        else if (action == GLFW_RELEASE) {
-            self->m_panning = false;
-        }
+        if (self->onMouseClick)
+            self->onMouseClick(button, action, self->m_lastDX, self->m_lastDY);
+
+        if (button == GLFW_MOUSE_BUTTON_RIGHT)
+            self->m_rightClickHeld = true;
+        else if (button == GLFW_MOUSE_BUTTON_LEFT)
+            self->m_leftClickHeld = true;
+    }
+    else
+    {
+        if (button == GLFW_MOUSE_BUTTON_RIGHT)
+            self->m_rightClickHeld = false;
+        else if (button == GLFW_MOUSE_BUTTON_LEFT)
+            self->m_leftClickHeld = false;
     }
 }
 

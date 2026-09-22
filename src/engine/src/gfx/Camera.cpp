@@ -13,24 +13,27 @@ Camera::Camera(glm::vec3 target, float distance)
     , m_pitch(0.3f) {
 }
 
-void Camera::processDrag(double dx, double dy) {
-    m_yaw -= static_cast<float>(dx) * m_RotateSensitivity;
-    m_pitch += static_cast<float>(dy) * m_RotateSensitivity;
-    m_pitch = std::clamp(m_pitch, -m_PitchLimit, m_PitchLimit);
-}
 
-void Camera::processScroll(double dy) {
-    m_distance -= static_cast<float>(dy) * m_distance * m_ZoomSpeed;
-    m_distance = std::clamp(m_distance, m_MinDistance, m_MaxDistance);
-}
-
-void Camera::processPan(double dx, double dy)
+void Camera::ProcessLeftClick(InputManager& inManager, InputManager::INPUT_TYPE inputType)
 {
     glm::vec3 forward = glm::normalize(m_target - getPosition());
     glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
     glm::vec3 up = glm::cross(right, forward);
-    glm::vec3 delta = (-right * static_cast<float>(dx) + up * static_cast<float>(dy)) * m_PanSensitivity * m_distance;
+    glm::vec3 delta = (-right * static_cast<float>(inManager.GetDx()) + up * static_cast<float>(inManager.GetDy())) * m_PanSensitivity * m_distance;
     m_target += delta;
+}
+
+void Camera::ProcessRightClick(InputManager& inManager, InputManager::INPUT_TYPE inputType)
+{
+    m_yaw -= static_cast<float>(inManager.GetDx()) * m_RotateSensitivity;
+    m_pitch += static_cast<float>(inManager.GetDy()) * m_RotateSensitivity;
+    m_pitch = std::clamp(m_pitch, -m_PitchLimit, m_PitchLimit);
+}
+
+void Camera::ProcessScroll(InputManager& inManager, InputManager::INPUT_TYPE)
+{
+    m_distance -= static_cast<float>(inManager.GetScrollY()) * m_distance * m_ZoomSpeed;
+    m_distance = std::clamp(m_distance, m_MinDistance, m_MaxDistance);
 }
 
 glm::vec3 Camera::getPosition() const {

@@ -2,6 +2,7 @@
 #include "gfx/Camera.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
+#include "Manager/InputManager.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -52,16 +53,34 @@ static std::vector<fs::path> ScanPlyFiles(const fs::path& dir) {
 int main() {
     Window window(1280, 720, "Codefine - Engine Foundation (M1)");
     Camera camera;
+    InputManager inputManager(window);
 
-    window.onMouseRotate = [&camera](double dx, double dy) {
-        camera.processDrag(dx, dy);
-    };
-    window.onMousePan = [&camera](double dx, double dy) {
-        camera.processPan(dx, dy);
-    };
-    window.onScroll = [&camera](double dy) {
-        camera.processScroll(dy);
-    };
+    //Bind InputManager to Window callback
+    window.onMouseClick = [&inputManager](int key, int pressType, double dx, double dy) {
+        inputManager.CallbackMouseClick(key, pressType, dx, dy);
+        };
+    window.onScroll = [&inputManager](double dy) {
+        inputManager.CallbackMouseScroll(dy);
+        };
+
+    //Bind inputs
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT_CLICK,
+        [&camera](InputManager& manager, InputManager::INPUT_TYPE type) {
+            camera.ProcessLeftClick(manager, type);
+        });
+
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT_CLICK,
+        [&camera](InputManager& manager, InputManager::INPUT_TYPE type) {
+            camera.ProcessRightClick(manager, type);
+        });
+
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::SCROLL,
+        [&camera](InputManager& manager, InputManager::INPUT_TYPE type) {
+            camera.ProcessScroll(manager, type);
+        });
+
+
+
 
     window.onKey = [&window](int key, int action) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
