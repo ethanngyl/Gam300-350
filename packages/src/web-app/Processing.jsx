@@ -57,6 +57,24 @@ export default function Processing({ jobId, onDone, onCancel }) {
     }
   }, [jobId, onDone])
 
+  // Free the server-side job if the user leaves without pressing Cancel:
+  // closing the tab, refreshing, or the browser Back button all tear down
+  // this screen while COLMAP/Brush keeps running and hogging the GPU. pagehide
+  // covers tab close / navigation; the effect cleanup covers in-app unmount.
+  // A finished job is left alone so its result stays downloadable, and the
+  // DELETE is idempotent, so a redundant call after Cancel is harmless.
+  useEffect(() => {
+    function killJob() {
+      if (doneRef.current) return
+      fetch(`/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => {})
+    }
+    window.addEventListener('pagehide', killJob)
+    return () => {
+      window.removeEventListener('pagehide', killJob)
+      killJob()
+    }
+  }, [jobId])
+
   // Kill the server-side job, then leave. keepalive lets the request finish
   // even if the page unloads; failures are ignored since we're leaving anyway.
   function cancel() {
@@ -100,7 +118,12 @@ export default function Processing({ jobId, onDone, onCancel }) {
               Running COLMAP and Brush on the server — a few minutes depending on
               photo count and quality.
             </p>
-            <div style={{ margin: '18px 0 10px' }}>{label}…</div>
+            <div style={{ margin: '18px 0 10px' }}>
+              {label}…
+              {job?.detail && (
+                <span style={{ color: '#9aa0aa', marginLeft: 8 }}>{job.detail}</span>
+              )}
+            </div>
             <div
               style={{
                 height: 10,

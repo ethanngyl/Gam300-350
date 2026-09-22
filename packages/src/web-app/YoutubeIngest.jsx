@@ -65,9 +65,17 @@ function YoutubeIngest() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
     const [job, setJob] = useState(null); // latest status payload from the server
+    // Keep a ref copy of the current job for the leave-handlers (see below).
+    const jobRef = useRef(null);
 
     // Holds the polling interval id so we can clear it on unmount / completion.
     const pollRef = useRef(null);
+
+    // Mirror the latest job into jobRef so the leave-handlers below can read it
+    // without re-subscribing every render.
+    useEffect(() => {
+        jobRef.current = job;
+    }, [job]);
 
     const stopPolling = useCallback(() => {
         if (pollRef.current) {
@@ -78,6 +86,25 @@ function YoutubeIngest() {
 
     // Clean up any in-flight polling when the component unmounts.
     useEffect(() => stopPolling, [stopPolling]);
+
+    // Free a still-running server-side job when the user leaves this page:
+    // "Back to dashboard", closing the tab, or refreshing all unmount this
+    // component while COLMAP/Brush keeps running unwatched. A finished job is
+    // left alone so its result stays downloadable, and the backend's DELETE is
+    // idempotent, so an extra call is harmless. keepalive lets the request
+    // finish during page unload.
+    useEffect(() => {
+        function killJob() {
+            const j = jobRef.current;
+            if (!j || !j.id || FINISHED.includes(j.status)) return;
+            fetch(`/jobs/${j.id}`, { method: 'DELETE', keepalive: true }).catch(() => {});
+        }
+        window.addEventListener('pagehide', killJob);
+        return () => {
+            window.removeEventListener('pagehide', killJob);
+            killJob();
+        };
+    }, []);
 
     const pollJob = useCallback(
         (id) => {
