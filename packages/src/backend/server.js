@@ -22,6 +22,7 @@ import {
   runYoutubePipeline,
 } from './pipeline.js'
 import { IMAGE_EXT_RE, scanJob, scanJobs } from './scan.js'
+import { saveJob } from './status.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -123,6 +124,8 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   }
   const job = makeJob(req.jobId)
   job.imageCount = files.length
+  job.source = 'upload'
+  saveJob(job) // gives upload-only jobs a status record from the start
   //runPipeline(job) // fire-and-forget; do not await
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
@@ -144,6 +147,7 @@ app.get('/jobs', async (_req, res) => {
         detail: job.detail,
         error: job.error,
         createdAt: record.createdAt,
+        updatedAt: job.updatedAt ?? record.updatedAt,
         imageCount: record.imageCount,
         hasResult: job.status === 'done' && !!job.resultPath,
         thumbnail: record.thumbnail,
@@ -181,6 +185,7 @@ app.post('/jobs/from-youtube', (req, res) => {
   fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
   const job = makeJob(jobId)
   job.source = 'youtube'
+  saveJob(job)
 
   const opts = {}
   if (Number.isFinite(Number(fps)) && Number(fps) > 0) {
@@ -205,6 +210,7 @@ app.get('/jobs/:id', async (req, res) => {
     progress: job.progress,
     detail: job.detail,
     error: job.error,
+    updatedAt: job.updatedAt ?? null,
     imageCount: job.imageCount ?? null,
     hasResult: job.status === 'done' && !!job.resultPath,
     logTail: job.log.slice(-40),
@@ -247,6 +253,7 @@ function shutdown(reason, exitCode = 0) {
     if (job.status === 'running') {
       job.status = 'error'
       job.error = 'Server shut down during processing.'
+      saveJob(job)
     }
   }
   killChildren()

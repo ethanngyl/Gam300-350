@@ -4,6 +4,7 @@
 //
 // Layout it understands (written by runPipeline in pipeline.js):
 //   <jobsDir>/<id>/images/         uploaded photos / extracted frames
+//   <jobsDir>/<id>/status.json     saved job state (see status.js)
 //   <jobsDir>/<id>/database.db     COLMAP has started
 //   <jobsDir>/<id>/sparse/         COLMAP mapping has started
 //   <jobsDir>/<id>_out/result.ply  normalized result (else the newest splat_*.ply)
@@ -12,6 +13,9 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { config } from './config.js'
+import { readStatus } from './status.js'
+
+const INTERRUPTED = 'Interrupted -- the server stopped during processing.'
 
 export const IMAGE_EXT_RE = /\.(jpe?g|png)$/i
 // Job ids become path segments, so only plain filename characters are accepted.
@@ -49,8 +53,12 @@ export async function highestRawPly(outDir) {
  * (bad id, no images, unreadable). Never throws, so one broken folder can't
  * take down a whole listing.
  *
- * The status is inferred from which files exist. The disk can't tell a running
- * job from an interrupted one, so callers must let a live in-memory job win.
+ * The saved status.json is trusted first, then reconciled with what is on disk:
+ * nothing owns a job at load time, so a saved `running` means it was interrupted,
+ * and a saved `done` whose result file is gone is an error. Folders without a
+ * record (created before status.json existed) get a status inferred from which
+ * files exist. `needsWrite` is true when the record should be (re)saved.
+ * Callers must still let a live in-memory job win over this snapshot.
  */
 export async function scanJob(id, jobsDir = config.jobsDir) {
   if (!JOB_ID_RE.test(id) || id.endsWith('_out')) return null
@@ -62,23 +70,56 @@ export async function scanJob(id, jobsDir = config.jobsDir) {
     if (names.length === 0) return null
 
     const st = await fsp.stat(jobDir)
-    const outDir = path.join(jobsDir, `${id}_out`)
-    const finalPly = path.join(outDir, 'result.ply')
-    const resultPath = (await exists(finalPly)) ? finalPly : await highestRawPly(outDir)
+    const hasColmapFiles =
+      (await exists(path.join(jobDir, 'sparse'))) || (await exists(path.join(jobDir, 'database.db')))
 
-    let status = 'queued'
-    let phase = 'upload'
-    let progress = 0
-    let error = null
-    if (resultPath) {
-      status = 'done'
-      phase = 'done'
-      progress = 1
-    } else if ((await exists(path.join(jobDir, 'sparse'))) || (await exists(path.join(jobDir, 'database.db')))) {
-      // Reconstruction started but never produced a result.
-      status = 'error'
-      phase = null
-      error = 'Interrupted -- the server stopped during processing.'
+    const saved = await readStatus(id, jobsDir)
+    let status
+    let phase
+    let progress
+    let error
+    let resultPath
+    let needsWrite
+
+    if (saved) {
+      status = saved.status
+      phase = saved.phase ?? null
+      progress = saved.progress ?? 0
+      error = saved.error ?? null
+      resultPath = saved.result ? path.join(jobsDir, saved.result) : null
+      if (resultPath && !(await exists(resultPath))) resultPath = null
+      needsWrite = false
+
+      if (status === 'running' || (status === 'queued' && hasColmapFiles)) {
+        status = 'error'
+        phase = null
+        error = INTERRUPTED
+        needsWrite = true
+      } else if (status === 'done' && !resultPath) {
+        status = 'error'
+        error = 'Result file is missing.'
+        needsWrite = true
+      }
+    } else {
+      // No record: infer from which files exist.
+      const outDir = path.join(jobsDir, `${id}_out`)
+      const finalPly = path.join(outDir, 'result.ply')
+      resultPath = (await exists(finalPly)) ? finalPly : await highestRawPly(outDir)
+      status = 'queued'
+      phase = 'upload'
+      progress = 0
+      error = null
+      if (resultPath) {
+        status = 'done'
+        phase = 'done'
+        progress = 1
+      } else if (hasColmapFiles) {
+        // Reconstruction started but never produced a result.
+        status = 'error'
+        phase = null
+        error = INTERRUPTED
+      }
+      needsWrite = true
     }
 
     const images = names.map((name) => ({ name, url: `/jobs/${id}/images/${name}` }))
@@ -88,11 +129,16 @@ export async function scanJob(id, jobsDir = config.jobsDir) {
       phase,
       progress,
       error,
+      detail: null,
+      source: saved?.source ?? null,
       // birthtime is 0 on some filesystems; fall back to mtime.
-      createdAt: st.birthtimeMs || st.mtimeMs,
+      createdAt: saved?.createdAt ?? (st.birthtimeMs || st.mtimeMs),
+      updatedAt: saved?.updatedAt ?? st.mtimeMs,
       imageCount: names.length,
       resultPath,
-      hasResult: !!resultPath,
+      hasResult: status === 'done' && !!resultPath,
+      logTail: saved?.logTail ?? [],
+      needsWrite,
       thumbnail: images[0].url,
       images,
     }
