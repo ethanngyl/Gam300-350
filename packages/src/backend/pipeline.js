@@ -106,7 +106,7 @@ export function cancelJob(job) {
  * parse lines for progress. With timeoutMs, the tool is killed if it runs
  * longer than that.
  */
-function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
+function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
   return new Promise((resolve, reject) => {
     // Cancelled between stages: don't start the next tool.
     if (job.cancelled) return reject(new Error('Cancelled by user'))
@@ -114,14 +114,26 @@ function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
     // windowsHide: no console window per tool on Windows. detached (macOS /
     // Linux only): put the tool in its own process group so killChildren can
     // take down its subprocesses too; stdio stays piped so it doesn't outlive
-    // us unnoticed.
+    // us unnoticed. env (when given) is merged over the inherited environment.
     const child = spawn(bin, args, {
       cwd,
       windowsHide: true,
       detached: process.platform !== 'win32',
+      env: env ? { ...process.env, ...env } : undefined,
     })
     liveChildren.add(child)
     job.child = child
+
+    // Optional watchdog: kill the tool if it runs longer than timeoutMs (used
+    // for the YouTube download/extract). clearTimeout below is a no-op when no
+    // timeout was requested, so `timer` is always safe to reference.
+    let timer
+    if (timeoutMs) {
+      timer = setTimeout(() => {
+        appendLog(job, `\n${path.basename(bin)} exceeded ${Math.round(timeoutMs / 1000)}s -- killing it.`)
+        killChild(child)
+      }, timeoutMs)
+    }
 
     const handle = (buf) => {
       const text = buf.toString()
@@ -344,34 +356,45 @@ export async function runPipeline(job) {
     job.phase = 'training'
     job.progress = 0.45
     const outDirName = `${job.id}_out`
-    // Best-effort progress parse from Brush's step output.
-    const stepRe = /(\d[\d,]*)\s*\/\s*(\d[\d,]*)/
+    const total = config.trainIters
+    // Brush (brush-cli 1.0.0) renders its progress as an interactive bar that is
+    // suppressed when stdout is a pipe, so with default logging it prints NOTHING
+    // for us to parse. Setting RUST_LOG=info makes it emit structured log lines,
+    // several of which carry the current step, e.g.
+    //   brush_train::train] screen_size iter=200 n=176 ...
+    //   brush_cli] Refine iter 401, 243 splats.
+    // These appear roughly every 200 steps -- frequent enough for a live counter.
+    const iterRe = /\biter[= ](\d[\d,]*)/i
     await run(
       job,
       config.brushBin,
       [
         job.id, // dataset dir name, relative to cwd (jobsDir)
         '--max-resolution', String(config.maxResolution),
-        config.brushItersFlag, String(config.trainIters),
+        config.brushItersFlag, String(total),
         '--export-path', `./${outDirName}/`,
         '--export-name', 'splat_{iter}.ply',
-        '--export-every', String(config.trainIters),
+        '--export-every', String(total),
       ],
       {
         cwd: config.jobsDir,
+        env: { RUST_LOG: 'info' },
         onData: (line) => {
-          const m = line.match(stepRe)
+          const m = line.match(iterRe)
           if (m) {
             const cur = Number(m[1].replace(/,/g, ''))
-            const total = Number(m[2].replace(/,/g, ''))
-            if (total > 0 && cur <= total) {
+            if (cur >= 0 && cur <= total) {
               // Map training [0..1] onto the 0.45..0.98 band.
               job.progress = 0.45 + 0.53 * (cur / total)
+              // Surfaced by the frontend as a live iteration counter.
+              job.detail = `Iteration ${cur.toLocaleString()} / ${total.toLocaleString()}`
             }
           }
         },
       },
     )
+    // Training done -- drop the iteration counter so later phases don't show it.
+    job.detail = null
 
     // --- Locate the exported .ply (highest iteration) ---
     const outDir = path.join(config.jobsDir, outDirName)
