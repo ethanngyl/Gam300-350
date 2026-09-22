@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.js'
+import { highestRawPly } from './scan.js'
 
 /**
  * In-memory job store. Single-user demo, so no database — jobs live for the
@@ -24,6 +25,7 @@ function makeJob(id) {
     error: null,
     createdAt: Date.now(),
     resultPath: null,
+    detail: null, // short human-readable sub-status, e.g. "Downloading video… 40%"
     cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
     child: null, // the tool process currently running for this job, if any
   }
@@ -123,6 +125,14 @@ function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
     liveChildren.add(child)
     job.child = child
 
+    let timedOut = false
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          timedOut = true
+          killChild(child)
+        }, timeoutMs)
+      : null
+
     const handle = (buf) => {
       const text = buf.toString()
       for (const line of text.split(/\r?\n/)) {
@@ -144,6 +154,8 @@ function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
       liveChildren.delete(child)
       if (job.child === child) job.child = null
       if (job.cancelled) reject(new Error('Cancelled by user'))
+      else if (timedOut)
+        reject(new Error(`${path.basename(bin)} timed out after ${+(timeoutMs / 60000).toFixed(1)} min`))
       else if (code === 0) resolve()
       else if (code === null)
         reject(new Error(`${path.basename(bin)} was killed (${signal ?? 'terminated'})`))
@@ -375,16 +387,10 @@ export async function runPipeline(job) {
 
     // --- Locate the exported .ply (highest iteration) ---
     const outDir = path.join(config.jobsDir, outDirName)
-    const plys = fs.existsSync(outDir)
-      ? (await fsp.readdir(outDir)).filter(
-          (f) => f.toLowerCase().endsWith('.ply') && f !== 'result.ply',
-        )
-      : []
-    if (plys.length === 0) {
+    const rawPly = await highestRawPly(outDir)
+    if (!rawPly) {
       throw new Error('Training finished but no .ply was exported.')
     }
-    plys.sort() // splat_00500, splat_07000 ... lexical works with zero-padding
-    const rawPly = path.join(outDir, plys[plys.length - 1])
 
     // --- Normalize into the viewer's frame ---
     // COLMAP reconstructs in an arbitrary world frame (object far from the
@@ -413,6 +419,24 @@ export async function runPipeline(job) {
     job.error = err.message
     appendLog(job, `\nERROR: ${err.message}`)
   }
+}
+
+/**
+ * Re-create an in-memory job from a record scanned off disk (see scan.js), so
+ * jobs finished before a restart can still be polled and downloaded.
+ */
+export function restoreJob(record) {
+  const job = makeJob(record.id)
+  Object.assign(job, {
+    status: record.status,
+    phase: record.phase,
+    progress: record.progress,
+    error: record.error,
+    createdAt: record.createdAt,
+    resultPath: record.resultPath,
+    imageCount: record.imageCount,
+  })
+  return job
 }
 
 export { makeJob }

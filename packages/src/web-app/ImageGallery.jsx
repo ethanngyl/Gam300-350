@@ -46,6 +46,7 @@ function ImageGallery({ onBack }) {
                 <section key={job.id} className="gallery-job">
                     <h3>
                         Job {job.id.slice(0, 8)}
+                        <span>{job.status}</span>
                         <span>{job.images.length} photos</span>
                     </h3>
                     <div className="gallery-grid">

@@ -17,9 +17,11 @@ import {
   jobs,
   killChildren,
   makeJob,
+  restoreJob,
   runPipeline,
   runYoutubePipeline,
 } from './pipeline.js'
+import { IMAGE_EXT_RE, scanJob, scanJobs } from './scan.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -27,6 +29,21 @@ const __dirname = dirname(__filename)
 const PORT = process.env.PORT || 5005
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
+
+// Jobs live in memory, so rebuild them from the job folders on disk. Without
+// this, everything finished before a restart 404s on /jobs/:id and result.ply.
+const restored = await scanJobs(config.jobsDir)
+for (const record of restored) if (!jobs.has(record.id)) restoreJob(record)
+console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
+
+// A job from memory, else adopted from its folder on disk (e.g. a folder that
+// appeared after startup). null if there is no such job.
+async function getJob(id) {
+  const live = jobs.get(id)
+  if (live) return live
+  const record = await scanJob(id)
+  return record ? (jobs.get(id) ?? restoreJob(record)) : null
+}
 
 const app = express()
 
@@ -110,33 +127,30 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
-// List every job folder that has uploaded images. Reads the disk (not the in-memory
-// `jobs` Map) so photos from before a server restart still show up.
-const IMAGE_EXT_RE = /\.(jpe?g|png)$/i
-
-app.get('/jobs', (_req, res) => {
-  try {
-    const result = fs
-      .readdirSync(config.jobsDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => {
-        const imagesDir = path.join(config.jobsDir, entry.name, 'images')
-        let names = []
-        try {
-          names = fs.readdirSync(imagesDir).filter((n) => IMAGE_EXT_RE.test(n)).sort()
-        } catch {
-          // job folder without an images/ subfolder -- skipped below
-        }
-        return {
-          id: entry.name,
-          images: names.map((name) => ({ name, url: `/jobs/${entry.name}/images/${name}` })),
-        }
-      })
-      .filter((job) => job.images.length > 0)
-    res.json(result)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
+// List every job folder that has images, newest first. The folders on disk are
+// scanned on each call (see scan.js), so photos and results from before a
+// restart -- or dropped in by hand -- show up. A job that is live in memory
+// keeps its live status: the disk can't tell "running" from "interrupted".
+app.get('/jobs', async (_req, res) => {
+  const records = await scanJobs(config.jobsDir)
+  res.json(
+    records.map((record) => {
+      const job = jobs.get(record.id) ?? restoreJob(record)
+      return {
+        id: record.id,
+        status: job.status,
+        phase: job.phase,
+        progress: job.progress,
+        detail: job.detail,
+        error: job.error,
+        createdAt: record.createdAt,
+        imageCount: record.imageCount,
+        hasResult: job.status === 'done' && !!job.resultPath,
+        thumbnail: record.thumbnail,
+        images: record.images,
+      }
+    }),
+  )
 })
 
 // Serve a single uploaded image. id/name are whitelisted to plain filename
@@ -181,8 +195,8 @@ app.post('/jobs/from-youtube', (req, res) => {
 })
 
 // Poll a job's status (bounded log tail, not the full log).
-app.get('/jobs/:id', (req, res) => {
-  const job = jobs.get(req.params.id)
+app.get('/jobs/:id', async (req, res) => {
+  const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
   res.json({
     id: job.id,
@@ -210,8 +224,8 @@ app.delete('/jobs/:id', (req, res) => {
 })
 
 // Download / stream the finished splat .ply.
-app.get('/jobs/:id/result.ply', (req, res) => {
-  const job = jobs.get(req.params.id)
+app.get('/jobs/:id/result.ply', async (req, res) => {
+  const job = await getJob(req.params.id)
   if (!job || job.status !== 'done' || !job.resultPath) {
     return res.status(404).json({ error: 'result not ready' })
   }
