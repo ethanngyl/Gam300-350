@@ -31,6 +31,33 @@ void InputManager::CallbackMouseScroll(double yScroll)
 
 void InputManager::CallbackKeyPress(int key, int inputType)
 {
+
+	KEY_ACTIONS input = ALL_ACTIONS;
+
+	switch (key)
+	{
+	case GLFW_KEY_W:
+	case GLFW_KEY_UP:
+		TriggerCallback(FORWARD, inputType);
+		break;
+
+	case GLFW_KEY_S:
+	case GLFW_KEY_DOWN:
+		TriggerCallback(BACKSWARD, inputType);
+		break;
+
+	case GLFW_KEY_A:
+	case GLFW_KEY_LEFT:
+		TriggerCallback(LEFT, inputType);
+		break;
+
+	case GLFW_KEY_D:
+	case GLFW_KEY_RIGHT:
+		TriggerCallback(RIGHT, inputType);
+		break;
+
+	}
+
 }
 
 void InputManager::AddCallBack(STATE stateTrigger, KEY_ACTIONS action, std::function<void(InputManager&, INPUT_TYPE)> callback)

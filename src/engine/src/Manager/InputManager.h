@@ -24,6 +24,11 @@ public:
 		RIGHT_CLICK,
 		SCROLL,
 
+		FORWARD,
+		BACKSWARD,
+		LEFT,
+		RIGHT,
+
 		ALL_ACTIONS
 	};
 
