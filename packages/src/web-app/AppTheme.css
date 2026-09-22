@@ -1,0 +1,914 @@
+:root {
+    --forma-bg: #0a0b0f;
+    --forma-panel: #121319;
+    --forma-panel-alt: #16171e;
+    --forma-border: rgba(255, 255, 255, 0.08);
+    --forma-border-strong: rgba(255, 255, 255, 0.16);
+    --forma-text: #e8e9ec;
+    --forma-text-muted: #7b8194;
+    --forma-text-dim: #4b5160;
+    --forma-blue: #3b82f6;
+    --forma-blue-hover: #2f6fe0;
+    --forma-green: #22c55e;
+    --forma-red: #ef4444;
+    --forma-purple: #a78bfa;
+    --forma-orange: #f97316;
+}
+
+.forma-app {
+    background: var(--forma-bg);
+    color: var(--forma-text);
+    min-height: 100vh;
+    font-family: 'IBM Plex Sans', sans-serif;
+}
+
+/* ---------- Top nav ---------- */
+
+.forma-nav {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 0 24px;
+    height: 60px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.forma-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    font-size: 0.95rem;
+}
+
+.forma-logo-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: var(--forma-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.forma-tabs {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+}
+
+.forma-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    color: var(--forma-text-muted);
+    font-size: 0.88rem;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+    .forma-tab:hover {
+        color: var(--forma-text);
+    }
+
+    .forma-tab.is-active {
+        color: var(--forma-blue);
+        background: rgba(59, 130, 246, 0.12);
+        font-weight: 600;
+    }
+
+.forma-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--forma-text-muted);
+}
+
+.forma-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--forma-green);
+}
+
+.forma-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    margin-left: 12px;
+}
+
+/* ---------- Shared buttons ---------- */
+
+.forma-btn {
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 9px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel-alt);
+    color: var(--forma-text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.forma-btn-primary {
+    background: var(--forma-blue);
+    border-color: var(--forma-blue);
+    color: white;
+}
+
+    .forma-btn-primary:hover {
+        background: var(--forma-blue-hover);
+    }
+
+/* ---------- Badges ---------- */
+
+.forma-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.forma-badge-ready {
+    color: var(--forma-green);
+    background: rgba(34, 197, 94, 0.12);
+}
+
+.forma-badge-processing {
+    color: var(--forma-red);
+    background: rgba(239, 68, 68, 0.12);
+}
+
+/* ---------- Cards ---------- */
+
+.forma-card {
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border);
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.forma-thumb {
+    aspect-ratio: 4 / 3;
+    background: var(--forma-panel-alt);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--forma-text-dim);
+    font-size: 28px;
+}
+
+.photo-library {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    padding: 24px;
+}
+
+.photo-batch-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    font-size: 0.85rem;
+    color: var(--forma-text-muted);
+}
+
+.photo-batch-icon {
+    color: var(--forma-text-dim);
+}
+
+.photo-batch-label {
+    color: var(--forma-text);
+}
+
+.photo-batch-count {
+    color: var(--forma-text-muted);
+    background: var(--forma-panel-alt);
+}
+
+.photo-batch-divider {
+    flex: 1;
+    height: 1px;
+    background: var(--forma-border);
+}
+
+.photo-batch-link {
+    background: none;
+    border: none;
+    color: var(--forma-blue);
+    font-size: 0.82rem;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.photo-batch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.photo-batch-thumb {
+    aspect-ratio: 4 / 3;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--forma-text-dim);
+}
+
+.photo-batch-thumb-icon {
+    font-size: 20px;
+}
+
+.photo-batch-thumb-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+}
+
+/* ---------- Scene Builder screen ---------- */
+
+.scene-screen {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 60px); /* fills remaining space below the top nav */
+}
+
+.scene-tool-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--forma-border);
+    background: var(--forma-panel);
+}
+
+.scene-tool-tab {
+    background: transparent;
+    border: none;
+    color: var(--forma-text-muted);
+    font-size: 0.82rem;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-family: inherit;
+    border-bottom: 2px solid transparent;
+}
+
+    .scene-tool-tab:hover {
+        color: var(--forma-text);
+    }
+
+    .scene-tool-tab.is-active {
+        color: var(--forma-blue);
+        border-bottom-color: var(--forma-blue);
+    }
+
+.scene-transform-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--forma-border);
+    background: var(--forma-panel);
+}
+
+.scene-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 220px 1fr 280px;
+    min-height: 0; /* allows children to scroll instead of overflowing */
+}
+
+/* --- Outliner (left panel) --- */
+
+.scene-outliner {
+    border-right: 1px solid var(--forma-border);
+    padding: 14px;
+    overflow-y: auto;
+}
+
+.scene-panel-label {
+    display: block;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--forma-text-dim);
+    margin-bottom: 10px;
+}
+
+.scene-outliner-item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .scene-outliner-item:hover {
+        background: var(--forma-panel-alt);
+    }
+
+    .scene-outliner-item.is-active {
+        background: rgba(59, 130, 246, 0.15);
+        color: var(--forma-text);
+    }
+
+/* --- Viewport (center) --- */
+
+.scene-viewport {
+    position: relative;
+    background: linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 24px 24px, var(--forma-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.scene-viewport-label {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+}
+
+.scene-viewport-placeholder {
+    font-size: 48px;
+    color: var(--forma-text-dim);
+}
+
+/* SplatViewer needs an explicitly sized parent -- without this the
+   library's canvas can render at 0 height and appear blank. */
+.scene-viewport .splat-viewer {
+    width: 100%;
+    height: 100%;
+}
+
+/* --- Inspector (right panel) --- */
+
+.scene-inspector {
+    border-left: 1px solid var(--forma-border);
+    padding: 16px;
+    overflow-y: auto;
+}
+
+    .scene-inspector h4 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--forma-text-dim);
+        margin: 20px 0 10px;
+    }
+
+        .scene-inspector h4:first-child {
+            margin-top: 0;
+        }
+
+.scene-transform-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+    margin-bottom: 8px;
+}
+
+    .scene-transform-field input {
+        width: 90px;
+        background: var(--forma-panel-alt);
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 4px;
+        color: var(--forma-text);
+        padding: 4px 8px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.78rem;
+        text-align: right;
+    }
+
+.scene-mesh-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--forma-text-muted);
+}
+
+    .scene-mesh-stats b {
+        color: var(--forma-text);
+        display: block;
+        font-family: 'IBM Plex Mono', monospace;
+    }
+
+.scene-component-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* --- Timeline (bottom strip) --- */
+
+.scene-timeline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--forma-border);
+    background: var(--forma-panel);
+}
+
+.scene-timeline-frames {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    flex: 1;
+}
+
+.scene-frame {
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border);
+    color: var(--forma-text-muted);
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace;
+    flex: none;
+}
+
+    .scene-frame.is-active {
+        background: var(--forma-blue);
+        border-color: var(--forma-blue);
+        color: white;
+    }
+
+.scene-frame-count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--forma-text-muted);
+    flex: none;
+}
+
+/* ---------- Home screen ---------- */
+
+.home-screen {
+    padding: 32px;
+}
+
+.home-hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+    .home-hero h1 {
+        font-size: 2rem;
+        margin: 0 0 10px;
+    }
+
+    .home-hero p {
+        color: var(--forma-text-muted);
+        max-width: 560px;
+        line-height: 1.6;
+        margin: 0;
+    }
+
+.home-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 40px;
+}
+
+.home-stat {
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border);
+    border-radius: 10px;
+    padding: 18px;
+}
+
+.home-stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.home-stat-label {
+    color: var(--forma-text-muted);
+    font-size: 0.85rem;
+    margin-top: 4px;
+}
+
+.home-stat-note {
+    color: var(--forma-blue);
+    font-size: 0.78rem;
+    margin-top: 8px;
+}
+
+.home-body {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 32px;
+    align-items: start;
+}
+
+.home-section-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--forma-text-dim);
+    margin: 0 0 14px;
+}
+
+.home-feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.home-feature {
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+    .home-feature:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
+
+.home-feature-icon {
+    font-size: 20px;
+    color: var(--forma-blue);
+}
+
+.home-feature h3 {
+    font-size: 1.05rem;
+    margin: 0;
+}
+
+.home-feature p {
+    color: var(--forma-text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.home-feature-footer {
+    color: var(--forma-text-dim);
+    font-size: 0.78rem;
+    margin-top: auto;
+}
+
+.home-recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.home-recent-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.home-recent-thumb {
+    width: 42px;
+    height: 42px;
+    aspect-ratio: unset;
+    font-size: 16px;
+    flex: none;
+}
+
+.home-recent-name {
+    font-size: 0.85rem;
+}
+
+.home-recent-poly {
+    font-size: 0.75rem;
+    color: var(--forma-text-dim);
+}
+
+.home-recent-time {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--forma-text-dim);
+}
+
+.home-dropzone {
+    width: 100%;
+    background: var(--forma-panel);
+    border: 1px dashed var(--forma-border-strong);
+    border-radius: 10px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--forma-text-dim);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+    .home-dropzone:hover {
+        border-color: var(--forma-blue);
+    }
+
+.home-dropzone-types {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+}
+
+/* ---------- Library screen (3D Models) ---------- */
+
+.library-screen {
+    padding: 24px 32px;
+}
+
+.library-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.library-subtabs {
+    display: flex;
+    background: var(--forma-panel-alt);
+    border-radius: 6px;
+    padding: 3px;
+}
+
+.library-subtab {
+    background: transparent;
+    border: none;
+    color: var(--forma-text-muted);
+    font-size: 0.82rem;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+    .library-subtab.is-active {
+        background: var(--forma-panel);
+        color: var(--forma-text);
+    }
+
+.library-search {
+    flex: 1;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 6px;
+    padding: 9px 14px;
+    color: var(--forma-text);
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+
+.library-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.library-item {
+    padding: 0;
+    overflow: hidden;
+}
+
+.library-thumb {
+    position: relative;
+    border-radius: 10px 10px 0 0;
+    font-size: 32px;
+}
+
+    .library-thumb .forma-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+
+.library-item-name {
+    padding: 14px 14px 4px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.library-item-meta {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 14px 14px;
+    font-size: 0.78rem;
+    color: var(--forma-text-dim);
+}
+
+.library-empty {
+    color: var(--forma-text-muted);
+    padding: 40px 0;
+}
+
+/* ---------- Photo Editor screen ---------- */
+
+.editor-screen {
+    display: grid;
+    grid-template-columns: 56px 1fr 280px;
+    height: calc(100vh - 60px);
+}
+
+.editor-tools {
+    border-right: 1px solid var(--forma-border);
+    padding: 14px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.editor-tool {
+    width: 40px;
+    height: 40px;
+    background: var(--forma-panel-alt);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+    font-size: 16px;
+}
+
+    .editor-tool:hover {
+        color: var(--forma-text);
+    }
+
+    .editor-tool.is-active {
+        background: var(--forma-blue);
+        color: white;
+    }
+
+.editor-canvas-area {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.editor-canvas-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--forma-border);
+    font-size: 0.82rem;
+    color: var(--forma-text-muted);
+}
+
+.editor-zoom {
+    display: flex;
+    gap: 6px;
+}
+
+.editor-canvas {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: var(--forma-bg);
+    color: var(--forma-text-dim);
+    font-size: 0.85rem;
+}
+
+.editor-history {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--forma-border);
+    overflow-x: auto;
+}
+
+.editor-history-label {
+    font-size: 0.75rem;
+    color: var(--forma-text-dim);
+    flex: none;
+}
+
+.editor-history-step {
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border);
+    color: var(--forma-text-muted);
+    font-size: 0.78rem;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    flex: none;
+    font-family: inherit;
+}
+
+    .editor-history-step.is-active {
+        border-color: var(--forma-blue);
+        color: var(--forma-text);
+    }
+
+.editor-panel {
+    border-left: 1px solid var(--forma-border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+    .editor-panel h4 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--forma-text-dim);
+        margin: 20px 0 14px;
+    }
+
+        .editor-panel h4:first-child {
+            margin-top: 0;
+        }
+
+.editor-slider {
+    display: block;
+    margin-bottom: 16px;
+}
+
+    .editor-slider span {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.82rem;
+        color: var(--forma-text-muted);
+        margin-bottom: 6px;
+    }
+
+        .editor-slider span b {
+            color: var(--forma-text);
+        }
+
+    .editor-slider input[type="range"] {
+        width: 100%;
+        accent-color: var(--forma-blue);
+    }
+
+.editor-grade-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.editor-toggles {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.editor-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--forma-text-muted);
+}
+
+.editor-generate {
+    width: 100%;
+    justify-content: center;
+    margin-top: auto;
+}
+
+.editor-panel > .forma-btn:last-child {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+}

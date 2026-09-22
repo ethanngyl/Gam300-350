@@ -21,7 +21,8 @@ public:
     GLFWwindow* handle() const { return m_window; }
 
     // Set by the owner (main.cpp) to receive input events.
-    std::function<void(double dx, double dy)> onMouseDrag;
+    std::function<void(double dx, double dy)> onMouseRotate;
+    std::function<void(double dx, double dy)> onMousePan;
     std::function<void(double dy)> onScroll;
     std::function<void(int width, int height)> onResize;
     std::function<void(int key, int action)> onKey;
@@ -34,7 +35,8 @@ private:
     static void keyCallback(GLFWwindow* w, int key, int scancode, int action, int mods);
 
     GLFWwindow* m_window = nullptr;
-    bool m_dragging = false;
+    bool m_rotating = false;
+    bool m_panning = false;
     double m_lastX = 0.0;
     double m_lastY = 0.0;
 };
