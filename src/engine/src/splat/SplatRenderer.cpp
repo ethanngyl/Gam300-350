@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <numeric>
+#include <iostream>
 
 namespace {
 
@@ -14,17 +15,22 @@ layout(location = 0) in vec3 aPosition;
 layout(location = 1) in float aPointSize;
 layout(location = 2) in vec3 aColor;
 layout(location = 3) in float aAlpha;
+layout(location = 4) in float aModelId;
 
 uniform mat4 uViewProj;
 uniform float uPixelsPerUnit;
+uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
 
 out vec3 vColor;
 out float vAlpha;
 
 void main() {
+    mat4 model = uModelTransforms[int(aModelId)];
+    vec4 worldPos = model * vec4(aPosition, 1.0);
+
     vColor = aColor;
     vAlpha = aAlpha;
-    gl_Position = uViewProj * vec4(aPosition, 1.0);
+    gl_Position = uViewProj * worldPos;
     gl_PointSize = max(aPointSize * uPixelsPerUnit / gl_Position.w, 1.0);
 }
 )";
@@ -192,13 +198,47 @@ size_t SplatRenderer::SplatCount() const
     return count;
 }
 
+void SplatRenderer::NudgeSplatForward(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_modelCount <= 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+
+    m_models[0].get()->Translate({ 0.1,0,0 });
+}
+
+
+void SplatRenderer::NudgeSplatBackwards(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_modelCount <= 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+    m_models[0].get()->Translate({ -0.1,0,0 });
+}
+
+void SplatRenderer::NudgeSplatLeft(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_modelCount <= 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+
+    m_models[0].get()->Translate({ 0,0,-0.1 });
+}
+
+void SplatRenderer::NudgeSplatRight(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_modelCount <= 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+
+    m_models[0].get()->Translate({ 0,0,0.1 });
+}
+
+
 void SplatRenderer::RebuildCombinedBuffer()
 {
     m_combined.clear();
 
     for (size_t modelIdx = 0; modelIdx < m_models.size(); ++modelIdx) {
         const auto& splats = m_models[modelIdx]->splats();
-        for (SplatVertex v : splats) { // copy -- about to mutate modelId
+        //Copy, about to mutate modelId
+        for (SplatVertex v : splats) { 
             v.modelID = static_cast<float>(modelIdx);
             m_combined.push_back(v);
         }

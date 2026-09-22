@@ -53,9 +53,18 @@ static std::vector<fs::path> ScanPlyFiles(const fs::path& dir) {
 int main() {
     Window window(1280, 720, "Codefine - Engine Foundation (M1)");
     Camera camera;
+    SplatRenderer renderer;
     InputManager inputManager(window);
 
     //Bind InputManager to Window callback
+    window.onKey = [&window, &inputManager](int key, int action) {
+        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+            glfwSetWindowShouldClose(window.handle(), GLFW_TRUE);
+        }
+        else
+            inputManager.CallbackKeyPress(key, action);
+        };
+
     window.onMouseClick = [&inputManager](int key, int pressType, double dx, double dy) {
         inputManager.CallbackMouseClick(key, pressType, dx, dy);
         };
@@ -80,13 +89,27 @@ int main() {
         });
 
 
+    //Movmeent test
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::FORWARD,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatForward(manager, type);
+        });
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::BACKSWARD,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatBackwards(manager, type);
+        });
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatLeft(manager, type);
+        });
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatRight(manager, type);
+        });
 
 
-    window.onKey = [&window](int key, int action) {
-        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-            glfwSetWindowShouldClose(window.handle(), GLFW_TRUE);
-        }
-    };
+
+
 
     // ImGui setup -- foundation for the sandbox UI in later milestones.
     IMGUI_CHECKVERSION();
@@ -106,7 +129,6 @@ int main() {
     }
 
 
-    SplatRenderer renderer;
 
     // Directory the .ply browser lists from, and the file currently displayed.
     fs::path splatDir = fs::path(ENGINE_ASSETS_DIR) / "samples";
