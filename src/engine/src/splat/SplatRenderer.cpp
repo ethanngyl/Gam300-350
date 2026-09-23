@@ -97,9 +97,10 @@ SplatRenderer::~SplatRenderer() {
     m_models.clear(); //Removed unique ptrs
 }
 
-void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats) {
+void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats, std::string splatName) {
     std::unique_ptr< SplatModel>model = std::make_unique<SplatModel>();
     model.get()->SetSplat(splats);
+    model.get()->SetName(splatName);
     m_models.push_back(std::move(model));
     model = nullptr;
     m_totalCreatedCount++;

@@ -22,7 +22,7 @@ public:
     SplatRenderer(const SplatRenderer&) = delete;
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
-    void SetSplats(const std::vector<SplatVertex>& splats);
+    void SetSplats(const std::vector<SplatVertex>& splats, std::string splatname);
     //Updates a model
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
     //Moves model

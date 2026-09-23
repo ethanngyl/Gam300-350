@@ -143,7 +143,7 @@ int main() {
             std::cerr << "[main] no splats loaded from '" << path.string() << "'" << std::endl;
             return false;
         }
-        renderer.SetSplats(splats);
+        renderer.SetSplats(splats, path.filename().string());
         loadedPath = path.string();
         std::cout << "[main] loaded " << splats.size() << " splats from '" << path.string() << "'" << std::endl;
         return true;
