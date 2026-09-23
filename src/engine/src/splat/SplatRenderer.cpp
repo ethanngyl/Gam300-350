@@ -189,6 +189,15 @@ void SplatRenderer::Draw(const glm::mat4& viewProj, float viewportHeightPixels, 
     glEnable(GL_DEPTH_TEST);
 }
 
+std::string SplatRenderer::GetModelName(size_t indexNum)
+{
+
+    if (indexNum < 0 || indexNum >= m_modelCount)
+        return std::string();
+
+    return m_models[indexNum].get()->GetName();
+}
+
 size_t SplatRenderer::SplatCount() const
 {
     size_t count = 0;

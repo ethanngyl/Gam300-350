@@ -29,6 +29,8 @@ public:
     void TranslateModel(SplatModel* model, const glm::vec3& delta);
     void Draw(const glm::mat4& viewProj, float viewportHeightPixels, const glm::vec3& camPos);
 
+    std::string GetModelName(size_t indexNum);
+
     size_t ModelCount() const { return m_modelCount; }
     size_t TotalCreatedCount() const { return m_totalCreatedCount; }
     size_t SplatCount() const;
