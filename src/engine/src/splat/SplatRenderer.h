@@ -22,12 +22,14 @@ public:
     SplatRenderer(const SplatRenderer&) = delete;
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
-    void SetSplats(const std::vector<SplatVertex>& splats);
+    void SetSplats(const std::vector<SplatVertex>& splats, std::string splatname);
     //Updates a model
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
     //Moves model
     void TranslateModel(SplatModel* model, const glm::vec3& delta);
     void Draw(const glm::mat4& viewProj, float viewportHeightPixels, const glm::vec3& camPos);
+
+    std::string GetModelName(size_t indexNum);
 
     size_t ModelCount() const { return m_modelCount; }
     size_t TotalCreatedCount() const { return m_totalCreatedCount; }

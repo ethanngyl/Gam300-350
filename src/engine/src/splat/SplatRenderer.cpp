@@ -97,9 +97,10 @@ SplatRenderer::~SplatRenderer() {
     m_models.clear(); //Removed unique ptrs
 }
 
-void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats) {
+void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats, std::string splatName) {
     std::unique_ptr< SplatModel>model = std::make_unique<SplatModel>();
     model.get()->SetSplat(splats);
+    model.get()->SetName(splatName);
     m_models.push_back(std::move(model));
     model = nullptr;
     m_totalCreatedCount++;
@@ -186,6 +187,15 @@ void SplatRenderer::Draw(const glm::mat4& viewProj, float viewportHeightPixels, 
 
     glBindVertexArray(0);
     glEnable(GL_DEPTH_TEST);
+}
+
+std::string SplatRenderer::GetModelName(size_t indexNum)
+{
+
+    if (indexNum < 0 || indexNum >= m_modelCount)
+        return std::string();
+
+    return m_models[indexNum].get()->GetName();
 }
 
 size_t SplatRenderer::SplatCount() const
