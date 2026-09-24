@@ -17,9 +17,12 @@ import {
   jobs,
   killChildren,
   makeJob,
+  restoreJob,
   runPipeline,
   runYoutubePipeline,
 } from './pipeline.js'
+import { IMAGE_EXT_RE, scanJob, scanJobs } from './scan.js'
+import { saveJob } from './status.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -27,6 +30,21 @@ const __dirname = dirname(__filename)
 const PORT = process.env.PORT || 5005
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
+
+// Jobs live in memory, so rebuild them from the job folders on disk. Without
+// this, everything finished before a restart 404s on /jobs/:id and result.ply.
+const restored = await scanJobs(config.jobsDir)
+for (const record of restored) if (!jobs.has(record.id)) restoreJob(record)
+console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
+
+// A job from memory, else adopted from its folder on disk (e.g. a folder that
+// appeared after startup). null if there is no such job.
+async function getJob(id) {
+  const live = jobs.get(id)
+  if (live) return live
+  const record = await scanJob(id)
+  return record ? (jobs.get(id) ?? restoreJob(record)) : null
+}
 
 const app = express()
 
@@ -106,10 +124,50 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   }
   const job = makeJob(req.jobId)
   job.imageCount = files.length
-  runPipeline(job) // fire-and-forget; do not await
+  job.source = 'upload'
+  saveJob(job) // gives upload-only jobs a status record from the start
+  //runPipeline(job) // fire-and-forget; do not await
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
+// List every job folder that has images, newest first. The folders on disk are
+// scanned on each call (see scan.js), so photos and results from before a
+// restart -- or dropped in by hand -- show up. A job that is live in memory
+// keeps its live status: the disk can't tell "running" from "interrupted".
+app.get('/jobs', async (_req, res) => {
+  const records = await scanJobs(config.jobsDir)
+  res.json(
+    records.map((record) => {
+      const job = jobs.get(record.id) ?? restoreJob(record)
+      return {
+        id: record.id,
+        status: job.status,
+        phase: job.phase,
+        progress: job.progress,
+        detail: job.detail,
+        error: job.error,
+        createdAt: record.createdAt,
+        updatedAt: job.updatedAt ?? record.updatedAt,
+        imageCount: record.imageCount,
+        hasResult: job.status === 'done' && !!job.resultPath,
+        thumbnail: record.thumbnail,
+        images: record.images,
+      }
+    }),
+  )
+})
+
+// Serve a single uploaded image. id/name are whitelisted to plain filename
+// characters so a request can't use `..` or slashes to escape the jobs folder.
+app.get('/jobs/:id/images/:name', (req, res) => {
+  const { id, name } = req.params
+  if (!/^[\w-]+$/.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) {
+    return res.status(404).json({ error: 'image not found' })
+  }
+  res.sendFile(path.join(config.jobsDir, id, 'images', name), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
+  })
+})
 // Create a reconstruction job from a YouTube link. Frames are extracted server
 // side (tools/youtube_frames.py) into the job's images/ folder, then the same
 // COLMAP + Brush pipeline runs. Body: { url: string, fps?: number, maxFrames?: number }
@@ -127,6 +185,7 @@ app.post('/jobs/from-youtube', (req, res) => {
   fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
   const job = makeJob(jobId)
   job.source = 'youtube'
+  saveJob(job)
 
   const opts = {}
   if (Number.isFinite(Number(fps)) && Number(fps) > 0) {
@@ -141,8 +200,8 @@ app.post('/jobs/from-youtube', (req, res) => {
 })
 
 // Poll a job's status (bounded log tail, not the full log).
-app.get('/jobs/:id', (req, res) => {
-  const job = jobs.get(req.params.id)
+app.get('/jobs/:id', async (req, res) => {
+  const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
   res.json({
     id: job.id,
@@ -151,6 +210,7 @@ app.get('/jobs/:id', (req, res) => {
     progress: job.progress,
     detail: job.detail,
     error: job.error,
+    updatedAt: job.updatedAt ?? null,
     imageCount: job.imageCount ?? null,
     hasResult: job.status === 'done' && !!job.resultPath,
     logTail: job.log.slice(-40),
@@ -170,8 +230,8 @@ app.delete('/jobs/:id', (req, res) => {
 })
 
 // Download / stream the finished splat .ply.
-app.get('/jobs/:id/result.ply', (req, res) => {
-  const job = jobs.get(req.params.id)
+app.get('/jobs/:id/result.ply', async (req, res) => {
+  const job = await getJob(req.params.id)
   if (!job || job.status !== 'done' || !job.resultPath) {
     return res.status(404).json({ error: 'result not ready' })
   }
@@ -193,6 +253,7 @@ function shutdown(reason, exitCode = 0) {
     if (job.status === 'running') {
       job.status = 'error'
       job.error = 'Server shut down during processing.'
+      saveJob(job)
     }
   }
   killChildren()

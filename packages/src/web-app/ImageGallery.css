@@ -1,0 +1,53 @@
+.gallery {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.gallery-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.gallery-note {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.gallery-error {
+    color: var(--accent);
+}
+
+.gallery-job h3 {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.95rem;
+}
+
+.gallery-job h3 span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.gallery-grid img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+}

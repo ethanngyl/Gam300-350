@@ -176,6 +176,15 @@ function CameraCapture({ onBatchReady, onBack }) {
 
     function handleUploadBatch() {
         const files = photos.map((p) => p.file);
+            if (onBatchReady) {
+            onBatchReady(files);   // ← THIS is what uploads
+        }
+        console.log('Batch selected (not uploaded):', files);
+    }
+
+    // "Train model" is the only trigger that starts the reconstruction.
+    function handleTrain() {
+        const files = photos.map((p) => p.file);
         if (onBatchReady) {
             onBatchReady(files);
         }

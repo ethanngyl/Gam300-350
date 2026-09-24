@@ -3,10 +3,13 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.js'
+import { highestRawPly } from './scan.js'
+import { saveJob } from './status.js'
 
 /**
- * In-memory job store. Single-user demo, so no database — jobs live for the
- * lifetime of the server process. Each job:
+ * In-memory job store. Jobs run from memory, and each state change is also
+ * written to <jobsDir>/<id>/status.json (see status.js) so scan.js can restore
+ * them after a restart. Each job:
  *   { id, status, phase, progress, log[], error, createdAt, resultPath }
  * status: queued | running | done | error | cancelled
  * phase:  upload | extract | colmap-features | colmap-matching | colmap-mapping
@@ -24,6 +27,7 @@ function makeJob(id) {
     error: null,
     createdAt: Date.now(),
     resultPath: null,
+    detail: null, // short human-readable sub-status, e.g. "Downloading video… 40%"
     cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
     child: null, // the tool process currently running for this job, if any
   }
@@ -37,6 +41,13 @@ function appendLog(job, line) {
   job.log.push(trimmed)
   // Keep the log bounded so long runs don't grow unbounded in memory.
   if (job.log.length > 400) job.log.splice(0, job.log.length - 400)
+}
+
+/** Move a job into a new phase and persist it (phase changes are never throttled). */
+function setPhase(job, phase, progress) {
+  job.phase = phase
+  job.progress = progress
+  saveJob(job)
 }
 
 /**
@@ -96,6 +107,7 @@ export function cancelJob(job) {
   job.status = 'cancelled'
   job.error = 'Cancelled by user'
   appendLog(job, '\nCancelled by user.')
+  saveJob(job)
   if (job.child) killChild(job.child)
   return true
 }
@@ -123,6 +135,14 @@ function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
     liveChildren.add(child)
     job.child = child
 
+    let timedOut = false
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          timedOut = true
+          killChild(child)
+        }, timeoutMs)
+      : null
+
     const handle = (buf) => {
       const text = buf.toString()
       for (const line of text.split(/\r?\n/)) {
@@ -144,6 +164,8 @@ function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
       liveChildren.delete(child)
       if (job.child === child) job.child = null
       if (job.cancelled) reject(new Error('Cancelled by user'))
+      else if (timedOut)
+        reject(new Error(`${path.basename(bin)} timed out after ${+(timeoutMs / 60000).toFixed(1)} min`))
       else if (code === 0) resolve()
       else if (code === null)
         reject(new Error(`${path.basename(bin)} was killed (${signal ?? 'terminated'})`))
@@ -202,6 +224,7 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
   job.phase = 'extract'
   job.progress = 0
   job.detail = 'Fetching video info…'
+  saveJob(job)
 
   // Extraction owns the 0..0.05 slice of the bar (COLMAP starts at 0.05);
   // job.detail carries the finer-grained per-stage percentage.
@@ -218,6 +241,7 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
         job.progress = 0.03 + 0.02 * frac
         job.detail = `Extracting frames… ${pct}%`
       }
+      saveJob(job, { throttle: true })
       return
     }
     const e = line.match(/^ERROR:\s*(.+)/)
@@ -262,6 +286,7 @@ export async function runYoutubePipeline(job, url, opts = {}) {
   try {
     const count = await extractYoutubeFrames(job, url, opts)
     job.imageCount = count
+    saveJob(job)
     if (count < 8) {
       throw new Error(
         `Extracted only ${count} frame(s). Need at least 8 for a reconstruction — ` +
@@ -273,11 +298,18 @@ export async function runYoutubePipeline(job, url, opts = {}) {
       job.status = 'error'
       job.error = err.message
       appendLog(job, `\nERROR: ${err.message}`)
+      saveJob(job)
     }
     return
   }
   await runPipeline(job)
 }
+
+// Shown for any flavor of "mapper couldn't build a model from these photos":
+// it exiting non-zero (e.g. no good initial image pair) and it exiting 0 but
+// writing no sparse model both mean the same thing to the user.
+const NO_MODEL_MESSAGE =
+  'COLMAP could not reconstruct a model from these photos. Try more photos with more overlap and texture.'
 
 /**
  * Full reconstruction pipeline for one job directory.
@@ -299,8 +331,7 @@ export async function runPipeline(job) {
     job.status = 'running'
 
     // --- COLMAP: feature extraction ---
-    job.phase = 'colmap-features'
-    job.progress = 0.05
+    setPhase(job, 'colmap-features', 0.05)
     await run(job, config.colmapBin, [
       'feature_extractor',
       '--database_path', dbPath,
@@ -310,8 +341,7 @@ export async function runPipeline(job) {
     ])
 
     // --- COLMAP: exhaustive matching ---
-    job.phase = 'colmap-matching'
-    job.progress = 0.2
+    setPhase(job, 'colmap-matching', 0.2)
     await run(job, config.colmapBin, [
       'exhaustive_matcher',
       '--database_path', dbPath,
@@ -319,30 +349,33 @@ export async function runPipeline(job) {
     ])
 
     // --- COLMAP: sparse mapping (recovers camera poses) ---
-    job.phase = 'colmap-mapping'
-    job.progress = 0.35
+    setPhase(job, 'colmap-mapping', 0.35)
     await fsp.mkdir(sparseDir, { recursive: true })
-    await run(job, config.colmapBin, [
-      'mapper',
-      '--database_path', dbPath,
-      '--image_path', imagesDir,
-      '--output_path', sparseDir,
-    ])
+    try {
+      await run(job, config.colmapBin, [
+        'mapper',
+        '--database_path', dbPath,
+        '--image_path', imagesDir,
+        '--output_path', sparseDir,
+      ])
+    } catch (err) {
+      // Cancellation and timeouts already have a clear, specific message -- only
+      // COLMAP's own failure (e.g. "no good initial image pair") gets replaced.
+      // The raw COLMAP output is still in the job's log / logTail for debugging.
+      if (job.cancelled || /timed out/.test(err.message)) throw err
+      throw new Error(NO_MODEL_MESSAGE)
+    }
 
     // Mapper writes sparse/0 (sometimes 1,2.. if it splits). Require at least one.
     const models = fs.existsSync(sparseDir)
       ? (await fsp.readdir(sparseDir)).filter((d) => /^\d+$/.test(d))
       : []
     if (models.length === 0) {
-      throw new Error(
-        'COLMAP could not reconstruct a model from these photos. ' +
-          'Try more photos with more overlap and texture.',
-      )
+      throw new Error(NO_MODEL_MESSAGE)
     }
 
     // --- Brush: train the gaussian splat ---
-    job.phase = 'training'
-    job.progress = 0.45
+    setPhase(job, 'training', 0.45)
     const outDirName = `${job.id}_out`
     // Best-effort progress parse from Brush's step output.
     const stepRe = /(\d[\d,]*)\s*\/\s*(\d[\d,]*)/
@@ -367,6 +400,7 @@ export async function runPipeline(job) {
             if (total > 0 && cur <= total) {
               // Map training [0..1] onto the 0.45..0.98 band.
               job.progress = 0.45 + 0.53 * (cur / total)
+              saveJob(job, { throttle: true })
             }
           }
         },
@@ -375,24 +409,17 @@ export async function runPipeline(job) {
 
     // --- Locate the exported .ply (highest iteration) ---
     const outDir = path.join(config.jobsDir, outDirName)
-    const plys = fs.existsSync(outDir)
-      ? (await fsp.readdir(outDir)).filter(
-          (f) => f.toLowerCase().endsWith('.ply') && f !== 'result.ply',
-        )
-      : []
-    if (plys.length === 0) {
+    const rawPly = await highestRawPly(outDir)
+    if (!rawPly) {
       throw new Error('Training finished but no .ply was exported.')
     }
-    plys.sort() // splat_00500, splat_07000 ... lexical works with zero-padding
-    const rawPly = path.join(outDir, plys[plys.length - 1])
 
     // --- Normalize into the viewer's frame ---
     // COLMAP reconstructs in an arbitrary world frame (object far from the
     // origin, arbitrary scale), which loads but can render off-screen in the
     // viewer. Recenter + rescale into result.ply. The PLY header, including
     // Brush's "Vertical axis" comment the viewer reads, is preserved verbatim.
-    job.phase = 'normalize'
-    job.progress = 0.99
+    setPhase(job, 'normalize', 0.99)
     const finalPly = path.join(outDir, 'result.ply')
     try {
       await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
@@ -407,12 +434,37 @@ export async function runPipeline(job) {
     job.progress = 1
     job.status = 'done'
     appendLog(job, `\nDone. Result: ${job.resultPath}`)
+    saveJob(job)
   } catch (err) {
     if (job.cancelled) return // cancelJob already set status/error
     job.status = 'error'
     job.error = err.message
     appendLog(job, `\nERROR: ${err.message}`)
+    saveJob(job)
   }
+}
+
+/**
+ * Re-create an in-memory job from a record scanned off disk (see scan.js), so
+ * jobs finished before a restart can still be polled and downloaded.
+ */
+export function restoreJob(record) {
+  const job = makeJob(record.id)
+  Object.assign(job, {
+    status: record.status,
+    phase: record.phase,
+    progress: record.progress,
+    error: record.error,
+    createdAt: record.createdAt,
+    resultPath: record.resultPath,
+    imageCount: record.imageCount,
+    source: record.source,
+    updatedAt: record.updatedAt,
+    log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
+  })
+  // Backfill a missing record, or persist a reconciled state (e.g. running -> interrupted).
+  if (record.needsWrite) saveJob(job)
+  return job
 }
 
 export { makeJob }
