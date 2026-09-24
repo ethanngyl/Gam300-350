@@ -3,6 +3,7 @@
 #include "SplatData.h"
 #include "SplatModel.h"
 #include "../gfx/Shader.h"
+#include "../Manager/InputManager.h"
 
 #include <glm/glm.hpp>
 
@@ -31,6 +32,11 @@ public:
     size_t ModelCount() const { return m_modelCount; }
     size_t TotalCreatedCount() const { return m_totalCreatedCount; }
     size_t SplatCount() const;
+
+    void NudgeSplatForward(InputManager& manager, InputManager::INPUT_TYPE type);
+    void NudgeSplatBackwards(InputManager& manager, InputManager::INPUT_TYPE type);
+    void NudgeSplatLeft(InputManager& manager, InputManager::INPUT_TYPE type);
+    void NudgeSplatRight(InputManager& manager, InputManager::INPUT_TYPE type);
 
 private:
     void RebuildCombinedBuffer();
