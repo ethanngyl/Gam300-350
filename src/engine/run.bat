@@ -19,6 +19,32 @@ echo.
 :: regardless of where the .bat is launched from.
 cd /d "%~dp0"
 
+:: Download the Qt SDK on first run. It is installed per-machine into
+:: Library\Qt (gitignored) by aqtinstall, which lives in its own venv so the
+:: system Python is left untouched. Keep QT_VERSION in sync with
+:: CODEFINE_QT_DIR in cmake\ImportDependencies.cmake.
+set "QT_VERSION=6.8.3"
+set "QT_ROOT=Library\Qt"
+set "QT_VENV=%QT_ROOT%\.aqt-venv"
+if not exist "%QT_ROOT%\%QT_VERSION%\msvc2022_64\lib\cmake\Qt6\Qt6Config.cmake" (
+    echo Qt %QT_VERSION% not found. Downloading it into %QT_ROOT%...
+    echo This is a one-time download of a few hundred MB.
+    python --version >nul 2>&1
+    if errorlevel 1 (
+        echo Python is required to download Qt: https://www.python.org/downloads/
+        goto :error
+    )
+    if not exist "%QT_VENV%\Scripts\python.exe" (
+        python -m venv "%QT_VENV%"
+        if errorlevel 1 goto :error
+    )
+    "%QT_VENV%\Scripts\python.exe" -m pip install -q --disable-pip-version-check aqtinstall
+    if errorlevel 1 goto :error
+    "%QT_VENV%\Scripts\python.exe" -m aqt install-qt windows desktop %QT_VERSION% win64_msvc2022_64 --outputdir "%QT_ROOT%"
+    if errorlevel 1 goto :error
+    echo.
+)
+
 :: Configure the CMake project on first run (or after a clean).
 :: Test for the generated solution, NOT CMakeCache.txt: CMake writes the
 :: cache early, so an interrupted first configure (the dependency fetch takes

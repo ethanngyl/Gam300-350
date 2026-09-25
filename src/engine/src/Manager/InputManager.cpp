@@ -1,22 +1,18 @@
 #include "InputManager.h"
-#include <GLFW/glfw3.h>
+#include <QtCore/qnamespace.h>
 
 
-InputManager::InputManager(Window& refWindow) : m_refWindow(refWindow)
-{
-}
-
-void InputManager::CallbackMouseClick(int key, int inputType, double dx, double dy)
+void InputManager::CallbackMouseClick(int button, INPUT_TYPE inputType, double dx, double dy)
 {
 	m_dx = dx;
 	m_dy = dy;
 
-	if (key == GLFW_MOUSE_BUTTON_RIGHT)
+	if (button == Qt::RightButton)
 	{
 		TriggerCallback(RIGHT_CLICK, inputType);
 	}
 
-	if (key == GLFW_MOUSE_BUTTON_LEFT)
+	if (button == Qt::LeftButton)
 	{
 		TriggerCallback(LEFT_CLICK, inputType);
 	}
@@ -29,30 +25,30 @@ void InputManager::CallbackMouseScroll(double yScroll)
 	TriggerCallback(SCROLL, HOLD);
 }
 
-void InputManager::CallbackKeyPress(int key, int inputType)
+void InputManager::CallbackKeyPress(int key, INPUT_TYPE inputType)
 {
 
 	KEY_ACTIONS input = ALL_ACTIONS;
 
 	switch (key)
 	{
-	case GLFW_KEY_W:
-	case GLFW_KEY_UP:
+	case Qt::Key_W:
+	case Qt::Key_Up:
 		TriggerCallback(FORWARD, inputType);
 		break;
 
-	case GLFW_KEY_S:
-	case GLFW_KEY_DOWN:
+	case Qt::Key_S:
+	case Qt::Key_Down:
 		TriggerCallback(BACKSWARD, inputType);
 		break;
 
-	case GLFW_KEY_A:
-	case GLFW_KEY_LEFT:
+	case Qt::Key_A:
+	case Qt::Key_Left:
 		TriggerCallback(LEFT, inputType);
 		break;
 
-	case GLFW_KEY_D:
-	case GLFW_KEY_RIGHT:
+	case Qt::Key_D:
+	case Qt::Key_Right:
 		TriggerCallback(RIGHT, inputType);
 		break;
 
@@ -77,29 +73,12 @@ void InputManager::AddCallBack(STATE stateTrigger, KEY_ACTIONS action, std::func
 
 }
 
-void InputManager::TriggerCallback(KEY_ACTIONS action, int inputType)
+void InputManager::TriggerCallback(KEY_ACTIONS action, INPUT_TYPE inputType)
 {
-	INPUT_TYPE type;
-	switch (inputType)
-	{
-	case GLFW_PRESS:
-		type = PRESS;
-		break;
-	case GLFW_REPEAT:
-		type = HOLD;
-		break;
-	case GLFW_RELEASE:
-		type = RELEASE;
-		break;
-	default:
-		type = PRESS;
-		break;
-	}
-
 	//Loop through all calbacks stored
 	for (std::function<void(InputManager&, INPUT_TYPE inputType)> func : m_inputCallback[m_inputState][action])
 	{
-		func(*this, type);
+		func(*this, inputType);
 	}
 
 

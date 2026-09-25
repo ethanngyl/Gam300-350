@@ -77,7 +77,6 @@ endif()
 
 # Link libraries (fixed syntax)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
-    glfw
     glm
     libglew_static
     imgui
@@ -87,7 +86,32 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     lua_static  
     nlohmann_json::nlohmann_json
     fmod
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
 )
+
+# Run Qt's moc on Q_OBJECT classes automatically
+set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON)
+
+# Copy the Qt DLLs and the Windows platform plugin (needed by QApplication)
+# next to the exe after each build, matching the Debug/Release config.
+if(WIN32)
+    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:${CMAKE_PROJECT_NAME}>
+            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/platforms
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>
+            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/platforms
+        COMMAND_EXPAND_LISTS
+        COMMENT "Copying Qt runtime next to ${CMAKE_PROJECT_NAME}"
+    )
+endif()
 
 # Mark shaders as non-compiled
 set_source_files_properties(

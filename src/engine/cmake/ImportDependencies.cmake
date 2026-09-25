@@ -3,27 +3,6 @@
 
 include(FetchContent)
 
-# Macro to import GLFW
-macro(import_glfw)
-    if(NOT TARGET glfw)
-        message(STATUS "Importing GLFW...")
-        FetchContent_Declare(
-            glfw
-            GIT_REPOSITORY https://github.com/glfw/glfw.git
-            GIT_TAG 3.3.8
-        )
-        
-        # Configure GLFW build options
-        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-        
-        FetchContent_MakeAvailable(glfw)
-        message(STATUS "GLFW imported successfully")
-    endif()
-endmacro()
-
 # Macro to import GLM
 macro(import_glm)
     if(NOT TARGET glm)
@@ -97,7 +76,6 @@ macro(import_imgui)
             ${imgui_SOURCE_DIR}/imgui_draw.cpp
             ${imgui_SOURCE_DIR}/imgui_tables.cpp
             ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-            ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
             ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
         )
         
@@ -108,8 +86,9 @@ macro(import_imgui)
             ${imgui_SOURCE_DIR}/backends
         )
         
-        # ImGui needs GLFW and OpenGL
-        target_link_libraries(imgui PUBLIC glfw libglew_static)
+        # ImGui's OpenGL backend needs GLEW; the Qt platform backend lives in
+        # the engine (src/ui/ImGuiQtBackend)
+        target_link_libraries(imgui PUBLIC libglew_static)
         target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_LOADER_GLEW)
         
         message(STATUS "ImGui imported successfully")
@@ -347,12 +326,33 @@ macro(import_fmod)
     endif()
 endmacro()
 
+# Macro to import Qt 6 (prebuilt SDK, too large to build via FetchContent)
+macro(import_qt)
+    if(NOT TARGET Qt6::Widgets)
+        message(STATUS "Importing Qt...")
+
+        # run.bat downloads Qt here on first run. Override CODEFINE_QT_DIR to
+        # use an existing Qt install instead.
+        set(CODEFINE_QT_DIR "${CMAKE_SOURCE_DIR}/Library/Qt/6.8.3/msvc2022_64"
+            CACHE PATH "Qt 6 SDK root (the folder containing bin/ and lib/cmake/)")
+        list(APPEND CMAKE_PREFIX_PATH "${CODEFINE_QT_DIR}")
+
+        find_package(Qt6 COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
+        if(NOT Qt6_FOUND)
+            message(FATAL_ERROR
+                "Qt 6 not found at: ${CODEFINE_QT_DIR}\n"
+                "Run src/engine/run.bat once to download it, or set CODEFINE_QT_DIR.")
+        endif()
+
+        message(STATUS "Qt imported successfully")
+    endif()
+endmacro()
+
 # Main function to import all dependencies
 function(importDependencies)
     message(STATUS "=== Importing Dependencies ===")
     
     # Import dependencies in correct order (dependencies first)
-    import_glfw()
     import_glm() 
     import_glew()
     import_freetype() 
@@ -362,5 +362,6 @@ function(importDependencies)
     import_lua()
     import_happly()
     import_fmod()
+    import_qt()
     message(STATUS "=== All Dependencies Imported ===")
 endfunction()
