@@ -33,7 +33,7 @@ function App() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
             setJobId(data.id);
-            //setScreen('processing');
+            setScreen('processing');
         } catch (err) {
             setUploadError(err.message);
         }
