@@ -3,6 +3,7 @@
 #include "SplatData.h"
 #include "SplatModel.h"
 #include "../gfx/Shader.h"
+#include "../Manager/InputManager.h"
 
 #include <glm/glm.hpp>
 
@@ -21,16 +22,27 @@ public:
     SplatRenderer(const SplatRenderer&) = delete;
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
-    void SetSplats(const std::vector<SplatVertex>& splats);
+    void SetSplats(const std::vector<SplatVertex>& splats, std::string splatname);
     //Updates a model
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
     //Moves model
     void TranslateModel(SplatModel* model, const glm::vec3& delta);
     void Draw(const glm::mat4& viewProj, float viewportHeightPixels, const glm::vec3& camPos);
 
-    size_t ModelCount() const { return m_modelCount; }
+    std::string GetModelName(size_t indexNum);
+
+    size_t ModelCount() const { return m_models.size(); }
     size_t TotalCreatedCount() const { return m_totalCreatedCount; }
-    size_t SplatCount() const;
+    size_t TotalSplatCount() const;
+    size_t GetSplatCount(int modelIndex) const;
+
+    int GetSelectedModel();
+    void SelectModel(int index);
+
+    void NudgeSplatForward(InputManager& manager, InputManager::INPUT_TYPE type);
+    void NudgeSplatBackwards(InputManager& manager, InputManager::INPUT_TYPE type);
+    void NudgeSplatLeft(InputManager& manager, InputManager::INPUT_TYPE type);
+    void NudgeSplatRight(InputManager& manager, InputManager::INPUT_TYPE type);
 
 private:
     void RebuildCombinedBuffer();
@@ -48,8 +60,10 @@ private:
     unsigned int m_vbo = 0; //Vertex Buffer Object, holds splat data
     unsigned int m_ebo = 0; //Element Buffer Object, holds draw order
 
-    size_t m_modelCount = 0; //Number of models
+    size_t m_totalSplatCount = 0; //Number of models
     size_t m_totalCreatedCount = 0; //Total number of models ever created
+
+    int m_selectedModelIndex = -1;
 
     bool m_modified = true;
 

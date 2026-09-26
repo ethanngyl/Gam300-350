@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <numeric>
+#include <iostream>
 
 namespace {
 
@@ -14,17 +15,22 @@ layout(location = 0) in vec3 aPosition;
 layout(location = 1) in float aPointSize;
 layout(location = 2) in vec3 aColor;
 layout(location = 3) in float aAlpha;
+layout(location = 4) in float aModelId;
 
 uniform mat4 uViewProj;
 uniform float uPixelsPerUnit;
+uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
 
 out vec3 vColor;
 out float vAlpha;
 
 void main() {
+    mat4 model = uModelTransforms[int(aModelId)];
+    vec4 worldPos = model * vec4(aPosition, 1.0);
+
     vColor = aColor;
     vAlpha = aAlpha;
-    gl_Position = uViewProj * vec4(aPosition, 1.0);
+    gl_Position = uViewProj * worldPos;
     gl_PointSize = max(aPointSize * uPixelsPerUnit / gl_Position.w, 1.0);
 }
 )";
@@ -85,19 +91,21 @@ SplatRenderer::SplatRenderer() {
 
     ///Unbinds the vao but setting it to 0
     glBindVertexArray(0);
+
+    m_totalSplatCount = 0;
 }
 
 SplatRenderer::~SplatRenderer() {
     m_models.clear(); //Removed unique ptrs
 }
 
-void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats) {
+void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats, std::string splatName) {
     std::unique_ptr< SplatModel>model = std::make_unique<SplatModel>();
     model.get()->SetSplat(splats);
+    model.get()->SetName(splatName);
     m_models.push_back(std::move(model));
     model = nullptr;
     m_totalCreatedCount++;
-    m_modelCount++;
     m_modified = true;
 }
 
@@ -114,7 +122,7 @@ void SplatRenderer::TranslateModel(SplatModel* model, const glm::vec3& delta) {
 void SplatRenderer::Draw(const glm::mat4& viewProj, float viewportHeightPixels, const glm::vec3& camPos) {
 
     if (m_modified) RebuildCombinedBuffer();
-    if (m_modelCount == 0) return;
+    if (m_models.size() == 0) return;
 
     glDisable(GL_DEPTH_TEST);
 
@@ -138,7 +146,7 @@ void SplatRenderer::Draw(const glm::mat4& viewProj, float viewportHeightPixels, 
             return glm::vec3(m_models[mid]->GetTransform() * glm::vec4(m_combined[idx].position, 1.0f));
             };
 
-        std::vector<unsigned int> order(m_modelCount);
+        std::vector<unsigned int> order(m_totalSplatCount);
         std::iota(order.begin(), order.end(), 0u);
         std::sort(order.begin(), order.end(), [&](unsigned int a, unsigned int b) {
             glm::vec3 wa = worldPos(a), wb = worldPos(b);
@@ -166,10 +174,10 @@ void SplatRenderer::Draw(const glm::mat4& viewProj, float viewportHeightPixels, 
             m_framesOverBudget = 0;
         }
 
-        glDrawElements(GL_POINTS, static_cast<GLsizei>(m_modelCount), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_POINTS, static_cast<GLsizei>(m_totalSplatCount), GL_UNSIGNED_INT, 0);
     }
     else {
-        glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(m_modelCount)); // failsafe fallback
+        glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(m_totalSplatCount)); // failsafe fallback
 
         m_framesUnderBudget++;
         if (m_framesUnderBudget >= kReEnableAfterFrames) {
@@ -182,7 +190,16 @@ void SplatRenderer::Draw(const glm::mat4& viewProj, float viewportHeightPixels, 
     glEnable(GL_DEPTH_TEST);
 }
 
-size_t SplatRenderer::SplatCount() const
+std::string SplatRenderer::GetModelName(size_t indexNum)
+{
+
+    if (indexNum < 0 || indexNum >= m_totalSplatCount)
+        return std::string();
+
+    return m_models[indexNum].get()->GetName();
+}
+
+size_t SplatRenderer::TotalSplatCount() const
 {
     size_t count = 0;
 
@@ -192,19 +209,73 @@ size_t SplatRenderer::SplatCount() const
     return count;
 }
 
+size_t SplatRenderer::GetSplatCount(int modelIndex) const
+{
+    if (modelIndex < 0 || modelIndex >= m_totalSplatCount)
+        return 0;
+    return m_models[modelIndex].get()->GetCount();
+}
+
+int SplatRenderer::GetSelectedModel()
+{
+    return m_selectedModelIndex;
+}
+
+void SplatRenderer::SelectModel(int index)
+{
+    if (index < 0 || index >= m_totalSplatCount)
+        m_selectedModelIndex = -1;
+    else
+        m_selectedModelIndex = index;
+}
+
+void SplatRenderer::NudgeSplatForward(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+
+    m_models[m_selectedModelIndex].get()->Translate({ 0.1,0,0 });
+}
+
+
+void SplatRenderer::NudgeSplatBackwards(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+    m_models[m_selectedModelIndex].get()->Translate({ -0.1,0,0 });
+}
+
+void SplatRenderer::NudgeSplatLeft(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+
+    m_models[m_selectedModelIndex].get()->Translate({ 0,0,-0.1 });
+}
+
+void SplatRenderer::NudgeSplatRight(InputManager& manager, InputManager::INPUT_TYPE type)
+{
+    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+        return;
+
+    m_models[m_selectedModelIndex].get()->Translate({ 0,0,0.1 });
+}
+
+
 void SplatRenderer::RebuildCombinedBuffer()
 {
     m_combined.clear();
 
     for (size_t modelIdx = 0; modelIdx < m_models.size(); ++modelIdx) {
         const auto& splats = m_models[modelIdx]->splats();
-        for (SplatVertex v : splats) { // copy -- about to mutate modelId
+        //Copy, about to mutate modelId
+        for (SplatVertex v : splats) { 
             v.modelID = static_cast<float>(modelIdx);
             m_combined.push_back(v);
         }
     }
 
-    m_modelCount = m_combined.size();
+    m_totalSplatCount = m_combined.size();
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(m_combined.size() * sizeof(SplatVertex)),

@@ -1,4 +1,5 @@
 ﻿import { useRef, useState, useEffect, useCallback } from 'react';
+import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 
 const HARD_CAP = 200;
@@ -126,6 +127,16 @@ function CameraCapture({ onBatchReady, onBack }) {
         return () => clearInterval(id);
     }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto, photos.length]);
 
+    function handleTrain() {
+        const files = photos.map((p) => p.file);
+        if (onBatchReady) {
+            onBatchReady(files);
+        }
+
+        setIsBatchSent(true);
+        setTimeout(() => setIsBatchSent(false), 2000);
+    }
+
     function handleModeChange(mode) {
         setCaptureMode(mode);
         if (mode === 'manual') {
@@ -176,6 +187,15 @@ function CameraCapture({ onBatchReady, onBack }) {
 
     function handleUploadBatch() {
         const files = photos.map((p) => p.file);
+            if (onBatchReady) {
+            onBatchReady(files);   // ← THIS is what uploads
+        }
+        console.log('Batch selected (not uploaded):', files);
+    }
+
+    // "Train model" is the only trigger that starts the reconstruction.
+    function handleTrain() {
+        const files = photos.map((p) => p.file);
         if (onBatchReady) {
             onBatchReady(files);
         }
@@ -186,8 +206,14 @@ function CameraCapture({ onBatchReady, onBack }) {
 
     return (
         <div className="capture">
-            <button className="forma-btn capture-back" onClick={onBack}>
-                Back
+            <button
+                className="forma-btn capture-back"
+                onClick={() => {
+                    playSound('click');
+                    onBack();
+                }}
+            >
+                Back to dashboard
             </button>
 
             {error && <p className="capture-error">{error}</p>}
@@ -200,13 +226,19 @@ function CameraCapture({ onBatchReady, onBack }) {
             <div className="capture-mode-toggle">
                 <button
                     className={captureMode === 'manual' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
-                    onClick={() => handleModeChange('manual')}
+                    onClick={() => {
+                        playSound('click');
+                        handleModeChange('manual');
+                    }}
                 >
                     Manual
                 </button>
                 <button
                     className={captureMode === 'auto' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
-                    onClick={() => handleModeChange('auto')}
+                    onClick={() => {
+                        playSound('click');
+                        handleModeChange('auto');
+                    }}
                 >
                     Auto capture
                 </button>
@@ -217,7 +249,10 @@ function CameraCapture({ onBatchReady, onBack }) {
             {captureMode === 'manual' ? (
                 <button
                     className="forma-btn forma-btn-primary capture-btn"
-                    onClick={() => capturePhoto(true)}
+                    onClick={() => {
+                        playSound('click');
+                        capturePhoto(true);
+                    }}
                     disabled={!stream}
                 >
                     Capture photo
@@ -226,7 +261,10 @@ function CameraCapture({ onBatchReady, onBack }) {
                 <div className="capture-auto-controls">
                     <button
                         className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
-                        onClick={() => setIsAutoCapturing((prev) => !prev)}
+                        onClick={() => {
+                            playSound('click');
+                            setIsAutoCapturing((prev) => !prev);
+                        }}
                         disabled={!stream}
                     >
                         {isAutoCapturing ? 'Stop auto-capture' : 'Start auto-capture'}
@@ -274,7 +312,10 @@ function CameraCapture({ onBatchReady, onBack }) {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={handleBrowseClick}
+                onClick={() => {
+                    playSound('click');
+                    handleBrowseClick();
+                }}
                 role="button"
                 tabIndex={0}
             >
@@ -285,6 +326,7 @@ function CameraCapture({ onBatchReady, onBack }) {
                     className="forma-btn"
                     onClick={(e) => {
                         e.stopPropagation();
+                        playSound('click');
                         handleBrowseClick();
                     }}
                 >
@@ -312,7 +354,10 @@ function CameraCapture({ onBatchReady, onBack }) {
                             <img src={photo.url} alt="" />
                             <button
                                 className="capture-thumb-remove"
-                                onClick={() => removePhoto(photo.id)}
+                                onClick={() => {
+                                    playSound('click');
+                                    removePhoto(photo.id);
+                                }}
                                 aria-label="Remove photo"
                             >
                                 ×
@@ -325,7 +370,10 @@ function CameraCapture({ onBatchReady, onBack }) {
             <button
                 className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                 disabled={photos.length === 0}
-                onClick={handleUploadBatch}
+                onClick={() => {
+                    playSound('click');
+                    handleTrain();
+                }}
             >
                 {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
             </button>

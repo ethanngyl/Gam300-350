@@ -12,7 +12,7 @@ const RECENT_MODELS = [
     { name: 'Metal Bracket', poly: '5.3k polygons', time: '2d ago' },
 ];
 
-function HomeScreen({ onNewGeneration, onYoutube, onNavigate }) {
+function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
     return (
         <div className="home-screen">
             <div className="home-hero">
@@ -64,6 +64,12 @@ function HomeScreen({ onNewGeneration, onYoutube, onNavigate }) {
                             <h3>YouTube Extractor</h3>
                             <p>Paste a YouTube URL to process any video and extract specific frames into your photo library.</p>
                             <span className="home-feature-footer">Ready</span>
+                        </button>
+
+                        <button className="forma-card home-feature" onClick={onGallery}>
+                            <h3>Image Gallery</h3>
+                            <p>Browse the photos you've uploaded and download them to your computer.</p>
+                            <span className="home-feature-footer">Uploaded photos</span>
                         </button>
                     </div>
                 </div>

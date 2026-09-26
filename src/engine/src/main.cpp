@@ -2,6 +2,7 @@
 #include "gfx/Camera.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
+#include "Manager/InputManager.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -52,22 +53,63 @@ static std::vector<fs::path> ScanPlyFiles(const fs::path& dir) {
 int main() {
     Window window(1280, 720, "Codefine - Engine Foundation (M1)");
     Camera camera;
+    SplatRenderer renderer;
+    InputManager inputManager(window);
 
-    window.onMouseRotate = [&camera](double dx, double dy) {
-        camera.processDrag(dx, dy);
-    };
-    window.onMousePan = [&camera](double dx, double dy) {
-        camera.processPan(dx, dy);
-    };
-    window.onScroll = [&camera](double dy) {
-        camera.processScroll(dy);
-    };
-
-    window.onKey = [&window](int key, int action) {
+    //Bind InputManager to Window callback
+    window.onKey = [&window, &inputManager](int key, int action) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
             glfwSetWindowShouldClose(window.handle(), GLFW_TRUE);
         }
-    };
+        else
+            inputManager.CallbackKeyPress(key, action);
+        };
+
+    window.onMouseClick = [&inputManager](int key, int pressType, double dx, double dy) {
+        inputManager.CallbackMouseClick(key, pressType, dx, dy);
+        };
+    window.onScroll = [&inputManager](double dy) {
+        inputManager.CallbackMouseScroll(dy);
+        };
+
+    //Bind inputs
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT_CLICK,
+        [&camera](InputManager& manager, InputManager::INPUT_TYPE type) {
+            camera.ProcessLeftClick(manager, type);
+        });
+
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT_CLICK,
+        [&camera](InputManager& manager, InputManager::INPUT_TYPE type) {
+            camera.ProcessRightClick(manager, type);
+        });
+
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::SCROLL,
+        [&camera](InputManager& manager, InputManager::INPUT_TYPE type) {
+            camera.ProcessScroll(manager, type);
+        });
+
+
+    //Movmeent test
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::FORWARD,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatForward(manager, type);
+        });
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::BACKSWARD,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatBackwards(manager, type);
+        });
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatLeft(manager, type);
+        });
+    inputManager.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT,
+        [&renderer](InputManager& manager, InputManager::INPUT_TYPE type) {
+            renderer.NudgeSplatRight(manager, type);
+        });
+
+
+
+
 
     // ImGui setup -- foundation for the sandbox UI in later milestones.
     IMGUI_CHECKVERSION();
@@ -87,7 +129,6 @@ int main() {
     }
 
 
-    SplatRenderer renderer;
 
     // Directory the .ply browser lists from, and the file currently displayed.
     fs::path splatDir = fs::path(ENGINE_ASSETS_DIR) / "samples";
@@ -102,7 +143,7 @@ int main() {
             std::cerr << "[main] no splats loaded from '" << path.string() << "'" << std::endl;
             return false;
         }
-        renderer.SetSplats(splats);
+        renderer.SetSplats(splats, path.filename().string());
         loadedPath = path.string();
         std::cout << "[main] loaded " << splats.size() << " splats from '" << path.string() << "'" << std::endl;
         return true;
@@ -139,7 +180,7 @@ int main() {
 
         ImGui::Begin("Engine Stats");
         ImGui::Text("FPS: %.1f", fps);
-        ImGui::Text("Splats loaded: %zu", renderer.SplatCount());
+        ImGui::Text("Splats loaded: %zu", renderer.TotalSplatCount());
         ImGui::End();
 
         // ------------------------------------------------------------------
@@ -164,11 +205,14 @@ int main() {
         ImGui::Separator();
 
         // Reserve space at the bottom for the Load button + separator.
-        float footerHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+        float totalAvail = ImGui::GetContentRegionAvail().y;
+        float loadButtonHeight = ImGui::GetFrameHeightWithSpacing();
+        float sectionHeight = (totalAvail - loadButtonHeight) * 0.45f;
+
         if (plyFiles.empty()) {
             ImGui::TextDisabled("No .ply files in this folder.");
         } else {
-            ImGui::BeginChild("ply_list", ImVec2(0, -footerHeight), true);
+            ImGui::BeginChild("ply_list", ImVec2(0, sectionHeight), true);
             for (int i = 0; i < static_cast<int>(plyFiles.size()); ++i) {
                 std::string name = plyFiles[i].filename().string();
                 bool isLoaded = (plyFiles[i].string() == loadedPath);
@@ -191,6 +235,20 @@ int main() {
         if (!hasSelection) {
             ImGui::EndDisabled();
         }
+
+        ImGui::Separator();
+        ImGui::Text("Loaded Splats (%zu)", renderer.ModelCount());
+        ImGui::BeginChild("loaded_models_list", ImVec2(0, sectionHeight), true);
+        for (int i = 0; i < renderer.ModelCount(); ++i) {
+            std::string label = renderer.GetModelName(i) + "  (" + std::to_string(renderer.GetSplatCount(i)) + " splats)";
+            std::string id = label + "##model" + std::to_string(i);
+            bool isSelected = (renderer.GetSelectedModel() == (i));
+            if (ImGui::Selectable(id.c_str(), isSelected)) {
+                renderer.SelectModel(i);
+            }
+        }
+        ImGui::EndChild();
+
         ImGui::End();
 
         ImGui::Render();
