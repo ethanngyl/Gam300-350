@@ -174,7 +174,7 @@ export const config = {
   brushBin,
 
   // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 30000,
+  trainIters: Number(process.env.TRAIN_ITERS) || 7000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
   // Name of Brush's iteration-count flag for the installed build (see above).
   brushItersFlag: brushItersFlagName,
