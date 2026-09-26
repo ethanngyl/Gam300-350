@@ -120,6 +120,41 @@ function brushItersFlag(exe) {
 }
 const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushBin)
 
+// COLMAP 4.x renamed the SiftExtraction/SiftMatching option namespaces to
+// FeatureExtraction/FeatureMatching. Passing the wrong one makes COLMAP exit
+// with "unrecognised option" before anything runs. Ask feature_extractor which
+// it understands (both namespaces were renamed together, so the extractor's
+// help settles the matcher too). Override with COLMAP_LEGACY_FLAGS=1 to force
+// the old Sift* names, or =0 to force the new Feature* names, if the probe
+// can't run (e.g. COLMAP not installed yet).
+//   3.x : --SiftExtraction.use_gpu    / --SiftMatching.use_gpu
+//   4.x : --FeatureExtraction.use_gpu / --FeatureMatching.use_gpu
+function colmapUsesFeatureNamespace(exe) {
+  try {
+    const r = spawnSync(exe, ['feature_extractor', '--help'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    // spawnSync reports a missing/unrunnable binary via r.error (it does not
+    // throw), so guard on that before reading the help text.
+    if (r.error) return true // can't run COLMAP yet -> default to newer names
+    const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
+    if (/--FeatureExtraction\.use_gpu/.test(help)) return true // 4.x
+    if (/--SiftExtraction\.use_gpu/.test(help)) return false // 3.x
+    return true // help didn't mention either -> default to newer names
+  } catch {
+    return true // default to the newer names the pipeline was written for
+  }
+}
+const colmapLegacyFlags = process.env.COLMAP_LEGACY_FLAGS
+const colmapUseFeatureNs =
+  colmapLegacyFlags === '1' ? false
+  : colmapLegacyFlags === '0' ? true
+  : colmapUsesFeatureNamespace(colmapBin)
+const colmapExtractionNs = colmapUseFeatureNs ? 'FeatureExtraction' : 'SiftExtraction'
+const colmapMatchingNs = colmapUseFeatureNs ? 'FeatureMatching' : 'SiftMatching'
+
 /**
  * Central config for the reconstruction backend.
  *
@@ -146,6 +181,9 @@ export const config = {
 
   // Use the GPU for COLMAP SIFT (requires the CUDA build of COLMAP).
   colmapUseGpu,
+  // GPU-toggle flags for the installed COLMAP (Sift* on 3.x, Feature* on 4.x).
+  colmapExtractionUseGpuFlag: `--${colmapExtractionNs}.use_gpu`,
+  colmapMatchingUseGpuFlag: `--${colmapMatchingNs}.use_gpu`,
 
   // Upload limits.
   maxFiles: 300,

@@ -342,7 +342,7 @@ export async function runPipeline(job) {
       '--database_path', dbPath,
       '--image_path', imagesDir,
       '--ImageReader.single_camera', '1',
-      '--FeatureExtraction.use_gpu', config.colmapUseGpu,
+      config.colmapExtractionUseGpuFlag, config.colmapUseGpu,
     ])
 
     // --- COLMAP: exhaustive matching ---
@@ -350,7 +350,7 @@ export async function runPipeline(job) {
     await run(job, config.colmapBin, [
       'exhaustive_matcher',
       '--database_path', dbPath,
-      '--FeatureMatching.use_gpu', config.colmapUseGpu,
+      config.colmapMatchingUseGpuFlag, config.colmapUseGpu,
     ])
 
     // --- COLMAP: sparse mapping (recovers camera poses) ---
