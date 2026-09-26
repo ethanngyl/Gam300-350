@@ -1,0 +1,32 @@
+name: CI
+
+# Run on every push and on pull requests targeting main.
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest   # GitHub's hosted runner
+
+    steps:
+      # 1. Get the code
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # 2. Install Node (match your VM's version)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 3. Frontend: install exact locked deps, then build.
+      #    This build step is what catches the UTF-8 / entry errors
+      #    before they ever reach the server.
+      - name: Install frontend and backend dependencies
+        working-directory: packages
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: packages/src/web-app
+        run: npm run build
