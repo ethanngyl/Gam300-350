@@ -79,6 +79,8 @@ venv/
 # Python virtualenv start.sh creates for the YouTube extractor.
 /tools/cloudflared
 /tools/.venv/
+# Qt SDK downloaded by src/engine/run.bat (aqtinstall), per-machine.
+/src/engine/Library/Qt/
 
 # More C++ / tooling
 compile_commands.json
