@@ -1,0 +1,20 @@
+name: Deploy
+
+# Manual trigger only — press "Run workflow" in the Actions tab.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted    # runs on your VM, where the app lives
+
+    steps:
+      - name: Pull, build, and restart on the VM
+        run: |
+          cd ~/Gam300-350
+          git pull origin Gabriel
+          cd packages
+          npm ci
+          cd src/web-app
+          npm run build
+          pm2 restart server
