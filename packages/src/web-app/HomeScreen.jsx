@@ -1,4 +1,6 @@
-﻿const STATS = [
+﻿import { playSound } from '../audio/Audio.js';
+
+const STATS = [
     { value: '24', label: 'Models Generated', note: '+3 this week' },
     { value: '156', label: 'Photos Uploaded', note: '+18 this week' },
     { value: '3', label: 'Active Scenes', note: 'Last edited today' },
@@ -23,7 +25,13 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                         3D models. Build complete scenes and extract frames from video sources.
                     </p>
                 </div>
-                <button className="forma-btn forma-btn-primary" onClick={onNewGeneration}>
+                <button
+                    className="forma-btn forma-btn-primary"
+                    onClick={() => {
+                        playSound('click');
+                        onNewGeneration();
+                    }}
+                >
                     New Generation
                 </button>
             </div>
@@ -42,13 +50,25 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                 <div className="home-features">
                     <h2 className="home-section-label">Features</h2>
                     <div className="home-feature-grid">
-                        <button className="forma-card home-feature" onClick={() => onNavigate('library')}>
+                        <button
+                            className="forma-card home-feature"
+                            onClick={() => {
+                                playSound('click');
+                                onNavigate('library');
+                            }}
+                        >
                             <h3>Media Library</h3>
                             <p>Browse your generated 3D models and organized photo collections.</p>
                             <span className="home-feature-footer">24 models - 156 photos</span>
                         </button>
 
-                        <button className="forma-card home-feature" onClick={() => onNavigate('editor')}>
+                        <button
+                            className="forma-card home-feature"
+                            onClick={() => {
+                                playSound('click');
+                                onNavigate('editor');
+                            }}
+                        >
                             <h3>Photo Editor</h3>
                             <p>Adjust, crop, and enhance uploaded images to maximize accuracy.</p>
                             <span className="home-feature-footer">12 in queue - 3 edited</span>
@@ -60,13 +80,25 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                         {/*    <span className="home-feature-footer">3 scenes - Active</span>*/}
                         {/*</button>*/}
 
-                        <button className="forma-card home-feature" onClick={onYoutube}>
+                        <button
+                            className="forma-card home-feature"
+                            onClick={() => {
+                                playSound('click');
+                                onYoutube();
+                            }}
+                        >
                             <h3>YouTube Extractor</h3>
                             <p>Paste a YouTube URL to process any video and extract specific frames into your photo library.</p>
                             <span className="home-feature-footer">Ready</span>
                         </button>
 
-                        <button className="forma-card home-feature" onClick={onGallery}>
+                        <button
+                            className="forma-card home-feature"
+                            onClick={() => {
+                                playSound('click');
+                                onGallery();
+                            }}
+                        >
                             <h3>Image Gallery</h3>
                             <p>Browse the photos you've uploaded and download them to your computer.</p>
                             <span className="home-feature-footer">Uploaded photos</span>
@@ -89,7 +121,13 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                         ))}
                     </div>
 
-                    <button className="home-dropzone" onClick={onNewGeneration}>
+                    <button
+                        className="home-dropzone"
+                        onClick={() => {
+                            playSound('click');
+                            onNewGeneration();
+                        }}
+                    >
                         <p>Drop images to upload</p>
                         <span className="home-dropzone-types">JPG - PNG - WEBP - HEIC</span>
                     </button>
