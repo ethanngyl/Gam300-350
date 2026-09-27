@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest   # GitHub's hosted runner
+    runs-on: self-hosted   # GitHub's hosted runner
 
     steps:
       # 1. Get the code
