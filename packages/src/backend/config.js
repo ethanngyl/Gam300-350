@@ -97,8 +97,18 @@ function colmapHasCuda(exe) {
     return false
   }
 }
+// A CUDA build still needs an NVIDIA GPU at runtime. nvidia-smi ships with the
+// NVIDIA driver, so if it can't run (AMD / Intel machine) SIFT stays on the CPU.
+function hasNvidiaGpu() {
+  try {
+    return spawnSync('nvidia-smi', ['-L'], { timeout: 10_000, windowsHide: true }).status === 0
+  } catch {
+    return false
+  }
+}
 const colmapUseGpu =
-  process.env.COLMAP_USE_GPU ?? (colmapHasCuda(colmapBin) ? '1' : '0')
+  process.env.COLMAP_USE_GPU ??
+  (colmapHasCuda(colmapBin) && hasNvidiaGpu() ? '1' : '0')
 
 // Passing the wrong name makes Brush exit with code 2 before training starts. 
 // Ask the binary once which one it understands. Override with BRUSH_ITERS_FLAG if the probe can't run.
