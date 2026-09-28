@@ -1,0 +1,16 @@
+.git
+.vs
+out
+actions-runner
+design
+docs
+tests
+server
+src
+**/node_modules
+**/dist
+packages/src/backend/jobs
+tools/colmap
+tools/brush
+tools/*.exe
+*.log

@@ -1,0 +1,25 @@
+# CPU-only by default. On a machine with an NVIDIA GPU, add the GPU override:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+services:
+  app:
+    build: .
+    image: codefine-backend
+    init: true            # reaps COLMAP / Brush / python child processes
+    ports:
+      - "5005:5005"
+    volumes:
+      - jobs:/data/jobs   # uploads + results survive container restarts
+    environment:
+      TRAIN_ITERS: "30000"
+      COLMAP_USE_GPU: "0"   # set to "1" by docker-compose.gpu.yml
+
+  # Optional public URL for teammates: docker compose --profile tunnel up
+  # The trycloudflare.com link is printed in this service's logs.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: [tunnel]
+    command: tunnel --no-autoupdate --protocol http2 --url http://app:5005
+    depends_on: [app]
+
+volumes:
+  jobs:
