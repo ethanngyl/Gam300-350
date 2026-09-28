@@ -37,6 +37,17 @@ Application Installations:
 - Windows: Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
 - macOS (Apple Silicon): Open the terminal in the packages folder and enter "./start.sh"
 
+## Run with Docker
+Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
+- Open a terminal in the repo root
+- Start: `docker compose up -d --build`, then open http://localhost:5005
+- Logs: `docker compose logs -f app`
+- Public link for teammates: `docker compose --profile tunnel up -d`, the trycloudflare.com URL is printed in `docker compose logs tunnel`
+- Stop: `docker compose down` (uploaded jobs and results are kept in a Docker volume)
+- NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
+- Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker-compose.yml for quick tests
+- The engine (src/engine) is not included, build it natively as below
+
 ## How to Run Engine
 - Go to the src/engine folder
 - Double click run.bat to generate the build folder
