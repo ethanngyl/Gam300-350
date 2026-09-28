@@ -9,6 +9,7 @@ import HomeScreen from './HomeScreen.jsx';
 import LibraryScreen from './LibraryScreen.jsx';
 import PhotoEditorScreen from './PhotoEditorScreen.jsx';
 import SceneBuilderScreen from './SceneBuilderScreen.jsx';
+import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
 
@@ -297,7 +298,14 @@ function App() {
     if (screen === 'youtube') {
         return (
             <div style={{ minHeight: '100vh', background: '#0f1115', color: '#e8eaed', padding: 24 }}>
-                <button className="btn btn-ghost" onClick={backToDashboard} style={{ marginBottom: 20 }}>
+                <button
+                    className="btn btn-ghost"
+                    onClick={() => {
+                        playSound('click');
+                        backToDashboard();
+                    }}
+                    style={{ marginBottom: 20 }}
+                >
                     Back to dashboard
                 </button>
                 <YoutubeIngest />
