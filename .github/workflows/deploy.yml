@@ -12,7 +12,7 @@ jobs:
       - name: Pull, build, and restart on the VM
         run: |
           cd ~/Gam300-350
-          git pull origin Gabriel
+          git pull origin main
           cd packages
           npm ci
           cd src/web-app

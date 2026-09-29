@@ -430,6 +430,19 @@ export async function runPipeline(job) {
       job.resultPath = rawPly
     }
 
+    // Best-effort copy into the engine's samples folder, so a finished scan can
+    // be opened straight from the native viewer's file browser (main.cpp scans
+    // assets/samples/ for *.ply on launch). Never fails the job -- the result is
+    // still servable from resultPath/the Download button either way.
+    try {
+      fs.mkdirSync(config.engineSamplesDir, { recursive: true })
+      const enginePath = path.join(config.engineSamplesDir, `${job.id.slice(0, 8)}.ply`)
+      fs.copyFileSync(job.resultPath, enginePath)
+      appendLog(job, `Copied to engine samples: ${enginePath}`)
+    } catch (err) {
+      appendLog(job, `Could not copy to engine samples (${err.message}); use Download .ply instead.`)
+    }
+
     job.phase = 'done'
     job.progress = 1
     job.status = 'done'

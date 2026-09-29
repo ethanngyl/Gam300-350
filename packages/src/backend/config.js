@@ -134,6 +134,12 @@ export const config = {
   // Where per-job working directories live (uploads, COLMAP db, splat output).
   jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
 
+  // Every finished job's result.ply is also copied here (see runPipeline), so
+  // it shows up in the native engine's samples browser (src/engine/main.cpp)
+  // without a manual copy step.
+  engineSamplesDir:
+    process.env.ENGINE_SAMPLES_DIR || path.join(repoRoot, 'src', 'engine', 'assets', 'samples'),
+
   // External tool executables (see resolution above).
   colmapBin,
   brushBin,
