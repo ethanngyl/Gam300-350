@@ -97,8 +97,25 @@ function colmapHasCuda(exe) {
     return false
   }
 }
+// A CUDA build still says "with CUDA" on an AMD / Intel machine, and use_gpu=1
+// then fails at feature extraction, so also require an NVIDIA driver.
+// nvidia-smi ships with the driver on Windows and Linux; if it's missing or
+// lists no GPUs, COLMAP runs on the CPU (the CUDA build handles that fine).
+function hasNvidiaGpu() {
+  try {
+    const r = spawnSync('nvidia-smi', ['-L'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    return r.status === 0 && /^GPU \d+:/m.test(r.stdout ?? '')
+  } catch {
+    return false
+  }
+}
 const colmapUseGpu =
-  process.env.COLMAP_USE_GPU ?? (colmapHasCuda(colmapBin) ? '1' : '0')
+  process.env.COLMAP_USE_GPU ??
+  (colmapHasCuda(colmapBin) && hasNvidiaGpu() ? '1' : '0')
 
 // Passing the wrong name makes Brush exit with code 2 before training starts. 
 // Ask the binary once which one it understands. Override with BRUSH_ITERS_FLAG if the probe can't run.
