@@ -12,7 +12,7 @@ const SOUND_SOURCES = {
     // error: error,
 };
 
-const DEFAULT_VOLUME = 0.5;
+const DEFAULT_VOLUME = 1.0;
 
 // Preload every sound once, at module load time and reuse the same
 // audio objects everywhere
