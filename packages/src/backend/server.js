@@ -126,7 +126,7 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   job.imageCount = files.length
   job.source = 'upload'
   saveJob(job) // gives upload-only jobs a status record from the start
-  //runPipeline(job) // fire-and-forget; do not await
+  runPipeline(job) // fire-and-forget; do not await
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
 

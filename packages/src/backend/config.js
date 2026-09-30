@@ -97,11 +97,18 @@ function colmapHasCuda(exe) {
     return false
   }
 }
-// A CUDA build still needs an NVIDIA GPU at runtime. nvidia-smi ships with the
-// NVIDIA driver, so if it can't run (AMD / Intel machine) SIFT stays on the CPU.
+// A CUDA build still says "with CUDA" on an AMD / Intel machine, and use_gpu=1
+// then fails at feature extraction, so also require an NVIDIA driver.
+// nvidia-smi ships with the driver on Windows and Linux; if it's missing or
+// lists no GPUs, COLMAP runs on the CPU (the CUDA build handles that fine).
 function hasNvidiaGpu() {
   try {
-    return spawnSync('nvidia-smi', ['-L'], { timeout: 10_000, windowsHide: true }).status === 0
+    const r = spawnSync('nvidia-smi', ['-L'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    return r.status === 0 && /^GPU \d+:/m.test(r.stdout ?? '')
   } catch {
     return false
   }
@@ -130,6 +137,41 @@ function brushItersFlag(exe) {
 }
 const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushBin)
 
+// COLMAP 4.x renamed the SiftExtraction/SiftMatching option namespaces to
+// FeatureExtraction/FeatureMatching. Passing the wrong one makes COLMAP exit
+// with "unrecognised option" before anything runs. Ask feature_extractor which
+// it understands (both namespaces were renamed together, so the extractor's
+// help settles the matcher too). Override with COLMAP_LEGACY_FLAGS=1 to force
+// the old Sift* names, or =0 to force the new Feature* names, if the probe
+// can't run (e.g. COLMAP not installed yet).
+//   3.x : --SiftExtraction.use_gpu    / --SiftMatching.use_gpu
+//   4.x : --FeatureExtraction.use_gpu / --FeatureMatching.use_gpu
+function colmapUsesFeatureNamespace(exe) {
+  try {
+    const r = spawnSync(exe, ['feature_extractor', '--help'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    // spawnSync reports a missing/unrunnable binary via r.error (it does not
+    // throw), so guard on that before reading the help text.
+    if (r.error) return true // can't run COLMAP yet -> default to newer names
+    const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
+    if (/--FeatureExtraction\.use_gpu/.test(help)) return true // 4.x
+    if (/--SiftExtraction\.use_gpu/.test(help)) return false // 3.x
+    return true // help didn't mention either -> default to newer names
+  } catch {
+    return true // default to the newer names the pipeline was written for
+  }
+}
+const colmapLegacyFlags = process.env.COLMAP_LEGACY_FLAGS
+const colmapUseFeatureNs =
+  colmapLegacyFlags === '1' ? false
+  : colmapLegacyFlags === '0' ? true
+  : colmapUsesFeatureNamespace(colmapBin)
+const colmapExtractionNs = colmapUseFeatureNs ? 'FeatureExtraction' : 'SiftExtraction'
+const colmapMatchingNs = colmapUseFeatureNs ? 'FeatureMatching' : 'SiftMatching'
+
 /**
  * Central config for the reconstruction backend.
  *
@@ -149,13 +191,16 @@ export const config = {
   brushBin,
 
   // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 30000,
+  trainIters: Number(process.env.TRAIN_ITERS) || 7000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
   // Name of Brush's iteration-count flag for the installed build (see above).
   brushItersFlag: brushItersFlagName,
 
   // Use the GPU for COLMAP SIFT (requires the CUDA build of COLMAP).
   colmapUseGpu,
+  // GPU-toggle flags for the installed COLMAP (Sift* on 3.x, Feature* on 4.x).
+  colmapExtractionUseGpuFlag: `--${colmapExtractionNs}.use_gpu`,
+  colmapMatchingUseGpuFlag: `--${colmapMatchingNs}.use_gpu`,
 
   // Upload limits.
   maxFiles: 300,

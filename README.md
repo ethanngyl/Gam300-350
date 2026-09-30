@@ -56,7 +56,11 @@ Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in 
 - Once you are in the solution, right click on codefine and set it as the start up project
 - Start the debugger
 - .ply files can be added into the src/engine/assets folder
-- 
+
+## How to use Engine
+- Select .ply file from the menu and press the load button
+- Select model from Loaded Splats list, use WASD/Arrow keys to shift the model around
+
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
 - Capable of generating a downloadable .ply file from uploaded images

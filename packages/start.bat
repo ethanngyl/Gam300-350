@@ -58,7 +58,7 @@ set "SKIP_BRUSH="
 
 node -e "import('./src/backend/config.js').then(m=>import('node:fs').then(fs=>process.exit(fs.existsSync(m.config.colmapBin)?0:1)))"
 if errorlevel 1 (
-    echo     COLMAP not found - will download it - about 130 MB.
+    echo     COLMAP not found - will download it - about 130-380 MB.
     set "NEED_TOOLS=1"
 ) else (
     echo     COLMAP found.
@@ -74,9 +74,18 @@ if errorlevel 1 (
     set "SKIP_BRUSH=-SkipBrush"
 )
 
+REM The CUDA build of COLMAP only helps on NVIDIA cards. nvidia-smi ships with
+REM the NVIDIA driver, so if it's missing (AMD / Intel) fetch the smaller
+REM CPU-only build instead. config.js does the same check at runtime, so a CUDA
+REM build left over on a non-NVIDIA machine still runs COLMAP on the CPU.
+set "NO_CUDA="
+nvidia-smi -L >nul 2>nul
+if errorlevel 1 set "NO_CUDA=-NoCuda"
+if not defined SKIP_COLMAP if defined NO_CUDA echo     No NVIDIA GPU found - COLMAP will use the CPU-only build.
+
 if "%NEED_TOOLS%"=="1" (
     echo     Downloading into the tools folder - one-time...
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%TOOLS%\get-tools.ps1" %SKIP_COLMAP% %SKIP_BRUSH%
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%TOOLS%\get-tools.ps1" %SKIP_COLMAP% %SKIP_BRUSH% %NO_CUDA%
     if errorlevel 1 (
         echo.
         echo *** Could not download COLMAP / Brush. Check your internet connection, then
