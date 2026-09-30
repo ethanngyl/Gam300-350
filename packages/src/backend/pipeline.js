@@ -1,22 +1,87 @@
+/*!************************************************************************
+\file pipeline.js
+\author1 Xiong Yang
+\author2 Gabriel Sebastian Putra
+\par DP email1: xiong.yang@digipen.edu
+\par DP email2: gabrielsebastian.p@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 30-09-2026
+\brief
+The reconstruction engine. It holds the in-memory job store and runs the
+photos -> COLMAP -> Brush -> normalized .ply pipeline for each job, plus the
+YouTube frame extraction step in front of it. It starts and tracks every tool
+process (COLMAP, Brush, python) so jobs can be cancelled and nothing is left
+running on the GPU when the server stops.
+- makeJob(id)
+Creates a new queued job with default values and adds it to the jobs map.
+- appendLog(job, line)
+Adds a trimmed line to the job's log, keeping only the last 400 lines.
+- setPhase(job, phase, progress)
+Moves a job into a new phase and saves it straight away (never throttled).
+- killChildren()
+Kills every running tool process. Synchronous so it works in exit handlers.
+- killChild(child)
+Kills one tool process and everything it spawned (taskkill /T on Windows,
+the whole process group elsewhere).
+- cancelJob(job)
+Marks a job as cancelled and kills its running tool. Returns false if the
+job had already finished.
+- run(job, bin, args, { cwd, onData, timeoutMs })
+Starts a tool process, streams its output into the job log, and resolves on
+exit code 0 or rejects with a readable error otherwise.
+- canonicalYoutubeUrl(input)
+Turns any single-video YouTube link into https://www.youtube.com/watch?v=<id>,
+or returns null for anything else (playlists, channels, other sites).
+- extractYoutubeFrames(job, url, { fps, maxFrames })
+Runs tools/youtube_frames.py to download a video and save frames into the
+job's images/ folder. Returns the number of frames written.
+- runYoutubePipeline(job, url, opts)
+Extracts the frames, checks there are at least 8, then runs runPipeline.
+- runPipeline(job)
+The full reconstruction: COLMAP features, matching and mapping, Brush
+training, normalizing the .ply, and copying it into the engine's samples.
+- restoreJob(record)
+Rebuilds an in-memory job from a record scanned off disk (see scan.js).
+**************************************************************************/
+
+// ----- Headers ------------------------------------------------------- //
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.js'
-import { highestRawPly } from './scan.js'
+import { highestRawPly, IMAGE_EXT_RE } from './scan.js'
 import { saveJob } from './status.js'
 
-/**
- * In-memory job store. Jobs run from memory, and each state change is also
- * written to <jobsDir>/<id>/status.json (see status.js) so scan.js can restore
- * them after a restart. Each job:
- *   { id, status, phase, progress, log[], error, createdAt, resultPath }
- * status: queued | running | done | error | cancelled
- * phase:  upload | extract | colmap-features | colmap-matching | colmap-mapping
- *         | training | normalize | done
- */
+/************************************************************************/
+/*!
+  \brief
+    In-memory job store. Jobs run from memory, and each state change is
+    also written to <jobsDir>/<id>/status.json (see status.js) so scan.js
+    can restore them after a restart. Each job:
+      { id, status, phase, progress, log[], error, createdAt, resultPath }
+    status: queued | running | done | error | cancelled
+    phase:  upload | extract | colmap-features | colmap-matching |
+            colmap-mapping | training | normalize | done
+*/
+/************************************************************************/
 export const jobs = new Map()
 
+// ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Create a new job with default values (queued, upload phase, no
+    progress) and add it to the jobs map.
+  \param id
+    string
+    The id of the job
+  \return
+    The new job.
+*/
+/************************************************************************/
 function makeJob(id) {
   const job = {
     id,
@@ -35,6 +100,21 @@ function makeJob(id) {
   return job
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Add a line to the job's log with trailing whitespace removed. Empty
+    lines are skipped, and only the last 400 lines are kept so long runs
+    don't grow unbounded in memory.
+  \param job
+    The job to log to
+  \param line
+    string
+    The line of output to add
+  \return
+    nothing
+*/
+/************************************************************************/
 function appendLog(job, line) {
   const trimmed = String(line).replace(/\s+$/, '')
   if (!trimmed) return
@@ -43,31 +123,68 @@ function appendLog(job, line) {
   if (job.log.length > 400) job.log.splice(0, job.log.length - 400)
 }
 
-/** Move a job into a new phase and persist it (phase changes are never throttled). */
+/************************************************************************/
+/*!
+  \brief
+    Move a job into a new phase and persist it (phase changes are never
+    throttled).
+  \param job
+    The job to update
+  \param phase
+    string
+    The new phase, e.g. 'colmap-features' or 'training'
+  \param progress
+    number
+    The progress to set, from 0 to 1
+  \return
+    Saves the job.
+*/
+/************************************************************************/
 function setPhase(job, phase, progress) {
   job.phase = phase
   job.progress = progress
   saveJob(job)
 }
 
-/**
- * Every tool process currently running (COLMAP, Brush, python). Tracked so the
- * server can terminate them on shutdown -- on Windows a child is NOT killed
- * when its parent Node process dies, so without this a restart leaves Brush
- * training as an orphan, hogging the GPU for a job nobody can poll anymore.
- */
+/************************************************************************/
+/*!
+  \brief
+    Every tool process currently running (COLMAP, Brush, python). Tracked
+    so the server can terminate them on shutdown -- on Windows a child is
+    NOT killed when its parent Node process dies, so without this a
+    restart leaves Brush training as an orphan, hogging the GPU for a job
+    nobody can poll anymore.
+*/
+/************************************************************************/
 const liveChildren = new Set()
 
-/**
- * Terminate every live tool process (and their own children, e.g. the
- * yt-dlp/ffmpeg that youtube_frames.py spawns). Synchronous on purpose so it
- * is safe to call from process 'exit' handlers, where async work never runs.
- */
+/************************************************************************/
+/*!
+  \brief
+    Terminate every live tool process (and their own children, e.g. the
+    yt-dlp/ffmpeg that youtube_frames.py spawns). Synchronous on purpose
+    so it is safe to call from process 'exit' handlers, where async work
+    never runs.
+  \return
+    nothing
+*/
+/************************************************************************/
 export function killChildren() {
   for (const child of liveChildren) killChild(child)
 }
 
-/** Terminate one tool process and everything it spawned. Synchronous. */
+/************************************************************************/
+/*!
+  \brief
+    Terminate one tool process and everything it spawned. Synchronous.
+    Best-effort: does nothing if the process has already exited.
+  \param child
+    ChildProcess
+    The tool process to kill
+  \return
+    nothing
+*/
+/************************************************************************/
 function killChild(child) {
   liveChildren.delete(child)
   if (child.exitCode !== null || child.signalCode !== null) return
@@ -93,12 +210,19 @@ function killChild(child) {
   }
 }
 
-/**
- * Cancel a job: kill whatever tool is running for it (COLMAP / Brush / python)
- * and stop the pipeline from starting the next stage. Returns false if the job
- * had already finished. The pipeline's catch block sees job.cancelled and
- * leaves status as 'cancelled' instead of 'error'.
- */
+/************************************************************************/
+/*!
+  \brief
+    Cancel a job: kill whatever tool is running for it (COLMAP / Brush /
+    python) and stop the pipeline from starting the next stage. The
+    pipeline's catch block sees job.cancelled and leaves status as
+    'cancelled' instead of 'error'.
+  \param job
+    The job to cancel
+  \return
+    bool, false if the job had already finished, true if it was cancelled
+*/
+/************************************************************************/
 export function cancelJob(job) {
   if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
     return false
@@ -119,6 +243,36 @@ export function cancelJob(job) {
  * longer than that.
  */
 function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
+/************************************************************************/
+/*!
+  \brief
+    Spawn a child process and resolve on exit 0, reject otherwise.
+    Streams stdout/stderr into the job log, and lets an optional onData
+    hook parse lines for progress. With timeoutMs, the tool is killed if
+    it runs longer than that.
+  \param job
+    The job the tool is running for
+  \param bin
+    string
+    The path to the executable
+  \param args
+    string[]
+    The command-line arguments
+  \param cwd
+    string
+    Optional. The folder to run the tool in
+  \param onData
+    function
+    Optional. Called with each line of output
+  \param timeoutMs
+    number
+    Optional. Kill the tool after this many milliseconds
+  \return
+    Promise that resolves on exit code 0, else rejects with an error for
+    cancellation, timeout, a kill signal or a non-zero exit code
+*/
+/************************************************************************/
+function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
   return new Promise((resolve, reject) => {
     // Cancelled between stages: don't start the next tool.
     if (job.cancelled) return reject(new Error('Cancelled by user'))
@@ -189,12 +343,20 @@ const YT_HOSTS = new Set([
   'www.youtube-nocookie.com',
 ])
 
-/**
- * Return https://www.youtube.com/watch?v=<id> for a single-video YouTube URL,
- * or null for anything else (other hosts, playlists, channels, bad IDs).
- * Rebuilding from the ID alone also strips list=/index= so yt-dlp can never be
- * handed a playlist. tools/youtube_frames.py applies the same rule.
- */
+/************************************************************************/
+/*!
+  \brief
+    Rebuild a single-video YouTube URL from its ID alone. This also strips
+    list=/index= so yt-dlp can never be handed a playlist.
+    tools/youtube_frames.py applies the same rule.
+  \param input
+    string
+    The link the user entered
+  \return
+    https://www.youtube.com/watch?v=<id> for a single-video YouTube URL,
+    null for anything else (other hosts, playlists, channels, bad IDs).
+*/
+/************************************************************************/
 export function canonicalYoutubeUrl(input) {
   let u
   try {
@@ -214,12 +376,29 @@ export function canonicalYoutubeUrl(input) {
   return id && YT_ID_RE.test(id) ? `https://www.youtube.com/watch?v=${id}` : null
 }
 
-/**
- * Extract frames from a YouTube URL into a job's images/ directory by running
- * tools/youtube_frames.py. Resolves with the number of frames written. The
- * script reports "PROGRESS <stage> <0..1>" lines, which drive job.detail, and
- * "ERROR: ..." lines, which become the job's error instead of a bare exit code.
- */
+/************************************************************************/
+/*!
+  \brief
+    Extract frames from a YouTube URL into a job's images/ directory by
+    running tools/youtube_frames.py. The script reports
+    "PROGRESS <stage> <0..1>" lines, which drive job.detail, and
+    "ERROR: ..." lines, which become the job's error instead of a bare
+    exit code.
+  \param job
+    The job to extract frames for
+  \param url
+    string
+    The canonical YouTube video URL
+  \param fps
+    number
+    Optional. Frames per second to extract, defaults to config.ytFps
+  \param maxFrames
+    number
+    Optional. Cap on frames extracted, defaults to config.ytMaxFrames
+  \return
+    The number of frames written to images/.
+*/
+/************************************************************************/
 export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
   const jobDir = path.join(config.jobsDir, job.id)
   const imagesDir = path.join(jobDir, 'images')
@@ -277,16 +456,30 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
   }
 
   const frames = (await fsp.readdir(imagesDir)).filter((f) =>
-    /\.(jpe?g|png)$/i.test(f),
+    IMAGE_EXT_RE.test(f),
   )
   return frames.length
 }
 
-/**
- * Create a reconstruction job seeded from a YouTube URL: extract frames, then
- * run the normal reconstruction pipeline. Intended to be called in the
- * background (not awaited) after responding to the client.
- */
+/************************************************************************/
+/*!
+  \brief
+    Create a reconstruction job seeded from a YouTube URL: extract frames,
+    then run the normal reconstruction pipeline. Intended to be called in
+    the background (not awaited) after responding to the client.
+  \param job
+    The job to run
+  \param url
+    string
+    The canonical YouTube video URL
+  \param opts
+    object
+    Optional { fps, maxFrames }, passed to extractYoutubeFrames
+  \return
+    nothing; sets the job to error if fewer than 8 frames were extracted
+    or extraction failed
+*/
+/************************************************************************/
 export async function runYoutubePipeline(job, url, opts = {}) {
   try {
     const count = await extractYoutubeFrames(job, url, opts)
@@ -316,15 +509,24 @@ export async function runYoutubePipeline(job, url, opts = {}) {
 const NO_MODEL_MESSAGE =
   'COLMAP could not reconstruct a model from these photos. Try more photos with more overlap and texture.'
 
-/**
- * Full reconstruction pipeline for one job directory.
- * Layout produced (INRIA/COLMAP convention that Brush reads):
- *   <jobDir>/images/              uploaded photos (or extracted video frames)
- *   <jobDir>/database.db          COLMAP feature database
- *   <jobDir>/sparse/0/            COLMAP sparse model (poses + points)
- *   <jobsDir>/<id>_out/           Brush splat .ply exports
- *   <jobsDir>/<id>_out/result.ply the export normalized into the viewer's frame
- */
+/************************************************************************/
+/*!
+  \brief
+    Full reconstruction pipeline for one job directory.
+    Layout produced (INRIA/COLMAP convention that Brush reads):
+      <jobDir>/images/              uploaded photos (or extracted frames)
+      <jobDir>/database.db          COLMAP feature database
+      <jobDir>/sparse/0/            COLMAP sparse model (poses + points)
+      <jobsDir>/<id>_out/           Brush splat .ply exports
+      <jobsDir>/<id>_out/result.ply the export normalized into the
+                                    viewer's frame
+  \param job
+    The job to run
+  \return
+    nothing; sets the job to done with a resultPath, or to error with a
+    message (left as cancelled if the user cancelled it)
+*/
+/************************************************************************/
 export async function runPipeline(job) {
   const jobDir = path.join(config.jobsDir, job.id)
   const imagesDir = path.join(jobDir, 'images')
@@ -446,6 +648,19 @@ export async function runPipeline(job) {
       job.resultPath = rawPly
     }
 
+    // Best-effort copy into the engine's samples folder, so a finished scan can
+    // be opened straight from the native viewer's file browser (main.cpp scans
+    // assets/samples/ for *.ply on launch). Never fails the job -- the result is
+    // still servable from resultPath/the Download button either way.
+    try {
+      fs.mkdirSync(config.engineSamplesDir, { recursive: true })
+      const enginePath = path.join(config.engineSamplesDir, `${job.id.slice(0, 8)}.ply`)
+      fs.copyFileSync(job.resultPath, enginePath)
+      appendLog(job, `Copied to engine samples: ${enginePath}`)
+    } catch (err) {
+      appendLog(job, `Could not copy to engine samples (${err.message}); use Download .ply instead.`)
+    }
+
     job.phase = 'done'
     job.progress = 1
     job.status = 'done'
@@ -460,10 +675,18 @@ export async function runPipeline(job) {
   }
 }
 
-/**
- * Re-create an in-memory job from a record scanned off disk (see scan.js), so
- * jobs finished before a restart can still be polled and downloaded.
- */
+/************************************************************************/
+/*!
+  \brief
+    Re-create an in-memory job from a record scanned off disk (see
+    scan.js), so jobs finished before a restart can still be polled and
+    downloaded.
+  \param record
+    The job record returned by scanJob
+  \return
+    The restored job, also added to the jobs map.
+*/
+/************************************************************************/
 export function restoreJob(record) {
   const job = makeJob(record.id)
   Object.assign(job, {
@@ -482,5 +705,7 @@ export function restoreJob(record) {
   if (record.needsWrite) saveJob(job)
   return job
 }
+
+// ----- End of Functions ----------------------------------------------------- //
 
 export { makeJob }
