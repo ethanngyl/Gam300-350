@@ -1,3 +1,39 @@
+/*!************************************************************************
+\file config.js
+\author1 Xiong Yang
+\author2 Gabriel Sebastian Putra
+\par DP email1: xiong.yang@digipen.edu
+\par DP email2: gabrielsebastian.p@digipen.edu 
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 30-09-2026
+\brief
+Central configuration for the reconstruction backend. It works out where the
+COLMAP and Brush executables are, probes them once at startup for GPU support
+and the right command-line flag, and exports a single config object that
+every other backend file reads (ports, folders, tool paths, training knobs,
+upload limits, python scripts). Any value can be overridden with an
+environment variable.
+- findExe(roots, re, fallback)
+Searches each root folder recursively, in order, for a file whose name
+matches re. Returns the first match, or fallback if none is found. The
+release zips extract into a subfolder whose name varies, so it searches
+rather than hardcoding a layout.
+- findOnPath(name)
+Returns the absolute path of name if it is on the system PATH (e.g. a
+Homebrew install), else null.
+- colmapHasCuda(exe)
+Runs COLMAP with -h and checks the output for "with CUDA". Decides whether
+COLMAP should use the GPU when COLMAP_USE_GPU isn't set.
+- brushItersFlag(exe)
+Runs Brush with --help to find out which iteration-count flag this build
+understands (--total-steps or --total-train-iters).
+- config
+The exported settings object used by server.js, pipeline.js, scan.js and
+status.js.
+**************************************************************************/
+
+// ----- Headers ------------------------------------------------------- //
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -13,12 +49,29 @@ const toolsDir = path.join(repoRoot, 'tools')
 // Legacy/sibling location for developers who built the tools themselves.
 const siblingToolsDir = path.join(repoRoot, '..', 'gsplat-tools')
 
-/**
- * Find an executable by searching each root directory recursively, in order,
- * for a file whose name matches `re`. Returns the first match, or `fallback`
- * if none of the roots exist / contain one. The release zips extract into a
- * subfolder whose name varies, so we search rather than hardcode a layout.
- */
+// ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Find an executable by searching each root directory recursively, in
+    order, for a file whose name matches `re`. The release zips extract
+    into a subfolder whose name varies, so we search rather than hardcode
+    a layout.
+  \param roots
+    string[]
+    The folders to search, most specific first.
+  \param re
+    RegExp
+    The pattern the executable's file name must match.
+  \param fallback
+    string
+    The path to return if nothing is found.
+  \return
+    The first matching path, else fallback if none of the roots exist or
+    contain one.
+*/
+/************************************************************************/
 function findExe(roots, re, fallback) {
   for (const root of roots) {
     const stack = [root]
@@ -40,7 +93,18 @@ function findExe(roots, re, fallback) {
   return fallback
 }
 
-/** Absolute path of `name` if it's on PATH (e.g. a Homebrew install), else null. */
+/************************************************************************/
+/*!
+  \brief
+    Looks for an executable in every folder on the system PATH (e.g. a
+    Homebrew install).
+  \param name
+    string
+    The executable's file name.
+  \return
+    The absolute path of name if it's on PATH, else null.
+*/
+/************************************************************************/
 function findOnPath(name) {
   for (const dir of (process.env.PATH || '').split(path.delimiter)) {
     if (!dir) continue
@@ -84,7 +148,19 @@ const brushBin =
       path.join(toolsDir, 'brush', `brush${exeSuffix}`),
   )
 
-// Check if the COLMAP binary is a CUDA build by running it with `-h` and looking
+/************************************************************************/
+/*!
+  \brief
+    Check if the COLMAP binary is a CUDA build by running it with `-h` and
+    looking for "with CUDA" in its output.
+  \param exe
+    string
+    The path to the COLMAP executable.
+  \return
+    bool, true if COLMAP was built with CUDA, false if not or if it
+    couldn't be run.
+*/
+/************************************************************************/
 function colmapHasCuda(exe) {
   try {
     const r = spawnSync(exe, ['-h'], {
@@ -100,10 +176,21 @@ function colmapHasCuda(exe) {
 const colmapUseGpu =
   process.env.COLMAP_USE_GPU ?? (colmapHasCuda(colmapBin) ? '1' : '0')
 
-// Passing the wrong name makes Brush exit with code 2 before training starts. 
-// Ask the binary once which one it understands. Override with BRUSH_ITERS_FLAG if the probe can't run.
-//   v0.3.0 release : --total-steps
-//   main branch    : --total-train-iters
+/************************************************************************/
+/*!
+  \brief
+    Passing the wrong name makes Brush exit with code 2 before training
+    starts. Ask the binary once which one it understands. Override with
+    BRUSH_ITERS_FLAG if the probe can't run.
+      v0.3.0 release : --total-steps
+      main branch    : --total-train-iters
+  \param exe
+    string
+    The path to the Brush executable.
+  \return
+    '--total-steps' if Brush's help lists it, else '--total-train-iters'.
+*/
+/************************************************************************/
 function brushItersFlag(exe) {
   try {
     const r = spawnSync(exe, ['--help'], {
@@ -120,13 +207,17 @@ function brushItersFlag(exe) {
 }
 const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushBin)
 
-/**
- * Central config for the reconstruction backend.
- *
- * Tool paths are resolved relative to the repo so a fresh clone works after
- * running tools/get-colmap.ps1 and tools/get-brush.ps1. Override any of these
- * with environment variables to point at a copy installed elsewhere.
- */
+// ----- End of Functions ----------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Central config for the reconstruction backend. Tool paths are resolved
+    relative to the repo so a fresh clone works after running
+    tools/get-colmap.ps1 and tools/get-brush.ps1. Override any of these
+    with environment variables to point at a copy installed elsewhere.
+*/
+/************************************************************************/
 export const config = {
   // HTTP port the API listens on (Vite proxies /api here in dev).
   port: Number(process.env.PORT) || 5005,

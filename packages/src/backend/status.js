@@ -1,11 +1,28 @@
+/*!************************************************************************
+\file status.js
+\author Gabriel Sebastian Putra
+\par DP email: gabrielsebastian.p@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 29-09-2026
+\brief
+Saves each job's state to <jobsDir>/<id>/status.json and reads it back. It's 
+the saved-to-disk copy of the job that survives a restart. Running jobs still 
+live in memory; scan.js reads these files back at startup. The file is short: 
+constants followed by two exported functions.
+- saveJob(job, { throttle })
+Writes the job's current state to disk.
+- readStatus(id, jobsDir)
+Async. Reads and parses <jobsDir>/<id>/status.json.
+**************************************************************************/
+
 // Persists each job's state as <jobsDir>/<id>/status.json so it survives a
 // server restart. Jobs still live in memory while running; this file is the
 // durable copy that scan.js reads back on startup.
-
+// ----- Headers ------------------------------------------------------- //
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-
 import { config } from './config.js'
 
 export const STATUS_FILE = 'status.json'
@@ -16,14 +33,22 @@ const TERMINAL_STATUS = new Set(['done', 'error', 'cancelled'])
 const THROTTLE_MS = 2000
 const LOG_TAIL_LINES = 40
 
-/**
- * Write the job's state to its folder. Synchronous on purpose: the record is
- * tiny, and the shutdown handler needs it to work where async never runs.
- * Never throws -- failing to persist must not fail a reconstruction.
- *
- * With `throttle`, skips the write if this job was saved less than 2s ago (for
- * progress-only updates). Phase changes and end states are always written.
- */
+// ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Write the job's state to its folder. Synchronous on purpose: the record 
+    is tiny, and the shutdown handler needs it to work where async never 
+    runs. Never throws -- failing to persist must not fail a reconstruction.
+  \param job
+    The job to save
+  \param throttle
+    Recommended to set to false
+  \return 
+    Saves the Job.
+*/
+/************************************************************************/
 export function saveJob(job, { throttle = false } = {}) {
   const now = Date.now()
   if (throttle && job.savedAt && now - job.savedAt < THROTTLE_MS) return
@@ -72,15 +97,34 @@ export function saveJob(job, { throttle = false } = {}) {
   }
 }
 
-/** Read a job's saved record, or null if missing, unreadable or not a valid record. */
-export async function readStatus(id, jobsDir = config.jobsDir) {
-  try {
+/************************************************************************/
+/*!
+  \brief
+    Read a job's saved record, or null if missing, unreadable or not a 
+    valid record.
+  \param id
+    The job's ID.
+  \param jobsDir
+    The path to the job.
+  \return 
+    Record of the job, else null.
+*/
+/************************************************************************/
+export async function readStatus(id, jobsDir = config.jobsDir) 
+{
+  try 
+  {
     const record = JSON.parse(await fsp.readFile(path.join(jobsDir, id, STATUS_FILE), 'utf8'))
-    if (record?.version !== VERSION || record.id !== id || !VALID_STATUS.has(record.status)) {
+    if (record?.version !== VERSION || record.id !== id || !VALID_STATUS.has(record.status)) 
+    {
       return null
     }
     return record
-  } catch {
+  } 
+  catch 
+  {
     return null
   }
 }
+
+// ----- End of Functions ----------------------------------------------------- //

@@ -1,3 +1,39 @@
+/*!************************************************************************
+\file ImageGallery.css
+\author1 Bryan
+\author2 Gabriel Sebastian Putra
+\par DP email1: 
+\par DP email2: gabrielsebastian.p@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 30-09-2026
+\brief
+Styles for the ImageGallery page (ImageGallery.jsx). Colours, radii and
+borders come from the shared theme variables (--text-muted, --accent,
+--radius-md, --border-strong, --surface).
+- .gallery
+Centred page column that stacks the header and job sections.
+- .gallery-head
+Row holding the Back button and the page title.
+- .gallery-note
+Muted text for the loading and empty messages.
+- .gallery-error
+Accent colour for the error message.
+- .gallery-job h3 / .gallery-job h3 span
+Monospace job heading with smaller, muted status and photo count.
+- .gallery-grid / .gallery-grid img
+Responsive grid of square photo thumbnails.
+**************************************************************************/
+
+/* ----- Start of Styles ------------------------------------------------------ */
+
+/************************************************************************/
+/*!
+  \brief
+    Page container: centred, max 1100px wide, with the header and each
+    job section stacked vertically.
+*/
+/************************************************************************/
 .gallery {
     max-width: 1100px;
     margin: 0 auto;
@@ -7,21 +43,47 @@
     gap: 24px;
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Header row: Back button and "Uploaded images" title side by side.
+*/
+/************************************************************************/
 .gallery-head {
     display: flex;
     align-items: center;
     gap: 16px;
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Small muted text used for the loading, error and empty messages.
+*/
+/************************************************************************/
 .gallery-note {
     color: var(--text-muted);
     font-size: 0.9rem;
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Colours the error message with the accent colour. Used together with
+    .gallery-note.
+*/
+/************************************************************************/
 .gallery-error {
     color: var(--accent);
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Job heading: the short job id in monospace, followed by the status
+    and photo count on the same line.
+*/
+/************************************************************************/
 .gallery-job h3 {
     display: flex;
     align-items: baseline;
@@ -31,17 +93,36 @@
     font-size: 0.95rem;
 }
 
+/************************************************************************/
+/*!
+  \brief
+    The status and photo count in the job heading, smaller and muted.
+*/
+/************************************************************************/
 .gallery-job h3 span {
     font-size: 0.8rem;
     color: var(--text-muted);
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Responsive thumbnail grid: as many 160px+ columns as fit the width.
+*/
+/************************************************************************/
 .gallery-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 10px;
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Each thumbnail: fills its cell as a square, cropped to fit, with
+    rounded corners and a border.
+*/
+/************************************************************************/
 .gallery-grid img {
     display: block;
     width: 100%;
@@ -51,3 +132,5 @@
     border: 1px solid var(--border-strong);
     background: var(--surface);
 }
+
+/* ----- End of Styles -------------------------------------------------------- */

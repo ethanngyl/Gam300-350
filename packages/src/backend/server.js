@@ -2,7 +2,8 @@
 \file server.js
 \author1 Gabriel Sebastian Putra
 \author2 Ethan Ng
-\par DP email: gabrielsebastian.p@digipen.edu
+\par DP email1: gabrielsebastian.p@digipen.edu
+\par DP email2: 
 \par Course: csd3401f26
 \par Software Engineering Project 5
 \date 29-09-2026
@@ -37,21 +38,19 @@ Runs only once. Marks every running job as error and saves it, calls
 killChildren() to stop the COLMAP/Brush/python processes, then exits.
 **************************************************************************/
 
-// Backend: serves the built React app and runs the photo -> COLMAP -> Brush ->
-// Gaussian splat .ply pipeline. Upload handling + pipeline engine live in
-// ./pipeline.js and ./config.js (ported from the standalone server/).
-// ----- Headers ----- //
+// ----- Headers ------------------------------------------------------- //
 import fs from 'node:fs'
 import multer from 'multer'
 import express from 'express'
 import crypto from 'node:crypto'
 import { config } from './config.js'
 import { saveJob } from './status.js'
-import path, { dirname } from 'node:path'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import 
 { 
-  IMAGE_EXT_RE, scanJob, scanJobs 
+  IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
+  scanJobs
 } 
 from './scan.js'
 import 
@@ -63,9 +62,7 @@ import
 from './pipeline.js'
 
 const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
-const PORT = process.env.PORT || 5005
+const __dirname = path.dirname(__filename)
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
 
@@ -83,8 +80,29 @@ for (const record of restored)
 
 console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
 
-// A job from memory, else adopted from its folder on disk (e.g. a folder that
-// appeared after startup). null if there is no such job.
+const app = express()
+
+// Parse JSON bodies (used by /jobs/from-youtube). Only applies to
+// application/json requests, so the multipart photo upload is unaffected.
+app.use(express.json())
+
+// Serve the built React frontend (run `npm run build` to produce web-app/dist).
+app.use(express.static(path.join(__dirname, '../web-app/dist')))
+
+// ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Gets a job from memory, else adopted from its folder on disk (e.g. a 
+    folder that appeared after startup). null if there is no such job.
+  \param id
+  string
+    The id of the job
+  \return job
+  returns the job from the jobs map, null if job doesn't exist.
+*/
+/************************************************************************/
 async function getJob(id) 
 {
   const live = jobs.get(id)
@@ -97,17 +115,23 @@ async function getJob(id)
   return record ? (jobs.get(id) ?? restoreJob(record)) : null
 }
 
-const app = express()
-
-// Parse JSON bodies (used by /jobs/from-youtube). Only applies to
-// application/json requests, so the multipart photo upload is unaffected.
-app.use(express.json())
-
-// Serve the built React frontend (run `npm run build` to produce web-app/dist).
-app.use(express.static(path.join(__dirname, '../web-app/dist')))
-
 // --- Upload handling --------------------------------------------------------
 // Assign a job id up front so every file in the request lands in one job folder.
+/************************************************************************/
+/*!
+  \brief
+    Assign a job id up front so every file in the request lands in one job 
+    folder. Must run before multer
+  \param req
+    The request from the user
+  \param _res
+    The response from the backend
+  \param next
+    moving on
+  \return 
+    ensures the file in the request goes into the same job folder
+*/
+/************************************************************************/
 function assignJobId(req, _res, next) 
 {
   req.jobId = crypto.randomUUID()
@@ -116,6 +140,14 @@ function assignJobId(req, _res, next)
   next()
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Send files into the images folder and rename the images in order.
+  \return 
+    The image files default to jpg
+*/
+/************************************************************************/
 const storage = multer.diskStorage
 ({
   destination: (req, _file, cb) => cb(null, path.join(config.jobsDir, req.jobId, 'images')),
@@ -128,6 +160,14 @@ const storage = multer.diskStorage
   },
 })
 
+/************************************************************************/
+/*!
+  \brief
+    Make sures that only jpegs and pngs under a size limit is accepted.
+  \return 
+    nothing
+*/
+/************************************************************************/
 const upload = multer
 ({
   storage,
@@ -135,9 +175,23 @@ const upload = multer
   fileFilter: (_req, file, cb) => cb(null, /^image\/(jpe?g|png)$/i.test(file.mimetype))
 })
 
-// Content-level guard: multer's fileFilter only trusts the client-declared MIME
-// type. This re-inspects the actual bytes of every uploaded file and rejects the
-// whole batch (deleting the job folder) if any file isn't a real JPEG/PNG.
+/************************************************************************/
+/*!
+  \brief
+    Content-level guard: multer's fileFilter only trusts the client-declared 
+    MIME type. This re-inspects the actual bytes of every uploaded file and 
+    rejects the whole batch (deleting the job folder) if any file isn't a 
+    real JPEG/PNG.
+  \param req
+    The request from the user
+  \param res
+    The response from the backend
+  \param next
+    moving on
+  \return 
+    400 if file isn't jpeg or png and deletes job folder.
+*/
+/************************************************************************/
 async function onlyImages(req, res, next)
 {
   const files = req.files || []
@@ -145,18 +199,17 @@ async function onlyImages(req, res, next)
 
   try 
   {
-    const { fileTypeFromBuffer } = await import('file-type')
+    const { fileTypeFromFile } = await import('file-type')
     const legalMimes = ['image/jpeg', 'image/png']
 
     for (const file of files) 
     {
-      const buffer = fs.readFileSync(file.path)
-      const type = await fileTypeFromBuffer(buffer)
+      const type = await fileTypeFromFile(file.path)      
 
       if (!type || !legalMimes.includes(type.mime)) 
       {
         // Reject the batch: remove the job folder created up front by assignJobId.
-        fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+        await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
         return res.status(400).json
         ({
           error: 'Invalid file content -- only real JPEG or PNG images are accepted.',
@@ -172,9 +225,58 @@ async function onlyImages(req, res, next)
   }
 }
 
-// --- Routes -----------------------------------------------------------------
-// Create a reconstruction job from uploaded photos. Returns a job id immediately
-// and runs COLMAP + Brush in the background -- the frontend polls for status.
+// --- Shutdown -----------------------------------------------------------------
+let shuttingDown = false
+
+/************************************************************************/
+/*!
+  \brief
+    Tool processes (COLMAP / Brush / python) outlive this process unless we 
+    stop them explicitly. Kill them on every exit path so a Ctrl+C, a closed 
+    console window, a nodemon restart or a crash never leaves Brush training 
+    as an orphan on the GPU.
+  \param reason
+    string
+    The type of shutdown
+  \param exitCode
+    number
+    The code to exit the website
+  \return 
+    Exits the website
+*/
+/************************************************************************/
+function shutdown(reason, exitCode = 0) 
+{
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`[backend] ${reason} -- stopping running tool processes`)
+  for (const job of jobs.values()) 
+  {
+    if (job.status === 'running') 
+    {
+      job.status = 'error'
+      job.error = 'Server shut down during processing.'
+      saveJob(job)
+    }
+  }
+  killChildren()
+  process.exit(exitCode)
+}
+
+// ----- End of Functions ----------------------------------------------------- //
+
+// ----- Start of Routes ------------------------------------------------------ // 
+
+/************************************************************************/
+/*!
+  \brief
+    Create a reconstruction job from uploaded photos. Returns a job id 
+    immediately and runs COLMAP + Brush in the background -- the frontend 
+    polls for status.
+  \return 
+    400 if less than 8 photos given, 202 if successful
+*/
+/************************************************************************/
 app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => 
 {
   const files = req.files || []
@@ -193,10 +295,18 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
-// List every job folder that has images, newest first. The folders on disk are
-// scanned on each call (see scan.js), so photos and results from before a
-// restart -- or dropped in by hand -- show up. A job that is live in memory
-// keeps its live status: the disk can't tell "running" from "interrupted".
+/************************************************************************/
+/*!
+  \brief
+    List every job folder that has images, newest first. The folders on 
+    disk are scanned on each call (see scan.js), so photos and results from 
+    before a restart -- or dropped in by hand -- show up. A job that is 
+    live in memory keeps its live status: the disk can't tell "running" 
+    from "interrupted".
+  \return 
+    A reecord of every job's details 
+*/
+/************************************************************************/
 app.get('/jobs', async (_req, res) => 
 {
   const records = await scanJobs(config.jobsDir)
@@ -223,12 +333,20 @@ app.get('/jobs', async (_req, res) =>
   )
 })
 
-// Serve a single uploaded image. id/name are whitelisted to plain filename
-// characters so a request can't use `..` or slashes to escape the jobs folder.
+/************************************************************************/
+/*!
+  \brief
+    Serve a single uploaded image. id/name are whitelisted to plain filename
+    characters so a request can't use `..` or slashes to escape the jobs 
+    folder.
+  \return 
+    404 if image doesn't exist or else the image itself
+*/
+/************************************************************************/
 app.get('/jobs/:id/images/:name', (req, res) => 
 {
   const { id, name } = req.params
-  if (!/^[\w-]+$/.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
+  if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
   {
     return res.status(404).json({ error: 'image not found' })
   }
@@ -238,9 +356,18 @@ app.get('/jobs/:id/images/:name', (req, res) =>
   })
 })
 
-// Create a reconstruction job from a YouTube link. Frames are extracted server
-// side (tools/youtube_frames.py) into the job's images/ folder, then the same
-// COLMAP + Brush pipeline runs. Body: { url: string, fps?: number, maxFrames?: number }
+/************************************************************************/
+/*!
+  \brief
+    Create a reconstruction job from a YouTube link. Frames are extracted 
+    server side (tools/youtube_frames.py) into the job's images/ folder, 
+    then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?: 
+    number, maxFrames?: number }
+  \return 
+    400 if url doesn't work, else 202 and starts a job and runs youtube
+    pipeline
+*/
+/************************************************************************/
 app.post('/jobs/from-youtube', (req, res) => 
 {
   const { url, fps, maxFrames } = req.body || {}
@@ -274,7 +401,15 @@ app.post('/jobs/from-youtube', (req, res) =>
   res.status(202).json({ id: job.id })
 })
 
-// Poll a job's status (bounded log tail, not the full log).
+/************************************************************************/
+/*!
+  \brief
+    Poll a job's status (bounded log tail, not the full log).
+  \return 
+    404 if job not found
+    else status, phase, progress, error and the last 40 log lines
+*/
+/************************************************************************/
 app.get('/jobs/:id', async (req, res) => 
 {
   const job = await getJob(req.params.id)
@@ -295,11 +430,20 @@ app.get('/jobs/:id', async (req, res) =>
   })
 })
 
-// Cancel a running job: kills its COLMAP / Brush / python process so the GPU
-// is freed immediately. Idempotent; a finished job answers 409.
-app.delete('/jobs/:id', (req, res) => 
+/************************************************************************/
+/*!
+  \brief
+    Cancel a running job: kills its COLMAP / Brush / python process so the 
+    GPU is freed immediately. Idempotent; a finished job answers 409.
+  \return 
+    404 if job not found
+    409 if job is finished
+    kills processes and frees GPU
+*/
+/************************************************************************/
+app.delete('/jobs/:id', async (req, res) => 
 {
-  const job = getJob(req.params.id)
+  const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
   if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
   if (!cancelJob(job)) 
@@ -309,7 +453,14 @@ app.delete('/jobs/:id', (req, res) =>
   res.json({ id: job.id, status: job.status })
 })
 
-// Download / stream the finished splat .ply.
+/************************************************************************/
+/*!
+  \brief
+    Download / stream the finished splat .ply.
+  \return 
+    404 if result is not ready
+*/
+/************************************************************************/
 app.get('/jobs/:id/result.ply', async (req, res) => 
 {
   const job = await getJob(req.params.id)
@@ -321,29 +472,7 @@ app.get('/jobs/:id/result.ply', async (req, res) =>
   res.sendFile(job.resultPath)
 })
 
-// --- Shutdown -----------------------------------------------------------------
-// Tool processes (COLMAP / Brush / python) outlive this process unless we stop
-// them explicitly. Kill them on every exit path so a Ctrl+C, a closed console
-// window, a nodemon restart or a crash never leaves Brush training as an
-// orphan on the GPU.
-let shuttingDown = false
-function shutdown(reason, exitCode = 0) 
-{
-  if (shuttingDown) return
-  shuttingDown = true
-  console.log(`[backend] ${reason} -- stopping running tool processes`)
-  for (const job of jobs.values()) 
-  {
-    if (job.status === 'running') 
-    {
-      job.status = 'error'
-      job.error = 'Server shut down during processing.'
-      saveJob(job)
-    }
-  }
-  killChildren()
-  process.exit(exitCode)
-}
+// ----- End of Routes -------------------------------------------------------- //
 
 // SIGINT: Ctrl+C. SIGTERM: nodemon / task manager / kill. SIGBREAK: Ctrl+Break
 // on Windows. SIGHUP: the console window was closed (Windows maps
@@ -366,9 +495,9 @@ process.on('unhandledRejection', (err) =>
 // process.exit elsewhere). killChildren() is synchronous, so it works here.
 process.on('exit', () => killChildren())
 
-app.listen(PORT, () => 
+app.listen(config.port, () =>
 {
-  console.log(`[backend] http://localhost:${PORT}`)
+  console.log(`[backend] http://localhost:${config.port}`)
   console.log(`[backend] COLMAP: ${config.colmapBin}`)
   console.log(`[backend] Brush:  ${config.brushBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
