@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+# /*!************************************************************************
+# \file youtube_frames.py
+# \author Ethan Ng Yong Le
+# \par DP email: n.ethanyongle@digipen.edu
+# \par Course: csd3401f26
+# \par Software Engineering Project 5
+# \date 01-10-2026
+# \brief
+# CLI tool that downloads a YouTube video with yt-dlp and extracts sharp,
+# non-duplicate frames spread evenly across it as zero-padded JPEGs, ready
+# to feed into the COLMAP reconstruction pipeline. Reports progress and a
+# JSON summary for the backend server that spawns it.
+# **************************************************************************/
 """Extract frames from a YouTube video into a folder.
 
 Downloads a YouTube video with yt-dlp, then walks it with OpenCV and writes
