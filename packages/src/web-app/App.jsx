@@ -94,16 +94,19 @@ function App() {
         return (
             <>
                 <SplatViewer url={`/jobs/${jobId}/result.ply`} />
-                <button className="btn btn-primary" onClick={() => { playSound('click'); resetJob(); }}>
-                    New scan
-                </button>
-                <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
-                    onClick={() => playSound('click')}>
-                    Download .ply
-                </a>
-                <button className="btn btn-ghost" onClick={() => { playSound('click'); backToDashboard(); }}>
-                    Back to dashboard
-                </button>
+                {/* Must stay fixed above the full-page viewer, or its canvas covers the buttons. */}
+                <div style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, zIndex: 10 }}>
+                    <button className="btn btn-primary" onClick={() => { playSound('click'); resetJob(); }}>
+                        New scan
+                    </button>
+                    <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
+                        onClick={() => playSound('click')}>
+                        Download .ply
+                    </a>
+                    <button className="btn btn-ghost" onClick={() => { playSound('click'); backToDashboard(); }}>
+                        Back to dashboard
+                    </button>
+                </div>
             </>
         );
     }
