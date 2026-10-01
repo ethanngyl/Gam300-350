@@ -46,6 +46,7 @@ import crypto from 'node:crypto'
 import { config } from './config.js'
 import { saveJob } from './status.js'
 import path from 'node:path'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
 import 
@@ -72,7 +73,8 @@ fs.mkdirSync(config.jobsDir, { recursive: true })
 const restored = await scanJobs(config.jobsDir)
 
 // Folder where the wiki repo was cloned
-const WIKI_DIR = path.join(process.env.HOME, 'wiki')
+// os.homedir() rather than $HOME: Windows doesn't set HOME.
+const WIKI_DIR = path.join(os.homedir(), 'wiki')
 
 for (const record of restored) 
 {
