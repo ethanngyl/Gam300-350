@@ -446,6 +446,19 @@ export async function runPipeline(job) {
       job.resultPath = rawPly
     }
 
+    // --- Copy into the engine's samples folder ---
+    // Best-effort: the web app serves resultPath either way.
+    if (config.samplesDir) {
+      const samplePly = path.join(config.samplesDir, `splat_${job.id.slice(0, 8)}.ply`)
+      try {
+        await fsp.mkdir(config.samplesDir, { recursive: true })
+        await fsp.copyFile(job.resultPath, samplePly)
+        appendLog(job, `\nCopied to engine samples: ${samplePly}`)
+      } catch (err) {
+        appendLog(job, `\nCould not copy to engine samples (${err.message}).`)
+      }
+    }
+
     job.phase = 'done'
     job.progress = 1
     job.status = 'done'

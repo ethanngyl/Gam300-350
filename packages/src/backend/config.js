@@ -186,6 +186,12 @@ export const config = {
   // Where per-job working directories live (uploads, COLMAP db, splat output).
   jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
 
+  // Finished splats are also copied here so the engine's .ply browser lists
+  // them. Set SAMPLES_DIR to an empty string to turn the copy off.
+  samplesDir:
+    process.env.SAMPLES_DIR ??
+    path.join(repoRoot, 'src', 'engine', 'assets', 'samples'),
+
   // External tool executables (see resolution above).
   colmapBin,
   brushBin,
