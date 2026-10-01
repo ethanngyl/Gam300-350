@@ -236,13 +236,6 @@ export function cancelJob(job) {
   return true
 }
 
-/**
- * Spawn a child process and resolve on exit 0, reject otherwise.
- * Streams stdout/stderr into the job log, and lets an optional onData hook
- * parse lines for progress. With timeoutMs, the tool is killed if it runs
- * longer than that.
- */
-function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
 /************************************************************************/
 /*!
   \brief
@@ -272,7 +265,7 @@ function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
     cancellation, timeout, a kill signal or a non-zero exit code
 */
 /************************************************************************/
-function run(job, bin, args, { cwd, onData, timeoutMs } = {}) {
+function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
   return new Promise((resolve, reject) => {
     // Cancelled between stages: don't start the next tool.
     if (job.cancelled) return reject(new Error('Cancelled by user'))
