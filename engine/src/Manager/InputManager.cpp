@@ -28,8 +28,6 @@ void InputManager::CallbackMouseScroll(double yScroll)
 void InputManager::CallbackKeyPress(int key, INPUT_TYPE inputType)
 {
 
-	KEY_ACTIONS input = ALL_ACTIONS;
-
 	switch (key)
 	{
 	case Qt::Key_W:

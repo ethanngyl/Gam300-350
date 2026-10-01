@@ -341,7 +341,7 @@ macro(import_qt)
         if(NOT Qt6_FOUND)
             message(FATAL_ERROR
                 "Qt 6 not found at: ${CODEFINE_QT_DIR}\n"
-                "Run src/engine/run.bat once to download it, or set CODEFINE_QT_DIR.")
+                "Run engine/run.bat once to download it, or set CODEFINE_QT_DIR.")
         endif()
 
         message(STATUS "Qt imported successfully")

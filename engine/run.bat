@@ -15,7 +15,7 @@ echo Codefine Engine - Build ^& Run (Debug)
 echo ========================================
 echo.
 
-:: Anchor to this script's directory (src/engine) so paths work
+:: Anchor to this script's directory (engine) so paths work
 :: regardless of where the .bat is launched from.
 cd /d "%~dp0"
 
