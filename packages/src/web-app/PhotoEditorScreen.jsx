@@ -1,4 +1,18 @@
-﻿import { useState } from 'react';
+﻿/*!************************************************************************
+\file PhotoEditorScreen.jsx
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Photo editing screen with a tool rail, image canvas, edit history strip,
+and an adjustments panel (brightness, contrast, saturation, sharpness,
+color grading, lens correction) feeding into a "Generate 3D Model" action.
+Currently a static mockup with no real image processing, but will eventually.
+**************************************************************************/
+
+import { useState } from 'react';
 
 const TOOLS = ['move', 'crop', 'adjust', 'grade', 'filter', 'reset'];
 const HISTORY = ['Original', 'Crop', 'Brightness +10', 'Contrast +15', 'Sharpen'];

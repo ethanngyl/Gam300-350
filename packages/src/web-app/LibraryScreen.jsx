@@ -1,4 +1,18 @@
-﻿import { useState } from 'react';
+﻿/*!************************************************************************
+\file LibraryScreen.jsx
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Library tab showing two sub-views: a searchable grid of generated 3D
+models with ready/processing status badges, and a photo library grouped
+by upload batch or YouTube frame-extraction session. Currently a placeholder
+with static data, but will eventually fetch real data from the backend.
+**************************************************************************/
+
+import { useState } from 'react';
 
 const MODELS = [
     { name: 'Ceramic Vase A', poly: '14.2k poly', date: 'Sep 15', status: 'ready' },

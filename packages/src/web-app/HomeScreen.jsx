@@ -1,4 +1,18 @@
-﻿import { playSound } from '../audio/Audio.js';
+﻿/*!************************************************************************
+\file HomeScreen.jsx
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Dashboard landing screen. Shows summary stats, a "New Generation" entry
+point into the capture flow, feature cards linking to the Media Library,
+Photo Editor, YouTube Extractor, and Image Gallery, and a sidebar listing
+recently generated models.
+**************************************************************************/
+
+import { playSound } from '../audio/Audio.js';
 
 const STATS = [
     { value: '24', label: 'Models Generated', note: '+3 this week' },

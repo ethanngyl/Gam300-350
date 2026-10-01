@@ -1,4 +1,20 @@
-﻿import { useState } from 'react';
+﻿/*!************************************************************************
+\file App.jsx
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Top-level app shell that switches between the tabbed dashboard (Home,
+Library, Photo Editor, Scene Builder) and full-page flows for capturing
+photos, polling reconstruction progress, viewing a finished splat result,
+browsing the YouTube ingest screen, and the image gallery. Owns the active
+job id and uploads a finished photo batch to the backend to kick off
+reconstruction.
+**************************************************************************/
+
+import { useState } from 'react';
 import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
 import SplatViewer from './SplatViewer.jsx';

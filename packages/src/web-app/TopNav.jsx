@@ -1,4 +1,17 @@
-﻿import { playSound } from '../audio/Audio.js';
+﻿/*!************************************************************************
+\file TopNav.jsx
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Top navigation bar for the dashboard: renders the Home / Library / Photo
+Editor tabs (Scene Builder currently disabled), plays a click sound on
+tab change, and shows GPU status and the user avatar.
+**************************************************************************/
+
+import { playSound } from '../audio/Audio.js';
 
 const TABS = [
     { id: 'home', label: 'Home' },

@@ -1,4 +1,19 @@
-﻿import { useState } from 'react';
+﻿/*!************************************************************************
+\file SceneBuilderScreen.jsx
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Maya-style scene builder screen: tool-category tabs, a transform tool
+bar, an outliner listing cameras/models/lights, a 3D viewport that
+renders a selected model's Gaussian splat via SplatViewer, a transform
+and mesh-stats inspector panel, and a frame timeline. Currently a static mockup
+that will eventually be hooked up to a real 3D engine and scene graph.
+**************************************************************************/
+
+import { useState } from 'react';
 import SplatViewer from './SplatViewer.jsx';
 
 const TOOL_TABS = ['Curves', 'Surfaces', 'Polygon', 'Sculpt', 'UV', 'Rigging', 'Animation', 'FX', 'Custom'];

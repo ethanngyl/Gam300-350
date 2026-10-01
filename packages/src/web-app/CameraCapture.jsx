@@ -1,4 +1,20 @@
-﻿import { useRef, useState, useEffect, useCallback } from 'react';
+﻿/*!************************************************************************
+\file CameraCapture.jsx
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+In-browser photo capture screen for scanning an object. Supports manual
+single-shot capture, interval-based auto-capture with a user-adjustable
+photo cap, drag-and-drop and file-picker uploads, live thumbnails with
+per-photo removal, and triggers reconstruction once enough photos are
+collected. Also responsible for correctly starting and releasing the
+camera's MediaStream as the component mounts and unmounts.
+**************************************************************************/
+
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 

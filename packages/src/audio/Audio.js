@@ -1,7 +1,17 @@
-// Central place for every UI sound in the app. To add a new sound
-// later, import the file here, add one line to SOUND_SOURCES, then
-// use playSound('yourName') or withSound('yourName', handler)
-// anywhere in the app
+/*!************************************************************************
+\file Audio.js
+\author Bryan Lim Jun Jie
+\par DP email: bryanjunjie.lim@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Central registry for the app's UI sound effects. Preloads each sound
+once at module load and exposes playSound(name) and withSound(name,
+handler) so any component can trigger a named sound by key instead of
+managing its own Audio objects.
+**************************************************************************/
+
 import buttonClick from './ButtonClick.wav';
 import buttonClick2 from './ButtonClick2.wav';
 import buttonClick3 from './ButtonClick3.wav';

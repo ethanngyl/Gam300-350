@@ -1,6 +1,6 @@
 /*!************************************************************************
 \file ImageGallery.jsx
-\author1 Bryan
+\author1 Bryan Lim Jun Jie
 \author2 Gabriel Sebastian Putra
 \par DP email1: 
 \par DP email2: gabrielsebastian.p@digipen.edu
