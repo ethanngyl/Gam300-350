@@ -1,3 +1,16 @@
+/*!************************************************************************
+\file ImGuiQtBackend.cpp
+\author Ethan Ng Yong Le
+\par DP email: n.ethanyongle@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Implements the minimal ImGui platform backend for Qt: maps Qt mouse, wheel,
+keyboard and focus events onto ImGui's IO and manages per-frame timing, so
+the widget can then consult io.WantCaptureMouse / io.WantCaptureKeyboard to
+decide whether the engine should also see each event.
+**************************************************************************/
 #include "ui/ImGuiQtBackend.h"
 
 #include <imgui.h>

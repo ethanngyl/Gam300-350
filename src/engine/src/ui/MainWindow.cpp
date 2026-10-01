@@ -1,3 +1,16 @@
+/*!************************************************************************
+\file MainWindow.cpp
+\author Ethan Ng Yong Le
+\par DP email: n.ethanyongle@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Implements MainWindow: builds the editor window, wires the central Viewport
+to a Qt dock panel (stats label and ImGui "Engine Stats" toggle), and
+refreshes the FPS / splat-count readout from the viewport's per-frame stats
+callback.
+**************************************************************************/
 #include "ui/Viewport.h"
 #include "ui/MainWindow.h"
 

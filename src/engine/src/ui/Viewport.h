@@ -1,3 +1,16 @@
+/*!************************************************************************
+\file Viewport.h
+\author Ethan Ng Yong Le
+\par DP email: n.ethanyongle@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Declares Viewport, the QOpenGLWidget 3D view. It owns the OpenGL context,
+the splat renderer, the orbit camera and the ImGui overlay, turns Qt mouse
+and keyboard events into InputManager events, and repaints continuously
+(vsync paced) in place of the old GLFW main loop.
+**************************************************************************/
 #pragma once
 
 // GLEW must come before any Qt OpenGL header, since those pull in gl.h.

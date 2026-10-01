@@ -1,3 +1,16 @@
+/*!************************************************************************
+\file Viewport.cpp
+\author Ethan Ng Yong Le
+\par DP email: n.ethanyongle@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Implements Viewport: initialises GLEW/OpenGL and the splat renderer, drives
+the continuous vsync-paced render loop, forwards Qt mouse/keyboard input to
+the ImGui overlay and the orbit camera, draws the ImGui "Engine Stats"
+overlay, and browses and loads .ply splat files.
+**************************************************************************/
 #include "ui/Viewport.h"
 
 #include "ui/ImGuiQtBackend.h"

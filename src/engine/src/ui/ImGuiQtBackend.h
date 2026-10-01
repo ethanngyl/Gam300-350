@@ -1,3 +1,16 @@
+/*!************************************************************************
+\file ImGuiQtBackend.h
+\author Ethan Ng Yong Le
+\par DP email: n.ethanyongle@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Declares a minimal ImGui platform backend for Qt (the Qt counterpart of
+imgui_impl_glfw): init/shutdown, per-frame setup, and the entry points that
+forward Qt mouse, wheel, keyboard and focus events into ImGui. Rendering
+still goes through imgui_impl_opengl3.
+**************************************************************************/
 #pragma once
 
 class QWidget;
