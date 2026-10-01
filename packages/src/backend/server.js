@@ -479,7 +479,7 @@ app.get('/jobs/:id/result.ply', async (req, res) =>
 })
 
 // Serve a wiki page: /wiki or /wiki/Architecture etc.
-app.get('/wiki/:page?', (req, res) => 
+app.get('/wiki{/:page}', (req, res) => 
 {
   // Default to Home; sanitize to prevent path escaping
   const page = (req.params.page || 'Home').replace(/[^a-zA-Z0-9_-]/g, '')
