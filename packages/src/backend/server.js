@@ -486,12 +486,24 @@ app.get('/wiki/:page', (req, res) => serveWikiPage(req.params.page, res))
 
 // shared helper
 function serveWikiPage(rawPage, res) {
-  const page = rawPage.replace(/[^a-zA-Z0-9_-]/g, '')   // keep the sanitizing!
+  // CHANGE 1 — convert spaces to hyphens BEFORE stripping,
+  // so "Technical Requirements" → "Technical-Requirements" (matches the .md filename)
+  const page = rawPage
+    .replace(/\s+/g, '-')             // spaces → hyphens
+    .replace(/[^a-zA-Z0-9_-]/g, '')   // then strip anything else (blocks ../ etc.)
+
   const filePath = path.join(WIKI_DIR, `${page}.md`)
 
   fs.readFile(filePath, 'utf8', (err, markdown) => {
     if (err) return res.status(404).send('Wiki page not found')
-    const html = marked(markdown)
+
+    // CHANGE 2 — note: 'let' not 'const', because we modify html next
+    let html = marked(markdown)
+
+    // Rewrite bare wiki links (href="Architecture") → href="/wiki/Architecture".
+    // Leaves external (http://), absolute (/), and anchor (#) links untouched.
+    html = html.replace(/href="(?!https?:\/\/|\/|#)([^"]+)"/g, 'href="/wiki/$1"')
+
     res.send(`
       <!DOCTYPE html>
       <html>
