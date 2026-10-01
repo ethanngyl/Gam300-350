@@ -1,3 +1,17 @@
+/******************************************************************************
+ * File:        Resource.h
+ * Project:     NightSnack
+ * Author(s):	Clement Ang Yang Ying   (Primary, 90%) - Transformed class to manage models and drawing them
+                                        (Secondary, 10%) - Created base class
+ *
+ * Description:
+ * This file contains the definition for the class SplatRenderer
+ * This class stores the model data class and renders them
+ * It also calls translate on them when required
+ *
+ * Copyright 2026 DigiPen Institute of Technology Singapore.
+ * All rights reserved.
+ ******************************************************************************/
 #include "SplatRenderer.h"
 
 #include <GL/glew.h>
