@@ -47,6 +47,7 @@ import { config } from './config.js'
 import { saveJob } from './status.js'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { marked } from 'marked'
 import 
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
@@ -69,6 +70,9 @@ fs.mkdirSync(config.jobsDir, { recursive: true })
 // Jobs live in memory, so rebuild them from the job folders on disk. Without
 // this, everything finished before a restart 404s on /jobs/:id and result.ply.
 const restored = await scanJobs(config.jobsDir)
+
+// Folder where the wiki repo was cloned
+const WIKI_DIR = path.join(process.env.HOME, 'wiki')
 
 for (const record of restored) 
 {
@@ -470,6 +474,41 @@ app.get('/jobs/:id/result.ply', async (req, res) =>
   }
   res.setHeader('Content-Type', 'application/octet-stream')
   res.sendFile(job.resultPath)
+})
+
+// Serve a wiki page: /wiki or /wiki/Architecture etc.
+app.get('/wiki/:page?', (req, res) => 
+{
+  // Default to Home; sanitize to prevent path escaping
+  const page = (req.params.page || 'Home').replace(/[^a-zA-Z0-9_-]/g, '')
+  const filePath = path.join(WIKI_DIR, `${page}.md`)
+
+  fs.readFile(filePath, 'utf8', (err, markdown) => 
+  {
+    if (err) 
+    {
+      return res.status(404).send('Wiki page not found')
+    }
+    const html = marked(markdown)
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>${page} — Wiki</title>
+          <style>
+            body { max-width: 800px; margin: 40px auto; padding: 0 20px;
+                   font-family: system-ui, sans-serif; line-height: 1.6; }
+            pre { background: #f4f4f4; padding: 12px; overflow-x: auto; }
+            code { background: #f4f4f4; padding: 2px 4px; }
+            a { color: #0366d6; }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>
+    `)
+  })
 })
 
 // ----- End of Routes -------------------------------------------------------- //
