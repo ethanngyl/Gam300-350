@@ -476,19 +476,19 @@ app.get('/jobs/:id/result.ply', async (req, res) =>
   res.sendFile(job.resultPath)
 })
 
-// Serve a wiki page: /wiki or /wiki/Architecture etc.
-app.get('/wiki/:page?', (req, res) => 
-{
-  // Default to Home; sanitize to prevent path escaping
-  const page = (req.params.page || 'Home').replace(/[^a-zA-Z0-9_-]/g, '')
+// /wiki with no page → show Home
+app.get('/wiki', (req, res) => serveWikiPage('Home', res))
+
+// /wiki/SomePage → show that page
+app.get('/wiki/:page', (req, res) => serveWikiPage(req.params.page, res))
+
+// shared helper
+function serveWikiPage(rawPage, res) {
+  const page = rawPage.replace(/[^a-zA-Z0-9_-]/g, '')   // keep the sanitizing!
   const filePath = path.join(WIKI_DIR, `${page}.md`)
 
-  fs.readFile(filePath, 'utf8', (err, markdown) => 
-  {
-    if (err) 
-    {
-      return res.status(404).send('Wiki page not found')
-    }
+  fs.readFile(filePath, 'utf8', (err, markdown) => {
+    if (err) return res.status(404).send('Wiki page not found')
     const html = marked(markdown)
     res.send(`
       <!DOCTYPE html>
@@ -509,7 +509,7 @@ app.get('/wiki/:page?', (req, res) =>
       </html>
     `)
   })
-})
+}
 
 // ----- End of Routes -------------------------------------------------------- //
 
