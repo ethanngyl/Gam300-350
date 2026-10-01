@@ -7,6 +7,7 @@ docs
 tests
 server
 src
+engine
 **/node_modules
 **/dist
 packages/src/backend/jobs

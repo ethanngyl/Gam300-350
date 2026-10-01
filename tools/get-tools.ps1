@@ -20,9 +20,10 @@
 
 .PARAMETER NoCuda
     Download the smaller CPU-only COLMAP build (~128 MB) instead of the default
-    CUDA build (~380 MB). Use this only if you do NOT have an NVIDIA GPU. The
-    default CUDA build gives GPU feature extraction. (Brush always needs a GPU
-    regardless.)
+    CUDA build (~380 MB). This is picked automatically when no NVIDIA GPU is
+    detected (e.g. AMD / Intel), so it is only needed to force it. The CUDA
+    build gives GPU feature extraction. (Brush always needs a GPU regardless,
+    but runs on any vendor through Vulkan / DX12.)
 
 .PARAMETER ColmapVersion
     COLMAP release tag to fetch. Defaults to 4.2.0.
@@ -82,6 +83,18 @@ $colmapExe = $null
 $brushExe  = $null
 
 if (-not $SkipColmap) {
+    # CUDA only runs on NVIDIA GPUs. If -NoCuda wasn't passed, pick the build
+    # from the installed adapters so AMD / Intel machines get the nocuda build.
+    if (-not $NoCuda) {
+        $gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty Name)
+        Write-Host "Detected GPU(s): $($gpus -join ', ')"
+        if (-not ($gpus -match "NVIDIA")) {
+            Write-Host "No NVIDIA GPU found - using the CPU-only (nocuda) COLMAP build." -ForegroundColor Yellow
+            $NoCuda = $true
+        }
+    }
+
     $flavor  = if ($NoCuda) { "nocuda" } else { "cuda" }
     $zipName = "colmap-x64-windows-$flavor.zip"
     $url     = "https://github.com/colmap/colmap/releases/download/$ColmapVersion/$zipName"

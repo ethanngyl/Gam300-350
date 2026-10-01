@@ -4,7 +4,7 @@
 #  Build:  docker compose build
 #  Run:    docker compose up            (http://localhost:5005)
 #
-#  The C++ engine (src/engine) is a Windows desktop app and is not
+#  The C++ engine (engine/) is a Windows desktop app and is not
 #  part of this image.
 # ============================================================
 

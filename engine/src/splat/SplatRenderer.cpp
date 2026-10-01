@@ -229,33 +229,33 @@ void SplatRenderer::SelectModel(int index)
         m_selectedModelIndex = index;
 }
 
-void SplatRenderer::NudgeSplatForward(InputManager& manager, InputManager::INPUT_TYPE type)
+void SplatRenderer::NudgeSplatForward(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
 {
-    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
         return;
 
     m_models[m_selectedModelIndex].get()->Translate({ 0.1,0,0 });
 }
 
 
-void SplatRenderer::NudgeSplatBackwards(InputManager& manager, InputManager::INPUT_TYPE type)
+void SplatRenderer::NudgeSplatBackwards(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
 {
-    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
         return;
     m_models[m_selectedModelIndex].get()->Translate({ -0.1,0,0 });
 }
 
-void SplatRenderer::NudgeSplatLeft(InputManager& manager, InputManager::INPUT_TYPE type)
+void SplatRenderer::NudgeSplatLeft(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
 {
-    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
         return;
 
     m_models[m_selectedModelIndex].get()->Translate({ 0,0,-0.1 });
 }
 
-void SplatRenderer::NudgeSplatRight(InputManager& manager, InputManager::INPUT_TYPE type)
+void SplatRenderer::NudgeSplatRight(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
 {
-    if (m_selectedModelIndex < 0 && m_selectedModelIndex >= m_models.size() && m_models.size() == 0 || type == InputManager::INPUT_TYPE::RELEASE)
+    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
         return;
 
     m_models[m_selectedModelIndex].get()->Translate({ 0,0,0.1 });

@@ -1,3 +1,18 @@
+/*!************************************************************************
+\file YoutubeIngest.jsx
+\author Ethan Ng Yong Le
+\par DP email: n.ethanyongle@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 01-10-2026
+\brief
+Lets the user submit a YouTube video link and frame-extraction rate to
+the backend, then polls job status until reconstruction finishes,
+showing phase, progress, and a download link for the resulting .ply.
+Also frees an in-progress server-side job if the user navigates away or
+closes the tab before it completes.
+**************************************************************************/
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './YoutubeIngest.css';
 
