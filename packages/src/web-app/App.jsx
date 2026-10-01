@@ -78,17 +78,16 @@ function App() {
         return (
             <>
                 <SplatViewer url={`/jobs/${jobId}/result.ply`} />
-                <div style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, zIndex: 10 }}>
-                    <button className="btn btn-primary" onClick={resetJob}>
-                        New scan
-                    </button>
-                    <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply">
-                        Download .ply
-                    </a>
-                    <button className="btn btn-ghost" onClick={backToDashboard}>
-                        Back to dashboard
-                    </button>
-                </div>
+                <button className="btn btn-primary" onClick={() => { playSound('click'); resetJob(); }}>
+                    New scan
+                </button>
+                <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
+                    onClick={() => playSound('click')}>
+                    Download .ply
+                </a>
+                <button className="btn btn-ghost" onClick={() => { playSound('click'); backToDashboard(); }}>
+                    Back to dashboard
+                </button>
             </>
         );
     }
@@ -301,7 +300,7 @@ function App() {
                 <button
                     className="btn btn-ghost"
                     onClick={() => {
-                        playSound('click');
+                        playSound('click3');
                         backToDashboard();
                     }}
                     style={{ marginBottom: 20 }}

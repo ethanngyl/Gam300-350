@@ -53,7 +53,7 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                         <button
                             className="forma-card home-feature"
                             onClick={() => {
-                                playSound('click');
+                                playSound('click2');
                                 onNavigate('library');
                             }}
                         >
@@ -65,7 +65,7 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                         <button
                             className="forma-card home-feature"
                             onClick={() => {
-                                playSound('click');
+                                playSound('click2');
                                 onNavigate('editor');
                             }}
                         >
@@ -83,7 +83,7 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                         <button
                             className="forma-card home-feature"
                             onClick={() => {
-                                playSound('click');
+                                playSound('click2');
                                 onYoutube();
                             }}
                         >
@@ -95,7 +95,7 @@ function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
                         <button
                             className="forma-card home-feature"
                             onClick={() => {
-                                playSound('click');
+                                playSound('click2');
                                 onGallery();
                             }}
                         >

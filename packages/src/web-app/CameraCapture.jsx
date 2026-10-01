@@ -191,7 +191,7 @@ function CameraCapture({ onBatchReady, onBack }) {
             <button
                 className="forma-btn capture-back"
                 onClick={() => {
-                    playSound('click');
+                    playSound('click3');
                     onBack();
                 }}
             >

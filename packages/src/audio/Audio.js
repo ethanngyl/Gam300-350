@@ -2,12 +2,16 @@
 // later, import the file here, add one line to SOUND_SOURCES, then
 // use playSound('yourName') or withSound('yourName', handler)
 // anywhere in the app
-import buttonClick from './ButtonClick_2.wav';
+import buttonClick from './ButtonClick.wav';
+import buttonClick2 from './ButtonClick2.wav';
+import buttonClick3 from './ButtonClick3.wav';
 // import success from './Success.wav';
 // import error from './Error.wav';
 
 const SOUND_SOURCES = {
     click: buttonClick,
+    click2: buttonClick2,
+    click3: buttonClick3,
     // success: success,
     // error: error,
 };
