@@ -58,7 +58,7 @@ venv/
 
 # Scan data (photos + generated .ply — large, not source)
 /scans/
-
+*.ply
 
 # Extracted images (YouTube frame extractor output — generated, not source):
 # per-job working dirs under server/jobs/ hold uploaded/extracted images/,
