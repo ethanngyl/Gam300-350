@@ -68,12 +68,11 @@ function App() {
 
     if (screen === 'capture') {
         return (
-            <>
-                {uploadError && (
-                    <p className="capture-error" style={{ textAlign: 'center' }}>{uploadError}</p>
-                )}
-                <CameraCapture onBatchReady={handleBatchReady} onBack={backToDashboard} />
-            </>
+            <CameraCapture
+                onBatchReady={handleBatchReady}
+                onBack={backToDashboard}
+                uploadError={uploadError}
+            />
         );
     }
 

@@ -20,7 +20,7 @@ import './CameraCapture.css';
 
 const HARD_CAP = 200;
 
-function CameraCapture({ onBatchReady, onBack }) {
+function CameraCapture({ onBatchReady, onBack, uploadError }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -375,6 +375,8 @@ function CameraCapture({ onBatchReady, onBack }) {
             >
                 {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
             </button>
+
+            {uploadError && <p className="capture-error" role="alert">{uploadError}</p>}
         </div>
     );
 }
