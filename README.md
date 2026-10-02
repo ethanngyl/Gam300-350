@@ -46,16 +46,16 @@ Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in 
 - Stop: `docker compose down` (uploaded jobs and results are kept in a Docker volume)
 - NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
 - Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker-compose.yml for quick tests
-- The engine (src/engine) is not included, build it natively as below
+- The engine (`engine/`) is not included, build it natively as below
 
 ## How to Run Engine
-- Go to the src/engine folder
+- Go to the engine folder
 - Double click run.bat to generate the build folder
 - Click on the icon to reveal hidden folders
 - Under the build folder double click on Codefine.sln
 - Once you are in the solution, right click on codefine and set it as the start up project
 - Start the debugger
-- .ply files can be added into the src/engine/assets folder
+- .ply files can be added into the engine/assets folder
 
 ## How to use Engine
 - Select .ply file from the menu and press the load button

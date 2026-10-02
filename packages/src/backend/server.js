@@ -46,7 +46,9 @@ import crypto from 'node:crypto'
 import { config } from './config.js'
 import { saveJob } from './status.js'
 import path from 'node:path'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { marked } from 'marked'
 import 
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
@@ -69,6 +71,10 @@ fs.mkdirSync(config.jobsDir, { recursive: true })
 // Jobs live in memory, so rebuild them from the job folders on disk. Without
 // this, everything finished before a restart 404s on /jobs/:id and result.ply.
 const restored = await scanJobs(config.jobsDir)
+
+// Folder where the wiki repo was cloned
+// os.homedir() rather than $HOME: Windows doesn't set HOME.
+const WIKI_DIR = path.join(os.homedir(), 'wiki')
 
 for (const record of restored) 
 {
@@ -471,6 +477,53 @@ app.get('/jobs/:id/result.ply', async (req, res) =>
   res.setHeader('Content-Type', 'application/octet-stream')
   res.sendFile(job.resultPath)
 })
+
+// /wiki with no page → show Home
+app.get('/wiki', (req, res) => serveWikiPage('Home', res))
+
+// /wiki/SomePage → show that page
+app.get('/wiki/:page', (req, res) => serveWikiPage(req.params.page, res))
+
+// shared helper
+function serveWikiPage(rawPage, res) {
+  // CHANGE 1 — convert spaces to hyphens BEFORE stripping,
+  // so "Technical Requirements" → "Technical-Requirements" (matches the .md filename)
+  const page = rawPage
+    .replace(/\s+/g, '-')             // spaces → hyphens
+    .replace(/[^a-zA-Z0-9_-]/g, '')   // then strip anything else (blocks ../ etc.)
+
+  const filePath = path.join(WIKI_DIR, `${page}.md`)
+
+  fs.readFile(filePath, 'utf8', (err, markdown) => {
+    if (err) return res.status(404).send('Wiki page not found')
+
+    // CHANGE 2 — note: 'let' not 'const', because we modify html next
+    let html = marked(markdown)
+
+    // Rewrite bare wiki links (href="Architecture") → href="/wiki/Architecture".
+    // Leaves external (http://), absolute (/), and anchor (#) links untouched.
+    html = html.replace(/href="(?!https?:\/\/|\/|#)([^"]+)"/g, 'href="/wiki/$1"')
+
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>${page} — Wiki</title>
+          <style>
+            body { max-width: 800px; margin: 40px auto; padding: 0 20px;
+                   font-family: system-ui, sans-serif; line-height: 1.6; }
+            pre { background: #f4f4f4; padding: 12px; overflow-x: auto; }
+            code { background: #f4f4f4; padding: 2px 4px; }
+            a { color: #0366d6; }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>
+    `)
+  })
+}
 
 // ----- End of Routes -------------------------------------------------------- //
 

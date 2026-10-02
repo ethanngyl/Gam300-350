@@ -82,6 +82,9 @@ venv/
 # Qt SDK downloaded by engine/run.bat (aqtinstall), per-machine.
 /engine/Library/Qt/
 
+# ImGui window layout, rewritten at runtime per user.
+imgui.ini
+
 # More C++ / tooling
 compile_commands.json
 .cache/
