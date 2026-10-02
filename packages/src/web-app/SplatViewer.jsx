@@ -1,3 +1,26 @@
+/*!************************************************************************
+\file SplatViewer.jsx
+\author Xiong Yang
+\par DP email: xiong.yang@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 02-10-2026
+\brief
+Shows a finished Gaussian splat .ply full-screen in the browser. It uses
+@mkkellogg/gaussian-splats-3d for the WebGL rendering, depth sorting and
+orbit controls, and reads the scene's up direction from the .ply header so
+any scene renders upright.
+- readCameraUp(url)
+Private helper. Fetches only the first 4 KB of the .ply (HTTP Range) and
+reads the "Vertical axis" line Brush writes into the header. Returns it as
+[x, y, z], or [0, 1, 0] (+Y) if it can't be found.
+- SplatViewer({ url })
+React component. Creates the viewer, loads the .ply at url and starts
+rendering. Stops and disposes the viewer when url changes or the component
+unmounts.
+**************************************************************************/
+
+// ----- Headers ------------------------------------------------------- //
 import { useEffect, useRef } from 'react'
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d'
 
