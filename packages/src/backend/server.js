@@ -1,9 +1,11 @@
 /*!************************************************************************
 \file server.js
 \author1 Gabriel Sebastian Putra
-\author2 Ethan Ng
+\author2 Xiong Yang
+\author3 Ethan Ng
 \par DP email1: gabrielsebastian.p@digipen.edu
-\par DP email2: 
+\par DP email2: xiong.yang@digipen.edu
+\par DP email3: n.ethanyongle@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
 \date 29-09-2026

@@ -1,3 +1,30 @@
+/*!************************************************************************
+\file Processing.jsx
+\author Xiong Yang
+\par DP email: xiong.yang@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 02-10-2026
+\brief
+The screen shown while the backend reconstructs a job. It polls the server
+for the job's phase and progress, shows a progress bar with a friendly label,
+and hands off to the viewer once the splat is ready. Leaving the screen in
+any way (Cancel, closing the tab, refreshing, Back) tells the server to kill
+the job so COLMAP/Brush don't keep running on the GPU for nobody.
+- PHASE_LABELS
+Maps the backend's phase names to the labels shown to the user.
+- Processing({ jobId, onDone, onCancel })
+React component. Polls /jobs/:id every 1.5s until the job is done, failed or
+cancelled. Calls onDone() when the splat is ready and onCancel() when the
+user leaves. Shows an error message with tips if the reconstruction fails.
+- killJob()
+Inner helper. Sends DELETE /jobs/:id (keepalive) on pagehide or unmount,
+unless the job already finished so its result stays downloadable.
+- cancel()
+Inner helper. Kills the server-side job, then calls onCancel().
+**************************************************************************/
+
+// ----- Headers ------------------------------------------------------- //
 import { useEffect, useRef, useState } from 'react'
 
 // Friendly labels for the backend's phase names.
