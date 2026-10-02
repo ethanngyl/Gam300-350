@@ -1,8 +1,8 @@
 /******************************************************************************
- * File:        Resource.h
- * Project:     NightSnack
+ * File:        SplatRenderer.cpp
+ * Project:     Genesis
  * Author(s):	Clement Ang Yang Ying   (Primary, 90%) - Transformed class to manage models and drawing them
-                                        (Secondary, 10%) - Created base class
+ *              Ethan Ng Yong Le    (Secondary, 10%) - Created base class and shader
  *
  * Description:
  * This file contains the definition for the class SplatRenderer

@@ -1,3 +1,16 @@
+/******************************************************************************
+ * File:        Camera.h
+ * Project:     Genesis
+ * Author(s):	Clement Ang Yang Ying   (Primary, 60%) - Updated class with input manager functions, add controls (panning, etc), etc
+ *              Ethan Ng Yong Le    (Secondary, 40%) - Created base class
+ *
+ * Description:
+ * This file contains the declaration for the class Camera
+ * This class handles the scene camera as well as its movements via input callbacks
+ *
+ * Copyright 2026 DigiPen Institute of Technology Singapore.
+ * All rights reserved.
+ ******************************************************************************/
 #pragma once
 
 #include <glm/glm.hpp>
