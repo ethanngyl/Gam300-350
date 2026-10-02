@@ -1,3 +1,16 @@
+/******************************************************************************
+ * File:        SplatLoader.h
+ * Project:     Genesis
+ * Author(s):	Ethan Ng Yong Le   (Primary, 80%)  - Created base logic/function
+ *              Clement Ang Yang Ying   (Secondary, 20%) - Updated function
+ *
+ *
+ * Description:
+ * This file contains the declaration for the function LoadSplatPly, which loads a .ply file
+ *
+ * Copyright 2026 DigiPen Institute of Technology Singapore.
+ * All rights reserved.
+ ******************************************************************************/
 #include "SplatLoader.h"
 
 #include <happly.h>
