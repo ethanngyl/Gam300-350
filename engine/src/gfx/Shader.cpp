@@ -1,3 +1,15 @@
+/******************************************************************************
+ * File:        Shader.h
+ * Project:     Genesis
+ * Author(s):	Ethan Ng Yong Le   (Primary, 100%)
+ *
+ * Description:
+ * This file contains the definition for the class Shader
+ * It handles the setting values for the shader
+ *
+ * Copyright 2026 DigiPen Institute of Technology Singapore.
+ * All rights reserved.
+ ******************************************************************************/
 #include "Shader.h"
 
 #include <GL/glew.h>

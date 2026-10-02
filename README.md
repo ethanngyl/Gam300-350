@@ -36,6 +36,7 @@ Application Installations:
 ## How to Run
 - Windows: Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
 - macOS (Apple Silicon): Open the terminal in the packages folder and enter "./start.sh"
+- Ubuntu / Linux (x86_64): Open a terminal in the packages folder and enter "./start-linux.sh" (the first run installs COLMAP via apt, so it will ask for your sudo password)
 
 ## Run with Docker
 Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.

@@ -288,8 +288,11 @@ function shutdown(reason, exitCode = 0)
 app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => 
 {
   const files = req.files || []
-  if (files.length < 8) 
+  if (files.length < 8)
   {
+    // Reject cleanly: remove the job folder assignJobId created up front so a
+    // too-small batch doesn't leave an orphan folder behind (same as onlyImages).
+    fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
     return res.status(400).json
     ({
       error: `Need at least 8 photos (got ${files.length}). More overlapping photos = better reconstruction.`,
@@ -528,6 +531,70 @@ function serveWikiPage(rawPage, res) {
 }
 
 // ----- End of Routes -------------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    JSON error handler (must be last, and take 4 args so Express treats it
+    as an error handler). Without it, multer's upload-limit errors and any
+    error passed to next(err) fall through to Express's default handler,
+    which replies with an HTML 500 -- the frontend does res.json() on that
+    and can only show a generic message. Here each case becomes a JSON
+    { error } with the right status, so the upload UI can show something
+    useful ("that file is too big"), and the job folder assignJobId created
+    up front is cleaned up so a rejected upload leaves nothing behind.
+  \param err
+    The error passed on from a route or from multer.
+  \param req
+    The request (carries req.jobId for the folder cleanup).
+  \param res
+    The response.
+  \param _next
+    Express's next (unused, but required for the 4-arg signature).
+  \return
+    Sends a JSON error response; delegates to Express if a reply already
+    started streaming.
+*/
+/************************************************************************/
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  // A partial reply is already on the wire -- let Express finish/abort it.
+  if (res.headersSent) return _next(err)
+
+  // Clean up the empty job folder assignJobId made before multer ran, so a
+  // rejected upload doesn't leave a stray folder that scanJobs would skip
+  // anyway (no images) but that still clutters jobs/. Best-effort.
+  if (req.jobId) {
+    try {
+      fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+    } catch {
+      // Nothing to clean up, or it's already gone.
+    }
+  }
+
+  if (err instanceof multer.MulterError) {
+    // The limits come from config (maxFileSizeMB, maxFiles); keep the messages
+    // in sync with those so they stay true if the limits change.
+    switch (err.code) {
+      case 'LIMIT_FILE_SIZE':
+        return res.status(413).json({
+          error: `That file is too large -- each photo must be under ${config.maxFileSizeMB} MB.`,
+        })
+      case 'LIMIT_FILE_COUNT':
+      case 'LIMIT_PART_COUNT':
+      case 'LIMIT_UNEXPECTED_FILE':
+        return res.status(400).json({
+          error: `Too many files -- upload at most ${config.maxFiles} photos at once.`,
+        })
+      default:
+        return res.status(400).json({ error: `Upload rejected: ${err.message}.` })
+    }
+  }
+
+  // Anything else (e.g. onlyImages' fs failure) is a real server-side fault.
+  console.error('[backend] request error:', err)
+  res.status(500).json({ error: 'Something went wrong on the server. Please try again.' })
+})
 
 // SIGINT: Ctrl+C. SIGTERM: nodemon / task manager / kill. SIGBREAK: Ctrl+Break
 // on Windows. SIGHUP: the console window was closed (Windows maps

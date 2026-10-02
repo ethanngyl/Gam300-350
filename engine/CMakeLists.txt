@@ -111,6 +111,17 @@ if(WIN32)
         COMMAND_EXPAND_LISTS
         COMMENT "Copying Qt runtime next to ${CMAKE_PROJECT_NAME}"
     )
+
+    # FMOD links against an import lib, so its DLL is not picked up by
+    # TARGET_RUNTIME_DLLS above. Copy the matching variant (fmodL.dll for Debug,
+    # fmod.dll otherwise) next to the exe or the engine fails to start.
+    set(FMOD_DLL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Library/FMOD Studio API Windows/api/core/lib/x64")
+    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<IF:$<CONFIG:Debug>,${FMOD_DLL_DIR}/fmodL.dll,${FMOD_DLL_DIR}/fmod.dll>"
+            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>
+        COMMENT "Copying FMOD runtime DLL next to ${CMAKE_PROJECT_NAME}"
+    )
 endif()
 
 # Mark shaders as non-compiled

@@ -1,3 +1,15 @@
+/******************************************************************************
+ * File:        SplatData.h
+ * Project:     Genesis
+ * Author(s):	Ethan Ng Yong Le    (Primary, 90%) - Created definitions
+ *              Clement Ang Yang Ying   (Secondary, 10%) - Updated SplatVertex
+ *
+ * Description:
+ * This file contains the definition and declaration for various 
+ *
+ * Copyright 2026 DigiPen Institute of Technology Singapore.
+ * All rights reserved.
+ ******************************************************************************/
 #pragma once
 
 #include <glm/glm.hpp>

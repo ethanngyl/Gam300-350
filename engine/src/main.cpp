@@ -1,3 +1,15 @@
+/******************************************************************************
+ * File:        main.cpp
+ * Project:     Genesis
+ * Author(s):	Ethan Ng Yong Le   (Primary, 100%)  - Created base logic/function
+ *
+ * Description:
+ * This file contains the definition of main()
+ * It is the entry point for the program and sets up the inital calls for the window
+ *
+ * Copyright 2026 DigiPen Institute of Technology Singapore.
+ * All rights reserved.
+ ******************************************************************************/
 #include "ui/MainWindow.h"
 
 #include <QApplication>

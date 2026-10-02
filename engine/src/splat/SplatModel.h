@@ -1,3 +1,15 @@
+/******************************************************************************
+ * File:        SplatModel.h
+ * Project:     Genesis
+ * Author(s):	Clement Ang Yang Ying   (Primary, 100%) - Created class and logic
+ *
+ * Description:
+ * This file contains the definition & declaration for the class SplatModel
+ * This class stores the model data and has functions to modify them.
+ *
+ * Copyright 2026 DigiPen Institute of Technology Singapore.
+ * All rights reserved.
+ ******************************************************************************/
 #pragma once
 
 #include "SplatData.h"
