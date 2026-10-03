@@ -12,11 +12,11 @@ jobs:
     steps:
       # 1. Get the code
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # 2. Install Node (match your VM's version)
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -45,13 +45,13 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Provides a known `python` on PATH regardless of the runner OS. The
       # self-hosted Linux runner only has `python3`, so calling `python`
       # directly fails with exit 127.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.10'   # matches target-version in ruff.toml
 
