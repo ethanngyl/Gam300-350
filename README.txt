@@ -1,3 +1,10 @@
+Tech Team:
+Ethan Ng (Technical Lead)
+Xiong Yang (Gaussian/Colmap Champion)
+Bryan Lim (Frontend Champion)
+Gabriel Sebastian Putra (Backend Champion)
+Clement Ang (Engine Champion)
+
 Pre-Requisities:
 - Nodejs(Default Installation Settings): https://nodejs.org/en
 - Visual Studio Community 22/26(With CMake and C++ packages): https://visualstudio.microsoft.com/downloads/
@@ -46,8 +53,26 @@ External tools (downloaded automatically into tools/ on first run):
 - Brush (Gaussian splatting trainer)
 - cloudflared (public tunnel for sharing the web app)
 
-To run:
+To run (For Windows):
 run-all.bat: Double clicking this will install all required packages and run both the web application as well as the engine
 start.bat: Located in the packages folder, only starts the web-application
 run.bat: Located in the engine folder, only starts the engine
 
+Engine Guide:
+Loading .ply model:
+1) Left click on .ply file within PLY FILES menu to select .ply model
+2) Left Click load button
+3) You can click the refresh button to show new .ply files added to the engine/assets/samples folder after you have added them there
+
+Moving model:
+1) Left click on model within Loaded Splats menu
+2) Press WASD/Arrow Keys to move selected model around
+
+Play/Stop Sounds:
+1) Left Click on sound in Audio menu
+2) Press Play Select
+3) Press Stop All to stop all currently playing sounds
+
+Loading Audio Files:
+1) You can select which folder to load the audio files from under "Choose folder", the default folder path is under engine/assets/audio
+2) You can load a specific audio file that is not in the selected folder with the "Play File Not Listed" button
