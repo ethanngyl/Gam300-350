@@ -251,9 +251,11 @@ macro(import_happly)
         )
         FetchContent_Populate(happly)
 
-        # happly is header-only: single happly.h at the repo root
+        # happly is header-only: single happly.h at the repo root.
+        # SYSTEM so the compiler suppresses warnings from happly.h under /W4
+        # (same treatment as GLM above).
         add_library(happly INTERFACE)
-        target_include_directories(happly INTERFACE ${happly_SOURCE_DIR})
+        target_include_directories(happly SYSTEM INTERFACE ${happly_SOURCE_DIR})
 
         message(STATUS "happly imported successfully")
     endif()

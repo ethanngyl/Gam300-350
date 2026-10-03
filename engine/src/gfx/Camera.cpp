@@ -27,7 +27,7 @@ Camera::Camera(glm::vec3 target, float distance)
 }
 
 
-void Camera::ProcessLeftClick(InputManager& inManager, InputManager::INPUT_TYPE inputType)
+void Camera::ProcessLeftClick(InputManager& inManager, InputManager::INPUT_TYPE)
 {
     glm::vec3 forward = glm::normalize(m_target - getPosition());
     glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
@@ -36,7 +36,7 @@ void Camera::ProcessLeftClick(InputManager& inManager, InputManager::INPUT_TYPE 
     m_target += delta;
 }
 
-void Camera::ProcessRightClick(InputManager& inManager, InputManager::INPUT_TYPE inputType)
+void Camera::ProcessRightClick(InputManager& inManager, InputManager::INPUT_TYPE)
 {
     m_yaw -= static_cast<float>(inManager.GetDx()) * m_RotateSensitivity;
     m_pitch += static_cast<float>(inManager.GetDy()) * m_RotateSensitivity;
