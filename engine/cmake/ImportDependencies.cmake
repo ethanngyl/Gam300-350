@@ -116,22 +116,6 @@ macro(import_stb)
     endif()
 endmacro()
 
-# Macro to import nlohmann/json (header-only)
-macro(import_nlohmann_json)
-    if(NOT TARGET nlohmann_json::nlohmann_json)
-        message(STATUS "Importing nlohmann_json...")
-        # Official repo provides a proper CMake target via FetchContent
-        FetchContent_Declare(
-            nlohmann_json
-            GIT_REPOSITORY https://github.com/nlohmann/json.git
-            GIT_TAG v3.11.3
-            GIT_SHALLOW TRUE
-        )
-        FetchContent_MakeAvailable(nlohmann_json)  # defines target nlohmann_json::nlohmann_json
-        message(STATUS "nlohmann_json imported successfully")
-    endif()
-endmacro()
-
 # Macro to import FreeType
 macro(import_freetype)
     if(NOT TARGET Freetype::Freetype)
@@ -366,7 +350,6 @@ function(importDependencies)
     import_freetype() 
     import_imgui()
     import_stb()
-    import_nlohmann_json()
     import_lua()
     import_happly()
     import_fmod()

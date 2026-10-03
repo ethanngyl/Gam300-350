@@ -83,8 +83,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     stb
     happly
     Freetype::Freetype
-    lua_static  
-    nlohmann_json::nlohmann_json
+    lua_static
     fmod
     Qt6::Core
     Qt6::Gui
