@@ -156,8 +156,7 @@ function assignJobId(req, _res, next)
     The image files default to jpg
 */
 /************************************************************************/
-const storage = multer.diskStorage
-({
+const storage = multer.diskStorage({
   destination: (req, _file, cb) => cb(null, path.join(config.jobsDir, req.jobId, 'images')),
 
   filename: (req, file, cb) => 
@@ -176,8 +175,7 @@ const storage = multer.diskStorage
     nothing
 */
 /************************************************************************/
-const upload = multer
-({
+const upload = multer({
   storage,
   limits: { fileSize: config.maxFileSizeMB * 1024 * 1024, files: config.maxFiles },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(jpe?g|png)$/i.test(file.mimetype))
@@ -218,8 +216,7 @@ async function onlyImages(req, res, next)
       {
         // Reject the batch: remove the job folder created up front by assignJobId.
         await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
-        return res.status(400).json
-        ({
+        return res.status(400).json({
           error: 'Invalid file content -- only real JPEG or PNG images are accepted.',
           detected: type ? type.mime : 'unknown',
         })
@@ -293,8 +290,7 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
     // Reject cleanly: remove the job folder assignJobId created up front so a
     // too-small batch doesn't leave an orphan folder behind (same as onlyImages).
     fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
-    return res.status(400).json
-    ({
+    return res.status(400).json({
       error: `Need at least 8 photos (got ${files.length}). More overlapping photos = better reconstruction.`,
     })
   }
@@ -321,9 +317,8 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
 app.get('/jobs', async (_req, res) => 
 {
   const records = await scanJobs(config.jobsDir)
-  res.json
-  (
-    records.map((record) => 
+  res.json(
+    records.map((record) =>
     {
       const job = jobs.get(record.id) ?? restoreJob(record);
       return {
@@ -386,8 +381,7 @@ app.post('/jobs/from-youtube', (req, res) =>
   const videoUrl = canonicalYoutubeUrl(url)
   if (!videoUrl) 
   {
-    return res.status(400).json
-    ({
+    return res.status(400).json({
       error: 'Please use a link to a single YouTube video (youtube.com/watch?v=…, youtu.be/…, or youtube.com/shorts/…).',
     })
   }
@@ -426,8 +420,7 @@ app.get('/jobs/:id', async (req, res) =>
   const job = await getJob(req.params.id)
   if (!job) 
     return res.status(404).json({ error: 'job not found' })
-  res.json
-  ({
+  res.json({
     id: job.id,
     status: job.status,
     phase: job.phase,
@@ -556,7 +549,6 @@ function serveWikiPage(rawPage, res) {
     started streaming.
 */
 /************************************************************************/
-// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
   // A partial reply is already on the wire -- let Express finish/abort it.
   if (res.headersSent) return _next(err)
