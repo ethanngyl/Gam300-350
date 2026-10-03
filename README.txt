@@ -71,7 +71,7 @@ to FMOD's multiple versions for different operating systems abd incompatibility 
 Testing the Website:
 
 Navigation:
-
+0. The web application can be accessed via http://localhost:5005 or the cloudflare link provided.
 1. Left-click the top navigation bar buttons (Home, Library, Photo Editor) to cycle through tabs. Confirm each tab loads its own content and the active tab is visually highlighted.
 2. On the Home tab, under Features, left-click each card and confirm it opens the right page:
    - Media Library → opens the Library tab (3D Models view)
