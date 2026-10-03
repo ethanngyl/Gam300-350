@@ -128,7 +128,7 @@ if errorlevel 1 (
         pause
         exit /b 1
     )
-    echo     Saved to %TOOLS%\cloudflared.exe
+    echo     Saved to "%TOOLS%\cloudflared.exe"
 ) else (
     echo     cloudflared found.
 )
