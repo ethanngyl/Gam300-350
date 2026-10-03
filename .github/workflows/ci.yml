@@ -47,6 +47,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # Provides a known `python` on PATH regardless of the runner OS. The
+      # self-hosted Linux runner only has `python3`, so calling `python`
+      # directly fails with exit 127.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'   # matches target-version in ruff.toml
+
       # Pinned so a new Ruff release can't change results out from under CI.
       # --upgrade forces the pinned version even if an older Ruff is already
       # installed on the self-hosted runner.
