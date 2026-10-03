@@ -15,5 +15,7 @@
 *.compressed.ply  -text
 *.spz             -text
 *.png filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
+# Sample input photos: stored in normal Git (NOT LFS) so GitHub "Download ZIP"
+# and plain clones include the real images, not LFS pointer files.
+"Sample Image Set/*.jpg" binary
 .ply filter=lfs diff=lfs merge=lfs -text
