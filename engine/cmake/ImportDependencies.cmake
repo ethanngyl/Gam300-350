@@ -11,6 +11,7 @@ macro(import_glm)
             glm
             GIT_REPOSITORY https://github.com/g-truc/glm.git
             GIT_TAG 1.0.1
+            GIT_SHALLOW TRUE
         )
         FetchContent_MakeAvailable(glm)
         target_include_directories(glm SYSTEM INTERFACE 
@@ -66,6 +67,7 @@ macro(import_imgui)
             imgui
             GIT_REPOSITORY https://github.com/ocornut/imgui.git
             GIT_TAG v1.89.9-docking
+            GIT_SHALLOW TRUE
         )
         FetchContent_Populate(imgui)
         
@@ -102,6 +104,7 @@ macro(import_stb)
             stb
             GIT_REPOSITORY https://github.com/nothings/stb.git
             GIT_TAG master
+            GIT_SHALLOW TRUE
         )
         FetchContent_Populate(stb)
         
@@ -122,6 +125,7 @@ macro(import_nlohmann_json)
             nlohmann_json
             GIT_REPOSITORY https://github.com/nlohmann/json.git
             GIT_TAG v3.11.3
+            GIT_SHALLOW TRUE
         )
         FetchContent_MakeAvailable(nlohmann_json)  # defines target nlohmann_json::nlohmann_json
         message(STATUS "nlohmann_json imported successfully")
@@ -139,6 +143,7 @@ macro(import_freetype)
             freetype
             GIT_REPOSITORY https://github.com/freetype/freetype.git
             GIT_TAG VER-2-14-1
+            GIT_SHALLOW TRUE
         )
         # Prefer a static library to avoid DLL hassle
         set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -175,6 +180,7 @@ macro(import_lua)
             lua
             GIT_REPOSITORY https://github.com/lua/lua.git
             GIT_TAG v5.4.7
+            GIT_SHALLOW TRUE
         )
         FetchContent_Populate(lua)
         
