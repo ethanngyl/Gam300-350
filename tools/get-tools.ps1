@@ -26,7 +26,7 @@
     but runs on any vendor through Vulkan / DX12.)
 
 .PARAMETER ColmapVersion
-    COLMAP release tag to fetch. Defaults to 4.2.0.
+    COLMAP release tag to fetch. Defaults to 4.0.4.
 
 .PARAMETER BrushVersion
     Brush release tag to fetch. Defaults to v0.3.0.
@@ -45,7 +45,7 @@
 #>
 param(
     [switch]$NoCuda,
-    [string]$ColmapVersion = "4.2.0",
+    [string]$ColmapVersion = "4.0.4",
     [string]$BrushVersion  = "v0.3.0",
     [switch]$SkipColmap,
     [switch]$SkipBrush
