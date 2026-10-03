@@ -442,7 +442,7 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
       { onData, timeoutMs: config.ytTimeoutMin * 60_000 },
     )
   } catch (err) {
-    if (scriptError && !job.cancelled) throw new Error(scriptError)
+    if (scriptError && !job.cancelled) throw new Error(scriptError, { cause: err })
     throw err
   } finally {
     job.detail = null
@@ -563,7 +563,7 @@ export async function runPipeline(job) {
       // COLMAP's own failure (e.g. "no good initial image pair") gets replaced.
       // The raw COLMAP output is still in the job's log / logTail for debugging.
       if (job.cancelled || /timed out/.test(err.message)) throw err
-      throw new Error(NO_MODEL_MESSAGE)
+      throw new Error(NO_MODEL_MESSAGE, { cause: err })
     }
 
     // Mapper writes sparse/0 (sometimes 1,2.. if it splits). Require at least one.
