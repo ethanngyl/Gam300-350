@@ -45,3 +45,9 @@ External tools (downloaded automatically into tools/ on first run):
 - COLMAP (structure-from-motion / multi-view stereo)
 - Brush (Gaussian splatting trainer)
 - cloudflared (public tunnel for sharing the web app)
+
+To run:
+run-all.bat: Double clicking this will install all required packages and run both the web application as well as the engine
+start.bat: Located in the packages folder, only starts the web-application
+run.bat: Located in the egine folder, only starts the engine
+
