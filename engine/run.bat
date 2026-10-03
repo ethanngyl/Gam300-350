@@ -45,6 +45,32 @@ if not exist "%QT_ROOT%\%QT_VERSION%\msvc2022_64\lib\cmake\Qt6\Qt6Config.cmake" 
     echo.
 )
 
+:: Resolve CMake: prefer one on PATH, otherwise use the copy bundled with
+:: Visual Studio (located via vswhere), so a plain double-click works with just
+:: VS + its "Desktop development with C++" workload -- no standalone CMake and
+:: no Developer Command Prompt needed.
+set "CMAKE=cmake"
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+where cmake >nul 2>&1
+if not errorlevel 1 goto :cmake_ready
+
+set "VSDIR="
+if exist "%VSWHERE%" for /f "usebackq delims=" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%i"
+if defined VSDIR if exist "%VSDIR%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" set "CMAKE=%VSDIR%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+
+if /i "%CMAKE%"=="cmake" (
+    echo.
+    echo CMake was not found on PATH, and no Visual Studio CMake could be located.
+    echo Install either:
+    echo   - Visual Studio 2022 with "Desktop development with C++", or
+    echo   - CMake from https://cmake.org/download/ and tick "Add CMake to the system PATH"
+    goto :error
+)
+echo Using CMake bundled with Visual Studio:
+echo   %CMAKE%
+
+:cmake_ready
+
 :: Configure the CMake project on first run (or after a clean).
 :: Test for the generated solution, NOT CMakeCache.txt: CMake writes the
 :: cache early, so an interrupted first configure (the dependency fetch takes
@@ -53,7 +79,7 @@ if not exist "%QT_ROOT%\%QT_VERSION%\msvc2022_64\lib\cmake\Qt6\Qt6Config.cmake" 
 if not exist "build\Codefine.sln" (
     echo Configuring CMake project...
     echo This fetches dependencies from GitHub and can take a few minutes.
-    cmake -S . -B build
+    "%CMAKE%" -S . -B build
     if errorlevel 1 (
         :: Drop the partial cache so the next run reconfigures from scratch.
         :: _deps is left alone, so already-fetched dependencies are reused.
@@ -65,7 +91,7 @@ if not exist "build\Codefine.sln" (
 
 :: Build the Debug configuration.
 echo Building Codefine (Debug)...
-cmake --build build --config Debug --target Codefine
+"%CMAKE%" --build build --config Debug --target Codefine
 if errorlevel 1 goto :error
 echo.
 
