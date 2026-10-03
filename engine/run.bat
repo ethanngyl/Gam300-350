@@ -45,28 +45,6 @@ if not exist "%QT_ROOT%\%QT_VERSION%\msvc2022_64\lib\cmake\Qt6\Qt6Config.cmake" 
     echo.
 )
 
-:: Resolve a CMake to use. Prefer one already on PATH (Visual Studio or a
-:: standalone install); otherwise pip-install it into the local venv so the
-:: only tools a user must install by hand stay Python + npm. Detect-first means
-:: a Developer Command Prompt (VS's cmake already on PATH) skips the download.
-set "CMAKE=cmake"
-where cmake >nul 2>&1
-if errorlevel 1 (
-    echo CMake not found on PATH - installing it locally with pip...
-    python --version >nul 2>&1
-    if errorlevel 1 (
-        echo Python is required to install CMake: https://www.python.org/downloads/
-        goto :error
-    )
-    if not exist "%QT_VENV%\Scripts\python.exe" (
-        python -m venv "%QT_VENV%"
-        if errorlevel 1 goto :error
-    )
-    "%QT_VENV%\Scripts\python.exe" -m pip install -q --disable-pip-version-check cmake
-    if errorlevel 1 goto :error
-    set "CMAKE=%QT_VENV%\Scripts\cmake.exe"
-)
-
 :: Configure the CMake project on first run (or after a clean).
 :: Test for the generated solution, NOT CMakeCache.txt: CMake writes the
 :: cache early, so an interrupted first configure (the dependency fetch takes
@@ -75,7 +53,7 @@ if errorlevel 1 (
 if not exist "build\Codefine.sln" (
     echo Configuring CMake project...
     echo This fetches dependencies from GitHub and can take a few minutes.
-    "%CMAKE%" -S . -B build
+    cmake -S . -B build
     if errorlevel 1 (
         :: Drop the partial cache so the next run reconfigures from scratch.
         :: _deps is left alone, so already-fetched dependencies are reused.
@@ -87,7 +65,7 @@ if not exist "build\Codefine.sln" (
 
 :: Build the Debug configuration.
 echo Building Codefine (Debug)...
-"%CMAKE%" --build build --config Debug --target Codefine
+cmake --build build --config Debug --target Codefine
 if errorlevel 1 goto :error
 echo.
 
