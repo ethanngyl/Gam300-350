@@ -58,6 +58,14 @@ run-all.bat: Double clicking this will install all required packages and run bot
 start.bat: Located in the packages folder, only starts the web-application
 run.bat: Located in the engine folder, only starts the engine
 
+To run (For macOS):
+start.sh: Located in the packages folder, open a terminal in that folder and run "./start.sh" to start the web application
+Note: The engine has no macOS support at the moment (Windows only), so there is no engine launcher for macOS.
+
+To run (For Linux):
+start-linux.sh: Located in the packages folder, open a terminal in that folder and run "./start-linux.sh" to start the web-application. The first run installs COLMAP via apt, so it will ask for your sudo password.
+Note: The engine has no Linux support at the moment (Windows only), so there is no engine launcher for Linux.
+
 Engine Guide:
 Loading .ply model:
 1) Left click on .ply file within PLY FILES menu to select .ply model
