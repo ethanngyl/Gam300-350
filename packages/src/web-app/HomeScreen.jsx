@@ -4,22 +4,24 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 01-10-2026
+\date 08-10-2026
 \brief
-Dashboard landing screen. Shows summary stats, a "New Generation" entry
-point into the capture flow, feature cards linking to the Media Library,
-Photo Editor, YouTube Extractor, and Image Gallery, and a sidebar listing
-recently generated models.
+Dashboard landing screen: a personalised welcome, a "Start a new project"
+banner that opens the capture flow, four tool cards (Media Library, Photo
+Editor, Scene Builder, YouTube Extractor), and a row of recent models.
 **************************************************************************/
 
+import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
 
-const STATS = [
-    { value: '24', label: 'Models Generated', note: '+3 this week' },
-    { value: '156', label: 'Photos Uploaded', note: '+18 this week' },
-    { value: '3', label: 'Active Scenes', note: 'Last edited today' },
-    { value: '2', label: 'Processing Queue', note: 'Est. 4 min' },
+const TOOLS = [
+    { id: 'library', category: 'Models & photos', title: 'Media Library', description: 'Browse, organize, and manage your generated models and source photos.', footer: '24 models - 156 photos', icon: 'layers' },
+    { id: 'editor', category: 'Enhance & prepare', title: 'Photo Editor', description: 'Crop and enhance source images before creating your model.', footer: '3 edited today', icon: 'edit' },
+    { id: 'scene', category: '3D environment', title: 'Scene Builder', description: 'Arrange models, set lighting, and export complete 3D scenes.', footer: '3 active scenes', icon: 'shield' },
+    { id: 'youtube', category: 'Frame capture', title: 'YouTube Extractor', description: 'Capture useful source frames from any YouTube video.', footer: 'Ready to import', icon: 'play' },
 ];
+
+const BANNER_STEPS = ['Add photos', 'Refine images', 'Generate model'];
 
 const RECENT_MODELS = [
     { name: 'Ceramic Vase A', poly: '14.2k polygons', time: '2h ago' },
@@ -28,124 +30,107 @@ const RECENT_MODELS = [
     { name: 'Metal Bracket', poly: '5.3k polygons', time: '2d ago' },
 ];
 
-function HomeScreen({ onNewGeneration, onYoutube, onGallery, onNavigate }) {
+function HomeScreen({ userName, onNewGeneration, onYoutube, onNavigate, onOpenLibrary }) {
+    function handleToolClick(toolId) {
+        playSound('click2');
+        if (toolId === 'youtube') {
+            onYoutube();
+        } else {
+            onNavigate(toolId);
+        }
+    }
+
     return (
         <div className="home-screen">
-            <div className="home-hero">
+            <p className="eyebrow">Default workspace</p>
+            <div className="home-heading-row">
                 <div>
-                    <h1>3D Generation Studio</h1>
-                    <p>
-                        Upload photos, refine them in the editor, then generate photorealistic
-                        3D models. Build complete scenes and extract frames from video sources.
-                    </p>
+                    <h1>Welcome back, {userName}</h1>
+                    <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
                 </div>
                 <button
-                    className="forma-btn forma-btn-primary"
+                    className="forma-btn"
+                    onClick={() => {
+                        playSound('click');
+                        onOpenLibrary('photos');
+                    }}
+                >
+                    <Icon name="folder" size={14} /> Browse all files
+                </button>
+            </div>
+
+            <div className="home-banner">
+                <div className="home-banner-icon"><Icon name="sparkle" size={20} /></div>
+                <div className="home-banner-copy">
+                    <span className="eyebrow eyebrow-accent">Start a new project</span>
+                    <h2>Create a 3D model from photos</h2>
+                    <p>Prepare your images, review the result, and move straight into scene building.</p>
+                </div>
+                <ol className="home-banner-steps">
+                    {BANNER_STEPS.map((step, index) => (
+                        <li key={step}><span>{index + 1}</span>{step}</li>
+                    ))}
+                </ol>
+                <button
+                    className="home-banner-camera"
+                    aria-label="Start a new generation"
                     onClick={() => {
                         playSound('click');
                         onNewGeneration();
                     }}
                 >
-                    New Generation
+                    <Icon name="camera" size={26} />
                 </button>
             </div>
 
-            <div className="home-stats">
-                {STATS.map((stat) => (
-                    <div key={stat.label} className="home-stat">
-                        <div className="home-stat-value">{stat.value}</div>
-                        <div className="home-stat-label">{stat.label}</div>
-                        <div className="home-stat-note">{stat.note}</div>
-                    </div>
+            <p className="eyebrow">Tools</p>
+            <h2 className="home-section-title">What would you like to do?</h2>
+            <div className="home-tool-grid">
+                {TOOLS.map((tool) => (
+                    <button
+                        key={tool.id}
+                        className="forma-card home-tool"
+                        onClick={() => handleToolClick(tool.id)}
+                    >
+                        <div className="home-tool-top">
+                            <span className={`home-tool-icon home-tool-icon-${tool.id}`}>
+                                <Icon name={tool.icon} size={18} />
+                            </span>
+                            <span className="home-tool-arrow"><Icon name="arrow" size={14} /></span>
+                        </div>
+                        <span className="eyebrow">{tool.category}</span>
+                        <h3>{tool.title}</h3>
+                        <p>{tool.description}</p>
+                        <span className="home-tool-footer">{tool.footer}</span>
+                    </button>
                 ))}
             </div>
 
-            <div className="home-body">
-                <div className="home-features">
-                    <h2 className="home-section-label">Features</h2>
-                    <div className="home-feature-grid">
-                        <button
-                            className="forma-card home-feature"
-                            onClick={() => {
-                                playSound('click2');
-                                onNavigate('library');
-                            }}
-                        >
-                            <h3>Media Library</h3>
-                            <p>Browse your generated 3D models and organized photo collections.</p>
-                            <span className="home-feature-footer">24 models - 156 photos</span>
-                        </button>
-
-                        <button
-                            className="forma-card home-feature"
-                            onClick={() => {
-                                playSound('click2');
-                                onNavigate('editor');
-                            }}
-                        >
-                            <h3>Photo Editor</h3>
-                            <p>Adjust, crop, and enhance uploaded images to maximize accuracy.</p>
-                            <span className="home-feature-footer">12 in queue - 3 edited</span>
-                        </button>
-
-                        {/*<button className="forma-card home-feature" onClick={() => onNavigate('scene')}>*/}
-                        {/*    <h3>Scene Builder</h3>*/}
-                        {/*    <p>Arrange and interact with your generated models in a full 3D workspace.</p>*/}
-                        {/*    <span className="home-feature-footer">3 scenes - Active</span>*/}
-                        {/*</button>*/}
-
-                        <button
-                            className="forma-card home-feature"
-                            onClick={() => {
-                                playSound('click2');
-                                onYoutube();
-                            }}
-                        >
-                            <h3>YouTube Extractor</h3>
-                            <p>Paste a YouTube URL to process any video and extract specific frames into your photo library.</p>
-                            <span className="home-feature-footer">Ready</span>
-                        </button>
-
-                        <button
-                            className="forma-card home-feature"
-                            onClick={() => {
-                                playSound('click2');
-                                onGallery();
-                            }}
-                        >
-                            <h3>Image Gallery</h3>
-                            <p>Browse the photos you've uploaded and download them to your computer.</p>
-                            <span className="home-feature-footer">Uploaded photos</span>
-                        </button>
-                    </div>
+            <div className="home-recent-header">
+                <div>
+                    <p className="eyebrow">Your work</p>
+                    <h2 className="home-section-title">Recent models</h2>
                 </div>
-
-                <aside className="home-sidebar">
-                    <h2 className="home-section-label">Recent Models</h2>
-                    <div className="forma-card home-recent-list">
-                        {RECENT_MODELS.map((model) => (
-                            <div key={model.name} className="home-recent-item">
-                                <div className="forma-thumb home-recent-thumb"></div>
-                                <div>
-                                    <div className="home-recent-name">{model.name}</div>
-                                    <div className="home-recent-poly">{model.poly}</div>
-                                </div>
-                                <span className="home-recent-time">{model.time}</span>
-                            </div>
-                        ))}
+                <button
+                    className="home-link"
+                    onClick={() => {
+                        playSound('click');
+                        onOpenLibrary('models');
+                    }}
+                >
+                    View all models
+                </button>
+            </div>
+            <div className="home-recent-grid">
+                {RECENT_MODELS.map((model) => (
+                    <div key={model.name} className="forma-card home-recent-item">
+                        <div className="home-recent-thumb"><Icon name="layers" size={22} /></div>
+                        <div>
+                            <div className="home-recent-name">{model.name}</div>
+                            <div className="home-recent-poly">{model.poly} - {model.time}</div>
+                        </div>
                     </div>
-
-                    <button
-                        className="home-dropzone"
-                        onClick={() => {
-                            playSound('click');
-                            onNewGeneration();
-                        }}
-                    >
-                        <p>Drop images to upload</p>
-                        <span className="home-dropzone-types">JPG - PNG - WEBP - HEIC</span>
-                    </button>
-                </aside>
+                ))}
             </div>
         </div>
     );
