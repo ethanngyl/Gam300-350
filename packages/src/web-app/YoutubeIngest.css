@@ -1,162 +1,304 @@
-/* YouTube-link ingest section. Reuses the global tokens from App.css
-   (--surface, --accent, --mesh, etc.) so it matches the rest of the page. */
-
 .yt {
-    max-width: 760px;
+    padding: 32px 40px 48px;
 }
+
+.yt-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+    .yt-heading > div {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .yt-heading > .forma-btn {
+        flex: none;
+    }
+
+.yt-back {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.yt .yt-title {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.yt .yt-subtitle {
+    margin-top: 8px;
+    max-width: 620px;
+    color: var(--forma-text-muted);
+    line-height: 1.6;
+}
+
+.yt-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.yt-card {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.yt .yt-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+/* ---------- Form ---------- */
 
 .yt-form {
-    background: var(--surface);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    padding: 24px;
-}
-
-.yt-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
+    flex-direction: column;
+    gap: 14px;
 }
 
 .yt-input {
-    flex: 1 1 320px;
-    min-width: 0;
+    width: 100%;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    color: var(--forma-text);
+    font-family: inherit;
+    font-size: 0.92rem;
     padding: 12px 14px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.9rem;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
+    outline: none;
 }
 
-.yt-input:focus-visible {
-    outline: 2px solid var(--mesh);
-    outline-offset: 1px;
+    .yt-input:focus {
+        border-color: var(--forma-blue);
+    }
+
+    .yt-input:disabled {
+        opacity: 0.6;
+    }
+
+.yt-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
 }
 
 .yt-fps {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-muted);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--forma-text-dim);
 }
 
-.yt-fps input {
-    width: 64px;
-    padding: 12px 10px;
-    font-family: inherit;
-    font-size: 0.9rem;
-    color: var(--text);
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
+    .yt-fps input {
+        width: 96px;
+        background: var(--forma-panel-alt);
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 8px;
+        color: var(--forma-text);
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.86rem;
+        padding: 10px 12px;
+        outline: none;
+    }
+
+        .yt-fps input:focus {
+            border-color: var(--forma-blue);
+        }
+
+        .yt-fps input:disabled {
+            opacity: 0.6;
+        }
+
+.yt-submit {
+    padding: 11px 22px;
 }
 
-.yt-hint {
-    margin-top: 14px;
-    font-size: 0.85rem;
-    max-width: none;
+.yt .yt-hint {
+    color: var(--forma-text-dim);
+    font-size: 0.78rem;
+    line-height: 1.6;
 }
 
-.yt-error {
-    margin-top: 16px;
-    color: #f0857a;
-    font-size: 0.9rem;
+.yt .yt-error {
+    color: var(--forma-red);
+    font-size: 0.84rem;
+    line-height: 1.5;
 }
 
-/* ---------- Job status ---------- */
+/* ---------- Status ---------- */
+
+.yt-empty {
+    border: 1px dashed var(--forma-border-strong);
+    border-radius: 10px;
+    padding: 28px 18px;
+    text-align: center;
+    color: var(--forma-text-dim);
+    font-size: 0.84rem;
+    line-height: 1.6;
+}
 
 .yt-status {
-    margin-top: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
 .yt-status-head {
     display: flex;
     align-items: center;
-    gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    gap: 10px;
 }
 
 .yt-badge {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 3px 9px;
-    border-radius: 3px;
-    border: 1px solid var(--border-strong);
-    color: var(--text-muted);
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--forma-border-strong);
+    color: var(--forma-text-muted);
+    background: var(--forma-panel-alt);
 }
 
 .yt-badge-running {
-    color: var(--mesh);
-    border-color: rgba(110, 231, 200, 0.4);
-    background: var(--mesh-dim);
+    color: var(--forma-teal-text);
+    background: rgba(63, 152, 173, 0.16);
+    border-color: rgba(63, 152, 173, 0.4);
 }
 
 .yt-badge-done {
-    color: var(--mesh);
-    border-color: rgba(110, 231, 200, 0.55);
-    background: var(--mesh-dim);
+    color: var(--forma-green);
+    background: rgba(79, 196, 166, 0.14);
+    border-color: rgba(79, 196, 166, 0.4);
 }
 
-.yt-badge-error {
-    color: #f0857a;
-    border-color: rgba(240, 133, 122, 0.45);
-    background: rgba(240, 133, 122, 0.12);
+.yt-badge-error,
+.yt-badge-cancelled {
+    color: #ff8c7c;
+    background: rgba(240, 111, 96, 0.14);
+    border-color: rgba(240, 111, 96, 0.4);
 }
 
 .yt-phase {
-    font-size: 0.92rem;
-    color: var(--text);
+    font-size: 0.86rem;
+    color: var(--forma-text);
 }
 
 .yt-frames {
     margin-left: auto;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-muted);
+    font-size: 0.72rem;
+    color: var(--forma-text-muted);
 }
 
 .yt-bar {
-    height: 6px;
+    height: 8px;
+    background: var(--forma-panel-alt);
     border-radius: 999px;
-    background: var(--surface-raised);
     overflow: hidden;
 }
 
 .yt-bar-fill {
     height: 100%;
-    background: var(--accent);
+    background: var(--forma-blue);
+    border-radius: 999px;
     transition: width 0.4s ease;
 }
 
+.yt-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.yt-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.82rem;
+    color: var(--forma-text-dim);
+}
+
+.yt-step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid var(--forma-border-strong);
+    flex: none;
+}
+
+.yt-step-done {
+    color: var(--forma-text-muted);
+}
+
+    .yt-step-done .yt-step-dot {
+        background: var(--forma-green);
+        border-color: var(--forma-green);
+    }
+
+.yt-step-active {
+    color: var(--forma-text);
+    font-weight: 600;
+}
+
+    .yt-step-active .yt-step-dot {
+        background: var(--forma-coral);
+        border-color: var(--forma-coral);
+    }
+
 .yt-download {
-    margin-top: 16px;
+    align-self: flex-start;
+    text-decoration: none;
 }
 
 .yt-log {
-    margin-top: 16px;
-    margin-bottom: 0;
-    max-height: 200px;
+    margin: 0;
+    max-height: 220px;
     overflow: auto;
+    white-space: pre-wrap;
+    background: var(--forma-bg);
+    border: 1px solid var(--forma-border);
+    border-radius: 8px;
     padding: 12px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.76rem;
-    line-height: 1.5;
-    color: var(--text-muted);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    white-space: pre-wrap;
-    word-break: break-word;
+    font-size: 0.7rem;
+    line-height: 1.6;
+    color: var(--forma-text-muted);
+}
+
+/* ---------- Smaller screens ---------- */
+
+@media (max-width: 980px) {
+    .yt-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 760px) {
+    .yt {
+        padding: 20px 16px 40px;
+    }
+
+    .yt-heading {
+        flex-direction: column !important;
+    }
 }

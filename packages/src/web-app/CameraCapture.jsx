@@ -4,17 +4,19 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 01-10-2026
+\date 08-10-2026
 \brief
-In-browser photo capture screen for scanning an object. Supports manual
-single-shot capture, interval-based auto-capture with a user-adjustable
-photo cap, drag-and-drop and file-picker uploads, live thumbnails with
-per-photo removal, and triggers reconstruction once enough photos are
-collected. Also responsible for correctly starting and releasing the
-camera's MediaStream as the component mounts and unmounts.
+In-browser photo capture screen for scanning an object, laid out to match
+the GENESIS theme: a camera panel (live preview, manual or interval-based
+auto-capture with a user-adjustable photo cap) beside a batch panel
+(drag-and-drop and file-picker uploads, live thumbnails with per-photo
+removal, and the button that sends the batch for reconstruction). The
+capture, upload and camera-release logic is unchanged from the previous
+version; only the markup and styling were redesigned.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback } from 'react';
+import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 
@@ -203,180 +205,222 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
     }
 
     return (
-        <div className="capture">
-            <button
-                className="forma-btn capture-back"
-                onClick={() => {
-                    playSound('click3');
-                    onBack();
-                }}
-            >
-                Back to dashboard
-            </button>
-
-            {error && <p className="capture-error">{error}</p>}
-
-            <div className="capture-viewport">
-                <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
-                <canvas ref={canvasRef} style={{ display: 'none' }} />
-            </div>
-
-            <div className="capture-mode-toggle">
-                <button
-                    className={captureMode === 'manual' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
-                    onClick={() => {
-                        playSound('click');
-                        handleModeChange('manual');
-                    }}
-                >
-                    Manual
-                </button>
-                <button
-                    className={captureMode === 'auto' ? 'forma-btn forma-btn-primary' : 'forma-btn'}
-                    onClick={() => {
-                        playSound('click');
-                        handleModeChange('auto');
-                    }}
-                >
-                    Auto capture
-                </button>
-            </div>
-
-            {captureFeedback && <div className="capture-feedback">{captureFeedback}</div>}
-
-            {captureMode === 'manual' ? (
-                <button
-                    className="forma-btn forma-btn-primary capture-btn"
-                    onClick={() => {
-                        playSound('click');
-                        capturePhoto(true);
-                    }}
-                    disabled={!stream}
-                >
-                    Capture photo
-                </button>
-            ) : (
-                <div className="capture-auto-controls">
-                    <button
-                        className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
-                        onClick={() => {
-                            playSound('click');
-                            setIsAutoCapturing((prev) => !prev);
-                        }}
-                        disabled={!stream}
-                    >
-                        {isAutoCapturing ? 'Stop auto-capture' : 'Start auto-capture'}
-                    </button>
-
-                    <label className="capture-interval-label">
-                        every
-                        <select
-                            value={intervalSeconds}
-                            onChange={(e) => setIntervalSeconds(Number(e.target.value))}
-                            disabled={isAutoCapturing}
-                        >
-                            <option value={1}>1s</option>
-                            <option value={2}>2s</option>
-                            <option value={3}>3s</option>
-                            <option value={5}>5s</option>
-                        </select>
-                    </label>
-
-                    <label className="capture-interval-label">
-                        max
-                        <select
-                            value={maxCaptures}
-                            onChange={(e) => setMaxCaptures(Number(e.target.value))}
-                            disabled={isAutoCapturing}
-                        >
-                            <option value={10}>10</option>
-                            <option value={25}>25</option>
-                            <option value={50}>50</option>
-                            <option value={100}>100</option>
-                            <option value={HARD_CAP}>{HARD_CAP}</option>
-                        </select>
-                    </label>
-
-                    {isAutoCapturing && (
-                        <span className="capture-auto-status">
-                            Capturing every {intervalSeconds}s… ({photos.length}/{maxCaptures})
-                        </span>
-                    )}
+        <div className="capture-page">
+            <div className="capture-heading">
+                <div>
+                    <div className="eyebrow eyebrow-accent">Start a new project</div>
+                    <h1 className="capture-title">Create a 3D model from photos</h1>
+                    <p className="capture-subtitle">
+                        Capture photos of your object from every angle, or upload photos you
+                        already have. Then send the batch to build your model.
+                    </p>
                 </div>
-            )}
-
-            <div
-                className={isDragging ? 'capture-dropzone is-dragging' : 'capture-dropzone'}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => {
-                    playSound('click');
-                    handleBrowseClick();
-                }}
-                role="button"
-                tabIndex={0}
-            >
-                <p>Upload Photos</p>
-                <p className="capture-dropzone-or">or</p>
                 <button
-                    type="button"
-                    className="forma-btn"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        playSound('click');
-                        handleBrowseClick();
+                    className="forma-btn capture-back"
+                    onClick={() => {
+                        playSound('click3');
+                        onBack();
                     }}
                 >
-                    Browse files
+                    Back to dashboard
                 </button>
-
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleFileInputChange}
-                    style={{ display: 'none' }}
-                />
             </div>
 
-            {uploadFeedback && <div className="capture-feedback">{uploadFeedback}</div>}
+            <div className="capture-layout">
+                <div className="forma-card capture-camera">
+                    <div className="capture-viewport">
+                        <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
+                        <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-            <span className="capture-count">{photos.length} photo{photos.length === 1 ? '' : 's'} in batch</span>
+                        {!stream && (
+                            <div className="capture-placeholder">
+                                <Icon name="camera" size={34} />
+                                <span>{error ? 'Camera not available' : 'Waiting for camera...'}</span>
+                            </div>
+                        )}
 
-            {photos.length > 0 && (
-                <div className="capture-thumbnails">
-                    {photos.map((photo) => (
-                        <div key={photo.id} className="capture-thumb">
-                            <img src={photo.url} alt="" />
+                        <span className="capture-corner capture-corner-tl"></span>
+                        <span className="capture-corner capture-corner-tr"></span>
+                        <span className="capture-corner capture-corner-bl"></span>
+                        <span className="capture-corner capture-corner-br"></span>
+
+                        <span className={stream ? 'capture-live is-live' : 'capture-live'}>
+                            <span className="capture-live-dot"></span>
+                            {stream ? 'Live' : 'Offline'}
+                        </span>
+                    </div>
+
+                    {error && <p className="capture-error">{error}</p>}
+
+                    {captureFeedback && <div className="capture-feedback">{captureFeedback}</div>}
+
+                    <div className="capture-controls">
+                        <div className="capture-mode-toggle">
                             <button
-                                className="capture-thumb-remove"
+                                className={captureMode === 'manual' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
                                 onClick={() => {
                                     playSound('click');
-                                    removePhoto(photo.id);
+                                    handleModeChange('manual');
                                 }}
-                                aria-label="Remove photo"
                             >
-                                ×
+                                Manual
+                            </button>
+                            <button
+                                className={captureMode === 'auto' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
+                                onClick={() => {
+                                    playSound('click');
+                                    handleModeChange('auto');
+                                }}
+                            >
+                                Auto capture
                             </button>
                         </div>
-                    ))}
+
+                        {captureMode === 'manual' ? (
+                            <button
+                                className="forma-btn capture-btn"
+                                onClick={() => {
+                                    playSound('click');
+                                    capturePhoto(true);
+                                }}
+                                disabled={!stream}
+                            >
+                                <Icon name="camera" size={16} /> Capture photo
+                            </button>
+                        ) : (
+                            <div className="capture-auto-controls">
+                                <button
+                                    className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                                    onClick={() => {
+                                        playSound('click');
+                                        setIsAutoCapturing((prev) => !prev);
+                                    }}
+                                    disabled={!stream}
+                                >
+                                    {isAutoCapturing ? 'Stop auto-capture' : 'Start auto-capture'}
+                                </button>
+
+                                <label className="capture-interval-label">
+                                    every
+                                    <select
+                                        value={intervalSeconds}
+                                        onChange={(e) => setIntervalSeconds(Number(e.target.value))}
+                                        disabled={isAutoCapturing}
+                                    >
+                                        <option value={1}>1s</option>
+                                        <option value={2}>2s</option>
+                                        <option value={3}>3s</option>
+                                        <option value={5}>5s</option>
+                                    </select>
+                                </label>
+
+                                <label className="capture-interval-label">
+                                    max
+                                    <select
+                                        value={maxCaptures}
+                                        onChange={(e) => setMaxCaptures(Number(e.target.value))}
+                                        disabled={isAutoCapturing}
+                                    >
+                                        <option value={10}>10</option>
+                                        <option value={25}>25</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                        <option value={HARD_CAP}>{HARD_CAP}</option>
+                                    </select>
+                                </label>
+
+                                {isAutoCapturing && (
+                                    <span className="capture-auto-status">
+                                        Capturing every {intervalSeconds}s... ({photos.length}/{maxCaptures})
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            )}
 
-            <button
-                className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
-                disabled={photos.length === 0}
-                onClick={() => {
-                    playSound('click');
-                    handleTrain();
-                }}
-            >
-                {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
-            </button>
+                <div className="forma-card capture-batch">
+                    <div>
+                        <div className="eyebrow">Batch</div>
+                        <h2 className="capture-batch-title">Source photos</h2>
+                    </div>
 
-            {uploadError && <p className="capture-error" role="alert">{uploadError}</p>}
+                    <div
+                        className={isDragging ? 'capture-dropzone is-dragging' : 'capture-dropzone'}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => {
+                            playSound('click');
+                            handleBrowseClick();
+                        }}
+                        role="button"
+                        tabIndex={0}
+                    >
+                        <Icon name="image" size={26} />
+                        <p>Upload Photos</p>
+                        <p className="capture-dropzone-or">or</p>
+                        <button
+                            type="button"
+                            className="forma-btn"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                playSound('click');
+                                handleBrowseClick();
+                            }}
+                        >
+                            Browse files
+                        </button>
+                        <span className="capture-dropzone-types">JPG - PNG - WEBP - HEIC</span>
+
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleFileInputChange}
+                            style={{ display: 'none' }}
+                        />
+                    </div>
+
+                    {uploadFeedback && <div className="capture-feedback">{uploadFeedback}</div>}
+
+                    <span className="capture-count">{photos.length} photo{photos.length === 1 ? '' : 's'} in batch</span>
+
+                    {photos.length > 0 && (
+                        <div className="capture-thumbnails">
+                            {photos.map((photo) => (
+                                <div key={photo.id} className="capture-thumb">
+                                    <img src={photo.url} alt="" />
+                                    <button
+                                        className="capture-thumb-remove"
+                                        onClick={() => {
+                                            playSound('click');
+                                            removePhoto(photo.id);
+                                        }}
+                                        aria-label="Remove photo"
+                                    >
+                                        <Icon name="plus" size={12} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
+                        disabled={photos.length === 0}
+                        onClick={() => {
+                            playSound('click');
+                            handleTrain();
+                        }}
+                    >
+                        {isBatchSent ? 'Sent' : `Use this batch (${photos.length} photos)`}
+                    </button>
+
+                    {uploadError && <p className="capture-error" role="alert">{uploadError}</p>}
+                </div>
+            </div>
         </div>
     );
 }

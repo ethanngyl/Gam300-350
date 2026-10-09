@@ -1,0 +1,145 @@
+.processing-page {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    padding: 24px;
+    overflow-y: auto;
+    background: var(--forma-bg);
+    color: var(--forma-text);
+    font-family: 'IBM Plex Sans', sans-serif;
+}
+
+    /* App.css still styles bare h1 and p with the old theme, so reset them here. */
+    .processing-page :is(h1, p) {
+        font-family: inherit;
+        max-width: none;
+        margin: 0;
+    }
+
+.processing-card {
+    width: 100%;
+    max-width: 480px;
+    margin: auto; /* centres the card without clipping it on short screens */
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Two classes so this wins over .forma-card's padding whichever file loads last. */
+.processing-page .processing-card {
+    padding: 32px;
+}
+
+.processing-page .processing-title {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.processing-page .processing-hint {
+    color: var(--forma-text-muted);
+    font-size: 0.86rem;
+    line-height: 1.6;
+}
+
+.processing-page .processing-error {
+    color: var(--forma-red);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.processing-page .processing-eyebrow-error {
+    color: var(--forma-red);
+}
+
+/* ---------- Progress ---------- */
+
+.processing-phase {
+    margin-top: 6px;
+    font-size: 0.92rem;
+    color: var(--forma-text);
+}
+
+.processing-detail {
+    margin-left: 8px;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+}
+
+.processing-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.processing-bar {
+    height: 8px;
+    background: var(--forma-panel-alt);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.processing-bar-fill {
+    height: 100%;
+    background: var(--forma-blue);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+.processing-pct {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.74rem;
+    color: var(--forma-teal-text);
+}
+
+/* ---------- Step tracker ---------- */
+
+.processing-steps {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.processing-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.82rem;
+    color: var(--forma-text-dim);
+}
+
+.processing-step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid var(--forma-border-strong);
+    flex: none;
+}
+
+.processing-step-done {
+    color: var(--forma-text-muted);
+}
+
+    .processing-step-done .processing-step-dot {
+        background: var(--forma-green);
+        border-color: var(--forma-green);
+    }
+
+.processing-step-active {
+    color: var(--forma-text);
+    font-weight: 600;
+}
+
+    .processing-step-active .processing-step-dot {
+        background: var(--forma-coral);
+        border-color: var(--forma-coral);
+    }
+
+.processing-page .processing-action {
+    align-self: flex-start;
+    margin-top: 6px;
+}

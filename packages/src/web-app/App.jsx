@@ -168,18 +168,14 @@ function App() {
 
     if (screen === 'youtube') {
         return (
-            <div className="genesis-page">
-                <button
-                    className="btn btn-ghost"
-                    onClick={() => {
+
+            <div className="genesis-page" style={{ padding: 0 }}>
+                <YoutubeIngest
+                    onBack={() => {
                         playSound('click3');
                         backToDashboard();
                     }}
-                    style={{ marginBottom: 20 }}
-                >
-                    Back to dashboard
-                </button>
-                <YoutubeIngest />
+                />
             </div>
         );
     }
