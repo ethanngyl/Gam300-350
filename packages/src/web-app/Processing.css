@@ -143,3 +143,17 @@
     align-self: flex-start;
     margin-top: 6px;
 }
+
+@media (max-width: 760px) {
+    .processing-page {
+        padding: 16px;
+    }
+
+        .processing-page .processing-card {
+            padding: 22px;
+        }
+
+        .processing-page .processing-title {
+            font-size: 1.35rem;
+        }
+}

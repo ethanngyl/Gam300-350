@@ -746,6 +746,35 @@ html {
     color: var(--forma-text-dim);
 }
 
+/* Real model cards (3D Models sub-tab) */
+
+.library-item-button {
+    width: 100%;
+    display: block;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .library-item-button:hover:not(:disabled) {
+        border-color: var(--forma-blue);
+    }
+
+    .library-item-button:disabled {
+        cursor: default;
+        opacity: 0.75;
+    }
+
+.library-note {
+    padding: 0 28px;
+    margin-bottom: 16px;
+    color: var(--forma-text-muted);
+    font-size: 0.86rem;
+}
+
+.library-note-error {
+    color: var(--forma-red);
+}
+
 /* Photo Library cards (ImageGallery compact variant) */
 
 .gallery-compact {
@@ -1918,13 +1947,43 @@ html {
         color: var(--forma-text);
     }
 
-/* ---------- Smaller screens (phones) ---------- */
+/* ============================================================
+   Responsive layout: tablets (<=1100px) and phones (<=760px)
+   Keep this section last in the file so its rules win.
+   ============================================================ */
+
+/* Hidden on desktop; shown in the phone layout below. */
+.forma-menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex: none;
+    border-radius: 8px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel-alt);
+    color: var(--forma-text);
+    cursor: pointer;
+}
+
+.genesis-backdrop {
+    display: none;
+}
+
+/* Mobile browsers count the address bar in 100vh; dvh is the visible
+   height. Browsers without dvh keep the 100vh rule from above. */
+.genesis-shell {
+    height: 100dvh;
+}
+
+/* ---------- Tablets and small laptops ---------- */
 
 @media (max-width: 1100px) {
     .home-tool-grid,
     .home-recent-grid,
     .account-stats {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .home-banner {
@@ -1934,16 +1993,28 @@ html {
     .home-banner-steps {
         display: none;
     }
-}
 
-@media (max-width: 760px) {
-    .genesis-body {
-        grid-template-columns: 1fr;
+    .editor-screen {
+        grid-template-columns: 48px 1fr 240px;
     }
 
-    .genesis-sidebar,
-    .forma-status {
-        display: none;
+    .scene-body {
+        grid-template-columns: 180px 1fr 210px;
+    }
+}
+
+/* ---------- Phones ---------- */
+
+@media (max-width: 760px) {
+    /* Top nav: menu button, logo icon, icon-only tabs, avatar */
+    .forma-nav {
+        height: 56px;
+        gap: 10px;
+        padding: 0 12px;
+    }
+
+    .forma-menu-btn {
+        display: inline-flex;
     }
 
     .forma-logo {
@@ -1951,10 +2022,70 @@ html {
         padding-right: 0;
     }
 
-    .forma-tab span {
+    .forma-logo-text,
+    .forma-status {
         display: none;
     }
 
+    .forma-tabs {
+        justify-content: center;
+    }
+
+    .forma-tab {
+        padding: 10px;
+    }
+
+        .forma-tab span {
+            display: none;
+        }
+
+    /* Sidebar becomes a slide-in drawer */
+    .genesis-body {
+        grid-template-columns: 1fr;
+    }
+
+    .genesis-sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: min(280px, 82vw);
+        z-index: 60;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+    }
+
+        .genesis-sidebar.is-open {
+            transform: translateX(0);
+            box-shadow: 12px 0 30px rgba(0, 0, 0, 0.45);
+        }
+
+    .genesis-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 55;
+        border: none;
+        background: rgba(8, 14, 20, 0.6);
+    }
+
+    /* iPhone Safari zooms in on focused fields with text under 16px. */
+    input,
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    /* Bigger touch targets */
+    .forma-btn {
+        min-height: 42px;
+    }
+
+    .genesis-side-item {
+        padding: 12px 10px;
+    }
+
+    /* Home */
     .home-screen,
     .account-screen {
         padding: 20px 16px 40px;
@@ -1964,36 +2095,204 @@ html {
         flex-direction: column;
     }
 
+        .home-heading-row h1 {
+            font-size: 1.6rem;
+        }
+
+    .home-banner {
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        padding: 18px;
+    }
+
+    .home-banner-icon {
+        display: none;
+    }
+
     .home-tool-grid,
-    .home-recent-grid,
-    .account-stats {
+    .home-recent-grid {
         grid-template-columns: 1fr;
     }
 
+    .home-recent-header {
+        align-items: center;
+    }
+
+    /* Account */
+    .account-profile {
+        flex-wrap: wrap;
+    }
+
+    .account-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .home-stat-value {
+        font-size: 1.4rem;
+    }
+
+    /* Library: subtabs and search on their own rows, sort + action share one */
     .library-toolbar {
         flex-wrap: wrap;
+        gap: 10px;
         padding: 12px 16px;
+    }
+
+    .library-subtabs {
+        width: 100%;
+    }
+
+    .library-subtab {
+        flex: 1;
+    }
+
+    .library-search {
+        flex: 1 1 100%;
+    }
+
+    .library-sort {
+        flex: 1;
+    }
+
+    .library-toolbar > .forma-btn {
+        flex: 1;
+        justify-content: center;
     }
 
     .library-grid,
     .library-photo-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
         padding: 0 16px;
     }
 
+    .library-thumb {
+        height: 96px;
+    }
+
+    .library-item-meta {
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .library-note,
+    .gallery-compact .gallery-note {
+        padding: 0 16px;
+    }
+
+    .gallery-compact-back {
+        margin: 0 16px 12px;
+    }
+
+    .gallery-compact section.gallery-job {
+        padding: 0 16px;
+    }
+
+    .gallery-compact .gallery-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    /* Photo Editor: tools row, then canvas, then the adjustments panel */
     .editor-screen {
-        grid-template-columns: 48px 1fr;
+        display: flex;
+        flex-direction: column;
+        height: auto;
+    }
+
+    .editor-tools {
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 8px 12px;
+        border-right: none;
+        border-bottom: 1px solid var(--forma-border);
+    }
+
+    .editor-tool-settings {
+        margin-top: 0;
+        margin-left: auto;
+    }
+
+    .editor-ruler {
+        display: none;
+    }
+
+    .editor-canvas-header {
+        flex-wrap: wrap;
+    }
+
+    .editor-canvas {
+        padding: 16px;
     }
 
     .editor-panel {
-        display: none;
+        border-left: none;
+        border-top: 1px solid var(--forma-border);
+    }
+
+    .editor-actions {
+        margin-top: 0;
+    }
+
+    /* Scene Builder: viewport first, then outliner and inspector */
+    .scene-screen {
+        height: auto;
     }
 
     .scene-body {
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
     }
 
-    .scene-outliner,
-    .scene-inspector {
+    .scene-viewport {
+        order: -1;
+        height: 55vh;
+        min-height: 280px;
+    }
+
+    .scene-viewport-menu {
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .scene-transform-bar {
+        overflow-x: auto;
+    }
+
+    .scene-color-space {
         display: none;
+    }
+
+    .scene-outliner {
+        max-height: 320px;
+        border-right: none;
+        border-top: 1px solid var(--forma-border);
+    }
+
+    .scene-inspector {
+        overflow: visible;
+        border-left: none;
+        border-top: 1px solid var(--forma-border);
+    }
+
+    .scene-frame {
+        min-width: 34px;
+        padding: 8px 0;
+    }
+
+    .scene-transport {
+        flex-wrap: wrap;
+    }
+
+    /* Login */
+    .login-card {
+        padding: 24px 20px;
+    }
+
+    /* Result screen buttons wrap instead of running off the screen */
+    .genesis-overlay {
+        flex-wrap: wrap;
+        right: 16px;
     }
 }

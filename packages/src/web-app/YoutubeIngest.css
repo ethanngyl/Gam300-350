@@ -1,31 +1,31 @@
+/* ============================================================
+   YoutubeIngest - GENESIS theme
+   Uses the --forma-* variables from AppTheme.css.
+   Layout is mobile-first: one column by default, two columns
+   (link form beside status) only on wide screens.
+   ============================================================ */
+
 .yt {
-    padding: 32px 40px 48px;
+    padding: 20px 16px 40px;
 }
+
+/* ---------- Heading ---------- */
 
 .yt-heading {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 24px;
-    margin-bottom: 24px;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
 }
 
-    .yt-heading > div {
-        flex: 1;
-        min-width: 0;
-    }
-
+    /* On phones the Back button sits above the title. */
     .yt-heading > .forma-btn {
-        flex: none;
+        order: -1;
+        align-self: flex-start;
     }
-
-.yt-back {
-    flex-shrink: 0;
-    white-space: nowrap;
-}
 
 .yt .yt-title {
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: 600;
     color: var(--forma-heading);
 }
@@ -37,18 +37,21 @@
     line-height: 1.6;
 }
 
+/* ---------- Two cards ---------- */
+
 .yt-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
     align-items: start;
 }
 
 .yt-card {
-    padding: 22px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-width: 0;
 }
 
 .yt .yt-card-title {
@@ -67,6 +70,7 @@
 
 .yt-input {
     width: 100%;
+    box-sizing: border-box;
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border-strong);
     border-radius: 8px;
@@ -85,17 +89,18 @@
         opacity: 0.6;
     }
 
+/* fps box and Extract button share one row; the button fills the rest. */
 .yt-row {
     display: flex;
     align-items: flex-end;
-    gap: 14px;
-    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .yt-fps {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    flex: none;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.7rem;
     letter-spacing: 0.1em;
@@ -104,7 +109,8 @@
 }
 
     .yt-fps input {
-        width: 96px;
+        width: 84px;
+        box-sizing: border-box;
         background: var(--forma-panel-alt);
         border: 1px solid var(--forma-border-strong);
         border-radius: 8px;
@@ -124,6 +130,8 @@
         }
 
 .yt-submit {
+    flex: 1;
+    justify-content: center;
     padding: 11px 22px;
 }
 
@@ -144,7 +152,7 @@
 .yt-empty {
     border: 1px dashed var(--forma-border-strong);
     border-radius: 10px;
-    padding: 28px 18px;
+    padding: 24px 18px;
     text-align: center;
     color: var(--forma-text-dim);
     font-size: 0.84rem;
@@ -266,7 +274,8 @@
     }
 
 .yt-download {
-    align-self: flex-start;
+    align-self: stretch;
+    justify-content: center;
     text-decoration: none;
 }
 
@@ -275,6 +284,7 @@
     max-height: 220px;
     overflow: auto;
     white-space: pre-wrap;
+    word-break: break-word;
     background: var(--forma-bg);
     border: 1px solid var(--forma-border);
     border-radius: 8px;
@@ -285,20 +295,58 @@
     color: var(--forma-text-muted);
 }
 
-/* ---------- Smaller screens ---------- */
+/* ---------- Tablets and up ---------- */
 
-@media (max-width: 980px) {
-    .yt-layout {
-        grid-template-columns: 1fr;
+@media (min-width: 761px) {
+    .yt {
+        padding: 32px 40px 48px;
+    }
+
+        .yt .yt-title {
+            font-size: 2rem;
+        }
+
+    /* Back button returns to the right of the title. */
+    .yt-heading {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 24px;
+    }
+
+        .yt-heading > div {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .yt-heading > .forma-btn {
+            order: 0;
+            flex: none;
+        }
+
+    .yt-card {
+        padding: 22px;
+    }
+
+    .yt-fps input {
+        width: 96px;
+    }
+
+    .yt-submit {
+        flex: none;
+    }
+
+    .yt-download {
+        align-self: flex-start;
     }
 }
 
-@media (max-width: 760px) {
-    .yt {
-        padding: 20px 16px 40px;
-    }
+/* ---------- Wide screens: form beside status ---------- */
 
-    .yt-heading {
-        flex-direction: column !important;
+@media (min-width: 981px) {
+    .yt-layout {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 20px;
     }
 }

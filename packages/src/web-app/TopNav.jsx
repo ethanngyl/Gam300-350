@@ -4,12 +4,13 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 08-10-2026
+\date 09-10-2026
 \brief
-Top navigation bar: GENESIS logo, Home / Library / Photo Editor / Scene
-Builder tabs (with click sound), a workspace status indicator, and the
-signed-in user's avatar. Clicking the avatar opens a small account menu
-with links to the account page and sign out.
+Top navigation bar: a menu button (phones only) that opens the sidebar
+drawer, GENESIS logo, Home / Library / Photo Editor / Scene Builder tabs
+(with click sound), a workspace status indicator, and the signed-in
+user's avatar. Clicking the avatar opens a small account menu with links
+to the account page and sign out.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
@@ -23,7 +24,7 @@ const TABS = [
     { id: 'scene', label: 'Scene Builder', icon: 'shield' }, // comment out this line to disable the tab
 ];
 
-function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut }) {
+function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuContainerRef = useRef(null);
 
@@ -43,9 +44,21 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut }) {
 
     return (
         <nav className="forma-nav">
+            {/* Only visible on phones, where the sidebar becomes a drawer. */}
+            <button
+                className="forma-menu-btn"
+                onClick={() => {
+                    playSound('click');
+                    onToggleMenu();
+                }}
+                aria-label="Open menu"
+            >
+                <Icon name="menu" size={20} />
+            </button>
+
             <div className="forma-logo">
                 <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
-                GENESIS
+                <span className="forma-logo-text">GENESIS</span>
             </div>
 
             <div className="forma-tabs">
@@ -57,6 +70,7 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut }) {
                             playSound('click');
                             onTabChange(tab.id);
                         }}
+                        aria-label={tab.label}
                     >
                         <Icon name={tab.icon} size={14} />
                         <span>{tab.label}</span>

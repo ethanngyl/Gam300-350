@@ -4,37 +4,77 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 08-10-2026
+\date 09-10-2026
 \brief
 Library tab with two sub-views: a searchable, sortable grid of generated
-3D models (still static mock data) and a Photo Library that embeds
-ImageGallery in its compact variant to show real uploaded / extracted
-photo batches from the backend. The active sub-tab is controlled by the
-parent so the sidebar can open either one directly.
+3D models and a Photo Library that embeds ImageGallery in its compact
+variant. The 3D Models grid is built from GET /jobs: finished jobs show
+as Ready and open the full-page splat viewer when clicked, jobs still
+running show as Processing, and failed or cancelled jobs are hidden. The
+active sub-tab is controlled by the parent so the sidebar can open
+either one directly.
 **************************************************************************/
 
+import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import ImageGallery from './ImageGallery.jsx';
-import { useState } from 'react';
+import { playSound } from '../audio/Audio.js';
 
-const MODELS = [
-    { name: 'Ceramic Vase A', poly: '14.2k poly', date: 'Sep 15', status: 'ready' },
-    { name: 'Stone Fragment', poly: '8.7k poly', date: 'Sep 15', status: 'ready' },
-    { name: 'Wooden Chair', poly: '22.1k poly', date: 'Sep 14', status: 'ready' },
-    { name: 'Metal Bracket', poly: '5.3k poly', date: 'Sep 13', status: 'ready' },
-    { name: 'Glass Bottle', poly: '11.6k poly', date: 'Sep 12', status: 'processing' },
-    { name: 'Terracotta Pot', poly: '9.4k poly', date: 'Sep 10', status: 'ready' },
-];
+// Statuses where a job has stopped for good. 'done' is the only one that
+// produces a model; the others are hidden from the grid.
+const FINISHED_STATUSES = ['done', 'error', 'cancelled'];
 
-function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos }) {
+function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos, onOpenModel }) {
     const [search, setSearch] = useState('');
     const [sortOrder, setSortOrder] = useState('newest');
+    const [jobs, setJobs] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
 
-    const visibleModels = MODELS.filter((model) =>
-        model.name.toLowerCase().includes(search.toLowerCase())
+    // Fetch the job list whenever the 3D Models sub-tab is opened, so a model
+    // that finished since the last visit shows up without a page reload.
+    useEffect(() => {
+        if (subTab !== 'models') return;
+
+        let isCancelled = false;
+
+        async function loadJobs() {
+            try {
+                const res = await fetch('/jobs');
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                const data = await res.json();
+                if (!isCancelled) {
+                    setJobs(data);
+                    setLoadError(null);
+                }
+            } catch (err) {
+                if (!isCancelled) setLoadError(err.message);
+            } finally {
+                if (!isCancelled) setIsLoading(false);
+            }
+        }
+
+        loadJobs();
+        // Ignore the response if the user leaves the tab before it arrives.
+        return () => { isCancelled = true; };
+    }, [subTab]);
+
+    // Only finished jobs (real models) and jobs still running are shown.
+    const models = jobs
+        .filter((job) => job.status === 'done' || !FINISHED_STATUSES.includes(job.status))
+        .map((job) => ({
+            id: job.id,
+            name: `Model ${job.id.slice(0, 8)}`,
+            photoCount: job.images?.length ?? 0,
+            isReady: job.status === 'done',
+        }));
+
+    const normalizedSearch = search.trim().toLowerCase();
+    const visibleModels = models.filter((model) =>
+        `${model.name} ${model.id}`.toLowerCase().includes(normalizedSearch)
     );
     if (sortOrder === 'oldest') visibleModels.reverse();
-    if (sortOrder === 'name') visibleModels.sort((a, b) => a.name.localeCompare(b.name));
+    if (sortOrder === 'name') visibleModels.sort((a, b) => a.id.localeCompare(b.id));
 
     return (
         <div className="library-screen">
@@ -85,29 +125,52 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             </div>
 
             {subTab === 'models' ? (
-                <div className="library-grid">
-                    {visibleModels.map((model) => (
-                        <div key={model.name} className="forma-card library-item">
-                            <div className="library-thumb">
-                                <span
-                                    className={
-                                        model.status === 'ready'
-                                            ? 'forma-badge forma-badge-ready'
-                                            : 'forma-badge forma-badge-processing'
-                                    }
-                                >
-                                    {model.status === 'ready' ? 'Ready' : 'Processing'}
-                                </span>
-                                <Icon name="layers" size={44} />
-                            </div>
-                            <div className="library-item-name">{model.name}</div>
-                            <div className="library-item-meta">
-                                <span>{model.poly}</span>
-                                <span>{model.date}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <>
+                    {isLoading && <p className="library-note">Loading...</p>}
+                    {loadError && (
+                        <p className="library-note library-note-error">Couldn't load models: {loadError}</p>
+                    )}
+                    {!isLoading && !loadError && visibleModels.length === 0 && (
+                        <p className="library-note">
+                            {normalizedSearch
+                                ? 'No models match your search.'
+                                : 'No generated models yet. Use Generate Model to create one.'}
+                        </p>
+                    )}
+
+                    <div className="library-grid">
+                        {visibleModels.map((model) => (
+                            <button
+                                key={model.id}
+                                type="button"
+                                className="forma-card library-item library-item-button"
+                                disabled={!model.isReady}
+                                onClick={() => {
+                                    playSound('click');
+                                    onOpenModel(model.id);
+                                }}
+                            >
+                                <div className="library-thumb">
+                                    <span
+                                        className={
+                                            model.isReady
+                                                ? 'forma-badge forma-badge-ready'
+                                                : 'forma-badge forma-badge-processing'
+                                        }
+                                    >
+                                        {model.isReady ? 'Ready' : 'Processing'}
+                                    </span>
+                                    <Icon name="layers" size={44} />
+                                </div>
+                                <div className="library-item-name">{model.name}</div>
+                                <div className="library-item-meta">
+                                    <span>{model.photoCount} photos</span>
+                                    <span>{model.isReady ? 'Click to view' : 'In progress'}</span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </>
             ) : (
                 // Live data: fetched and owned by ImageGallery's own load() logic.
                 <ImageGallery variant="compact" searchTerm={search} sortOrder={sortOrder} />

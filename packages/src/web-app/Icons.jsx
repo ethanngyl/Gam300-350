@@ -45,6 +45,7 @@ const ICON_PATHS = {
     pause: (<><rect x="6" y="5" width="4" height="14" fill="currentColor" /><rect x="14" y="5" width="4" height="14" fill="currentColor" /></>),
     stepForward: <path d="m9 5 8 7-8 7z" />,
     skipForward: (<><path d="M18 5v14" /><path d="m5 5 10 7-10 7z" /></>),
+    menu: <path d="M4 6h16M4 12h16M4 18h16" />,
 };
 
 function Icon({ name, size = 16 }) {

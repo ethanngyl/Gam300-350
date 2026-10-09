@@ -59,6 +59,7 @@ function App() {
     const [screen, setScreen] = useState(null);
     const [jobId, setJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     function handleLogin(user) {
         try {
@@ -86,6 +87,11 @@ function App() {
         setActiveTab('library');
     }
 
+    function handleTabChange(tab) {
+        setIsMenuOpen(false);
+        setActiveTab(tab);
+    }
+
     // Uploads the real batch to the backend and starts reconstruction.
     async function handleBatchReady(files) {
         setUploadError(null);
@@ -110,6 +116,11 @@ function App() {
         setJobId(null);
         setUploadError(null);
         setScreen(null);
+    }
+
+    function openModel(modelJobId) {
+        setJobId(modelJobId);
+        setScreen('result');
     }
 
     if (!currentUser) {
@@ -182,21 +193,35 @@ function App() {
 
     return (
         <div className="forma-app genesis-shell">
+
             <TopNav
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={handleTabChange}
                 user={currentUser}
-                onOpenAccount={() => setActiveTab('account')}
+                onOpenAccount={() => handleTabChange('account')}
                 onSignOut={handleSignOut}
+                onToggleMenu={() => setIsMenuOpen((wasOpen) => !wasOpen)}
             />
 
             <div className="genesis-body">
+                {/* Dark overlay behind the phone drawer; tapping it closes the drawer. */}
+                {isMenuOpen && (
+                    <button
+                        type="button"
+                        className="genesis-backdrop"
+                        aria-label="Close menu"
+                        onClick={() => setIsMenuOpen(false)}
+                    />
+                )}
+
                 <Sidebar
                     activeTab={activeTab}
                     onNavigate={setActiveTab}
                     onOpenLibrary={openLibrary}
                     onNewModel={() => setScreen('capture')}
                     onYoutube={() => setScreen('youtube')}
+                    isOpen={isMenuOpen}
+                    onClose={() => setIsMenuOpen(false)}
                 />
 
                 <div className="genesis-main">
@@ -215,6 +240,7 @@ function App() {
                             onSubTabChange={setLibrarySubTab}
                             onGenerateModel={() => setScreen('capture')}
                             onUploadPhotos={() => setScreen('capture')}
+                            onOpenModel={openModel}
                         />
                     )}
                     {activeTab === 'editor' && (

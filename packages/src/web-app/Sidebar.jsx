@@ -4,12 +4,14 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 08-10-2026
+\date 09-10-2026
 \brief
 Left sidebar shown on every dashboard screen: a "New model" button that
 starts the capture flow, workspace shortcuts (Media Library, Photo Editor,
 Scene Builder, YouTube Extractor), "Your work" shortcuts that open the
 Library on its 3D Models or Photo Library sub-tab, and a status footer.
+On phones it becomes a slide-in drawer: isOpen shows it, and every item
+calls onClose so the drawer shuts after a choice is made.
 **************************************************************************/
 
 import Icon from './Icons.jsx';
@@ -27,9 +29,10 @@ const WORK_ITEMS = [
     { id: 'source', label: 'Source photos', icon: 'image', librarySubTab: 'photos' },
 ];
 
-function Sidebar({ activeTab, onNavigate, onOpenLibrary, onNewModel, onYoutube }) {
+function Sidebar({ activeTab, onNavigate, onOpenLibrary, onNewModel, onYoutube, isOpen, onClose }) {
     function handleWorkspaceClick(itemId) {
         playSound('click');
+        onClose();
         if (itemId === 'youtube') {
             onYoutube();
         } else {
@@ -38,11 +41,12 @@ function Sidebar({ activeTab, onNavigate, onOpenLibrary, onNewModel, onYoutube }
     }
 
     return (
-        <aside className="genesis-sidebar">
+        <aside className={isOpen ? 'genesis-sidebar is-open' : 'genesis-sidebar'}>
             <button
                 className="forma-btn forma-btn-primary genesis-new-model"
                 onClick={() => {
                     playSound('click');
+                    onClose();
                     onNewModel();
                 }}
             >
@@ -67,6 +71,7 @@ function Sidebar({ activeTab, onNavigate, onOpenLibrary, onNewModel, onYoutube }
                     className="genesis-side-item"
                     onClick={() => {
                         playSound('click');
+                        onClose();
                         onOpenLibrary(item.librarySubTab);
                     }}
                 >
