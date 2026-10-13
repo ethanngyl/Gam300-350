@@ -22,6 +22,7 @@ export default defineConfig({
     proxy: {
       '/upload': 'http://localhost:5005',
       '/jobs': 'http://localhost:5005',
+      '/auth': 'http://localhost:5005',
     },
   },
 })
