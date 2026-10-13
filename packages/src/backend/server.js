@@ -47,6 +47,7 @@ import express from 'express'
 import crypto from 'node:crypto'
 import { config } from './config.js'
 import { saveJob } from './status.js'
+import { getHardwareInfo } from './metrics.js'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -615,4 +616,7 @@ app.listen(config.port, () =>
   console.log(`[backend] COLMAP: ${config.colmapBin}`)
   console.log(`[backend] Brush:  ${config.brushBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
+  // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
+  getHardwareInfo().then((hw) =>
+    console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))
 })
