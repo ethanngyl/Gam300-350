@@ -55,7 +55,9 @@ import sys
 import tempfile
 from urllib.parse import parse_qs, urlparse
 
+# YouTube video IDs are always exactly 11 URL-safe base64 characters.
 YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+# Hostnames accepted as YouTube (youtu.be short links are handled separately).
 YT_HOSTS = {
     "youtube.com",
     "www.youtube.com",
@@ -64,7 +66,9 @@ YT_HOSTS = {
     "youtube-nocookie.com",
     "www.youtube-nocookie.com",
 }
+# Terminal colour codes that yt-dlp embeds in its error messages.
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+# Files this script writes (0000.jpg, 0001.jpg, ...), used by --clean.
 FRAME_NAME_RE = re.compile(r"^\d{4,}\.jpg$")
 
 
@@ -80,6 +84,7 @@ def fail(message: str) -> None:
 
 
 def progress(stage: str, fraction: float) -> None:
+    """Emit a "PROGRESS <stage> <0..1>" line for the server, clamped to [0, 1]."""
     eprint(f"PROGRESS {stage} {max(0.0, min(1.0, fraction)):.3f}")
 
 
@@ -94,9 +99,11 @@ def canonical_youtube_url(url: str) -> str | None:
         u = urlparse(url.strip())
     except ValueError:
         return None
+    # Reject odd schemes and "user:pass@host" tricks that could disguise the host.
     if u.scheme not in ("http", "https") or u.username or u.password:
         return None
     try:
+        # Accessing .port raises ValueError for non-numeric / out-of-range ports.
         if u.port not in (None, 80, 443):
             return None
     except ValueError:
@@ -104,11 +111,14 @@ def canonical_youtube_url(url: str) -> str | None:
     host = (u.hostname or "").lower()
     video_id = None
     if host == "youtu.be":
+        # Short link: https://youtu.be/<id>
         video_id = u.path.lstrip("/").split("/")[0]
     elif host in YT_HOSTS:
         if u.path == "/watch":
+            # Standard link: https://www.youtube.com/watch?v=<id>
             video_id = (parse_qs(u.query).get("v") or [None])[0]
         else:
+            # Path-style links: /shorts/<id>, /embed/<id>, /live/<id>, /v/<id>
             m = re.match(r"^/(?:shorts|embed|live|v)/([^/]+)", u.path)
             video_id = m.group(1) if m else None
     if video_id and YT_ID_RE.match(video_id):
@@ -157,6 +167,7 @@ class _YtdlLogger:
 
 
 def _clean_ytdl_error(err: Exception) -> str:
+    """Strip colour codes and yt-dlp prefixes so the error reads cleanly in the UI."""
     msg = ANSI_RE.sub("", str(err)).strip()
     msg = re.sub(r"^ERROR:\s*", "", msg)
     # "[youtube] <id>: Video unavailable" -> "Video unavailable"
@@ -173,6 +184,9 @@ def video_format(max_height: int) -> str:
     Brush downscale anyway, and 4K just makes the download and decode slower.
     """
     h = f"[height<={max_height}]" if max_height > 0 else ""
+    # yt-dlp tries each "/"-separated option in order and uses the first one
+    # that exists: H.264 -> VP9 -> any non-AV1 video-only -> any non-AV1 combined
+    # stream, then the same two without the height cap as a last resort.
     return "/".join([
         f"bv*[vcodec^=avc1]{h}",
         f"bv*[vcodec~='^vp0?9']{h}",
@@ -198,9 +212,12 @@ def download_video(
     """
     import yt_dlp
 
+    # Held in a list so the nested hook can update it (a closure can't rebind
+    # a plain int without `nonlocal`).
     last_pct = [-1]
 
     def hook(d: dict) -> None:
+        """yt-dlp progress callback; reports in 5% steps to avoid flooding stderr."""
         if d.get("status") != "downloading":
             return
         total = d.get("total_bytes") or d.get("total_bytes_estimate")
@@ -229,6 +246,7 @@ def download_video(
 
     eprint(f"Fetching video info: {url}")
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        # Step 1: fetch metadata only (download=False) so we can validate first.
         info = ydl.extract_info(url, download=False)
 
         if not isinstance(info, dict) or info.get("_type") in ("playlist", "multi_video"):
@@ -248,8 +266,11 @@ def download_video(
         title = info.get("title", "video")
         eprint(f'Downloading "{title}" ({duration or "?"} s)')
         progress("download", 0)
+        # Step 2: download using the metadata we already have (no second lookup).
         info = ydl.process_ie_result(info, download=True)
 
+    # Find the downloaded file. yt-dlp normally reports its path; if not, fall
+    # back to the largest "source.*" file in the temp directory.
     path = None
     downloads = info.get("requested_downloads") or []
     if downloads:
@@ -279,6 +300,9 @@ def _analysis_images(frame):
     """Downscaled grayscale copies for scoring (fast, resolution-independent)."""
     import cv2
 
+    # `gray` (max 640 px wide) is for the sharpness score, so scores are
+    # comparable regardless of source resolution. `thumb` (64 px wide) is a
+    # tiny copy for cheap duplicate detection.
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape[:2]
     scale = 640 / w if w > 640 else 1.0
@@ -319,6 +343,7 @@ def extract_frames(
 
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    # Some containers don't report a frame count; estimate it from the duration.
     if total <= 0 and duration and src_fps > 0:
         total = int(duration * src_fps)
 
@@ -356,15 +381,16 @@ def extract_frames(
     encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
 
     kept: list[tuple[str, float]] = []  # (path, sharpness) in write order
-    last_thumb = None
+    last_thumb = None  # thumbnail of the last written frame, for duplicate checks
     duplicates = 0
-    frame_idx = 0
-    next_slot = 0.0
+    frame_idx = 0  # number of frames decoded so far (index of the next frame)
+    next_slot = 0.0  # fractional frame index where the next sampling slot starts
     best = None  # (sharpness, frame, thumb) for the current slot
     last_reported = -1.0
     decoded_any = False
 
     def emit(candidate) -> None:
+        """Write the slot's chosen frame, unless it's a near-copy of the last one."""
         nonlocal last_thumb, duplicates
         score, frame, thumb = candidate
         if use_filter and last_thumb is not None and thumb.shape == last_thumb.shape:
@@ -381,6 +407,11 @@ def extract_frames(
         if len(kept) % 10 == 0 or len(kept) == 1:
             eprint(f"  wrote {len(kept)} frame(s)...")
 
+    # Main loop. The video is split into slots `stride` frames apart; each slot
+    # inspects `window` consecutive frames from its start and emits the sharpest.
+    #
+    #   frame:  0 1 2 3 4 5 6 7 8 9 ...      (stride=5, window=2)
+    #   slot:   [x x] . . . [x x] . . . ...  x = scored, . = skipped
     while len(kept) < max_frames:
         slot_start = int(next_slot)
         if frame_idx < slot_start:
@@ -391,6 +422,7 @@ def extract_frames(
             frame_idx += 1
             continue
 
+        # Inside a slot's window: fully decode the frame and score it.
         if not cap.grab():
             break
         ok, frame = cap.retrieve()
@@ -405,6 +437,7 @@ def extract_frames(
             if best is None or score > best[0]:
                 best = (score, frame, thumb)
 
+        # Window finished: write the winner and move on to the next slot.
         if frame_idx >= slot_start + window:
             if best is not None:
                 emit(best)
@@ -424,6 +457,10 @@ def extract_frames(
     if not decoded_any:
         fail(codec_hint)
 
+    # Blur pass: now that all scores are known, delete frames far blurrier than
+    # the median (e.g. min_sharpness=0.35 drops anything under 35% of it). This
+    # is relative, so it adapts to soft-looking and crisp videos alike. Needs a
+    # few frames for the median to mean anything.
     dropped_blurry = 0
     if use_filter and len(kept) >= 8 and min_sharpness > 0:
         scores = sorted(s for _, s in kept)
@@ -456,6 +493,7 @@ def extract_frames(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse args, validate the URL, download, extract, clean up, print summary."""
     parser = argparse.ArgumentParser(
         description="Extract frames from a YouTube video into a folder.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -547,6 +585,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Validate cheap things before importing the heavy deps or touching the network.
     url = canonical_youtube_url(args.url)
     if not url:
         fail(
@@ -557,8 +596,9 @@ def main(argv: list[str] | None = None) -> int:
         fail("--max-frames must be at least 1.")
 
     require_deps()
-    import yt_dlp
+    import yt_dlp  # needed here for yt_dlp.utils.DownloadError below
 
+    # Handle leftover frames from a previous run in the same folder.
     out_dir = os.path.abspath(args.output)
     os.makedirs(out_dir, exist_ok=True)
     existing = [f for f in os.listdir(out_dir) if FRAME_NAME_RE.match(f)]
@@ -574,6 +614,8 @@ def main(argv: list[str] | None = None) -> int:
                 "to remove them first."
             )
 
+    # The video is downloaded into a temp dir that is always removed afterwards
+    # (the `finally`), even if extraction fails or fail() exits.
     tmp_dir = tempfile.mkdtemp(prefix="ytframes_")
     try:
         try:
