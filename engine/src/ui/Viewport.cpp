@@ -175,8 +175,8 @@ void Viewport::paintGL() {
     glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glm::mat4 viewProj = m_camera.getProjection(aspect) * m_camera.getView();
-    m_renderer->Draw(viewProj, static_cast<float>(fbHeight), m_camera.getPosition());
+    m_renderer->Draw(m_camera.getView(), m_camera.getProjection(aspect),
+                     static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGuiQtBackend::NewFrame(*this, deltaTime);
@@ -255,6 +255,15 @@ void Viewport::DrawImGui(float fps) {
     if (!hasSelection) {
         ImGui::EndDisabled();
     }
+
+    //Render mode: Point Cloud vs. Gaussian splat 
+    ImGui::Separator();
+    ImGui::Text("Render Mode");
+    int mode = static_cast<int>(m_renderer->GetRenderMode());
+    ImGui::RadioButton("Point Cloud", &mode, static_cast<int>(SplatRenderer::RenderMode::PointCloud));
+    ImGui::SameLine();
+    ImGui::RadioButton("Gaussian Splat", &mode, static_cast<int>(SplatRenderer::RenderMode::GaussianSplat));
+    m_renderer->SetRenderMode(static_cast<SplatRenderer::RenderMode>(mode));
 
     ImGui::Separator();
     ImGui::Text("Loaded Splats (%zu)", m_renderer->ModelCount());

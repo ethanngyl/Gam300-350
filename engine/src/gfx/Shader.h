@@ -1,8 +1,9 @@
 /******************************************************************************
  * File:        Shader.h
  * Project:     Genesis
- * Author(s):	Ethan Ng Yong Le   (Primary, 100%)
- *
+ * Author(s):	Ethan Ng Yong Le        (Primary, 90%) - Created base class and functions
+ *              Clement Ang Yang Ying   (Secondary, 10%) - Added additional functions and modified existing functions
+ * 
  * Description:
  * This file contains the declaration for the class Shader
  * It handles the setting values for the shader
@@ -19,6 +20,8 @@
 class Shader {
 public:
     Shader(const char* vertexSrc, const char* fragmentSrc);
+    //With extra geometry stage (pass nullptr to skip it)
+    Shader(const char* vertexSrc, const char* geometrySrc, const char* fragmentSrc);
     ~Shader();
 
     Shader(const Shader&) = delete;
@@ -29,6 +32,7 @@ public:
     void setMat4(const std::string& name, const glm::mat4& value) const;
     void setMat4Array(const std::string& name, const std::vector<glm::mat4>& values) const;
     void setFloat(const std::string& name, float value) const;
+    void setVec2(const std::string& name, const glm::vec2& value) const;
     void setVec3(const std::string& name, const glm::vec3& value) const;
 
     unsigned int id() const { return m_id; }
