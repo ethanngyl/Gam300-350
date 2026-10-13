@@ -39,12 +39,18 @@ unsigned int compileStage(unsigned int type, const char* src) {
 
 } // namespace
 
-Shader::Shader(const char* vertexSrc, const char* fragmentSrc) {
+Shader::Shader(const char* vertexSrc, const char* fragmentSrc)
+    : Shader(vertexSrc, nullptr, fragmentSrc) {
+}
+
+Shader::Shader(const char* vertexSrc, const char* geometrySrc, const char* fragmentSrc) {
     unsigned int vs = compileStage(GL_VERTEX_SHADER, vertexSrc);
+    unsigned int gs = geometrySrc ? compileStage(GL_GEOMETRY_SHADER, geometrySrc) : 0;
     unsigned int fs = compileStage(GL_FRAGMENT_SHADER, fragmentSrc);
 
     m_id = glCreateProgram();
     glAttachShader(m_id, vs);
+    if (gs) glAttachShader(m_id, gs);
     glAttachShader(m_id, fs);
     glLinkProgram(m_id);
 
@@ -59,6 +65,7 @@ Shader::Shader(const char* vertexSrc, const char* fragmentSrc) {
     }
 
     glDeleteShader(vs);
+    if (gs) glDeleteShader(gs);
     glDeleteShader(fs);
 }
 
@@ -85,6 +92,10 @@ void Shader::setMat4Array(const std::string& name, const std::vector<glm::mat4>&
 
 void Shader::setFloat(const std::string& name, float value) const {
     glUniform1f(glGetUniformLocation(m_id, name.c_str()), value);
+}
+
+void Shader::setVec2(const std::string& name, const glm::vec2& value) const {
+    glUniform2fv(glGetUniformLocation(m_id, name.c_str()), 1, glm::value_ptr(value));
 }
 
 void Shader::setVec3(const std::string& name, const glm::vec3& value) const {
