@@ -6,21 +6,17 @@
 \par Software Engineering Project 5
 \date 08-10-2026
 \brief
-Sign in / create account screen shown before the dashboard. This is a
-front-end placeholder: it validates the form shape (email format, 6+
-character password, name when creating an account) and hands a user
-object to the parent, which stores it in this browser only. No password is
-checked against a server; swap handleSubmit for a backend call when an
-auth endpoint exists.
+Sign in / create account screen shown before the dashboard. Validates the
+form shape (email format, 6+ character password, name when creating an
+account), then posts it to the backend: /auth/signup creates the account
+in the SQLite database (password stored only as a hash), /auth/login checks
+the password. On success the user object the server returns is handed to
+the parent, which keeps it as this browser's session.
 **************************************************************************/
 
 import { useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
-
-function capitalize(text) {
-    return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
 function LoginScreen({ onLogin }) {
     const [mode, setMode] = useState('signin');
@@ -28,6 +24,7 @@ function LoginScreen({ onLogin }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [errorMessage, setErrorMessage] = useState(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const isSignUp = mode === 'signup';
 
@@ -37,7 +34,7 @@ function LoginScreen({ onLogin }) {
         setErrorMessage(null);
     }
 
-    function handleSubmit(event) {
+    async function handleSubmit(event) {
         event.preventDefault();
         const trimmedEmail = email.trim();
 
@@ -55,11 +52,32 @@ function LoginScreen({ onLogin }) {
         }
 
         playSound('click');
-        onLogin({
-            name: displayName.trim() || capitalize(trimmedEmail.split('@')[0]),
-            email: trimmedEmail,
-            memberSince: new Date().toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
-        });
+        setErrorMessage(null);
+        setIsSubmitting(true);
+
+        try {
+            const body = isSignUp
+                ? { name: displayName.trim(), email: trimmedEmail, password }
+                : { email: trimmedEmail, password };
+            const res = await fetch(isSignUp ? '/auth/signup' : '/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            // The backend always answers JSON; fall back to {} if a proxy
+            // or crash returned something else.
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                setErrorMessage(data.error || 'Something went wrong. Please try again.');
+                return;
+            }
+            onLogin(data);
+        } catch {
+            setErrorMessage('Could not reach the server. Is the backend running?');
+        } finally {
+            setIsSubmitting(false);
+        }
     }
 
     return (
@@ -107,17 +125,17 @@ function LoginScreen({ onLogin }) {
 
                 {errorMessage && <p className="login-error" role="alert">{errorMessage}</p>}
 
-                <button type="submit" className="forma-btn forma-btn-primary login-submit">
-                    {isSignUp ? 'Create account' : 'Sign in'}
+                <button
+                    type="submit"
+                    className="forma-btn forma-btn-primary login-submit"
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}
                 </button>
 
                 <button type="button" className="login-switch" onClick={switchMode}>
                     {isSignUp ? 'Already have an account? Sign in' : 'New here? Create an account'}
                 </button>
-
-                <p className="login-note">
-                    Demo sign-in: accounts are kept in this browser only and passwords are not verified.
-                </p>
             </form>
         </div>
     );
