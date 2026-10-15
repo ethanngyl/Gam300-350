@@ -7,7 +7,8 @@
 \date 08-10-2026
 \brief
 Account page for the signed-in user: profile card (avatar, name, email,
-member since), a sign out button, and the workspace usage stats that used
+member since, an Administrator badge for admins), a sign out button, and
+the workspace usage stats that used
 to sit on the Home screen (still static placeholder numbers).
 **************************************************************************/
 
@@ -33,6 +34,9 @@ function AccountScreen({ user, onSignOut }) {
                     <div className="account-name">{user.name}</div>
                     <div className="account-email">{user.email}</div>
                     <div className="account-since">Member since {user.memberSince}</div>
+                    {user.role === 'admin' && (
+                        <span className="forma-badge forma-badge-ready">Administrator</span>
+                    )}
                 </div>
                 <button
                     className="forma-btn"

@@ -6,8 +6,12 @@
 \par Software Engineering Project 5
 \date 08-10-2026
 \brief
-Top-level app shell. Shows the login screen until a user is signed in
-(session kept in localStorage). Once signed in it renders the GENESIS
+Top-level app shell. Shows the login screen until a user is signed in.
+The real session is an HttpOnly cookie set by the backend; on load the app
+asks GET /auth/me whether it is still valid (and for the user's current
+role), and sign out calls POST /auth/logout. localStorage only caches the
+profile so the page can render if the backend is unreachable. Once signed
+in it renders the GENESIS
 dashboard (top nav + sidebar + Home / Library / Photo Editor / Scene
 Builder / Account) and the full-page flows for capturing photos, polling
 reconstruction progress, viewing a finished splat result, the YouTube
@@ -15,7 +19,7 @@ ingest screen and the image gallery. Owns the active job id and uploads a
 finished photo batch to the backend to kick off reconstruction.
 **************************************************************************/
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
 import SplatViewer from './SplatViewer.jsx';
@@ -46,8 +50,49 @@ function loadSavedUser() {
     }
 }
 
+// Caches the signed-in user's profile, or clears it when user is null.
+function saveUser(user) {
+    try {
+        if (user) window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
+        else window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+        // Storage unavailable: the profile just isn't cached.
+    }
+}
+
 function App() {
     const [currentUser, setCurrentUser] = useState(loadSavedUser);
+    // True until GET /auth/me answers, so no screen fetches with a dead session.
+    const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function checkSession() {
+            try {
+                const res = await fetch('/auth/me');
+                if (cancelled) return;
+                if (res.ok) {
+                    // Fresh copy from the server, so role changes show up.
+                    const user = await res.json();
+                    if (cancelled) return;
+                    saveUser(user);
+                    setCurrentUser(user);
+                } else if (res.status === 401) {
+                    // No valid session cookie: the cached profile is stale.
+                    saveUser(null);
+                    setCurrentUser(null);
+                }
+            } catch {
+                // Backend unreachable: keep the cached profile so the page renders.
+            } finally {
+                if (!cancelled) setIsCheckingSession(false);
+            }
+        }
+
+        checkSession();
+        return () => { cancelled = true; };
+    }, []);
 
     // Dashboard tab: home | library | editor | scene | account
     const [activeTab, setActiveTab] = useState('home');
@@ -62,21 +107,16 @@ function App() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     function handleLogin(user) {
-        try {
-            window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
-        } catch {
-            // Storage unavailable: the session just lasts until the page reloads.
-        }
+        saveUser(user);
         setCurrentUser(user);
         setActiveTab('home');
     }
 
     function handleSignOut() {
-        try {
-            window.localStorage.removeItem(SESSION_STORAGE_KEY);
-        } catch {
-            // Nothing saved to remove.
-        }
+        // Ends the session on the server and clears the cookie. Not awaited:
+        // a backend that is down must not stop the user signing out here.
+        fetch('/auth/logout', { method: 'POST' }).catch(() => { });
+        saveUser(null);
         setCurrentUser(null);
         setScreen(null);
         setActiveTab('home');
@@ -121,6 +161,10 @@ function App() {
     function openModel(modelJobId) {
         setJobId(modelJobId);
         setScreen('result');
+    }
+
+    if (isCheckingSession) {
+        return <div className="genesis-page" />;
     }
 
     if (!currentUser) {

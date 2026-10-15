@@ -18,8 +18,18 @@ scan.js, pipeline.js", this file focuses on startup, shutdown and HTTP
 matters.
 - getJod(id)
 Returns the job from the in-memory jobs map. If it isn't there, it looks for 
-the job's folder on disk (scanJob) and adopts it with restoreJob. This covers 
+the job's folder on disk (scanJob) and adopts it with restoreJob. This covers
 folders that appeared after startup. Returns null if the job doesn't exist.
+- readCookie(req, name) / startSession(res, userId)
+Read a cookie from the request / log a user in by setting the HttpOnly
+session cookie (the session itself is stored in db.js).
+- loadUser / requireUser (middleware)
+loadUser sets req.user from the session cookie on every request;
+requireUser answers 401 when nobody is logged in.
+- canAccessJob(user, jobId) / requireJobAccess (middleware)
+Role check: admins can access every job, users only jobs they created.
+requireJobAccess guards the /jobs/:id routes and answers 404 for someone
+else's job.
 - assigneJobId(req, res, next)
 Runs before multer. Generates a UUID job ID, resets a file counter on req, 
 and creates jobs/<id>/images/, so every file in the request goes into the same 
@@ -51,7 +61,13 @@ import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
-import { createUser, findUserByEmail, verifyPassword } from './db.js'
+import
+{
+  SESSION_TTL_MS, createSession, createUser, deleteSession,
+  findSessionUser, findUserByEmail, getJobOwnerId,
+  listOwnedJobIds, setJobOwner, verifyPassword,
+}
+from './db.js'
 import
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
@@ -98,6 +114,9 @@ app.use(express.json())
 // Serve the built React frontend (run `npm run build` to produce web-app/dist).
 app.use(express.static(path.join(__dirname, '../web-app/dist')))
 
+// Work out who is calling (from the session cookie) before any route runs.
+app.use(loadUser)
+
 // ----- Start of Functions --------------------------------------------------- //
 
 /************************************************************************/
@@ -122,6 +141,138 @@ async function getJob(id)
   const record = await scanJob(id)
 
   return record ? (jobs.get(id) ?? restoreJob(record)) : null
+}
+
+// --- Accounts and access ----------------------------------------------------
+const SESSION_COOKIE = 'genesis_session'
+
+/************************************************************************/
+/*!
+  \brief
+    Reads one cookie from the request's Cookie header (Express doesn't
+    parse cookies without the cookie-parser package).
+  \param req
+    The request from the user
+  \param name
+  string
+    The cookie's name
+  \return
+    The cookie's value, or null if it isn't set
+*/
+/************************************************************************/
+function readCookie(req, name)
+{
+  for (const part of (req.headers.cookie ?? '').split(';'))
+  {
+    const eq = part.indexOf('=')
+    if (eq !== -1 && part.slice(0, eq).trim() === name)
+    {
+      try
+      {
+        return decodeURIComponent(part.slice(eq + 1).trim())
+      }
+      catch
+      {
+        return null
+      }
+    }
+  }
+  return null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Starts a session for a user and sends it to the browser as an
+    HttpOnly cookie (page scripts can't read it). The browser then sends
+    it with every request to this server, including <img> loads.
+  \param res
+    The response from the backend
+  \param userId
+  number
+    The user's id
+*/
+/************************************************************************/
+function startSession(res, userId)
+{
+  res.cookie(SESSION_COOKIE, createSession(userId), {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_TTL_MS,
+  })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware: sets req.user to the logged-in user ({ id, email, name,
+    role, created_at }) or null. Never rejects; requireUser does that.
+  \param req
+    The request from the user
+  \param _res
+    The response from the backend
+  \param next
+    moving on
+*/
+/************************************************************************/
+function loadUser(req, _res, next)
+{
+  req.user = findSessionUser(readCookie(req, SESSION_COOKIE))
+  next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware: rejects the request unless someone is logged in.
+  \return
+    401 if not logged in
+*/
+/************************************************************************/
+function requireUser(req, res, next)
+{
+  if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+  next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether a user may see / use a job: admins can access every job,
+    other users only the jobs they created. A job with no recorded owner
+    (made before accounts existed) is admin-only.
+  \param user
+    req.user
+  \param jobId
+  string
+    The job's id
+  \return
+    bool
+*/
+/************************************************************************/
+function canAccessJob(user, jobId)
+{
+  if (!user) return false
+  if (user.role === 'admin') return true
+  return getJobOwnerId(jobId) === user.id
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware for /jobs/:id routes: login required, and the job must be
+    accessible to the caller. Someone else's job answers 404, not 403, so
+    it can't be used to find out which job ids exist.
+  \return
+    401 if not logged in, 404 if the job isn't theirs
+*/
+/************************************************************************/
+function requireJobAccess(req, res, next)
+{
+  if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+  if (!canAccessJob(req.user, req.params.id)) return res.status(404).json({ error: 'job not found' })
+  next()
 }
 
 // --- Upload handling --------------------------------------------------------
@@ -278,12 +429,13 @@ function shutdown(reason, exitCode = 0)
   \brief
     Create a reconstruction job from uploaded photos. Returns a job id 
     immediately and runs COLMAP + Brush in the background -- the frontend 
-    polls for status.
-  \return 
-    400 if less than 8 photos given, 202 if successful
+    polls for status. The job is owned by the logged-in user. requireUser
+    runs before assignJobId so a logged-out request never creates a folder.
+  \return
+    401 if not logged in, 400 if less than 8 photos given, 202 if successful
 */
 /************************************************************************/
-app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => 
+app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) =>
 {
   const files = req.files || []
   if (files.length < 8)
@@ -295,6 +447,7 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
       error: `Need at least 8 photos (got ${files.length}). More overlapping photos = better reconstruction.`,
     })
   }
+  setJobOwner(req.jobId, req.user.id)
   const job = makeJob(req.jobId)
   job.imageCount = files.length
   job.source = 'upload'
@@ -309,15 +462,21 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
     List every job folder that has images, newest first. The folders on 
     disk are scanned on each call (see scan.js), so photos and results from 
     before a restart -- or dropped in by hand -- show up. A job that is 
-    live in memory keeps its live status: the disk can't tell "running" 
-    from "interrupted".
-  \return 
-    A reecord of every job's details 
+    live in memory keeps its live status: the disk can't tell "running"
+    from "interrupted". Admins get every job; other users only the jobs
+    they created.
+  \return
+    401 if not logged in, else a record of every visible job's details
 */
 /************************************************************************/
-app.get('/jobs', async (_req, res) => 
+app.get('/jobs', requireUser, async (req, res) =>
 {
-  const records = await scanJobs(config.jobsDir)
+  let records = await scanJobs(config.jobsDir)
+  if (req.user.role !== 'admin')
+  {
+    const owned = listOwnedJobIds(req.user.id)
+    records = records.filter((record) => owned.has(record.id))
+  }
   res.json(
     records.map((record) =>
     {
@@ -344,13 +503,14 @@ app.get('/jobs', async (_req, res) =>
 /*!
   \brief
     Serve a single uploaded image. id/name are whitelisted to plain filename
-    characters so a request can't use `..` or slashes to escape the jobs 
-    folder.
-  \return 
-    404 if image doesn't exist or else the image itself
+    characters so a request can't use `..` or slashes to escape the jobs
+    folder. Only the job's owner or an admin can load it.
+  \return
+    401 if not logged in, 404 if image doesn't exist or isn't theirs, else
+    the image itself
 */
 /************************************************************************/
-app.get('/jobs/:id/images/:name', (req, res) => 
+app.get('/jobs/:id/images/:name', requireJobAccess, (req, res) =>
 {
   const { id, name } = req.params
   if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
@@ -368,14 +528,14 @@ app.get('/jobs/:id/images/:name', (req, res) =>
   \brief
     Create a reconstruction job from a YouTube link. Frames are extracted 
     server side (tools/youtube_frames.py) into the job's images/ folder, 
-    then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?: 
-    number, maxFrames?: number }
-  \return 
-    400 if url doesn't work, else 202 and starts a job and runs youtube
-    pipeline
+    then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?:
+    number, maxFrames?: number }. The job is owned by the logged-in user.
+  \return
+    401 if not logged in, 400 if url doesn't work, else 202 and starts a
+    job and runs youtube pipeline
 */
 /************************************************************************/
-app.post('/jobs/from-youtube', (req, res) => 
+app.post('/jobs/from-youtube', requireUser, (req, res) =>
 {
   const { url, fps, maxFrames } = req.body || {}
   // Only single YouTube videos; the canonical form drops any playlist params.
@@ -389,6 +549,7 @@ app.post('/jobs/from-youtube', (req, res) =>
 
   const jobId = crypto.randomUUID()
   fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
+  setJobOwner(jobId, req.user.id)
   const job = makeJob(jobId)
   job.source = 'youtube'
   saveJob(job)
@@ -410,13 +571,14 @@ app.post('/jobs/from-youtube', (req, res) =>
 /************************************************************************/
 /*!
   \brief
-    Poll a job's status (bounded log tail, not the full log).
-  \return 
-    404 if job not found
+    Poll a job's status (bounded log tail, not the full log). Owner or
+    admin only.
+  \return
+    401 if not logged in, 404 if job not found or isn't theirs
     else status, phase, progress, error and the last 40 log lines
 */
 /************************************************************************/
-app.get('/jobs/:id', async (req, res) => 
+app.get('/jobs/:id', requireJobAccess, async (req, res) =>
 {
   const job = await getJob(req.params.id)
   if (!job) 
@@ -440,13 +602,15 @@ app.get('/jobs/:id', async (req, res) =>
   \brief
     Cancel a running job: kills its COLMAP / Brush / python process so the 
     GPU is freed immediately. Idempotent; a finished job answers 409.
-  \return 
-    404 if job not found
+    Owner or admin only.
+  \return
+    401 if not logged in
+    404 if job not found or isn't theirs
     409 if job is finished
     kills processes and frees GPU
 */
 /************************************************************************/
-app.delete('/jobs/:id', async (req, res) => 
+app.delete('/jobs/:id', requireJobAccess, async (req, res) =>
 {
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
@@ -461,12 +625,12 @@ app.delete('/jobs/:id', async (req, res) =>
 /************************************************************************/
 /*!
   \brief
-    Download / stream the finished splat .ply.
-  \return 
-    404 if result is not ready
+    Download / stream the finished splat .ply. Owner or admin only.
+  \return
+    401 if not logged in, 404 if result is not ready or isn't theirs
 */
 /************************************************************************/
-app.get('/jobs/:id/result.ply', async (req, res) => 
+app.get('/jobs/:id/result.ply', requireJobAccess, async (req, res) =>
 {
   const job = await getJob(req.params.id)
   if (!job || job.status !== 'done' || !job.resultPath) 
@@ -485,9 +649,9 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/
     Shapes a users row into what the frontend keeps as the session. Never
     includes password_hash.
   \param user
-    { email, name, createdAt } or a users row
+    { email, name, role, createdAt } or a users row
   \return
-    { name, email, memberSince }
+    { name, email, role, memberSince }
 */
 /************************************************************************/
 function publicUser(user)
@@ -497,6 +661,7 @@ function publicUser(user)
   return {
     name: user.name,
     email: user.email,
+    role: user.role,
     memberSince: created.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
   }
 }
@@ -504,11 +669,12 @@ function publicUser(user)
 /************************************************************************/
 /*!
   \brief
-    Create an account. Body: { name, email, password }. The password is
-    stored only as a salted scrypt hash (see db.js).
+    Create an account and log it in. Body: { name, email, password }. The
+    password is stored only as a salted scrypt hash (see db.js). New
+    accounts are always role 'user'.
   \return
-    400 if input is invalid, 409 if the email is taken, else 201 and the
-    user
+    400 if input is invalid, 409 if the email is taken, else 201, the
+    user, and a session cookie
 */
 /************************************************************************/
 app.post('/auth/signup', async (req, res, next) =>
@@ -527,6 +693,7 @@ app.post('/auth/signup', async (req, res, next) =>
   try
   {
     const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
+    startSession(res, user.id)
     res.status(201).json(publicUser(user))
   }
   catch (err)
@@ -543,7 +710,8 @@ app.post('/auth/signup', async (req, res, next) =>
     Sign in. Body: { email, password }. Unknown email and wrong password
     get the same answer so the endpoint can't be used to probe accounts.
   \return
-    401 if the credentials don't match, else 200 and the user
+    401 if the credentials don't match, else 200, the user, and a session
+    cookie
 */
 /************************************************************************/
 app.post('/auth/login', async (req, res, next) =>
@@ -557,12 +725,43 @@ app.post('/auth/login', async (req, res, next) =>
     const user = findUserByEmail(email.trim())
     if (!user || !(await verifyPassword(password, user.password_hash)))
       return res.status(401).json({ error: 'Incorrect email or password.' })
+    startSession(res, user.id)
     res.json(publicUser(user))
   }
   catch (err)
   {
     next(err)
   }
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Who is logged in, according to the session cookie. Lets the frontend
+    check a saved session is still valid (and pick up role changes).
+  \return
+    401 if not logged in, else the user
+*/
+/************************************************************************/
+app.get('/auth/me', requireUser, (req, res) =>
+{
+  res.json(publicUser(req.user))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Log out: deletes the session and clears the cookie. Safe to call when
+    already logged out.
+  \return
+    204
+*/
+/************************************************************************/
+app.post('/auth/logout', (req, res) =>
+{
+  deleteSession(readCookie(req, SESSION_COOKIE))
+  res.clearCookie(SESSION_COOKIE, { path: '/' })
+  res.status(204).end()
 })
 
 // /wiki with no page → show Home

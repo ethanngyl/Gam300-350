@@ -8,8 +8,10 @@
 \par Software Engineering Project 5
 \date 08-10-2026
 \brief
-React page that shows every photo stored under backend/jobs/<jobId>/images,
-grouped by job. It fetches the job list once when it opens (load() is
+React page that shows the photos under backend/jobs/<jobId>/images that the
+signed-in user may see, grouped by job: every job for admins, only the
+user's own jobs otherwise (the backend filters GET /jobs by the session
+cookie). It fetches the job list once when it opens (load() is
 unchanged). The "full" variant shows a section per job with a download-on-
 click thumbnail grid. The "compact" variant, used inside the Library tab's
 Photo Library, shows one preview card per job (with search and sort);
@@ -35,9 +37,9 @@ const PREVIEW_COUNT = 4;
 /************************************************************************/
 /*!
   \brief
-    Shows every photo stored under backend/jobs/<jobId>/images, grouped by
-    job. Data comes from GET /jobs (list) and GET /jobs/:id/images/:name
-    (each image).
+    Shows the signed-in user's photos (every job's photos for admins),
+    grouped by job. Data comes from GET /jobs (list, already filtered by
+    role on the server) and GET /jobs/:id/images/:name (each image).
   \param onBack
     function, optional
     Called when the Back button is clicked. No Back button is rendered
