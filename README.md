@@ -47,7 +47,7 @@ Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in 
 - Stop: `docker compose down` (uploaded jobs and results are kept in a Docker volume)
 - NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
 - Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker-compose.yml for quick tests
-- The engine (`engine/`) is not included, build it natively as below
+- The engine's desktop editor is not included (build it natively as below), but its renderer is: the image compiles it to WebAssembly for the web app's viewer
 
 ## How to Run Engine
 - Go to the engine folder
@@ -57,6 +57,15 @@ Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in 
 - Once you are in the solution, right click on codefine and set it as the start up project
 - Start the debugger
 - .ply files can be added into the engine/assets folder
+
+## Engine renderer in the web app
+The web app's 3D viewer can render with the engine's own splat renderer (`engine/src/splat`, `engine/src/gfx`) compiled to WebAssembly, instead of the Three.js viewer.
+- The start scripts (`start.bat`, `start.sh`, `start-linux.sh`) build it automatically. The first run downloads the Emscripten SDK into `engine/Library/emsdk` (a few hundred MB); later runs only rebuild what changed. Output goes to `packages/src/web-app/public/engine/`
+- To build it on its own: double click `engine/build-web.bat` (Windows), or run `./engine/build-web.sh` (macOS / Linux, needs `git`, `python3` and `cmake`: `brew install cmake` / `sudo apt install cmake git python3`)
+- Re-run it after changing anything in `engine/src/splat`, `engine/src/gfx` or `engine/web`. Docker builds it automatically
+- In the viewer, switch between **Engine renderer** and **Three.js renderer** (bottom left), and between Gaussian / Point cloud (bottom right). If the engine hasn't been built, or the browser has no WebGL2, the Three.js viewer is used
+- Controls: drag to orbit, right-drag or Shift-drag to pan, scroll or pinch to zoom, double-click to reset the view
+- Web-specific code: `engine/web/` (entry point + CMake), and the `CODEFINE_GLES` blocks in `SplatRenderer.cpp` / `Shader.cpp` (WebGL2 has no geometry shaders, so Gaussian mode draws instanced quads there)
 
 ## How to use Engine
 The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), and **Assets / Console / Audio** tabs (bottom). Panels can be dragged, tabbed, floated or hidden from the Window menu; the layout is remembered between runs (Window > Reset Layout restores the default).

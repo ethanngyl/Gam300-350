@@ -14,7 +14,11 @@
  ******************************************************************************/
 #include "SplatRenderer.h"
 
+#ifdef CODEFINE_GLES
+#include <GLES3/gl3.h>
+#else
 #include <GL/glew.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -265,11 +269,135 @@ void main() {
 }
 )";
 
+#ifdef CODEFINE_GLES
+// ---------------------------------------------------------------------------
+// Gaussian splat vertex shader for WebGL2 / GLES3 (no geometry stage)
+//
+// Does the work of the vertex + geometry shaders above in one pass: each instance is one
+// splat, each of its 4 vertices is one corner of the ellipse quad. The covariance math is
+// identical to kGaussianVertexShaderSrc; keep the two in sync. Output feeds the same
+// kGaussianFragmentShaderSrc.
+// ---------------------------------------------------------------------------
+const char* kGaussianGlesVertexShaderSrc = R"(
+#version 330 core
+layout(location = 0) in vec2 aCorner;     // quad corner, (-1,-1)..(1,1)
+layout(location = 1) in uint aSplatIndex; // per instance, already sorted far -> near
+
+uniform sampler2D uSplatData; // 4 RGBA32F texels per SplatVertex, in struct field order
+uniform mat4 uView;
+uniform mat4 uProj;
+uniform vec2 uViewport; // framebuffer size in pixels
+uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
+
+out vec3 gColor;
+out float gAlpha;
+out vec2 gOffset; // position inside the ellipse, in units of sigma
+
+mat3 quatToMat3(vec4 q) {
+    float w = q.x, x = q.y, y = q.z, z = q.w;
+    return mat3(
+        1.0 - 2.0*(y*y + z*z), 2.0*(x*y + w*z),       2.0*(x*z - w*y),
+        2.0*(x*y - w*z),       1.0 - 2.0*(x*x + z*z), 2.0*(y*z + w*x),
+        2.0*(x*z + w*y),       2.0*(y*z - w*x),       1.0 - 2.0*(x*x + y*y));
+}
+
+vec4 splatTexel(int texel) {
+    int width = textureSize(uSplatData, 0).x;
+    int i = int(aSplatIndex) * 4 + texel;
+    return texelFetch(uSplatData, ivec2(i % width, i / width), 0);
+}
+
+void cull() {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0); // outside the clip volume, all 4 corners collapse
+}
+
+void main() {
+    //Unpack SplatVertex: (position, pointSize) (color, alpha) (modelID, scale) (rotation)
+    vec4 t0 = splatTexel(0);
+    vec4 t1 = splatTexel(1);
+    vec4 t2 = splatTexel(2);
+    vec4 t3 = splatTexel(3);
+    vec3 aPosition = t0.xyz;
+    vec3 aScale = t2.yzw;
+    vec4 aRotation = t3;
+
+    gColor = t1.rgb;
+    gAlpha = t1.a;
+
+    //Quad of +-3 sigma, which contains ~99% of the Gaussian's energy
+    vec2 sigmaOffset = aCorner * 3.0;
+    gOffset = sigmaOffset;
+
+    mat4 modelView = uView * uModelTransforms[int(t2.x + 0.5)];
+    vec4 t = modelView * vec4(aPosition, 1.0);
+
+    //Cull splats behind the camera
+    if (t.z > -0.01) { cull(); return; }
+
+    vec4 clip = uProj * t;
+
+    //Skip splats whose center is outside the screen
+    if (abs(clip.x) > 1.3 * clip.w || abs(clip.y) > 1.3 * clip.w) { cull(); return; }
+
+    mat3 S = mat3(aScale.x, 0.0, 0.0,
+                  0.0, aScale.y, 0.0,
+                  0.0, 0.0, aScale.z);
+    mat3 A = mat3(modelView) * quatToMat3(normalize(aRotation)) * S;
+
+    float fx = uProj[0][0] * uViewport.x * 0.5;
+    float fy = uProj[1][1] * uViewport.y * 0.5;
+
+    float limX = 1.3 / uProj[0][0];
+    float limY = 1.3 / uProj[1][1];
+    float tx = clamp(t.x / t.z, -limX, limX) * t.z;
+    float ty = clamp(t.y / t.z, -limY, limY) * t.z;
+
+    vec3 j0 = vec3(-fx / t.z, 0.0, fx * tx / (t.z * t.z));
+    vec3 j1 = vec3(0.0, -fy / t.z, fy * ty / (t.z * t.z));
+
+    vec3 b0 = j0 * A;
+    vec3 b1 = j1 * A;
+    float covA = dot(b0, b0) + 0.3;
+    float covB = dot(b0, b1);
+    float covC = dot(b1, b1) + 0.3;
+
+    float mid = 0.5 * (covA + covC);
+    float det = covA * covC - covB * covB;
+    float disc = sqrt(max(0.1, mid * mid - det));
+    float lambda1 = mid + disc;
+    float lambda2 = max(mid - disc, 0.01);
+
+    vec2 v1 = (abs(covB) < 1e-6) ? vec2(1.0, 0.0) : normalize(vec2(covB, lambda1 - covA));
+    vec2 v2 = vec2(-v1.y, v1.x);
+
+    vec2 pixelToNdc = 2.0 / uViewport;
+    vec2 axis1 = sqrt(lambda1) * v1 * pixelToNdc;
+    vec2 axis2 = sqrt(lambda2) * v2 * pixelToNdc;
+
+    //Same corner placement as the desktop geometry shader (scaled by w for clip space)
+    vec2 ndcOffset = sigmaOffset.x * axis1 + sigmaOffset.y * axis2;
+    gl_Position = vec4(clip.xy + ndcOffset * clip.w, clip.z, clip.w);
+}
+)";
+
+//The splat texture is read as raw SplatVertex structs, 4 texels (16 floats) each
+static_assert(sizeof(SplatVertex) == 16 * sizeof(float), "SplatVertex must stay 4 RGBA32F texels");
+static_assert(offsetof(SplatVertex, color) == 4 * sizeof(float), "texel 1 = color, alpha");
+static_assert(offsetof(SplatVertex, modelID) == 8 * sizeof(float), "texel 2 = modelID, scale");
+static_assert(offsetof(SplatVertex, rotation) == 12 * sizeof(float), "texel 3 = rotation");
+
+constexpr int kSplatTextureWidth = 4096; //Texels per row, a multiple of 4 so a splat never wraps
+#endif
+
 } // namespace
 
 SplatRenderer::SplatRenderer() {
     m_shader = std::make_shared<Shader>(kVertexShaderSrc, kFragmentShaderSrc);
+#ifdef CODEFINE_GLES
+    m_gaussianShader = std::make_shared<Shader>(kGaussianGlesVertexShaderSrc, kGaussianFragmentShaderSrc);
+#else
     m_gaussianShader = std::make_shared<Shader>(kGaussianVertexShaderSrc, kGaussianGeometryShaderSrc, kGaussianFragmentShaderSrc);
+#endif
 
     //Alloclate the vao/vbo buffers
     glGenVertexArrays(1, &m_vao);
@@ -316,11 +444,48 @@ SplatRenderer::SplatRenderer() {
     ///Unbinds the vao but setting it to 0
     glBindVertexArray(0);
 
+#ifdef CODEFINE_GLES
+    const float corners[8] = { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f }; //Triangle strip order
+    glGenVertexArrays(1, &m_quadVao);
+    glGenBuffers(1, &m_quadVbo);
+    glGenBuffers(1, &m_orderVbo);
+    glGenTextures(1, &m_splatTexture);
+
+    glBindVertexArray(m_quadVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_quadVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(corners), corners, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_orderVbo);
+    glEnableVertexAttribArray(1);
+    glVertexAttribIPointer(1, 1, GL_UNSIGNED_INT, sizeof(unsigned int), nullptr);
+    glVertexAttribDivisor(1, 1); //One splat index per quad
+    glBindVertexArray(0);
+
+    //Float textures are not filterable in WebGL2; texelFetch ignores filtering but the
+    //texture must still be "complete", so no mipmaps
+    glBindTexture(GL_TEXTURE_2D, m_splatTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+#endif
+
     m_totalSplatCount = 0;
 }
 
 SplatRenderer::~SplatRenderer() {
     m_models.clear(); //Removed unique ptrs
+#ifdef CODEFINE_GLES
+    //The web build can tear a viewer down and create another in the same context
+    glDeleteTextures(1, &m_splatTexture);
+    glDeleteBuffers(1, &m_orderVbo);
+    glDeleteBuffers(1, &m_quadVbo);
+    glDeleteVertexArrays(1, &m_quadVao);
+    glDeleteBuffers(1, &m_ebo);
+    glDeleteBuffers(1, &m_vbo);
+    glDeleteVertexArrays(1, &m_vao);
+#endif
 }
 
 void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats, std::string splatName) {
@@ -402,6 +567,18 @@ void SplatRenderer::DrawGaussian(const glm::mat4& view, const glm::mat4& proj,
     for (const auto& model : m_models) transforms.push_back(model->GetTransform());
     m_gaussianShader->setMat4Array("uModelTransforms", transforms);
 
+#ifdef CODEFINE_GLES
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_splatTexture);
+    m_gaussianShader->setInt("uSplatData", 0);
+
+    //Blending is order dependent, so the order is far -> near
+    SortSplatsBackToFront(view);
+
+    //One instanced ellipse quad per splat, in sorted order
+    glBindVertexArray(m_quadVao);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, static_cast<GLsizei>(m_totalSplatCount));
+#else
     glBindVertexArray(m_vao);
 
     //Blending is order dependent, so the order is far -> near
@@ -409,6 +586,7 @@ void SplatRenderer::DrawGaussian(const glm::mat4& view, const glm::mat4& proj,
 
     //Each point becomes one ellipse quad in the shader
     glDrawElements(GL_POINTS, static_cast<GLsizei>(m_totalSplatCount), GL_UNSIGNED_INT, 0);
+#endif
 
     glBindVertexArray(0);
 }
@@ -438,6 +616,33 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
 
     //Camera looks down -z, so farther = more negative z = comes first
     m_sortOrder.resize(m_totalSplatCount);
+#ifdef CODEFINE_GLES
+    //Single-threaded WebAssembly is too slow for a comparison sort of millions of splats
+    //every time the camera moves, so use a linear-time counting sort on 16-bit depth buckets.
+    //Splats closer together than 1/65536 of the scene depth may blend in either order.
+    if (m_totalSplatCount > 0) {
+        auto [minIt, maxIt] = std::minmax_element(m_sortKeys.begin(), m_sortKeys.end());
+        const float minKey = *minIt;
+        const float range = *maxIt - minKey;
+        constexpr unsigned int kBuckets = 1u << 16;
+        const float toBucket = range > 0.0f ? (kBuckets - 1) / range : 0.0f;
+
+        m_sortBucketCounts.assign(kBuckets + 1, 0u);
+        for (float key : m_sortKeys)
+            ++m_sortBucketCounts[static_cast<unsigned int>((key - minKey) * toBucket) + 1];
+        for (unsigned int b = 1; b <= kBuckets; ++b)
+            m_sortBucketCounts[b] += m_sortBucketCounts[b - 1]; //counts[b] = first slot of bucket b
+        for (size_t i = 0; i < m_totalSplatCount; ++i) {
+            unsigned int bucket = static_cast<unsigned int>((m_sortKeys[i] - minKey) * toBucket);
+            m_sortOrder[m_sortBucketCounts[bucket]++] = static_cast<unsigned int>(i);
+        }
+    }
+
+    //Per-instance splat index buffer read by the quad VAO
+    glBindBuffer(GL_ARRAY_BUFFER, m_orderVbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0,
+        static_cast<GLsizeiptr>(m_sortOrder.size() * sizeof(unsigned int)), m_sortOrder.data());
+#else
     std::iota(m_sortOrder.begin(), m_sortOrder.end(), 0u);
     std::sort(m_sortOrder.begin(), m_sortOrder.end(),
         [this](unsigned int a, unsigned int b) { return m_sortKeys[a] < m_sortKeys[b]; });
@@ -446,6 +651,7 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
         static_cast<GLsizeiptr>(m_sortOrder.size() * sizeof(unsigned int)), m_sortOrder.data());
+#endif
 
     m_lastSortView = view;
     m_lastSortTransforms = std::move(transforms);
@@ -614,6 +820,45 @@ void SplatRenderer::RebuildCombinedBuffer()
         nullptr, GL_DYNAMIC_DRAW); // reserve space; sort fills it in every frame
     glBindVertexArray(0);
 
+#ifdef CODEFINE_GLES
+    glBindBuffer(GL_ARRAY_BUFFER, m_orderVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(m_combined.size() * sizeof(unsigned int)),
+        nullptr, GL_DYNAMIC_DRAW); // reserve space; sort fills it in
+    UploadSplatTexture();
+#endif
+
     m_modified = false;
     m_sortDirty = true; //Splat set changed, the cached Gaussian order is stale
 }
+
+#ifdef CODEFINE_GLES
+void SplatRenderer::UploadSplatTexture()
+{
+    constexpr size_t kSplatsPerRow = kSplatTextureWidth / 4;
+    const size_t count = m_combined.size();
+    const size_t rows = std::max<size_t>(1, (count + kSplatsPerRow - 1) / kSplatsPerRow);
+
+    GLint maxSize = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize);
+    if (rows > static_cast<size_t>(maxSize))
+        std::cerr << "[SplatRenderer] " << count << " splats exceed the GPU's texture size limit; "
+                  << "only the first " << static_cast<size_t>(maxSize) * kSplatsPerRow << " will draw." << std::endl;
+    const GLsizei texRows = static_cast<GLsizei>(std::min(rows, static_cast<size_t>(maxSize)));
+    const size_t uploadCount = std::min(count, static_cast<size_t>(texRows) * kSplatsPerRow);
+
+    glBindTexture(GL_TEXTURE_2D, m_splatTexture);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, kSplatTextureWidth, texRows, 0, GL_RGBA, GL_FLOAT, nullptr);
+
+    //Full rows in one go, then whatever is left over in a partial last row
+    const size_t fullRows = uploadCount / kSplatsPerRow;
+    const size_t remainder = uploadCount % kSplatsPerRow;
+    if (fullRows > 0)
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kSplatTextureWidth, static_cast<GLsizei>(fullRows),
+            GL_RGBA, GL_FLOAT, m_combined.data());
+    if (remainder > 0)
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, static_cast<GLint>(fullRows), static_cast<GLsizei>(remainder * 4), 1,
+            GL_RGBA, GL_FLOAT, m_combined.data() + fullRows * kSplatsPerRow);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+#endif

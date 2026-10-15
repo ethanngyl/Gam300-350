@@ -12,15 +12,41 @@
  ******************************************************************************/
 #include "Shader.h"
 
+#ifdef CODEFINE_GLES
+#include <GLES3/gl3.h>
+#else
 #include <GL/glew.h>
+#endif
 #include <glm/gtc/type_ptr.hpp>
 
 #include <iostream>
+#include <string>
 #include <vector>
 
 namespace {
 
+#ifdef CODEFINE_GLES
+//Shaders are written as desktop "#version 330 core". WebGL2 / GLES3 takes the same
+//language under a different header plus default precisions, so swap the header line.
+//GLES also requires #version on the very first line, so drop anything before it (the
+//raw string literals start with a newline).
+std::string translateForGles(const char* src) {
+    std::string out(src);
+    const std::string desktop = "#version 330 core";
+    size_t pos = out.find(desktop);
+    if (pos != std::string::npos) {
+        out.replace(0, pos + desktop.size(),
+            "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;");
+    }
+    return out;
+}
+#endif
+
 unsigned int compileStage(unsigned int type, const char* src) {
+#ifdef CODEFINE_GLES
+    std::string translated = translateForGles(src);
+    src = translated.c_str();
+#endif
     unsigned int shader = glCreateShader(type);
     glShaderSource(shader, 1, &src, nullptr);
     glCompileShader(shader);
@@ -45,7 +71,13 @@ Shader::Shader(const char* vertexSrc, const char* fragmentSrc)
 
 Shader::Shader(const char* vertexSrc, const char* geometrySrc, const char* fragmentSrc) {
     unsigned int vs = compileStage(GL_VERTEX_SHADER, vertexSrc);
+#ifdef CODEFINE_GLES
+    //GLES3 has no geometry stage; the renderer never passes one on this build
+    (void)geometrySrc;
+    unsigned int gs = 0;
+#else
     unsigned int gs = geometrySrc ? compileStage(GL_GEOMETRY_SHADER, geometrySrc) : 0;
+#endif
     unsigned int fs = compileStage(GL_FRAGMENT_SHADER, fragmentSrc);
 
     m_id = glCreateProgram();
@@ -92,6 +124,10 @@ void Shader::setMat4Array(const std::string& name, const std::vector<glm::mat4>&
 
 void Shader::setFloat(const std::string& name, float value) const {
     glUniform1f(glGetUniformLocation(m_id, name.c_str()), value);
+}
+
+void Shader::setInt(const std::string& name, int value) const {
+    glUniform1i(glGetUniformLocation(m_id, name.c_str()), value);
 }
 
 void Shader::setVec2(const std::string& name, const glm::vec2& value) const {
