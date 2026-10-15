@@ -11,7 +11,9 @@ form shape (email format, 6+ character password, name when creating an
 account), then posts it to the backend: /auth/signup creates the account
 in the SQLite database (password stored only as a hash), /auth/login checks
 the password. On success the user object the server returns is handed to
-the parent, which keeps it as this browser's session.
+the parent, which keeps it as this browser's session. "Remember me" keeps
+the login after the browser is closed; unticked, the server's session
+cookie ends when the browser closes.
 **************************************************************************/
 
 import { useState } from 'react';
@@ -23,6 +25,7 @@ function LoginScreen({ onLogin }) {
     const [displayName, setDisplayName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -57,8 +60,8 @@ function LoginScreen({ onLogin }) {
 
         try {
             const body = isSignUp
-                ? { name: displayName.trim(), email: trimmedEmail, password }
-                : { email: trimmedEmail, password };
+                ? { name: displayName.trim(), email: trimmedEmail, password, remember: rememberMe }
+                : { email: trimmedEmail, password, remember: rememberMe };
             const res = await fetch(isSignUp ? '/auth/signup' : '/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -121,6 +124,14 @@ function LoginScreen({ onLogin }) {
                         onChange={(event) => setPassword(event.target.value)}
                         autoComplete={isSignUp ? 'new-password' : 'current-password'}
                     />
+                </label>
+                <label className="login-remember">
+                    <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(event) => setRememberMe(event.target.checked)}
+                    />
+                    Remember me
                 </label>
 
                 {errorMessage && <p className="login-error" role="alert">{errorMessage}</p>}

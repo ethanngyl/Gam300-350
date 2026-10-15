@@ -20,9 +20,10 @@ matters.
 Returns the job from the in-memory jobs map. If it isn't there, it looks for 
 the job's folder on disk (scanJob) and adopts it with restoreJob. This covers
 folders that appeared after startup. Returns null if the job doesn't exist.
-- readCookie(req, name) / startSession(res, userId)
+- readCookie(req, name) / startSession(res, userId, remember)
 Read a cookie from the request / log a user in by setting the HttpOnly
-session cookie (the session itself is stored in db.js).
+session cookie (the session itself is stored in db.js). With "Remember me"
+the cookie lasts 7 days; without it the browser drops it on close.
 - loadUser / requireUser (middleware)
 loadUser sets req.user from the session cookie on every request;
 requireUser answers 401 when nobody is logged in.
@@ -63,7 +64,7 @@ import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
 import
 {
-  SESSION_TTL_MS, createSession, createUser, deleteSession,
+  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
   findSessionUser, findUserByEmail, getJobOwnerId,
   listOwnedJobIds, setJobOwner, verifyPassword,
 }
@@ -191,16 +192,19 @@ function readCookie(req, name)
   \param userId
   number
     The user's id
+  \param remember
+  bool
+    true ("Remember me" ticked): the cookie lasts SESSION_TTL_MS (7 days).
+    false: no maxAge, so it is a browser-session cookie that is dropped
+    when the browser closes; the server also expires it after
+    SHORT_SESSION_TTL_MS in case the browser stays open or restores it.
 */
 /************************************************************************/
-function startSession(res, userId)
+function startSession(res, userId, remember)
 {
-  res.cookie(SESSION_COOKIE, createSession(userId), {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_TTL_MS,
-  })
+  const options = { httpOnly: true, sameSite: 'lax', path: '/' }
+  if (remember) options.maxAge = SESSION_TTL_MS
+  res.cookie(SESSION_COOKIE, createSession(userId, remember ? SESSION_TTL_MS : SHORT_SESSION_TTL_MS), options)
 }
 
 /************************************************************************/
@@ -669,9 +673,10 @@ function publicUser(user)
 /************************************************************************/
 /*!
   \brief
-    Create an account and log it in. Body: { name, email, password }. The
-    password is stored only as a salted scrypt hash (see db.js). New
-    accounts are always role 'user'.
+    Create an account and log it in. Body: { name, email, password,
+    remember? }. The password is stored only as a salted scrypt hash (see
+    db.js). New accounts are always role 'user'. remember: true keeps the
+    login after the browser closes (see startSession).
   \return
     400 if input is invalid, 409 if the email is taken, else 201, the
     user, and a session cookie
@@ -679,7 +684,7 @@ function publicUser(user)
 /************************************************************************/
 app.post('/auth/signup', async (req, res, next) =>
 {
-  const { name, email, password } = req.body || {}
+  const { name, email, password, remember } = req.body || {}
   const trimmedEmail = typeof email === 'string' ? email.trim() : ''
   const trimmedName = typeof name === 'string' ? name.trim() : ''
 
@@ -693,7 +698,7 @@ app.post('/auth/signup', async (req, res, next) =>
   try
   {
     const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
-    startSession(res, user.id)
+    startSession(res, user.id, remember === true)
     res.status(201).json(publicUser(user))
   }
   catch (err)
@@ -707,8 +712,9 @@ app.post('/auth/signup', async (req, res, next) =>
 /************************************************************************/
 /*!
   \brief
-    Sign in. Body: { email, password }. Unknown email and wrong password
-    get the same answer so the endpoint can't be used to probe accounts.
+    Sign in. Body: { email, password, remember? }. Unknown email and wrong
+    password get the same answer so the endpoint can't be used to probe
+    accounts. remember: true keeps the login after the browser closes.
   \return
     401 if the credentials don't match, else 200, the user, and a session
     cookie
@@ -716,7 +722,7 @@ app.post('/auth/signup', async (req, res, next) =>
 /************************************************************************/
 app.post('/auth/login', async (req, res, next) =>
 {
-  const { email, password } = req.body || {}
+  const { email, password, remember } = req.body || {}
   if (typeof email !== 'string' || typeof password !== 'string')
     return res.status(400).json({ error: 'Enter your email and password.' })
 
@@ -725,7 +731,7 @@ app.post('/auth/login', async (req, res, next) =>
     const user = findUserByEmail(email.trim())
     if (!user || !(await verifyPassword(password, user.password_hash)))
       return res.status(401).json({ error: 'Incorrect email or password.' })
-    startSession(res, user.id)
+    startSession(res, user.id, remember === true)
     res.json(publicUser(user))
   }
   catch (err)

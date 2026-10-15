@@ -29,8 +29,9 @@ already registered.
 - findUserByEmail(email)
 Returns the user row (including password_hash) or null. Email matching is
 case-insensitive.
-- createSession(userId)
-Starts a session and returns the raw token to put in the cookie.
+- createSession(userId, ttlMs)
+Starts a session lasting ttlMs (7 days by default) and returns the raw
+token to put in the cookie.
 - findSessionUser(token)
 Returns the logged-in user for a cookie token, or null if unknown/expired.
 - deleteSession(token)
@@ -56,8 +57,12 @@ const scrypt = promisify(crypto.scrypt)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(__dirname, 'data')
 
-// How long a login lasts before the user has to sign in again.
+// How long a "Remember me" login lasts before the user has to sign in again.
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+// Server-side limit for a login without "Remember me". Its cookie already
+// ends when the browser closes; this also ends it if the browser stays open
+// (or restores the cookie on restart).
+export const SHORT_SESSION_TTL_MS = 24 * 60 * 60 * 1000
 
 // DatabaseSync can't create the folder, only the file.
 fs.mkdirSync(DATA_DIR, { recursive: true })
@@ -252,14 +257,17 @@ function hashToken(token)
   \param userId
   number
     The user's id
+  \param ttlMs
+  number
+    How long the session stays valid, in milliseconds
   \return
     The raw session token (send it to the browser as a cookie)
 */
 /************************************************************************/
-export function createSession(userId)
+export function createSession(userId, ttlMs = SESSION_TTL_MS)
 {
   const token = crypto.randomBytes(32).toString('base64url')
-  insertSession.run(hashToken(token), userId, Date.now() + SESSION_TTL_MS)
+  insertSession.run(hashToken(token), userId, Date.now() + ttlMs)
   return token
 }
 

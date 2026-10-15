@@ -1790,6 +1790,20 @@ html {
             border-color: var(--forma-blue);
         }
 
+.login-remember {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .login-remember input {
+        accent-color: var(--forma-blue);
+        cursor: pointer;
+    }
+
 .login-error {
     color: var(--forma-red);
     font-size: 0.8rem;
