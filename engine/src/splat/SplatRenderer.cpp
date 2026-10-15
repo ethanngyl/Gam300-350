@@ -333,6 +333,27 @@ void SplatRenderer::SetSplats(const std::vector<SplatVertex>& splats, std::strin
     m_modified = true;
 }
 
+void SplatRenderer::RemoveModel(int index) {
+    if (index < 0 || index >= static_cast<int>(m_models.size()))
+        return;
+
+    m_models.erase(m_models.begin() + index);
+
+    //Keep the selection pointing at the same model, or clear it if that model was removed
+    if (m_selectedModelIndex == index)
+        m_selectedModelIndex = -1;
+    else if (m_selectedModelIndex > index)
+        --m_selectedModelIndex;
+
+    m_modified = true; //Model IDs in the combined buffer are now stale
+}
+
+SplatModel* SplatRenderer::GetModel(int index) {
+    if (index < 0 || index >= static_cast<int>(m_models.size()))
+        return nullptr;
+    return m_models[index].get();
+}
+
 
 void SplatRenderer::UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats) {
     model->SetSplat(splats);
@@ -499,7 +520,7 @@ void SplatRenderer::DrawPointCloud(const glm::mat4& viewProj, float viewportHeig
 std::string SplatRenderer::GetModelName(size_t indexNum)
 {
 
-    if (indexNum < 0 || indexNum >= m_totalSplatCount)
+    if (indexNum >= m_models.size())
         return std::string();
 
     return m_models[indexNum].get()->GetName();
@@ -517,7 +538,7 @@ size_t SplatRenderer::TotalSplatCount() const
 
 size_t SplatRenderer::GetSplatCount(int modelIndex) const
 {
-    if (modelIndex < 0 || modelIndex >= m_totalSplatCount)
+    if (modelIndex < 0 || modelIndex >= static_cast<int>(m_models.size()))
         return 0;
     return m_models[modelIndex].get()->GetCount();
 }
@@ -529,7 +550,7 @@ int SplatRenderer::GetSelectedModel()
 
 void SplatRenderer::SelectModel(int index)
 {
-    if (index < 0 || index >= m_totalSplatCount)
+    if (index < 0 || index >= static_cast<int>(m_models.size()))
         m_selectedModelIndex = -1;
     else
         m_selectedModelIndex = index;

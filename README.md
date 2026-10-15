@@ -59,8 +59,12 @@ Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in 
 - .ply files can be added into the engine/assets folder
 
 ## How to use Engine
-- Select .ply file from the menu and press the load button
-- Select model from Loaded Splats list, use WASD/Arrow keys to shift the model around
+The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), and **Assets / Console / Audio** tabs (bottom). Panels can be dragged, tabbed, floated or hidden from the Window menu; the layout is remembered between runs (Window > Reset Layout restores the default).
+- Import a splat: double-click a .ply in the **Assets** panel, use File > Import Splat (Ctrl+O), drag .ply files onto the window, or pass them on the command line (`Codefine.exe model.ply`). Large files load in the background.
+- Select a model in the **Scene** panel; edit its name and position in the **Inspector**. F2 renames, Delete removes it from the scene (the file is untouched).
+- Camera: right-drag to orbit, left-drag to pan, scroll to zoom, Home to recenter. With the viewport focused, WASD/Arrow keys nudge the selected model and Esc deselects.
+- Switch between Point Cloud and Gaussian Splat rendering from the toolbar (Ctrl+1 / Ctrl+2).
+- Engine output (`std::cout`/`std::cerr` and Qt messages) appears in the **Console** panel. Help > Controls lists every shortcut.
 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page

@@ -36,6 +36,8 @@ public:
         GaussianSplat
     };
 
+    static constexpr int kMaxModels = 32; //Must match uModelTransforms[] size in the shader
+
     SplatRenderer();
     ~SplatRenderer();
 
@@ -43,6 +45,10 @@ public:
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
     void SetSplats(const std::vector<SplatVertex>& splats, std::string splatname);
+    //Removes a model and fixes up the selection; out-of-range indices are ignored
+    void RemoveModel(int index);
+    //Direct access for editor panels (transform, name); nullptr if out of range
+    SplatModel* GetModel(int index);
     //Updates a model
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
     //Moves model
@@ -90,7 +96,6 @@ private:
     std::vector<unsigned int> m_sortOrder;  //Splat indices, far to near
 
     //Sorting Vars
-    static constexpr int kMaxModels = 32; //Must match uModelTransforms[] size in the shader
     static constexpr float kSortBudgetMs = 4.0f; //Alloclated sorting time
     static constexpr int kDisableAfterFrames = 3; //How many frames overbudget to disable
     static constexpr int kReEnableAfterFrames = 120; //How many frames to reenable sorting
