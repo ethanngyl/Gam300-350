@@ -29,6 +29,7 @@ import PhotoEditorScreen from './PhotoEditorScreen.jsx';
 import SceneBuilderScreen from './SceneBuilderScreen.jsx';
 import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
+import ModelViewerScreen from './ModelViewerScreen.jsx';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
@@ -49,15 +50,17 @@ function loadSavedUser() {
 function App() {
     const [currentUser, setCurrentUser] = useState(loadSavedUser);
 
-    // Dashboard tab: home | library | editor | scene | account
+    // Dashboard tab: home | library | editor | scene | viewer | account
     const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState('models');
 
     // Full-page flows that temporarily replace the dashboard. null shows the
-    // dashboard; otherwise 'capture' | 'processing' | 'result' | 'youtube' | 'gallery'
+    // dashboard; otherwise 'capture' | 'processing' | 'result' | 'local-model' | 'youtube' | 'gallery'
     const [screen, setScreen] = useState(null);
     const [jobId, setJobId] = useState(null);
+    // A .ply opened from the user's computer in the Model Viewer: { url, name }
+    const [localModel, setLocalModel] = useState(null);
     const [uploadError, setUploadError] = useState(null);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -123,6 +126,18 @@ function App() {
         setScreen('result');
     }
 
+    function openLocalModel(file) {
+        setLocalModel({ url: URL.createObjectURL(file), name: file.name });
+        setScreen('local-model');
+    }
+
+    function closeLocalModel() {
+        // Release the file the blob URL holds on to.
+        URL.revokeObjectURL(localModel.url);
+        setLocalModel(null);
+        setScreen(null);
+    }
+
     if (!currentUser) {
         return <LoginScreen onLogin={handleLogin} />;
     }
@@ -168,6 +183,23 @@ function App() {
                     <button className="btn btn-ghost" onClick={() => { playSound('click'); backToDashboard(); }}>
                         Back to dashboard
                     </button>
+                </div>
+            </>
+        );
+    }
+
+    if (screen === 'local-model' && localModel) {
+        return (
+            <>
+                <SplatViewer url={localModel.url} />
+                <div
+                    className="genesis-overlay"
+                    style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, alignItems: 'center', zIndex: 10 }}
+                >
+                    <button className="btn btn-ghost" onClick={() => { playSound('click'); closeLocalModel(); }}>
+                        Back to dashboard
+                    </button>
+                    <span style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8 }}>{localModel.name}</span>
                 </div>
             </>
         );
@@ -248,6 +280,9 @@ function App() {
                     )}
                     {activeTab === 'scene' && (
                         <SceneBuilderScreen onAddFromLibrary={() => openLibrary('models')} />
+                    )}
+                    {activeTab === 'viewer' && (
+                        <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}
                     {activeTab === 'account' && (
                         <AccountScreen user={currentUser} onSignOut={handleSignOut} />

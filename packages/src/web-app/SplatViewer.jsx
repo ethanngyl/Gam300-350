@@ -57,7 +57,19 @@ function writeRendererPref(renderer) {
 async function readCameraUp(url) {
   try {
     const res = await fetch(url, { headers: { Range: 'bytes=0-4095' } })
-    const text = await res.text()
+    // Blob URLs (a .ply opened from disk) may ignore Range, so stop reading
+    // after 4 KB instead of pulling in the whole file
+    const reader = res.body.getReader()
+    const chunks = []
+    let received = 0
+    while (received < 4096) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.length
+    }
+    reader.cancel().catch(() => {})
+    const text = new TextDecoder().decode(await new Blob(chunks).arrayBuffer())
     const m = text.match(/Vertical axis:\s*([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/)
     if (m) return [Number(m[1]), Number(m[2]), Number(m[3])]
   } catch {
@@ -97,6 +109,7 @@ function ThreeSplatViewer({ url }) {
 
       try {
         await viewer.addSplatScene(url, {
+          format: GaussianSplats3D.SceneFormat.Ply, // blob URLs have no extension to infer it from
           splatAlphaRemovalThreshold: 5,
           showLoadingUI: true,
         })

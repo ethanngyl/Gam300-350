@@ -8,7 +8,7 @@
 \brief
 Left sidebar shown on every dashboard screen: a "New model" button that
 starts the capture flow, workspace shortcuts (Media Library, Photo Editor,
-Scene Builder, YouTube Extractor), "Your work" shortcuts that open the
+Scene Builder, YouTube Extractor, Model Viewer), "Your work" shortcuts that open the
 Library on its 3D Models or Photo Library sub-tab, and a status footer.
 On phones it becomes a slide-in drawer: isOpen shows it, and every item
 calls onClose so the drawer shuts after a choice is made.
@@ -22,6 +22,7 @@ const WORKSPACE_ITEMS = [
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
     { id: 'scene', label: 'Scene Builder', icon: 'shield' },
     { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
+    { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
 ];
 
 const WORK_ITEMS = [
