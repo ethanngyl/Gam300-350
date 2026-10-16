@@ -10,6 +10,7 @@
  * Copyright 2026 DigiPen Institute of Technology Singapore.
  * All rights reserved.
  ******************************************************************************/
+#include "ui/EditorTheme.h"
 #include "ui/MainWindow.h"
 
 #include <QApplication>
@@ -27,9 +28,15 @@ int main(int argc, char** argv) {
     QSurfaceFormat::setDefaultFormat(format);
 
     QApplication app(argc, argv);
+    // Identity used by QSettings (window layout, recent files, preferences).
+    QApplication::setOrganizationName("CoDefine");
+    QApplication::setApplicationName("Codefine Engine");
+    EditorTheme::Apply(app);
 
     MainWindow window;
     window.show();
+    // Any .ply paths passed on the command line (or via "Open with") are imported.
+    window.openFiles(app.arguments().mid(1));
 
     return app.exec();
 }

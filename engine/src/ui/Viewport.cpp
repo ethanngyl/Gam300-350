@@ -8,13 +8,12 @@
 \brief
 Implements Viewport: initialises GLEW/OpenGL and the splat renderer, drives
 the continuous vsync-paced render loop, forwards Qt mouse/keyboard input to
-the ImGui overlay and the orbit camera, draws the ImGui "Engine Stats"
-overlay, and browses and loads .ply splat files.
+the ImGui overlay and the orbit camera, and draws the ImGui "Engine Stats"
+overlay. Loading and editing splats is done by the Qt editor panels.
 **************************************************************************/
 #include "ui/Viewport.h"
 
 #include "ui/ImGuiQtBackend.h"
-#include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
 
 #include <imgui.h>
@@ -26,52 +25,18 @@ overlay, and browses and loads .ply splat files.
 #include <QMouseEvent>
 #include <QWheelEvent>
 
-#include <algorithm>
-#include <iostream>
 #include <stdexcept>
-
-#ifndef ENGINE_ASSETS_DIR
-#define ENGINE_ASSETS_DIR "."
-#endif
-
-namespace fs = std::filesystem;
+#include <string>
 
 namespace {
     // Qt reports a wheel notch as 120 units of angle delta.
     constexpr double kWheelNotch = 120.0;
-
-    // Scans a directory (non-recursively) for .ply files and returns their full
-    // paths, sorted by filename. Missing/unreadable directories yield an empty
-    // list rather than throwing, so the browser degrades gracefully.
-    std::vector<fs::path> ScanPlyFiles(const fs::path& dir) {
-        std::vector<fs::path> results;
-        std::error_code ec;
-        if (!fs::is_directory(dir, ec)) {
-            return results;
-        }
-        for (const auto& entry : fs::directory_iterator(dir, ec)) {
-            if (ec) break;
-            if (!entry.is_regular_file()) continue;
-            auto ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (ext == ".ply") {
-                results.push_back(entry.path());
-            }
-        }
-        std::sort(results.begin(), results.end(), [](const fs::path& a, const fs::path& b) {
-            return a.filename().string() < b.filename().string();
-        });
-        return results;
-    }
 }
 
 Viewport::Viewport(QWidget* parent)
-    : QOpenGLWidget(parent)
-    , m_splatDir(fs::path(ENGINE_ASSETS_DIR) / "samples") {
+    : QOpenGLWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true); // ImGui needs hover positions, not just drags
-    m_plyFiles = ScanPlyFiles(m_splatDir);
 }
 
 Viewport::~Viewport() {
@@ -112,6 +77,10 @@ void Viewport::initializeGL() {
 
     m_glInitialized = true;
     m_frameTimer.start();
+
+    if (onInitialized) {
+        onInitialized();
+    }
 }
 
 void Viewport::BindInputs() {
@@ -147,21 +116,6 @@ void Viewport::BindInputs() {
         });
 }
 
-// Loads a .ply through Clement's SplatLoader and hands it to the renderer.
-// Returns false (and leaves the previous splats untouched) on empty/failed
-// loads, so a bad file never blanks a good scene.
-bool Viewport::LoadSplatFile(const fs::path& path) {
-    auto splats = LoadSplatPly(path.string());
-    if (splats.empty()) {
-        std::cerr << "[Viewport] no splats loaded from '" << path.string() << "'" << std::endl;
-        return false;
-    }
-    m_renderer->SetSplats(splats, path.filename().string());
-    m_loadedPath = path.string();
-    std::cout << "[Viewport] loaded " << splats.size() << " splats from '" << path.string() << "'" << std::endl;
-    return true;
-}
-
 void Viewport::paintGL() {
     float deltaTime = static_cast<float>(m_frameTimer.nsecsElapsed()) / 1.0e9f;
     m_frameTimer.restart();
@@ -175,8 +129,8 @@ void Viewport::paintGL() {
     glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glm::mat4 viewProj = m_camera.getProjection(aspect) * m_camera.getView();
-    m_renderer->Draw(viewProj, static_cast<float>(fbHeight), m_camera.getPosition());
+    m_renderer->Draw(m_camera.getView(), m_camera.getProjection(aspect),
+                     static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGuiQtBackend::NewFrame(*this, deltaTime);
@@ -194,81 +148,26 @@ void Viewport::paintGL() {
 }
 
 void Viewport::DrawImGui(float fps) {
-    if (m_showImGuiStats) {
-        // Start clear of the .ply browser, which is pinned to the left edge.
-        ImGui::SetNextWindowPos(ImVec2(310.0f, 10.0f), ImGuiCond_Once);
-        ImGui::Begin("Engine Stats");
-        ImGui::Text("FPS: %.1f", fps);
-        ImGui::Text("Splats loaded: %zu", m_renderer->TotalSplatCount());
-        ImGui::End();
+    if (!m_showImGuiStats) {
+        return;
     }
 
-    // ------------------------------------------------------------------
-    // .ply browser: lists the .ply files in m_splatDir. The user selects a
-    // file, then clicks Load to display it. Snapped to the left edge and
-    // stretched to the full window height. Uses SplatLoader's public API.
-    // ------------------------------------------------------------------
-    const float browserWidth = 300.0f;
-    ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(browserWidth, displaySize.y), ImGuiCond_Always);
-    ImGui::Begin("PLY Files", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
-
-    ImGui::TextWrapped("Folder: %s", m_splatDir.string().c_str());
-    if (ImGui::Button("Refresh")) {
-        m_plyFiles = ScanPlyFiles(m_splatDir);
-        m_selectedIndex = -1;
-    }
-    ImGui::SameLine();
-    ImGui::Text("(%zu found)", m_plyFiles.size());
+    // Read-only stats overlay pinned to the top-right corner. NoInputs keeps
+    // it from ever capturing the mouse, so it never blocks camera drags.
+    constexpr float kPad = 10.0f;
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x - kPad, kPad), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.45f);
+    ImGui::Begin("Engine Stats", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+    ImGui::Text("%.1f FPS (%.2f ms)", fps, fps > 0.0f ? 1000.0f / fps : 0.0f);
     ImGui::Separator();
-
-    // Reserve space at the bottom for the Load button + separator.
-    float totalAvail = ImGui::GetContentRegionAvail().y;
-    float loadButtonHeight = ImGui::GetFrameHeightWithSpacing();
-    float sectionHeight = (totalAvail - loadButtonHeight) * 0.45f;
-
-    if (m_plyFiles.empty()) {
-        ImGui::TextDisabled("No .ply files in this folder.");
-    } else {
-        ImGui::BeginChild("ply_list", ImVec2(0, sectionHeight), true);
-        for (int i = 0; i < static_cast<int>(m_plyFiles.size()); ++i) {
-            std::string name = m_plyFiles[i].filename().string();
-            bool isLoaded = (m_plyFiles[i].string() == m_loadedPath);
-            std::string label = isLoaded ? name + "  (loaded)" : name;
-            if (ImGui::Selectable(label.c_str(), m_selectedIndex == i)) {
-                m_selectedIndex = i;
-            }
-        }
-        ImGui::EndChild();
-    }
-
-    ImGui::Separator();
-    bool hasSelection = (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_plyFiles.size()));
-    if (!hasSelection) {
-        ImGui::BeginDisabled();
-    }
-    if (ImGui::Button("Load", ImVec2(-1.0f, 0.0f)) && hasSelection) {
-        LoadSplatFile(m_plyFiles[m_selectedIndex]);
-    }
-    if (!hasSelection) {
-        ImGui::EndDisabled();
-    }
-
-    ImGui::Separator();
-    ImGui::Text("Loaded Splats (%zu)", m_renderer->ModelCount());
-    ImGui::BeginChild("loaded_models_list", ImVec2(0, sectionHeight), true);
-    for (int i = 0; i < m_renderer->ModelCount(); ++i) {
-        std::string label = m_renderer->GetModelName(i) + "  (" + std::to_string(m_renderer->GetSplatCount(i)) + " splats)";
-        std::string id = label + "##model" + std::to_string(i);
-        bool isSelected = (m_renderer->GetSelectedModel() == (i));
-        if (ImGui::Selectable(id.c_str(), isSelected)) {
-            m_renderer->SelectModel(i);
-        }
-    }
-    ImGui::EndChild();
-
+    ImGui::Text("Models: %zu / %d", m_renderer->ModelCount(), SplatRenderer::kMaxModels);
+    ImGui::Text("Splats: %zu", m_renderer->TotalSplatCount());
+    ImGui::Text("Mode:   %s", m_renderer->GetRenderMode() == SplatRenderer::RenderMode::GaussianSplat
+                                  ? "Gaussian Splat" : "Point Cloud");
     ImGui::End();
 }
 
@@ -316,10 +215,6 @@ void Viewport::wheelEvent(QWheelEvent* event) {
 }
 
 void Viewport::keyPressEvent(QKeyEvent* event) {
-    if (event->key() == Qt::Key_Escape) {
-        window()->close();
-        return;
-    }
     if (!m_glInitialized) return;
     ImGuiQtBackend::ProcessKey(*event, true);
     if (ImGui::GetIO().WantCaptureKeyboard) return;

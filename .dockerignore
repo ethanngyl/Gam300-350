@@ -8,6 +8,10 @@ tests
 server
 src
 engine
+# ...except what the WebAssembly renderer build needs (engine-web stage)
+!engine/cmake
+!engine/src
+!engine/web
 **/node_modules
 **/dist
 packages/src/backend/jobs
@@ -15,3 +19,4 @@ tools/colmap
 tools/brush
 tools/*.exe
 *.log
+packages/src/web-app/public/engine
