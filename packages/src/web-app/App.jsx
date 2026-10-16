@@ -54,6 +54,9 @@ function App() {
     const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState('models');
+    // True when the Library was opened from a "Your work" shortcut, so the
+    // sidebar highlights that shortcut instead of "Media Library".
+    const [openedFromYourWork, setOpenedFromYourWork] = useState(false);
 
     // Full-page flows that temporarily replace the dashboard. null shows the
     // dashboard; otherwise 'capture' | 'processing' | 'result' | 'local-model' | 'youtube' | 'gallery'
@@ -88,11 +91,17 @@ function App() {
     function openLibrary(subTab) {
         setLibrarySubTab(subTab);
         setActiveTab('library');
+        setOpenedFromYourWork(true);
+    }
+
+    function navigate(tab) {
+        setActiveTab(tab);
+        setOpenedFromYourWork(false);
     }
 
     function handleTabChange(tab) {
         setIsMenuOpen(false);
-        setActiveTab(tab);
+        navigate(tab);
     }
 
     // Uploads the real batch to the backend and starts reconstruction.
@@ -228,7 +237,12 @@ function App() {
 
             <TopNav
                 activeTab={activeTab}
+                openedFromYourWork={openedFromYourWork}
                 onTabChange={handleTabChange}
+                onYoutube={() => {
+                    setIsMenuOpen(false);
+                    setScreen('youtube');
+                }}
                 user={currentUser}
                 onOpenAccount={() => handleTabChange('account')}
                 onSignOut={handleSignOut}
@@ -248,7 +262,9 @@ function App() {
 
                 <Sidebar
                     activeTab={activeTab}
-                    onNavigate={setActiveTab}
+                    librarySubTab={librarySubTab}
+                    openedFromYourWork={openedFromYourWork}
+                    onNavigate={navigate}
                     onOpenLibrary={openLibrary}
                     onNewModel={() => setScreen('capture')}
                     onYoutube={() => setScreen('youtube')}
@@ -262,7 +278,7 @@ function App() {
                             userName={currentUser.name}
                             onNewGeneration={() => setScreen('capture')}
                             onYoutube={() => setScreen('youtube')}
-                            onNavigate={setActiveTab}
+                            onNavigate={navigate}
                             onOpenLibrary={openLibrary}
                         />
                     )}

@@ -30,7 +30,7 @@ const WORK_ITEMS = [
     { id: 'source', label: 'Source photos', icon: 'image', librarySubTab: 'photos' },
 ];
 
-function Sidebar({ activeTab, onNavigate, onOpenLibrary, onNewModel, onYoutube, isOpen, onClose }) {
+function Sidebar({ activeTab, librarySubTab, openedFromYourWork, onNavigate, onOpenLibrary, onNewModel, onYoutube, isOpen, onClose }) {
     function handleWorkspaceClick(itemId) {
         playSound('click');
         onClose();
@@ -58,7 +58,9 @@ function Sidebar({ activeTab, onNavigate, onOpenLibrary, onNewModel, onYoutube, 
             {WORKSPACE_ITEMS.map((item) => (
                 <button
                     key={item.id}
-                    className={activeTab === item.id ? 'genesis-side-item is-active' : 'genesis-side-item'}
+                    className={activeTab === item.id && !(item.id === 'library' && openedFromYourWork)
+                        ? 'genesis-side-item is-active'
+                        : 'genesis-side-item'}
                     onClick={() => handleWorkspaceClick(item.id)}
                 >
                     <Icon name={item.icon} size={15} /> {item.label}
@@ -69,7 +71,9 @@ function Sidebar({ activeTab, onNavigate, onOpenLibrary, onNewModel, onYoutube, 
             {WORK_ITEMS.map((item) => (
                 <button
                     key={item.id}
-                    className="genesis-side-item"
+                    className={activeTab === 'library' && openedFromYourWork && librarySubTab === item.librarySubTab
+                        ? 'genesis-side-item is-active'
+                        : 'genesis-side-item'}
                     onClick={() => {
                         playSound('click');
                         onClose();
