@@ -6,23 +6,48 @@
 \par Software Engineering Project 5
 \date 02-10-2026
 \brief
-Shows a finished Gaussian splat .ply full-screen in the browser. It uses
-@mkkellogg/gaussian-splats-3d for the WebGL rendering, depth sorting and
-orbit controls, and reads the scene's up direction from the .ply header so
+Shows a finished Gaussian splat .ply full-screen in the browser. By default
+it uses the Codefine engine's own renderer compiled to WebAssembly (see
+EngineSplatViewer.jsx). If that is unavailable, or the user switches to it,
+it uses @mkkellogg/gaussian-splats-3d for the WebGL rendering, depth sorting
+and orbit controls, reading the scene's up direction from the .ply header so
 any scene renders upright.
 - readCameraUp(url)
 Private helper. Fetches only the first 4 KB of the .ply (HTTP Range) and
 reads the "Vertical axis" line Brush writes into the header. Returns it as
 [x, y, z], or [0, 1, 0] (+Y) if it can't be found.
+- ThreeSplatViewer({ url })
+Private component. Creates the @mkkellogg viewer, loads the .ply at url and
+starts rendering. Stops and disposes the viewer when url changes or the
+component unmounts.
 - SplatViewer({ url })
-React component. Creates the viewer, loads the .ply at url and starts
-rendering. Stops and disposes the viewer when url changes or the component
-unmounts.
+React component. Picks the engine or the three.js viewer and shows a toggle
+to switch between them; the choice is remembered per browser.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d'
+import EngineSplatViewer from './EngineSplatViewer.jsx'
+import { isEngineAvailable } from './codefineEngine.js'
+
+const RENDERER_PREF_KEY = 'genesis.splatRenderer'
+
+function readRendererPref() {
+  try {
+    return localStorage.getItem(RENDERER_PREF_KEY) === 'three' ? 'three' : 'engine'
+  } catch {
+    return 'engine'
+  }
+}
+
+function writeRendererPref(renderer) {
+  try {
+    localStorage.setItem(RENDERER_PREF_KEY, renderer)
+  } catch {
+    /* storage blocked, the choice just isn't remembered */
+  }
+}
 
 /**
  * Read the scene's "up" direction from a Brush-exported .ply header so arbitrary
@@ -32,7 +57,19 @@ import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d'
 async function readCameraUp(url) {
   try {
     const res = await fetch(url, { headers: { Range: 'bytes=0-4095' } })
-    const text = await res.text()
+    // Blob URLs (a .ply opened from disk) may ignore Range, so stop reading
+    // after 4 KB instead of pulling in the whole file
+    const reader = res.body.getReader()
+    const chunks = []
+    let received = 0
+    while (received < 4096) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.length
+    }
+    reader.cancel().catch(() => {})
+    const text = new TextDecoder().decode(await new Blob(chunks).arrayBuffer())
     const m = text.match(/Vertical axis:\s*([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/)
     if (m) return [Number(m[1]), Number(m[2]), Number(m[3])]
   } catch {
@@ -47,7 +84,7 @@ async function readCameraUp(url) {
  *
  * @param {string} url  URL to the .ply (e.g. "/jobs/<id>/result.ply").
  */
-export default function SplatViewer({ url }) {
+function ThreeSplatViewer({ url }) {
   const containerRef = useRef(null)
   const viewerRef = useRef(null)
 
@@ -72,6 +109,7 @@ export default function SplatViewer({ url }) {
 
       try {
         await viewer.addSplatScene(url, {
+          format: GaussianSplats3D.SceneFormat.Ply, // blob URLs have no extension to infer it from
           splatAlphaRemovalThreshold: 5,
           showLoadingUI: true,
         })
@@ -101,5 +139,74 @@ export default function SplatViewer({ url }) {
       ref={containerRef}
       style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh' }}
     />
+  )
+}
+
+/**
+ * Full-page splat viewer. Uses the engine renderer when it is available and
+ * falls back to the three.js viewer otherwise.
+ *
+ * @param {string} url  URL to the .ply (e.g. "/jobs/<id>/result.ply").
+ */
+export default function SplatViewer({ url }) {
+  const [renderer, setRenderer] = useState(readRendererPref)
+  const [engineAvailable, setEngineAvailable] = useState(null) // null = still checking
+  const [engineNotice, setEngineNotice] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    isEngineAvailable().then((ok) => {
+      if (cancelled) return
+      setEngineAvailable(ok)
+      if (!ok) setEngineNotice('Engine renderer not built (run engine/build-web.bat)')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleEngineUnavailable = useCallback((reason) => {
+    console.warn('Engine renderer unavailable, using three.js viewer:', reason)
+    setEngineAvailable(false)
+    setEngineNotice(reason)
+  }, [])
+
+  const choose = (next) => {
+    setRenderer(next)
+    writeRendererPref(next)
+  }
+
+  // Wait for the availability check so the 300+ MB .ply isn't fetched by both viewers
+  if (engineAvailable === null) return null
+
+  const active = renderer === 'engine' && engineAvailable ? 'engine' : 'three'
+
+  return (
+    <>
+      {active === 'engine' ? (
+        <EngineSplatViewer url={url} onUnavailable={handleEngineUnavailable} />
+      ) : (
+        <ThreeSplatViewer url={url} />
+      )}
+      <div
+        className="genesis-overlay"
+        style={{ position: 'fixed', bottom: 16, left: 16, display: 'flex', gap: 8, alignItems: 'center', zIndex: 10 }}
+      >
+        <button
+          className={`btn ${active === 'engine' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => choose('engine')}
+          disabled={!engineAvailable}
+          title={engineAvailable ? 'Render with the Codefine engine (WebAssembly)' : engineNotice ?? undefined}
+        >
+          Engine renderer
+        </button>
+        <button
+          className={`btn ${active === 'three' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => choose('three')}
+        >
+          Three.js renderer
+        </button>
+      </div>
+    </>
   )
 }

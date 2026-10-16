@@ -47,11 +47,13 @@ import express from 'express'
 import crypto from 'node:crypto'
 import { config } from './config.js'
 import { saveJob } from './status.js'
+import { getHardwareInfo } from './metrics.js'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
-import 
+import { createUser, findUserByEmail, verifyPassword } from './db.js'
+import
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
   scanJobs
@@ -476,6 +478,94 @@ app.get('/jobs/:id/result.ply', async (req, res) =>
   res.sendFile(job.resultPath)
 })
 
+const EMAIL_RE = /^\S+@\S+\.\S+$/
+
+/************************************************************************/
+/*!
+  \brief
+    Shapes a users row into what the frontend keeps as the session. Never
+    includes password_hash.
+  \param user
+    { email, name, createdAt } or a users row
+  \return
+    { name, email, memberSince }
+*/
+/************************************************************************/
+function publicUser(user)
+{
+  // SQLite datetime('now') is UTC without a zone marker.
+  const created = new Date(`${(user.createdAt ?? user.created_at).replace(' ', 'T')}Z`)
+  return {
+    name: user.name,
+    email: user.email,
+    memberSince: created.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Create an account. Body: { name, email, password }. The password is
+    stored only as a salted scrypt hash (see db.js).
+  \return
+    400 if input is invalid, 409 if the email is taken, else 201 and the
+    user
+*/
+/************************************************************************/
+app.post('/auth/signup', async (req, res, next) =>
+{
+  const { name, email, password } = req.body || {}
+  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+
+  if (!EMAIL_RE.test(trimmedEmail))
+    return res.status(400).json({ error: 'Enter a valid email address.' })
+  if (typeof password !== 'string' || password.length < 6)
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+  if (!trimmedName)
+    return res.status(400).json({ error: 'Enter your name.' })
+
+  try
+  {
+    const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
+    res.status(201).json(publicUser(user))
+  }
+  catch (err)
+  {
+    if (err.code === 'EMAIL_TAKEN')
+      return res.status(409).json({ error: 'An account with that email already exists.' })
+    next(err)
+  }
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Sign in. Body: { email, password }. Unknown email and wrong password
+    get the same answer so the endpoint can't be used to probe accounts.
+  \return
+    401 if the credentials don't match, else 200 and the user
+*/
+/************************************************************************/
+app.post('/auth/login', async (req, res, next) =>
+{
+  const { email, password } = req.body || {}
+  if (typeof email !== 'string' || typeof password !== 'string')
+    return res.status(400).json({ error: 'Enter your email and password.' })
+
+  try
+  {
+    const user = findUserByEmail(email.trim())
+    if (!user || !(await verifyPassword(password, user.password_hash)))
+      return res.status(401).json({ error: 'Incorrect email or password.' })
+    res.json(publicUser(user))
+  }
+  catch (err)
+  {
+    next(err)
+  }
+})
+
 // /wiki with no page → show Home
 app.get('/wiki', (req, res) => serveWikiPage('Home', res))
 
@@ -615,4 +705,7 @@ app.listen(config.port, () =>
   console.log(`[backend] COLMAP: ${config.colmapBin}`)
   console.log(`[backend] Brush:  ${config.brushBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
+  // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
+  getHardwareInfo().then((hw) =>
+    console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))
 })

@@ -15,6 +15,9 @@ dist-ssr
 # Backend uploads (user-uploaded files, not source)
 src/backend/uploads/
 
+# User accounts database (contains password hashes)
+src/backend/data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

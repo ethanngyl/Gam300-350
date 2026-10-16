@@ -51,6 +51,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.js'
+import { recordPlyMetrics, startGpuSampler, startPhase } from './metrics.js'
 import { highestRawPly, IMAGE_EXT_RE } from './scan.js'
 import { saveJob } from './status.js'
 
@@ -141,6 +142,7 @@ function appendLog(job, line) {
 */
 /************************************************************************/
 function setPhase(job, phase, progress) {
+  startPhase(job, phase)
   job.phase = phase
   job.progress = progress
   saveJob(job)
@@ -398,6 +400,9 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
   await fsp.mkdir(imagesDir, { recursive: true })
 
   job.status = 'running'
+  startPhase(job, 'extract')
+  job.metrics.ytFps = fps ?? config.ytFps
+  job.metrics.ytMaxFrames = maxFrames ?? config.ytMaxFrames
   job.phase = 'extract'
   job.progress = 0
   job.detail = 'Fetching video info…'
@@ -573,6 +578,7 @@ export async function runPipeline(job) {
     if (models.length === 0) {
       throw new Error(NO_MODEL_MESSAGE)
     }
+    job.metrics.sparseModels = models.length
 
     // --- Brush: train the gaussian splat ---
     setPhase(job, 'training', 0.45)
@@ -586,35 +592,42 @@ export async function runPipeline(job) {
     //   brush_cli] Refine iter 401, 243 splats.
     // These appear roughly every 200 steps -- frequent enough for a live counter.
     const iterRe = /\biter[= ](\d[\d,]*)/i
-    await run(
-      job,
-      config.brushBin,
-      [
-        job.id, // dataset dir name, relative to cwd (jobsDir)
-        '--max-resolution', String(config.maxResolution),
-        config.brushItersFlag, String(total),
-        '--export-path', `./${outDirName}/`,
-        '--export-name', 'splat_{iter}.ply',
-        '--export-every', String(total),
-      ],
-      {
-        cwd: config.jobsDir,
-        env: { RUST_LOG: 'info' },
-        onData: (line) => {
-          const m = line.match(iterRe)
-          if (m) {
-            const cur = Number(m[1].replace(/,/g, ''))
-            if (cur >= 0 && cur <= total) {
-              // Map training [0..1] onto the 0.45..0.98 band.
-              job.progress = 0.45 + 0.53 * (cur / total)
-              // Surfaced by the frontend as a live iteration counter.
-              job.detail = `Iteration ${cur.toLocaleString()} / ${total.toLocaleString()}`
-              saveJob(job, { throttle: true })
+    // Samples VRAM / utilisation for the metrics record (NVIDIA only).
+    const stopGpuSampler = startGpuSampler(job)
+    try {
+      await run(
+        job,
+        config.brushBin,
+        [
+          job.id, // dataset dir name, relative to cwd (jobsDir)
+          '--max-resolution', String(config.maxResolution),
+          config.brushItersFlag, String(total),
+          '--export-path', `./${outDirName}/`,
+          '--export-name', 'splat_{iter}.ply',
+          '--export-every', String(total),
+        ],
+        {
+          cwd: config.jobsDir,
+          env: { RUST_LOG: 'info' },
+          onData: (line) => {
+            const m = line.match(iterRe)
+            if (m) {
+              const cur = Number(m[1].replace(/,/g, ''))
+              if (cur >= 0 && cur <= total) {
+                job.metrics.lastIteration = Math.max(job.metrics.lastIteration ?? 0, cur)
+                // Map training [0..1] onto the 0.45..0.98 band.
+                job.progress = 0.45 + 0.53 * (cur / total)
+                // Surfaced by the frontend as a live iteration counter.
+                job.detail = `Iteration ${cur.toLocaleString()} / ${total.toLocaleString()}`
+                saveJob(job, { throttle: true })
+              }
             }
-          }
+          },
         },
-      },
-    )
+      )
+    } finally {
+      stopGpuSampler()
+    }
     // Training done -- drop the iteration counter so later phases don't show it.
     job.detail = null
 
@@ -632,14 +645,25 @@ export async function runPipeline(job) {
     // Brush's "Vertical axis" comment the viewer reads, is preserved verbatim.
     setPhase(job, 'normalize', 0.99)
     const finalPly = path.join(outDir, 'result.ply')
+    let normalized = false
     try {
       await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
       job.resultPath = finalPly
+      normalized = true
     } catch (err) {
       // Best-effort: if normalization fails, still hand back the raw export.
       appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
       job.resultPath = rawPly
     }
+
+    // Timing / iteration / hardware stats for this .ply, written to
+    // <id>_out/metrics.json and <jobsDir>/metrics.jsonl. Never fails the job.
+    await recordPlyMetrics(job, {
+      rawPly,
+      finalPly: job.resultPath,
+      normalized,
+      log: (line) => appendLog(job, line),
+    })
 
     // Best-effort copy into the engine's samples folder, so a finished scan can
     // be opened straight from the native viewer's file browser (main.cpp scans

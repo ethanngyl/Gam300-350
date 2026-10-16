@@ -36,6 +36,8 @@ public:
         GaussianSplat
     };
 
+    static constexpr int kMaxModels = 32; //Must match uModelTransforms[] size in the shader
+
     SplatRenderer();
     ~SplatRenderer();
 
@@ -43,6 +45,10 @@ public:
     SplatRenderer& operator=(const SplatRenderer&) = delete;
 
     void SetSplats(const std::vector<SplatVertex>& splats, std::string splatname);
+    //Removes a model and fixes up the selection; out-of-range indices are ignored
+    void RemoveModel(int index);
+    //Direct access for editor panels (transform, name); nullptr if out of range
+    SplatModel* GetModel(int index);
     //Updates a model
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
     //Moves model
@@ -90,7 +96,6 @@ private:
     std::vector<unsigned int> m_sortOrder;  //Splat indices, far to near
 
     //Sorting Vars
-    static constexpr int kMaxModels = 32; //Must match uModelTransforms[] size in the shader
     static constexpr float kSortBudgetMs = 4.0f; //Alloclated sorting time
     static constexpr int kDisableAfterFrames = 3; //How many frames overbudget to disable
     static constexpr int kReEnableAfterFrames = 120; //How many frames to reenable sorting
@@ -101,6 +106,18 @@ private:
     unsigned int m_vao = 0; //Vertex Array Object, holds attributes (e.g. glVertexAttribPointer) and which vbo/ebo are bound
     unsigned int m_vbo = 0; //Vertex Buffer Object, holds splat data
     unsigned int m_ebo = 0; //Element Buffer Object, holds draw order
+
+#ifdef CODEFINE_GLES
+    //WebGL2/GLES3 has no geometry shaders, so Gaussian mode draws one instanced quad per
+    //splat instead. The splat data lives in a float texture (4 texels per SplatVertex) and
+    //the per-instance attribute is the sorted splat index, so sorting only re-uploads indices.
+    void UploadSplatTexture();
+    unsigned int m_quadVao = 0;      //Quad corners + per-instance splat index
+    unsigned int m_quadVbo = 0;      //The 4 corners of the unit quad
+    unsigned int m_orderVbo = 0;     //Per-instance splat index, far -> near
+    unsigned int m_splatTexture = 0; //RGBA32F copy of m_combined
+    std::vector<unsigned int> m_sortBucketCounts; //Counting sort scratch
+#endif
 
     size_t m_totalSplatCount = 0; //Number of models
     size_t m_totalCreatedCount = 0; //Total number of models ever created

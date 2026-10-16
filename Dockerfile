@@ -4,9 +4,19 @@
 #  Build:  docker compose build
 #  Run:    docker compose up            (http://localhost:5005)
 #
-#  The C++ engine (engine/) is a Windows desktop app and is not
-#  part of this image.
+#  The C++ engine's desktop editor is not part of this image, but
+#  its splat renderer is, compiled to WebAssembly for the web app.
 # ============================================================
+
+# ---- Stage 0: engine renderer -> WebAssembly (engine/web) ---------
+# Keep the version in sync with CF_EMSDK_VERSION in engine/build-web.bat.
+FROM emscripten/emsdk:4.0.10 AS engine-web
+WORKDIR /src
+COPY engine/cmake engine/cmake
+COPY engine/src engine/src
+COPY engine/web engine/web
+RUN emcmake cmake -S engine/web -B /build -DCMAKE_BUILD_TYPE=Release -DCODEFINE_WEB_OUTPUT_DIR=/out \
+    && cmake --build /build -j
 
 # ---- Stage 1: build the React app and install server deps ----------
 FROM node:22-bookworm-slim AS web
@@ -14,6 +24,7 @@ WORKDIR /app/packages
 COPY packages/package.json packages/package-lock.json ./
 RUN npm ci
 COPY packages/ ./
+COPY --from=engine-web /out/ ./src/web-app/public/engine/
 RUN npm run build && npm prune --omit=dev
 
 # ---- Stage 2: runtime (COLMAP's official CUDA image) ---------------
