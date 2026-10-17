@@ -21,7 +21,8 @@ const TABS = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shield' }, // comment out this line to disable the tab
+    { id: 'scene', label: 'Scene Builder', icon: 'shield' },
+    { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
 ];
 
 function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {

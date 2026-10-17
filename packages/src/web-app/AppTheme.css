@@ -249,6 +249,10 @@ html {
     margin-bottom: 10px;
 }
 
+    .genesis-new-model.is-active {
+        box-shadow: 0 0 0 2px var(--forma-sidebar), 0 0 0 4px var(--forma-teal-text);
+    }
+
 .genesis-side-label {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.64rem;
