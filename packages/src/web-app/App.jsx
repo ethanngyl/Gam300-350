@@ -274,7 +274,7 @@ function App() {
                         />
                     )}
                     {activeTab === 'editor' && (
-                        <PhotoEditorScreen onGenerateModel={() => goToTab('capture')} />
+                        <PhotoEditorScreen onGenerateModel={handleBatchReady} uploadError={uploadError} />
                     )}
                     {activeTab === 'scene' && (
                         <SceneBuilderScreen onAddFromLibrary={() => openLibrary('models')} />
