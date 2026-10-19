@@ -140,6 +140,22 @@ const upsertJobOwner = db.prepare(
 )
 const selectJobOwner = db.prepare('SELECT owner_id FROM jobs WHERE id = ?')
 const selectOwnedJobIds = db.prepare('SELECT id FROM jobs WHERE owner_id = ?')
+/*
+// Upsert a user the authority (VM) vouched for. The VM's id is authoritative,
+// so we insert/replace by that id. No password is stored locally — the VM
+// holds the only password hash. password_hash is NOT NULL in the schema, so a
+// fixed non-hash placeholder is stored; verifyPassword is never called on a
+// mirrored row (login goes through the VM), and its "salt:hash" split would
+// fail safely anyway.
+const upsertMirroredUser = db.prepare(`
+  INSERT INTO users (id, email, name, password_hash, role)
+  VALUES (?, ?, ?, 'remote', ?)
+  ON CONFLICT(id) DO UPDATE SET
+    email = excluded.email,
+    name  = excluded.name,
+    role  = excluded.role
+`)
+*/
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -351,5 +367,24 @@ export function listOwnedJobIds(userId)
 {
   return new Set(selectOwnedJobIds.all(userId).map((row) => row.id))
 }
+
+/************************************************************************/
+/*!
+  \brief
+    Mirror a user the VM authenticated into the local users table, so local
+    sessions and job ownership (both reference users.id) work with the VM's
+    canonical id. No password is stored locally.
+  \param user
+    { id, email, name, role } as returned by the VM
+  \return
+    nothing
+*/
+/************************************************************************/
+/*
+export function upsertLocalUser({ id, email, name, role })
+{
+  upsertMirroredUser.run(id, email, name, role === 'admin' ? 'admin' : 'user')
+}
+*/
 
 // ----- End of Functions ----------------------------------------------------- //

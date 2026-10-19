@@ -424,6 +424,55 @@ function shutdown(reason, exitCode = 0)
   process.exit(exitCode)
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Middleware for the authority-only account API (/register,
+    /verify-account). Rejects any request without the shared secret in the
+    X-Auth-Key header. Only meaningful when this instance is the authority.
+  \return
+    503 if this instance isn't the authority, 401 on a missing/wrong key
+*/
+/************************************************************************/
+/*
+function requireAuthorityKey(req, res, next)
+{
+  if (config.authMode !== 'authority')
+    return res.status(503).json({ error: 'This server is not the account authority.' })
+  const key = req.get('X-Auth-Key')
+  // constant-time compare so the key can't be guessed by timing
+  const expected = config.authApiKey
+  if (!expected || !key ||
+      key.length !== expected.length ||
+      !crypto.timingSafeEqual(Buffer.from(key), Buffer.from(expected)))
+    return res.status(401).json({ error: 'Unauthorized.' })
+  next()
+}
+*/
+
+/************************************************************************/
+/*!
+  \brief
+    Call the account authority (VM). Adds the shared API key and parses the
+    JSON reply. Throws on a network failure so the route can answer 503.
+  \param endpoint  '/register' or '/verify-account'
+  \param body      the JSON payload
+  \return          { status, data }
+*/
+/************************************************************************/
+/*
+async function callAuthority(endpoint, body)
+{
+  const resp = await fetch(`${config.vmAuthUrl}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-Key': config.authApiKey },
+    body: JSON.stringify(body),
+  })
+  const data = await resp.json().catch(() => ({}))
+  return { status: resp.status, data }
+}
+*/
+
 // ----- End of Functions ----------------------------------------------------- //
 
 // ----- Start of Routes ------------------------------------------------------ // 
@@ -709,6 +758,53 @@ app.post('/auth/signup', async (req, res, next) =>
   }
 })
 
+/*
+app.post('/auth/signup', async (req, res, next) =>
+{
+  const { name, email, password, remember } = req.body || {}
+
+  // Authority (VM): behave exactly as before, using the local accounts DB.
+  if (config.authMode === 'authority')
+  {
+    const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+    const trimmedName = typeof name === 'string' ? name.trim() : ''
+    if (!EMAIL_RE.test(trimmedEmail))
+      return res.status(400).json({ error: 'Enter a valid email address.' })
+    if (typeof password !== 'string' || password.length < 6)
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+    if (!trimmedName)
+      return res.status(400).json({ error: 'Enter your name.' })
+    try
+    {
+      const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
+      startSession(res, user.id, remember === true)
+      return res.status(201).json(publicUser(user))
+    }
+    catch (err)
+    {
+      if (err.code === 'EMAIL_TAKEN')
+        return res.status(409).json({ error: 'An account with that email already exists.' })
+      return next(err)
+    }
+  }
+
+  // Client: forward to the VM, mirror the returned user, then start a local session.
+  try
+  {
+    const { status, data } = await callAuthority('/register', { name, email, password })
+    if (status !== 201)
+      return res.status(status).json({ error: data.error || 'Signup failed.' })
+    upsertLocalUser(data)                 // mirror VM id -> local users
+    startSession(res, data.id, remember === true)
+    res.status(201).json(publicUser({ ...data, created_at: new Date().toISOString() }))
+  }
+  catch
+  {
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+  }
+})
+*/
+
 /************************************************************************/
 /*!
   \brief
@@ -739,6 +835,44 @@ app.post('/auth/login', async (req, res, next) =>
     next(err)
   }
 })
+
+/*
+app.post('/auth/login', async (req, res, next) =>
+{
+  const { email, password, remember } = req.body || {}
+  if (typeof email !== 'string' || typeof password !== 'string')
+    return res.status(400).json({ error: 'Enter your email and password.' })
+
+  // Authority (VM): unchanged local-DB behavior.
+  if (config.authMode === 'authority')
+  {
+    try
+    {
+      const user = findUserByEmail(email.trim())
+      if (!user || !(await verifyPassword(password, user.password_hash)))
+        return res.status(401).json({ error: 'Incorrect email or password.' })
+      startSession(res, user.id, remember === true)
+      return res.json(publicUser(user))
+    }
+    catch (err) { return next(err) }
+  }
+
+  // Client: verify against the VM, mirror the user, start a local session.
+  try
+  {
+    const { status, data } = await callAuthority('/verify-account', { email, password })
+    if (status !== 200 || !data.valid)
+      return res.status(401).json({ error: 'Incorrect email or password.' })
+    upsertLocalUser(data)
+    startSession(res, data.id, remember === true)
+    res.json(publicUser({ ...data, created_at: new Date().toISOString() }))
+  }
+  catch
+  {
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+  }
+})
+*/
 
 /************************************************************************/
 /*!
@@ -816,6 +950,72 @@ function serveWikiPage(rawPage, res) {
     `)
   })
 }
+
+/************************************************************************/
+/*!
+  \brief
+    Authority-only: create an account in the VM's database. Called by a
+    client backend's /auth/signup, not by browsers. Returns the new user's
+    canonical id so clients can own jobs by it.
+  \return
+    400 invalid input, 409 email taken, 201 { id, email, name, role }
+*/
+/************************************************************************/
+/*
+app.post('/register', requireAuthorityKey, async (req, res, next) =>
+{
+  const { name, email, password } = req.body || {}
+  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+  if (!EMAIL_RE.test(trimmedEmail))
+    return res.status(400).json({ error: 'Enter a valid email address.' })
+  if (typeof password !== 'string' || password.length < 6)
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' })
+  if (!trimmedName)
+    return res.status(400).json({ error: 'Enter your name.' })
+  try
+  {
+    const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
+    res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role })
+  }
+  catch (err)
+  {
+    if (err.code === 'EMAIL_TAKEN')
+      return res.status(409).json({ error: 'An account with that email already exists.' })
+    next(err)
+  }
+})
+*/
+
+/************************************************************************/
+/*!
+  \brief
+    Authority-only: check credentials against the VM's database. Unknown
+    email and wrong password return the same { valid: false } so the
+    endpoint can't be used to probe which emails are registered.
+  \return
+    200 { valid: true, id, email, name, role } or { valid: false }
+*/
+/************************************************************************/
+/*
+app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
+{
+  const { email, password } = req.body || {}
+  if (typeof email !== 'string' || typeof password !== 'string')
+    return res.status(400).json({ error: 'Email and password required.' })
+  try
+  {
+    const user = findUserByEmail(email.trim())
+    if (!user || !(await verifyPassword(password, user.password_hash)))
+      return res.json({ valid: false })
+    res.json({ valid: true, id: user.id, email: user.email, name: user.name, role: user.role })
+  }
+  catch (err)
+  {
+    next(err)
+  }
+})
+*/
 
 // ----- End of Routes -------------------------------------------------------- //
 

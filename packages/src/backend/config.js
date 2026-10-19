@@ -319,4 +319,18 @@ export const config = {
   // Recenters/rescales the trained splat into the viewer's frame.
   normalizeScript:
     process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
+
+  /*
+  // --- Account authority (centralized accounts on the VM) --------------------
+  // 'authority': this instance owns the accounts DB (the VM). It serves
+  //   /register and /verify-account, and its /auth/* routes use db.js directly.
+  // 'client' (default): this instance forwards signup/login to the authority.
+  authMode: process.env.AUTH_MODE || 'client',
+  // Where the authority lives (only used in 'client' mode). No trailing slash.
+  vmAuthUrl: (process.env.VM_AUTH_URL || 'http://51.79.240.131:5005').replace(/\/+$/, ''),
+  // Shared secret between clients and the authority. MUST be set (same value)
+  // on every machine via the AUTH_API_KEY env var. The fallback is only so a
+  // misconfigured setup fails loudly rather than silently accepting anything.
+  authApiKey: process.env.AUTH_API_KEY || '',
+  */
 }
