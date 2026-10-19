@@ -103,3 +103,5 @@ _deps/          # CMake FetchContent downloads (like node_modules for C++)
 !.vscode/settings.json
 .DS_Store
 Thumbs.db
+# Packaged desktop build (package.bat)
+dist/

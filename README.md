@@ -58,6 +58,14 @@ Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in 
 - Start the debugger
 - .ply files can be added into the engine/assets folder
 
+## How to Package the Engine as a Desktop App
+Builds a Release copy that runs on any Windows PC, with no Visual Studio, Qt or repo needed.
+- Run engine/run.bat once first (downloads Qt and sets up the build folder)
+- Double click engine/package.bat
+- engine/dist/Codefine.exe is the ready-to-run app; engine/build/Codefine-0.1.0-win64.zip is the same folder zipped for sharing
+- With NSIS installed (https://nsis.sourceforge.io), package.bat also produces a Codefine-0.1.0-win64.exe installer with Start Menu and desktop shortcuts
+- The sample splats add ~180 MB; configure with `-DCODEFINE_PACKAGE_SAMPLES=OFF` to leave them out
+
 ## Engine renderer in the web app
 The web app's 3D viewer can render with the engine's own splat renderer (`engine/src/splat`, `engine/src/gfx`) compiled to WebAssembly, instead of the Three.js viewer.
 - The start scripts (`start.bat`, `start.sh`, `start-linux.sh`) build it automatically. The first run downloads the Emscripten SDK into `engine/Library/emsdk` (a few hundred MB); later runs only rebuild what changed. Output goes to `packages/src/web-app/public/engine/`

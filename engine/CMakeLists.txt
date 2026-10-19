@@ -176,3 +176,109 @@ elseif(APPLE)
 elseif(UNIX)
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE GL X11 pthread dl)
 endif()
+
+# ======================= Install & Packaging =========================
+# Produces a self-contained desktop build that runs without the source tree,
+# Visual Studio or Qt installed:
+#   cmake --build build --config Release
+#   cmake --install build --config Release --component Codefine --prefix dist
+#   cd build && cpack -C Release          (zip, plus an installer if NSIS is found)
+# package.bat wraps these steps. Everything is installed flat into one folder,
+# with assets/ next to the exe (see src/ui/AssetPaths.h).
+#
+# All rules use the "Codefine" component: FetchContent dependencies (GLEW,
+# FreeType, ...) define their own install() rules, and packaging only this
+# component keeps their headers and static libs out of the package.
+
+option(CODEFINE_PACKAGE_SAMPLES "Ship the sample .ply splats (~180 MB) with the app" ON)
+
+set(CODEFINE_COMPONENT Codefine)
+set(CMAKE_INSTALL_BINDIR ".")
+
+install(TARGETS ${CMAKE_PROJECT_NAME}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    COMPONENT ${CODEFINE_COMPONENT}
+)
+
+if(WIN32)
+    # FMOD is an import lib, so the Qt deploy step below does not find its DLL.
+    install(FILES
+        "$<IF:$<CONFIG:Debug>,${FMOD_DLL_DIR}/fmodL.dll,${FMOD_DLL_DIR}/fmod.dll>"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT ${CODEFINE_COMPONENT}
+    )
+
+    # MSVC runtime (msvcp140.dll, vcruntime140*.dll), deployed app-local so
+    # users do not need the VC++ Redistributable installed.
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT ${CODEFINE_COMPONENT})
+    include(InstallRequiredSystemLibraries)
+endif()
+
+# Qt DLLs and plugins (platforms, styles, imageformats, ...) via windeployqt.
+# importDependencies() finds Qt inside a function, so the variables Qt's deploy
+# API relies on (e.g. QT6_IS_SHARED_LIBS_BUILD) never reach this scope. Find it
+# again here; it reuses the cached Qt6_DIR.
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
+qt_generate_deploy_app_script(
+    TARGET ${CMAKE_PROJECT_NAME}
+    OUTPUT_SCRIPT CODEFINE_DEPLOY_SCRIPT
+    NO_TRANSLATIONS
+    # The MSVC runtime is already installed app-local above; skip the 18 MB
+    # vc_redist.x64.exe windeployqt would otherwise add.
+    DEPLOY_TOOL_OPTIONS --no-compiler-runtime
+)
+# The script's file name holds $<CONFIG>; cmake_minimum_required(3.5) leaves
+# generator expressions in install(SCRIPT) unexpanded unless CMP0087 is NEW.
+cmake_policy(SET CMP0087 NEW)
+# Deploy Qt flat next to the exe (platforms/, styles/, ... as siblings) rather
+# than Qt's default bin/ + plugins/ layout. Qt only applies its defaults when
+# these are unset, so set them at install time before the deploy script runs.
+install(CODE "
+    set(QT_DEPLOY_BIN_DIR \"${CMAKE_INSTALL_BINDIR}\")
+    set(QT_DEPLOY_LIB_DIR \"${CMAKE_INSTALL_BINDIR}\")
+    set(QT_DEPLOY_PLUGINS_DIR \"${CMAKE_INSTALL_BINDIR}\")
+" COMPONENT ${CODEFINE_COMPONENT})
+install(SCRIPT ${CODEFINE_DEPLOY_SCRIPT} COMPONENT ${CODEFINE_COMPONENT})
+
+install(DIRECTORY assets/audio
+    DESTINATION ${CMAKE_INSTALL_BINDIR}/assets
+    COMPONENT ${CODEFINE_COMPONENT}
+)
+if(CODEFINE_PACKAGE_SAMPLES)
+    install(DIRECTORY assets/samples
+        DESTINATION ${CMAKE_INSTALL_BINDIR}/assets
+        COMPONENT ${CODEFINE_COMPONENT}
+    )
+else()
+    # Keep the folder so the Asset Browser opens on it rather than falling back.
+    install(DIRECTORY DESTINATION ${CMAKE_INSTALL_BINDIR}/assets/samples
+        COMPONENT ${CODEFINE_COMPONENT})
+endif()
+
+set(CPACK_PACKAGE_NAME "Codefine")
+set(CPACK_PACKAGE_VENDOR "Team CoDefine")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Codefine - Gaussian splat viewer and editor")
+set(CPACK_PACKAGE_VERSION "0.1.0")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Codefine")
+set(CPACK_PACKAGE_EXECUTABLES "Codefine;Codefine Engine")
+# Package only the Codefine component (build dir;project;component;subdir).
+set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${CMAKE_PROJECT_NAME};${CODEFINE_COMPONENT};/")
+set(CPACK_PACKAGE_FILE_NAME "Codefine-${CPACK_PACKAGE_VERSION}-win64")
+
+set(CPACK_GENERATOR "ZIP")
+find_program(CODEFINE_MAKENSIS makensis
+    PATHS "$ENV{ProgramFiles}/NSIS" "$ENV{ProgramFiles\(x86\)}/NSIS")
+if(CODEFINE_MAKENSIS)
+    list(APPEND CPACK_GENERATOR "NSIS")
+    set(CPACK_NSIS_DISPLAY_NAME "Codefine Engine")
+    set(CPACK_NSIS_PACKAGE_NAME "Codefine Engine")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "Codefine.exe")
+    set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Codefine.exe")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_CREATE_ICONS_EXTRA
+        "CreateShortCut '$DESKTOP\\Codefine Engine.lnk' '$INSTDIR\\Codefine.exe'")
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\Codefine Engine.lnk'")
+endif()
+
+include(CPack)

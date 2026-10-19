@@ -12,6 +12,7 @@ AudioManager, and the timer that pumps FMOD and refreshes the voice count.
 #include "ui/AudioPanel.h"
 
 #include "Manager/AudioManager.h"
+#include "ui/AssetPaths.h"
 
 #include <QDir>
 #include <QFileDialog>
@@ -33,13 +34,9 @@ namespace {
         "*.wav", "*.ogg", "*.mp3", "*.flac", "*.aiff", "*.aif", "*.wma", "*.m4a"
     };
 
-    // Folder opened first: the engine's own assets/audio, baked in at build
-    // time so the panel lists the project's audio by default.
-#ifdef ENGINE_ASSETS_DIR
-    const QString kDefaultAudioDir = QStringLiteral(ENGINE_ASSETS_DIR "/audio");
-#else
-    const QString kDefaultAudioDir;
-#endif
+    // Folder opened first: the engine's own assets/audio, so the panel lists
+    // the project's audio by default.
+    QString DefaultAudioDir() { return AssetPaths::AssetsSubdir("audio"); }
 
     // Role under which each list item stashes its absolute file path.
     constexpr int kPathRole = Qt::UserRole;
@@ -97,12 +94,12 @@ AudioPanel::AudioPanel(QWidget* parent)
     }
 
     m_statusLabel->setText("Ready. Double-click a file to play it.");
-    setFolder(kDefaultAudioDir);
+    setFolder(DefaultAudioDir());
 
     connect(chooseFolderButton, &QPushButton::clicked, this, [this] {
         const QString dir = QFileDialog::getExistingDirectory(
             this, "Choose a folder of audio files",
-            m_folder.isEmpty() ? kDefaultAudioDir : m_folder);
+            m_folder.isEmpty() ? DefaultAudioDir() : m_folder);
         if (!dir.isEmpty()) {
             setFolder(dir);
         }
@@ -117,7 +114,7 @@ AudioPanel::AudioPanel(QWidget* parent)
     connect(playFileButton, &QPushButton::clicked, this, [this] {
         const QString path = QFileDialog::getOpenFileName(
             this, "Select an audio file",
-            m_folder.isEmpty() ? kDefaultAudioDir : m_folder,
+            m_folder.isEmpty() ? DefaultAudioDir() : m_folder,
             QString("Audio files (%1);;All files (*.*)").arg(kAudioNameFilters.join(' ')));
         if (!path.isEmpty()) {
             playPath(path, QFileInfo(path).fileName());
@@ -143,7 +140,7 @@ AudioPanel::~AudioPanel() = default;
 
 void AudioPanel::setFolder(const QString& requestedDir) {
     const QString dir = requestedDir.isEmpty() || !QDir(requestedDir).exists()
-                            ? kDefaultAudioDir : requestedDir;
+                            ? DefaultAudioDir() : requestedDir;
     m_folder = dir;
     m_list->clear();
 
