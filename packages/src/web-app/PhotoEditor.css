@@ -630,3 +630,117 @@
     -webkit-user-select: none;
     touch-action: none;
 }
+
+/* ============================================================
+   Additions: auto tools, white balance, warnings, originals switch
+   ============================================================ */
+
+/* Holds the thumbnail colour filters; takes up no space. */
+.photo-editor-filter-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+/* The fieldset only groups the controls so they can be disabled together. */
+.photo-editor-adjust-fields {
+    border: none;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+    .photo-editor-adjust-fields:disabled {
+        opacity: 0.45;
+    }
+
+.photo-editor-auto-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+    .photo-editor-auto-actions .forma-btn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+/* Strong-setting warning on a slider */
+.photo-editor-slider.is-strong b {
+    color: var(--forma-coral);
+}
+
+.photo-editor-slider-warning {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.74rem;
+    line-height: 1.4;
+    color: var(--forma-coral);
+}
+
+.photo-editor-preview-canvas.is-picking {
+    cursor: crosshair;
+}
+
+/* "Use original photos" switch in the bottom bar */
+.photo-editor-originals {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.84rem;
+    color: var(--forma-text);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* Own copy of the toggle style, so it doesn't depend on the old
+   Photo Editor rules in AppTheme.css. */
+.photo-editor-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 34px;
+    height: 20px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    position: relative;
+    cursor: pointer;
+    flex: none;
+}
+
+    .photo-editor-switch::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--forma-text-muted);
+        transition: transform 0.15s ease;
+    }
+
+    .photo-editor-switch:checked {
+        background: rgba(63, 152, 173, 0.45);
+        border-color: var(--forma-blue);
+    }
+
+        .photo-editor-switch:checked::after {
+            transform: translateX(14px);
+            background: #fff;
+        }
+
+@media (min-width: 761px) {
+    .photo-editor-footer {
+        gap: 20px;
+    }
+
+    .photo-editor-footer-text {
+        flex: 1;
+    }
+}

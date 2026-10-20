@@ -9,11 +9,13 @@
 Photo Editor tab: checks and prepares photos before reconstruction.
 Photos come from the device or the photo library. Each one is checked in
 the browser for blur, bad exposure and near-duplicates, and can be kept
-or left out. Edits (brightness, contrast, sharpen, crop) apply to all
-photos by default; on desktop a photo can also be edited on its own, with
-a warning when photos end up cropped differently. "Generate 3D model"
-uploads only the kept photos through onGenerateModel (App's
-handleBatchReady). Phones get a simpler, batch-only set of tools.
+or left out. Edits (auto fix, brightness, contrast, warmth, tint, auto
+color, pick a neutral spot, sharpen, crop) apply to all photos by
+default; on desktop a photo can also be edited on its own. Strong
+settings, lost highlight/shadow detail, large crops and mixed crops all
+show warnings. "Use original photos" bypasses every edit. Edits are only
+settings until upload, so the originals are never changed. Phones get a
+simpler, batch-only set of tools.
 **************************************************************************/
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -22,20 +24,25 @@ import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { playSound } from '../audio/Audio.js';
 import {
     analyzePhoto,
-    buildPreviewFilter,
     findPhotoIssues,
     ISSUE_EXPLANATIONS,
     ISSUE_LABELS,
 } from './photoChecks.js';
 import {
+    buildChannelTransfer,
+    computeAutoFix,
+    computeWhiteBalance,
     cropsMatch,
     DEFAULT_EDITS,
     exportEditedFile,
+    hasColorChange,
     hasCrop,
     hasEdits,
     MAX_CROP_INSET,
+    measureClippedShare,
     NO_CROP,
     renderEditedCanvas,
+    sampleColor,
 } from './photoEdits.js';
 import './PhotoEditor.css';
 
@@ -49,6 +56,30 @@ const PREVIEW_LONGEST_SIDE = 900;
 const PREVIEW_DELAY_MS = 150;
 // The phone "Trim edges" slider cuts up to this percentage from each side.
 const MAX_TRIM_PERCENT = 30;
+// SVG filter shared by every photo that uses the batch edits.
+const BATCH_FILTER_ID = 'photo-editor-filter-batch';
+
+// Past these values a slider turns coral and shows its warning.
+const STRONG_SETTING_LIMITS = {
+    brightness: 30,
+    contrast: 30,
+    warmth: 35,
+    tint: 35,
+    sharpen: 60,
+};
+
+const STRONG_SETTING_WARNINGS = {
+    brightness: 'Strong brightness changes can wash out or hide detail.',
+    contrast: 'Strong contrast can lose detail in the brightest and darkest areas.',
+    warmth: 'A strong color shift can make the model look unnatural.',
+    tint: 'A strong color shift can make the model look unnatural.',
+    sharpen: 'Strong sharpening can add halos that confuse the 3D matching.',
+};
+
+// A crop cutting more than this from any side shows a reminder.
+const LARGE_CROP_INSET = 0.25;
+// Warn when an edit turns this much more of the photo pure white or black.
+const CLIPPING_INCREASE_WARNING = 0.03;
 
 const CROP_EDGES = ['top', 'right', 'bottom', 'left'];
 
@@ -72,6 +103,46 @@ function useIsPhone() {
 
 function formatSigned(value) {
     return value > 0 ? `+${value}` : `${value}`;
+}
+
+function filterIdForPhoto(photoId) {
+    return `photo-editor-filter-${photoId}`;
+}
+
+// SVG filter applying the colour edits to a thumbnail. Uses the same
+// formula as the upload, so the grid shows what will actually be sent.
+function ColorFilter({ filterId, edits }) {
+    const transfer = buildChannelTransfer(edits);
+    return (
+        <filter id={filterId} colorInterpolationFilters="sRGB">
+            <feComponentTransfer>
+                <feFuncR type="linear" slope={transfer.red.slope} intercept={transfer.red.intercept} />
+                <feFuncG type="linear" slope={transfer.green.slope} intercept={transfer.green.intercept} />
+                <feFuncB type="linear" slope={transfer.blue.slope} intercept={transfer.blue.intercept} />
+            </feComponentTransfer>
+        </filter>
+    );
+}
+
+// One slider, which turns coral and explains the risk past its strong limit.
+function EditSlider({ label, settingName, value, min, max, onChange, isSigned = true }) {
+    const isStrong = Math.abs(value) > STRONG_SETTING_LIMITS[settingName];
+
+    return (
+        <label className={isStrong ? 'photo-editor-slider is-strong' : 'photo-editor-slider'}>
+            <span>{label} <b>{isSigned ? formatSigned(value) : value}</b></span>
+            <input
+                type="range"
+                min={min}
+                max={max}
+                value={value}
+                onChange={(event) => onChange(Number(event.target.value))}
+            />
+            {isStrong && (
+                <small className="photo-editor-slider-warning">{STRONG_SETTING_WARNINGS[settingName]}</small>
+            )}
+        </label>
+    );
 }
 
 // Box drawn over the preview; dragging an edge handle moves that side of
@@ -150,9 +221,16 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
     const [batchEdits, setBatchEdits] = useState(DEFAULT_EDITS);
     // 'all' edits batchEdits; 'photo' edits only the selected photo (desktop).
     const [editTarget, setEditTarget] = useState('all');
+    // When true, every edit is bypassed and the original files are uploaded.
+    const [useOriginals, setUseOriginals] = useState(false);
     const [isCropping, setIsCropping] = useState(false);
+    const [isPickingNeutral, setIsPickingNeutral] = useState(false);
+    // Message from auto colour or the neutral-spot picker, if one failed.
+    const [colorMessage, setColorMessage] = useState(null);
     const [isShowingOriginal, setIsShowingOriginal] = useState(false);
     const [previewFailed, setPreviewFailed] = useState(false);
+    // Share of the preview that is pure white or black after edits.
+    const [previewClippedShare, setPreviewClippedShare] = useState(null);
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     // How many photos have been prepared for upload; null when not uploading.
@@ -201,7 +279,8 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
     const isPreparing = preparedCount !== null;
 
     const isEditingSinglePhoto = !isPhone && editTarget === 'photo' && selectedPhoto !== null;
-    const isCropToolActive = !isPhone && isCropping && selectedPhoto !== null;
+    const isCropToolActive = !isPhone && !useOriginals && isCropping && selectedPhoto !== null;
+    const isPickToolActive = !isPhone && !useOriginals && isPickingNeutral && selectedPhoto !== null && !isCropToolActive;
 
     // A photo uses its own edits if it has any, otherwise the shared ones.
     function editsFor(photo) {
@@ -211,13 +290,20 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
     const currentEdits = isEditingSinglePhoto ? editsFor(selectedPhoto) : batchEdits;
 
     const firstKeptCrop = keptPhotos.length > 0 ? editsFor(keptPhotos[0]).crop : NO_CROP;
-    const hasMixedCrops = keptPhotos.some((photo) => !cropsMatch(editsFor(photo).crop, firstKeptCrop));
+    const hasMixedCrops = !useOriginals && keptPhotos.some((photo) => !cropsMatch(editsFor(photo).crop, firstKeptCrop));
+    const hasLargeCrop = Object.values(currentEdits.crop).some((inset) => inset > LARGE_CROP_INSET);
+
+    // Measurements the auto tools work from: just the selected photo when
+    // editing it on its own, otherwise every kept photo that's been checked.
+    const autoSourceAnalyses = isEditingSinglePhoto
+        ? (selectedPhoto.analysisStatus === 'done' ? [selectedPhoto.analysis] : [])
+        : keptPhotos.filter((photo) => photo.analysisStatus === 'done').map((photo) => photo.analysis);
 
     // What the large preview shows: the original, the photo uncropped with a
     // crop box over it while cropping, or the finished result.
     let previewEdits = null;
     if (selectedPhoto) {
-        if (isShowingOriginal) {
+        if (isShowingOriginal || useOriginals) {
             previewEdits = DEFAULT_EDITS;
         } else if (isCropToolActive) {
             previewEdits = { ...editsFor(selectedPhoto), crop: NO_CROP };
@@ -243,9 +329,15 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                 );
                 const previewCanvas = previewCanvasRef.current;
                 if (isCancelled || !previewCanvas) return;
+
                 previewCanvas.width = renderedCanvas.width;
                 previewCanvas.height = renderedCanvas.height;
                 previewCanvas.getContext('2d').drawImage(renderedCanvas, 0, 0);
+
+                const renderedPixelBytes = renderedCanvas
+                    .getContext('2d')
+                    .getImageData(0, 0, renderedCanvas.width, renderedCanvas.height).data;
+                setPreviewClippedShare(measureClippedShare(renderedPixelBytes));
                 setPreviewFailed(false);
             } catch {
                 if (!isCancelled) setPreviewFailed(true);
@@ -257,6 +349,28 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
             clearTimeout(timerId);
         };
     }, [selectedFile, previewEditsKey, isPhone]);
+
+    // How much more of the selected photo is pure white or black than in the
+    // original, if enough to warn about. Comparing with the original means a
+    // photo that was already on a white background doesn't trigger it.
+    let addedClippedShare = 0;
+    if (
+        selectedPhoto &&
+        selectedPhoto.analysisStatus === 'done' &&
+        previewClippedShare !== null &&
+        !isShowingOriginal &&
+        !useOriginals &&
+        hasColorChange(editsFor(selectedPhoto))
+    ) {
+        addedClippedShare = previewClippedShare - selectedPhoto.analysis.clippedShare;
+    }
+
+    function filterForPhoto(photo) {
+        if (useOriginals) return 'none';
+        const photoEdits = editsFor(photo);
+        if (!hasColorChange(photoEdits)) return 'none';
+        return `url(#${photo.customEdits ? filterIdForPhoto(photo.id) : BATCH_FILTER_ID})`;
+    }
 
     function openFilePicker() {
         playSound('click');
@@ -324,6 +438,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
         if (selectedPhotoId === photoId) {
             setSelectedPhotoId(null);
             setIsCropping(false);
+            setIsPickingNeutral(false);
         }
     }
 
@@ -335,6 +450,8 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
         }
         playSound('click');
         setPreviewFailed(false);
+        setPreviewClippedShare(null);
+        setColorMessage(null);
         setSelectedPhotoId(photoId);
     }
 
@@ -364,17 +481,19 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                 )
             );
         } else {
-            setBatchEdits((currentEdits) => ({ ...currentEdits, ...changes }));
+            setBatchEdits((currentEditValues) => ({ ...currentEditValues, ...changes }));
         }
     }
 
     function changeEditTarget(target) {
         playSound('click');
         setEditTarget(target);
+        setColorMessage(null);
     }
 
     function resetCurrentEdits() {
         playSound('click');
+        setColorMessage(null);
         if (isEditingSinglePhoto) {
             updateEdits({ ...DEFAULT_EDITS });
         } else {
@@ -393,8 +512,66 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
         );
     }
 
+    function handleAutoFix() {
+        playSound('click');
+        const correction = computeAutoFix(autoSourceAnalyses);
+        if (correction) updateEdits(correction);
+    }
+
+    // Gray world: the average colour across the photos should be neutral.
+    function handleAutoColor() {
+        playSound('click');
+        const sourceCount = autoSourceAnalyses.length;
+        if (sourceCount === 0) return;
+
+        const averageRed = autoSourceAnalyses.reduce((total, analysis) => total + analysis.averageRed, 0) / sourceCount;
+        const averageGreen = autoSourceAnalyses.reduce((total, analysis) => total + analysis.averageGreen, 0) / sourceCount;
+        const averageBlue = autoSourceAnalyses.reduce((total, analysis) => total + analysis.averageBlue, 0) / sourceCount;
+
+        const correction = computeWhiteBalance(averageRed, averageGreen, averageBlue);
+        if (correction) {
+            updateEdits(correction);
+            setColorMessage(null);
+        } else {
+            setColorMessage("Auto colour couldn't find a reliable color to balance against. Try the warmth slider instead.");
+        }
+    }
+
+    function togglePickNeutral() {
+        playSound('click');
+        setColorMessage(null);
+        setIsPickingNeutral((wasPicking) => !wasPicking);
+    }
+
+    // Reads the clicked spot from the unedited photo and sets warmth and
+    // tint so that spot becomes neutral grey.
+    async function handlePreviewClick(event) {
+        if (!isPickToolActive) return;
+
+        const canvasBounds = event.currentTarget.getBoundingClientRect();
+        const fractionX = (event.clientX - canvasBounds.left) / canvasBounds.width;
+        const fractionY = (event.clientY - canvasBounds.top) / canvasBounds.height;
+        const displayedCrop = editsFor(selectedPhoto).crop;
+
+        setIsPickingNeutral(false);
+        try {
+            const sampledColor = await sampleColor(selectedPhoto.file, displayedCrop, fractionX, fractionY);
+            const correction = computeWhiteBalance(sampledColor.red, sampledColor.green, sampledColor.blue);
+            if (correction) {
+                playSound('click');
+                updateEdits(correction);
+                setColorMessage(null);
+            } else {
+                setColorMessage('That spot is too dark or too close to pure white. Pick a light grey or off-white area.');
+            }
+        } catch {
+            setColorMessage("Couldn't read that spot. Try another one.");
+        }
+    }
+
     function toggleCropTool() {
         playSound('click');
+        setIsPickingNeutral(false);
         setIsCropping((wasCropping) => !wasCropping);
     }
 
@@ -406,20 +583,28 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
     // Phone "Trim edges": the same amount cut from every side of every photo.
     function handleTrimChange(trimPercent) {
         const trimFraction = trimPercent / 100;
-        setBatchEdits((currentEdits) => ({
-            ...currentEdits,
+        setBatchEdits((currentEditValues) => ({
+            ...currentEditValues,
             crop: { left: trimFraction, top: trimFraction, right: trimFraction, bottom: trimFraction },
         }));
+    }
+
+    function handleUseOriginalsChange(event) {
+        playSound('click');
+        setUseOriginals(event.target.checked);
+        setIsCropping(false);
+        setIsPickingNeutral(false);
     }
 
     async function handleGenerate() {
         playSound('click');
         setIsCropping(false);
+        setIsPickingNeutral(false);
         setPreparedCount(0);
         try {
             const filesToUpload = [];
             for (const photo of keptPhotos) {
-                filesToUpload.push(await exportEditedFile(photo.file, editsFor(photo)));
+                filesToUpload.push(useOriginals ? photo.file : await exportEditedFile(photo.file, editsFor(photo)));
                 setPreparedCount(filesToUpload.length);
             }
             // On success App switches to the processing screen; on failure it
@@ -442,6 +627,9 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
         }
         if (keptPhotos.length < MIN_PHOTOS) {
             return `Keep at least ${MIN_PHOTOS} photos to build a model (${keptPhotos.length} kept).`;
+        }
+        if (useOriginals) {
+            return `${keptPhotos.length} original photos will be used, without edits.`;
         }
         return `${keptPhotos.length} photos will be used.`;
     }
@@ -489,6 +677,18 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
+            {/* Color filters used by the thumbnails. */}
+            <svg className="photo-editor-filter-defs" aria-hidden="true" focusable="false">
+                <defs>
+                    <ColorFilter filterId={BATCH_FILTER_ID} edits={batchEdits} />
+                    {photos
+                        .filter((photo) => photo.customEdits)
+                        .map((photo) => (
+                            <ColorFilter key={photo.id} filterId={filterIdForPhoto(photo.id)} edits={photo.customEdits} />
+                        ))}
+                </defs>
+            </svg>
+
             <div className="photo-editor-heading">
                 <div>
                     <div className="eyebrow eyebrow-accent">Prepare photos</div>
@@ -567,7 +767,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                         <div className="photo-editor-grid">
                             {photos.map((photo) => {
                                 const issues = issuesById[photo.id] ?? [];
-                                const photoEdits = editsFor(photo);
                                 const thumbClassName = [
                                     'photo-editor-thumb',
                                     photo.isExcluded ? 'is-excluded' : '',
@@ -586,9 +785,9 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                                                 src={photo.url}
                                                 alt=""
                                                 loading="lazy"
-                                                style={{ filter: buildPreviewFilter(photoEdits.brightness, photoEdits.contrast) }}
+                                                style={{ filter: filterForPhoto(photo) }}
                                             />
-                                            {photo.customEdits && (
+                                            {photo.customEdits && !useOriginals && (
                                                 <span className="photo-editor-edited-badge">Edited</span>
                                             )}
                                             {photo.isExcluded && (
@@ -629,7 +828,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                                                     </p>
                                                 ) : (
                                                     <div className="photo-editor-canvas-wrap">
-                                                        <canvas ref={previewCanvasRef} className="photo-editor-preview-canvas" />
+                                                        <canvas
+                                                            ref={previewCanvasRef}
+                                                            className={isPickToolActive ? 'photo-editor-preview-canvas is-picking' : 'photo-editor-preview-canvas'}
+                                                            onClick={handlePreviewClick}
+                                                        />
                                                         {isCropToolActive && (
                                                             <CropOverlay
                                                                 crop={currentEdits.crop}
@@ -645,6 +848,17 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                                                     Drag the edges to crop {isEditingSinglePhoto ? 'this photo only' : 'every photo the same way'}.
                                                 </p>
                                             )}
+                                            {isPickToolActive && (
+                                                <p className="photo-editor-hint">
+                                                    Click something in the photo that should be grey or white, like the turntable or a white card.
+                                                </p>
+                                            )}
+                                            {addedClippedShare > CLIPPING_INCREASE_WARNING && (
+                                                <p className="photo-editor-warning">
+                                                    These edits turn about {Math.round(addedClippedShare * 100)}% more of this
+                                                    photo pure white or black, so some detail is lost. Try a gentler setting.
+                                                </p>
+                                            )}
 
                                             <div className="photo-editor-preview-name">{selectedPhoto.file.name}</div>
                                             {renderPreviewDetails(selectedPhoto)}
@@ -653,6 +867,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                                                 <button
                                                     className={isCropToolActive ? 'forma-btn forma-btn-primary' : 'forma-btn'}
                                                     onClick={toggleCropTool}
+                                                    disabled={useOriginals}
                                                 >
                                                     <Icon name="crop" size={14} /> {isCropToolActive ? 'Done cropping' : 'Crop'}
                                                 </button>
@@ -661,7 +876,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                                                         Reset crop
                                                     </button>
                                                 )}
-                                                {!isCropToolActive && hasEdits(editsFor(selectedPhoto)) && (
+                                                {!isCropToolActive && !useOriginals && hasEdits(editsFor(selectedPhoto)) && (
                                                     <button
                                                         className="forma-btn photo-editor-hold-button"
                                                         onPointerDown={() => setIsShowingOriginal(true)}
@@ -694,12 +909,14 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                                         <button
                                             className={isEditingSinglePhoto ? '' : 'is-active'}
                                             onClick={() => changeEditTarget('all')}
+                                            disabled={useOriginals}
                                         >
                                             All photos
                                         </button>
                                         <button
                                             className={isEditingSinglePhoto ? 'is-active' : ''}
                                             onClick={() => changeEditTarget('photo')}
+                                            disabled={useOriginals}
                                         >
                                             This photo
                                         </button>
@@ -708,97 +925,169 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
                                     <div className="eyebrow">Adjust all photos</div>
                                 )}
 
-                                <label className="photo-editor-slider">
-                                    <span>Brightness <b>{formatSigned(currentEdits.brightness)}</b></span>
-                                    <input
-                                        type="range"
-                                        min="-50"
-                                        max="50"
-                                        value={currentEdits.brightness}
-                                        onChange={(event) => updateEdits({ brightness: Number(event.target.value) })}
-                                    />
-                                </label>
-
-                                {!isPhone && (
-                                    <label className="photo-editor-slider">
-                                        <span>Contrast <b>{formatSigned(currentEdits.contrast)}</b></span>
-                                        <input
-                                            type="range"
-                                            min="-50"
-                                            max="50"
-                                            value={currentEdits.contrast}
-                                            onChange={(event) => updateEdits({ contrast: Number(event.target.value) })}
-                                        />
-                                    </label>
-                                )}
-
-                                <label className="photo-editor-slider">
-                                    <span>Sharpen <b>{currentEdits.sharpen}</b></span>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        value={currentEdits.sharpen}
-                                        onChange={(event) => updateEdits({ sharpen: Number(event.target.value) })}
-                                    />
-                                </label>
-
-                                {isPhone && (
-                                    <label className="photo-editor-slider">
-                                        <span>Trim edges <b>{Math.round(batchEdits.crop.left * 100)}%</b></span>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max={MAX_TRIM_PERCENT}
-                                            value={Math.round(batchEdits.crop.left * 100)}
-                                            onChange={(event) => handleTrimChange(Number(event.target.value))}
-                                        />
-                                    </label>
-                                )}
-
-                                {hasMixedCrops && (
-                                    <p className="photo-editor-warning">
-                                        Some photos are cropped differently from the others. This can lower the
-                                        quality of the 3D model, so keep crops the same where you can.
-                                    </p>
-                                )}
-
-                                {isEditingSinglePhoto ? (
+                                {useOriginals && (
                                     <p className="photo-editor-hint">
-                                        These edits apply to this photo only. For the best 3D result, keep your
-                                        photos looking consistent with each other.
-                                    </p>
-                                ) : (
-                                    <p className="photo-editor-hint">
-                                        Changes apply to every photo equally, so they still line up for the 3D
-                                        model. Edited photos lose camera details that help reconstruction, so
-                                        only change what you need to.
-                                    </p>
-                                )}
-                                {!isPhone && !selectedPhoto && (
-                                    <p className="photo-editor-hint">Select a photo to crop it or to edit it on its own.</p>
-                                )}
-                                {isPhone && (
-                                    <p className="photo-editor-hint">
-                                        Editing single photos and cropping by hand are available on a larger screen.
+                                        Edits are switched off. Turn off "Use original photos" to apply them again.
                                     </p>
                                 )}
 
-                                <div className="photo-editor-adjust-actions">
-                                    <button className="forma-btn" onClick={resetCurrentEdits} disabled={!hasEdits(currentEdits)}>
-                                        <Icon name="refresh" size={14} /> Reset
-                                    </button>
-                                    {isEditingSinglePhoto && selectedPhoto.customEdits && (
-                                        <button className="forma-btn" onClick={matchAllPhotos}>
-                                            Match all photos
+                                {/* Disabling the fieldset disables every control inside it. */}
+                                <fieldset className="photo-editor-adjust-fields" disabled={useOriginals}>
+                                    <div className="photo-editor-auto-actions">
+                                        <button
+                                            type="button"
+                                            className="forma-btn"
+                                            onClick={handleAutoFix}
+                                            disabled={autoSourceAnalyses.length === 0}
+                                        >
+                                            <Icon name="wand" size={14} /> Auto fix
                                         </button>
+                                        <button
+                                            type="button"
+                                            className="forma-btn"
+                                            onClick={handleAutoColor}
+                                            disabled={autoSourceAnalyses.length === 0}
+                                        >
+                                            <Icon name="sun" size={14} /> Auto colour
+                                        </button>
+                                        {!isPhone && (
+                                            <button
+                                                type="button"
+                                                className={isPickToolActive ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                                                onClick={togglePickNeutral}
+                                                disabled={!selectedPhoto || isCropToolActive}
+                                            >
+                                                <Icon name="target" size={14} /> {isPickToolActive ? 'Cancel picking' : 'Pick neutral spot'}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {colorMessage && <p className="photo-editor-warning">{colorMessage}</p>}
+
+                                    <EditSlider
+                                        label="Brightness"
+                                        settingName="brightness"
+                                        value={currentEdits.brightness}
+                                        min={-50}
+                                        max={50}
+                                        onChange={(value) => updateEdits({ brightness: value })}
+                                    />
+                                    {!isPhone && (
+                                        <EditSlider
+                                            label="Contrast"
+                                            settingName="contrast"
+                                            value={currentEdits.contrast}
+                                            min={-50}
+                                            max={50}
+                                            onChange={(value) => updateEdits({ contrast: value })}
+                                        />
                                     )}
-                                </div>
+                                    <EditSlider
+                                        label="Warmth"
+                                        settingName="warmth"
+                                        value={currentEdits.warmth}
+                                        min={-50}
+                                        max={50}
+                                        onChange={(value) => updateEdits({ warmth: value })}
+                                    />
+                                    {!isPhone && (
+                                        <EditSlider
+                                            label="Tint"
+                                            settingName="tint"
+                                            value={currentEdits.tint}
+                                            min={-50}
+                                            max={50}
+                                            onChange={(value) => updateEdits({ tint: value })}
+                                        />
+                                    )}
+                                    <EditSlider
+                                        label="Sharpen"
+                                        settingName="sharpen"
+                                        value={currentEdits.sharpen}
+                                        min={0}
+                                        max={100}
+                                        isSigned={false}
+                                        onChange={(value) => updateEdits({ sharpen: value })}
+                                    />
+
+                                    {isPhone && (
+                                        <label className="photo-editor-slider">
+                                            <span>Trim edges <b>{Math.round(batchEdits.crop.left * 100)}%</b></span>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max={MAX_TRIM_PERCENT}
+                                                value={Math.round(batchEdits.crop.left * 100)}
+                                                onChange={(event) => handleTrimChange(Number(event.target.value))}
+                                            />
+                                        </label>
+                                    )}
+
+                                    {hasLargeCrop && (
+                                        <p className="photo-editor-warning">
+                                            Large crop: check the object stays fully inside it in every photo, not just this one.
+                                        </p>
+                                    )}
+                                    {hasMixedCrops && (
+                                        <p className="photo-editor-warning">
+                                            Some photos are cropped differently from the others. This can lower the
+                                            quality of the 3D model, so keep crops the same where you can.
+                                        </p>
+                                    )}
+
+                                    {isEditingSinglePhoto ? (
+                                        <p className="photo-editor-hint">
+                                            These edits apply to this photo only. For the best 3D result, keep your
+                                            photos looking consistent with each other.
+                                        </p>
+                                    ) : (
+                                        <p className="photo-editor-hint">
+                                            Changes apply to every photo equally, so they still line up for the 3D
+                                            model. Edited photos lose camera details that help reconstruction, so
+                                            only change what you need to.
+                                        </p>
+                                    )}
+                                    {!isPhone && !selectedPhoto && (
+                                        <p className="photo-editor-hint">
+                                            Select a photo to crop it, pick a neutral spot, or edit it on its own.
+                                        </p>
+                                    )}
+                                    {isPhone && (
+                                        <p className="photo-editor-hint">
+                                            Cropping by hand, contrast, tint and editing single photos are available on a larger screen.
+                                        </p>
+                                    )}
+
+                                    <div className="photo-editor-adjust-actions">
+                                        <button
+                                            type="button"
+                                            className="forma-btn"
+                                            onClick={resetCurrentEdits}
+                                            disabled={!hasEdits(currentEdits)}
+                                        >
+                                            <Icon name="refresh" size={14} /> Reset
+                                        </button>
+                                        {isEditingSinglePhoto && selectedPhoto.customEdits && (
+                                            <button type="button" className="forma-btn" onClick={matchAllPhotos}>
+                                                Match all photos
+                                            </button>
+                                        )}
+                                    </div>
+                                </fieldset>
                             </div>
                         </aside>
                     </div>
 
                     <div className="photo-editor-footer">
+                        <label className="photo-editor-originals">
+                            <input
+                                type="checkbox"
+                                className="photo-editor-switch"
+                                checked={useOriginals}
+                                onChange={handleUseOriginalsChange}
+                            />
+                            Use original photos
+                        </label>
                         <div className="photo-editor-footer-text">{renderFooterMessage()}</div>
                         <button
                             className="forma-btn forma-btn-primary"

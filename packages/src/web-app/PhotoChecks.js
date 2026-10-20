@@ -14,6 +14,8 @@ applyAdjustments() bakes batch brightness/contrast into a new JPEG using
 the same maths as the CSS filter used for the live preview.
 **************************************************************************/
 
+import { measureClippedShare } from './PhotoEdits.js';
+
 // Longest side, in pixels, of the downscaled copy used for the checks.
 const ANALYSIS_LONGEST_SIDE = 256;
 // The difference hash compares 9x8 pixels to get 64 bits.
@@ -121,6 +123,61 @@ function countDifferentBits(firstBits, secondBits) {
     return differentCount;
 }
 
+// Draws the photo at the given size and returns its raw RGBA bytes.
+function drawToPixelBytes(bitmap, width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0, width, height);
+    return context.getImageData(0, 0, width, height).data;
+}
+
+// Colour and tone measurements used by auto fix, auto colour and the
+// "lost detail" warning.
+function measureColorStats(pixelBytes, gray, width, height) {
+    const pixelCount = width * height;
+
+    let redTotal = 0;
+    let greenTotal = 0;
+    let blueTotal = 0;
+    for (let byteIndex = 0; byteIndex < pixelBytes.length; byteIndex += 4) {
+        redTotal += pixelBytes[byteIndex];
+        greenTotal += pixelBytes[byteIndex + 1];
+        blueTotal += pixelBytes[byteIndex + 2];
+    }
+
+    const meanBrightness = averageOf(gray);
+    let squaredDifferenceTotal = 0;
+    for (let index = 0; index < gray.length; index++) {
+        const difference = gray[index] - meanBrightness;
+        squaredDifferenceTotal += difference * difference;
+    }
+
+    // Middle 60% of the photo, where the object usually is.
+    const centerLeft = Math.floor(width * 0.2);
+    const centerRight = Math.ceil(width * 0.8);
+    const centerTop = Math.floor(height * 0.2);
+    const centerBottom = Math.ceil(height * 0.8);
+    let centerTotal = 0;
+    let centerCount = 0;
+    for (let y = centerTop; y < centerBottom; y++) {
+        for (let x = centerLeft; x < centerRight; x++) {
+            centerTotal += gray[y * width + x];
+            centerCount++;
+        }
+    }
+
+    return {
+        averageRed: redTotal / pixelCount,
+        averageGreen: greenTotal / pixelCount,
+        averageBlue: blueTotal / pixelCount,
+        centerBrightness: centerCount > 0 ? centerTotal / centerCount : meanBrightness,
+        tonalSpread: Math.sqrt(squaredDifferenceTotal / pixelCount),
+        clippedShare: measureClippedShare(pixelBytes),
+    };
+}
+
 // Measures one photo. Throws if the browser can't decode it (for example
 // HEIC outside Safari); the caller treats that as "couldn't check".
 export async function analyzePhoto(file) {
@@ -130,13 +187,15 @@ export async function analyzePhoto(file) {
         const width = Math.max(3, Math.round(bitmap.width * scale));
         const height = Math.max(3, Math.round(bitmap.height * scale));
 
-        const gray = drawToGrayscale(bitmap, width, height);
+        const pixelBytes = drawToPixelBytes(bitmap, width, height);
+        const gray = toGrayscale(pixelBytes, width * height);
         const hashGray = drawToGrayscale(bitmap, HASH_WIDTH, HASH_HEIGHT);
 
         return {
             sharpness: measureSharpness(gray, width, height),
             brightness: averageOf(gray),
             hashBits: differenceHashBits(hashGray),
+            ...measureColorStats(pixelBytes, gray, width, height),
         };
     } finally {
         bitmap.close?.();
@@ -185,55 +244,4 @@ export function findPhotoIssues(photos) {
     }
 
     return issuesById;
-}
-
-// The same values the editor puts in the CSS filter for the live preview.
-export function buildPreviewFilter(brightness, contrast) {
-    return `brightness(${1 + brightness / 100}) contrast(${1 + contrast / 100})`;
-}
-
-// Bakes brightness/contrast (each -50 to 50) into a new JPEG. Returns the
-// original file untouched when both are 0, so unedited photos keep their
-// camera details (EXIF), which re-saving through a canvas would remove.
-// Falls back to the original file if the browser can't decode it.
-export async function applyAdjustments(file, brightness, contrast) {
-    if (brightness === 0 && contrast === 0) return file;
-
-    try {
-        const bitmap = await createImageBitmap(file);
-        const canvas = document.createElement('canvas');
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        const context = canvas.getContext('2d');
-        context.drawImage(bitmap, 0, 0);
-        bitmap.close?.();
-
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const pixelBytes = imageData.data;
-
-        // Every channel value maps the same way, so build the mapping once.
-        // Matches CSS brightness() then contrast(). Uint8ClampedArray clamps
-        // and rounds to 0-255 for us.
-        const brightnessFactor = 1 + brightness / 100;
-        const contrastFactor = 1 + contrast / 100;
-        const valueMapping = new Uint8ClampedArray(256);
-        for (let value = 0; value < 256; value++) {
-            valueMapping[value] = (value * brightnessFactor - 127.5) * contrastFactor + 127.5;
-        }
-
-        for (let byteIndex = 0; byteIndex < pixelBytes.length; byteIndex += 4) {
-            pixelBytes[byteIndex] = valueMapping[pixelBytes[byteIndex]];
-            pixelBytes[byteIndex + 1] = valueMapping[pixelBytes[byteIndex + 1]];
-            pixelBytes[byteIndex + 2] = valueMapping[pixelBytes[byteIndex + 2]];
-        }
-        context.putImageData(imageData, 0, 0);
-
-        const editedBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
-        if (!editedBlob) return file;
-
-        const baseName = file.name.replace(/\.[^.]+$/, '');
-        return new File([editedBlob], `${baseName}-edited.jpg`, { type: 'image/jpeg' });
-    } catch {
-        return file;
-    }
 }
