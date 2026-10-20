@@ -262,6 +262,7 @@ function App() {
                             onYoutube={() => goToTab('youtube')}
                             onNavigate={goToTab}
                             onOpenLibrary={openLibrary}
+                            onOpenModel={openModel}
                         />
                     )}
                     {activeTab === 'library' && (

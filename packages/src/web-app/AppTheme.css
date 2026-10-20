@@ -625,6 +625,32 @@ html {
     margin-top: 3px;
 }
 
+.home-recent-button {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .home-recent-button:hover {
+        border-color: var(--forma-blue);
+    }
+
+.home-recent-thumb {
+    overflow: hidden;
+}
+
+    .home-recent-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.home-recent-note {
+    color: var(--forma-text-muted);
+    font-size: 0.86rem;
+}
+
 /* ---------- Library ---------- */
 
 .library-screen {

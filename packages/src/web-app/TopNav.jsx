@@ -118,7 +118,9 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                                 onSignOut();
                             }}
                         >
-                            <Icon name="logout" size={14} /> Sign out
+                            {user.isGuest
+                                ? <><Icon name="user" size={14} /> Sign in</>
+                                : <><Icon name="logout" size={14} /> Sign out</>}
                         </button>
                     </div>
                 )}
