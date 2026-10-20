@@ -44,6 +44,10 @@ Extracts the frames, checks there are at least 8, then runs runPipeline.
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.
+- sampleFileName(job)
+The job's filename in the engine's samples folder.
+- pickSampleFileName(job, name)
+The samples filename to use for a job's display name after a rename.
 - restoreJob(record)
 Rebuilds an in-memory job from a record scanned off disk (see scan.js).
 **************************************************************************/
@@ -748,7 +752,7 @@ export async function runPipeline(job) {
     // still servable from resultPath/the Download button either way.
     try {
       fs.mkdirSync(config.engineSamplesDir, { recursive: true })
-      const enginePath = path.join(config.engineSamplesDir, `${job.id.slice(0, 8)}.ply`)
+      const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
       fs.copyFileSync(job.resultPath, enginePath)
       appendLog(job, `Copied to engine samples: ${enginePath}`)
     } catch (err) {
@@ -767,6 +771,56 @@ export async function runPipeline(job) {
     appendLog(job, `\nERROR: ${err.message}`)
     saveJob(job)
   }
+}
+
+// Names Windows won't accept as a filename, with or without an extension.
+const RESERVED_FILE_RE = /^(con|prn|aux|nul|com\d|lpt\d)$/i
+const MAX_SAMPLE_BASE_LENGTH = 60
+
+/************************************************************************/
+/*!
+  \brief
+    The job's filename in the engine's samples folder: the one chosen by
+    the last rename, else the short job id.
+  \param job
+    The job
+  \return
+    string, e.g. "09e367bd.ply" or "Office_Chair.ply"
+*/
+/************************************************************************/
+export function sampleFileName(job) {
+  return job.sampleFile ?? `${job.id.slice(0, 8)}.ply`
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The samples filename for a job's new display name. The name is made
+    filename-safe (spaces and other characters become _); with no usable
+    name it goes back to the short job id. If another model's file
+    already has that name, the short id is added so it isn't overwritten.
+  \param job
+    The job being renamed
+  \param name
+    string or null, the new display name
+  \return
+    string, the filename to rename the job's sample to
+*/
+/************************************************************************/
+export function pickSampleFileName(job, name) {
+  const shortId = job.id.slice(0, 8)
+  const base = (name ?? '')
+    .replace(/[^\w-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, MAX_SAMPLE_BASE_LENGTH)
+  if (!base) return `${shortId}.ply`
+  if (RESERVED_FILE_RE.test(base)) return `${base}_${shortId}.ply`
+
+  const preferred = `${base}.ply`
+  // Case-insensitive: Windows treats Chair.ply and chair.ply as one file.
+  const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
+  if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
+  return `${base}_${shortId}.ply`
 }
 
 /************************************************************************/
@@ -792,6 +846,8 @@ export function restoreJob(record) {
     resultPath: record.resultPath,
     imageCount: record.imageCount,
     source: record.source,
+    name: record.name,
+    sampleFile: record.sampleFile,
     updatedAt: record.updatedAt,
     log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
   })

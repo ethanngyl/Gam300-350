@@ -10,7 +10,8 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (top nav + sidebar + Home / Library / Photo Editor / Scene
 Builder / Account) and the full-page flows for capturing photos, polling
-reconstruction progress, viewing a finished splat result, the YouTube
+reconstruction progress, viewing a finished splat result (asking for the
+model's name when training has just finished), the YouTube
 ingest screen and the image gallery. Owns the active job id and uploads a
 finished photo batch to the backend to kick off reconstruction.
 **************************************************************************/
@@ -30,6 +31,7 @@ import SceneBuilderScreen from './SceneBuilderScreen.jsx';
 import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
+import NameModelPrompt from './NameModelPrompt.jsx';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
@@ -64,6 +66,9 @@ function App() {
     const [jobId, setJobId] = useState(null);
     // A .ply opened from the user's computer in the Model Viewer: { url, name }
     const [localModel, setLocalModel] = useState(null);
+    // Job whose training just finished; the result screen asks for its name.
+    // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
+    const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -167,7 +172,10 @@ function App() {
         return (
             <Processing
                 jobId={jobId}
-                onDone={() => setScreen('result')}
+                onDone={() => {
+                    setNamePromptJobId(jobId);
+                    setScreen('result');
+                }}
                 onCancel={resetJob}
             />
         );
@@ -195,6 +203,9 @@ function App() {
                         Back to dashboard
                     </button>
                 </div>
+                {namePromptJobId === jobId && (
+                    <NameModelPrompt jobId={jobId} onClose={() => setNamePromptJobId(null)} />
+                )}
             </>
         );
     }
@@ -290,7 +301,6 @@ function App() {
                             onSubTabChange={setLibrarySubTab}
                             onGenerateModel={() => setScreen('capture')}
                             onUploadPhotos={() => setScreen('capture')}
-                            onOpenModel={openModel}
                         />
                     )}
                     {activeTab === 'editor' && (

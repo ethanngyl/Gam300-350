@@ -15,6 +15,7 @@ for a server model, onOpenFile(file) for a local one.
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
+import { jobDisplayName } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 
 function ModelViewerScreen({ onOpenModel, onOpenFile }) {
@@ -53,7 +54,8 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
         .filter((job) => job.status === 'done')
         .map((job) => ({
             id: job.id,
-            name: `Model ${job.id.slice(0, 8)}`,
+            // Name set by Rename in the Media Library or after training.
+            name: jobDisplayName(job, 'Model'),
             photoCount: job.images?.length ?? 0,
         }))
         .filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(normalizedSearch));

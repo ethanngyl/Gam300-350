@@ -764,6 +764,132 @@ html {
         opacity: 0.75;
     }
 
+/* Library model cards: no click action, right-click opens Rename / Delete */
+.library-item-actionable {
+    cursor: context-menu;
+    outline: none;
+}
+
+    .library-item-actionable:hover,
+    .library-item-actionable:focus-visible {
+        border-color: var(--forma-blue);
+    }
+
+    .library-item-actionable.is-processing {
+        opacity: 0.75;
+    }
+
+/* ---------- Right-click menu (ContextMenu.jsx) ---------- */
+
+.context-menu {
+    position: fixed;
+    z-index: 100;
+    min-width: 160px;
+    padding: 4px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.context-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--forma-text);
+    font-family: inherit;
+    font-size: 0.84rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .context-menu-item:hover,
+    .context-menu-item:focus-visible {
+        background: var(--forma-panel-alt);
+        outline: none;
+    }
+
+    .context-menu-item.is-danger {
+        color: var(--forma-red);
+    }
+
+/* ---------- Rename / delete dialog (ActionDialog.jsx) ---------- */
+
+.action-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(8, 14, 20, 0.6);
+}
+
+.action-dialog {
+    width: min(420px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+    .action-dialog h3 {
+        margin: 0;
+        font-size: 1rem;
+        color: var(--forma-heading);
+        overflow-wrap: anywhere;
+    }
+
+.action-dialog-message {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--forma-text-muted);
+}
+
+.action-dialog-input {
+    font-family: inherit;
+    font-size: 0.9rem;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel-alt);
+    color: var(--forma-text);
+}
+
+    .action-dialog-input:focus {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+.action-dialog-error {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--forma-red);
+}
+
+.action-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.forma-btn-danger {
+    background: var(--forma-red);
+    border-color: var(--forma-red);
+    color: #fff;
+}
+
+    .forma-btn-danger:hover {
+        filter: brightness(1.08);
+        border-color: var(--forma-red);
+    }
+
 .library-note {
     padding: 0 28px;
     margin-bottom: 16px;

@@ -68,6 +68,10 @@ export function saveJob(job, { throttle = false } = {}) {
     detail: job.detail ?? null,
     error: job.error ?? null,
     source: job.source ?? null,
+    // Display name set from the Media Library; null shows the default name.
+    name: job.name ?? null,
+    // The copy's filename in the engine's samples folder; follows renames.
+    sampleFile: job.sampleFile ?? null,
     imageCount: job.imageCount ?? null,
     removeBackground: job.removeBackground ?? false,
     createdAt: job.createdAt,
