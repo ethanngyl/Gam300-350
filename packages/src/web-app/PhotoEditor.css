@@ -462,3 +462,171 @@
         top: 16px;
     }
 }
+
+/* ============================================================
+   Additions: library button, crop tool, per-photo editing
+   ============================================================ */
+
+.photo-editor-heading-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.photo-editor-start {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.photo-editor-start-library {
+    align-self: center;
+}
+
+/* The preview now shows a canvas at the photo's own shape, so the
+   frame no longer forces 4:3. */
+.photo-editor .photo-editor-preview-frame {
+    aspect-ratio: auto;
+    min-height: 160px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Shrinks to the canvas so the crop overlay lines up with the photo. */
+.photo-editor-canvas-wrap {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+}
+
+.photo-editor-preview-canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 300px;
+}
+
+.photo-editor-crop-overlay {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+/* The huge shadow darkens everything outside the crop. */
+.photo-editor-crop-box {
+    position: absolute;
+    border: 2px solid var(--forma-teal-text);
+    box-shadow: 0 0 0 9999px rgba(8, 14, 20, 0.6);
+}
+
+.photo-editor-crop-handle {
+    position: absolute;
+    background: var(--forma-teal-text);
+    border-radius: 3px;
+    touch-action: none;
+}
+
+    /* Larger invisible area around each handle so it's easy to grab. */
+    .photo-editor-crop-handle::before {
+        content: '';
+        position: absolute;
+        inset: -10px;
+    }
+
+    .photo-editor-crop-handle.is-top {
+        top: 3px;
+        left: 50%;
+        width: 36px;
+        height: 7px;
+        transform: translateX(-50%);
+        cursor: ns-resize;
+    }
+
+    .photo-editor-crop-handle.is-bottom {
+        bottom: 3px;
+        left: 50%;
+        width: 36px;
+        height: 7px;
+        transform: translateX(-50%);
+        cursor: ns-resize;
+    }
+
+    .photo-editor-crop-handle.is-left {
+        left: 3px;
+        top: 50%;
+        width: 7px;
+        height: 36px;
+        transform: translateY(-50%);
+        cursor: ew-resize;
+    }
+
+    .photo-editor-crop-handle.is-right {
+        right: 3px;
+        top: 50%;
+        width: 7px;
+        height: 36px;
+        transform: translateY(-50%);
+        cursor: ew-resize;
+    }
+
+/* "All photos / This photo" switch */
+.photo-editor-target {
+    display: flex;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border);
+    border-radius: 8px;
+    padding: 3px;
+}
+
+    .photo-editor-target button {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--forma-text-muted);
+        font-family: inherit;
+        font-size: 0.8rem;
+        padding: 7px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+        .photo-editor-target button.is-active {
+            background: var(--forma-panel-raised);
+            color: var(--forma-text);
+            font-weight: 600;
+        }
+
+.photo-editor-edited-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: #e3f4f7;
+    background: rgba(63, 152, 173, 0.9);
+}
+
+.photo-editor .photo-editor-warning {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--forma-coral);
+}
+
+.photo-editor-adjust-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Stops text selection while "Hold to see original" is held down. */
+.photo-editor-hold-button {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
