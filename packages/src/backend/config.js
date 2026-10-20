@@ -22,6 +22,10 @@ rather than hardcoding a layout.
 - findOnPath(name)
 Returns the absolute path of name if it is on the system PATH (e.g. a
 Homebrew install), else null.
+- findPython()
+The Python interpreter to run the tools/ scripts with. On Windows it skips
+the Microsoft Store "python.exe" stub that only says Python isn't
+installed.
 - colmapHasCuda(exe)
 Runs COLMAP with -h and checks the output for "with CUDA". Decides whether
 COLMAP should use the GPU when COLMAP_USE_GPU isn't set.
@@ -112,6 +116,30 @@ function findOnPath(name) {
     if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
   }
   return null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Picks the Python interpreter for the tools/ scripts. On Windows,
+    %LOCALAPPDATA%\Microsoft\WindowsApps often holds a python.exe stub
+    that only prints "Python was not found" (exit code 9009); when it is
+    earlier on PATH than a real install, plain `python` runs the stub. So
+    the first python.exe outside WindowsApps is used. If there is none,
+    `python` is kept as-is: Python installed from the Microsoft Store
+    lives in WindowsApps and works there.
+  \return
+    string, an absolute path or a command name
+*/
+/************************************************************************/
+function findPython() {
+  if (!isWindows) return 'python3'
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir || /[\\/]Microsoft[\\/]WindowsApps[\\/]?$/i.test(dir)) continue
+    const full = path.join(dir, 'python.exe')
+    if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
+  }
+  return 'python'
 }
 
 // Windows builds ship .exe files; the macOS / Linux builds have no extension
@@ -304,7 +332,7 @@ export const config = {
   // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
   // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
   // to its virtualenv's interpreter).
-  pythonBin: process.env.PYTHON_BIN || (isWindows ? 'python' : 'python3'),
+  pythonBin: process.env.PYTHON_BIN || findPython(),
   // Extracts evenly spaced frames from a YouTube video into a job's images/.
   ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
   // Default extraction rate (frames per second) and cap on frames pulled.
