@@ -105,10 +105,12 @@ function App() {
     }
 
     // Uploads the real batch to the backend and starts reconstruction.
-    async function handleBatchReady(files) {
+    async function handleBatchReady(files, { removeBackground = false } = {}) {
         setUploadError(null);
         try {
             const form = new FormData();
+            // Text fields go before the files so the server has them as the upload streams in.
+            form.append('removeBackground', String(removeBackground));
             for (const file of files) form.append('images', file);
             const res = await fetch('/upload', { method: 'POST', body: form });
             const data = await res.json();

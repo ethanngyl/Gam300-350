@@ -368,6 +368,27 @@
         transform: rotate(45deg);
     }
 
+.capture-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    color: var(--forma-text);
+    cursor: pointer;
+}
+
+    .capture-option input {
+        margin-top: 3px;
+        accent-color: var(--forma-green);
+    }
+
+    .capture-option small {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--forma-text-muted);
+    }
+
 .capture-batch .batch-btn {
     width: 100%;
     justify-content: center;

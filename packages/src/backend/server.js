@@ -299,6 +299,9 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
   const job = makeJob(req.jobId)
   job.imageCount = files.length
   job.source = 'upload'
+  // Optional multipart text field: mask out the background before COLMAP
+  // (needed for turntable captures, see generateMasks in pipeline.js).
+  job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
   saveJob(job) // gives upload-only jobs a status record from the start
   runPipeline(job) // fire-and-forget; do not await
   res.status(202).json({ id: job.id, imageCount: files.length })
@@ -431,6 +434,7 @@ app.get('/jobs/:id', async (req, res) =>
     error: job.error,
     updatedAt: job.updatedAt ?? null,
     imageCount: job.imageCount ?? null,
+    removeBackground: !!job.removeBackground,
     hasResult: job.status === 'done' && !!job.resultPath,
     logTail: job.log.slice(-40),
   })

@@ -69,6 +69,7 @@ export function saveJob(job, { throttle = false } = {}) {
     error: job.error ?? null,
     source: job.source ?? null,
     imageCount: job.imageCount ?? null,
+    removeBackground: job.removeBackground ?? false,
     createdAt: job.createdAt,
     updatedAt: now,
     // Relative to jobsDir so moving JOBS_DIR doesn't break old records.

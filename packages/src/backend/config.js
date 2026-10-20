@@ -319,4 +319,9 @@ export const config = {
   // Recenters/rescales the trained splat into the viewer's frame.
   normalizeScript:
     process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
+  // Optional background removal: writes per-photo foreground masks that
+  // COLMAP and Brush use to ignore the background (turntable captures).
+  maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),
+  // rembg model used for the masks (see make_masks.py).
+  maskModel: process.env.MASK_MODEL || 'isnet-general-use',
 }

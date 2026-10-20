@@ -41,6 +41,9 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
     const [isAutoCapturing, setIsAutoCapturing] = useState(false);
     const [intervalSeconds, setIntervalSeconds] = useState(2);
     const [maxCaptures, setMaxCaptures] = useState(50);
+    // Mask out the background before reconstruction. Needed for turntable
+    // captures, where the static background makes the model come out flat.
+    const [removeBackground, setRemoveBackground] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -197,7 +200,7 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
     function handleTrain() {
         const files = photos.map((p) => p.file);
         if (onBatchReady) {
-            onBatchReady(files);
+            onBatchReady(files, { removeBackground });
         }
 
         setIsBatchSent(true);
@@ -406,6 +409,18 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
                             ))}
                         </div>
                     )}
+
+                    <label className="capture-option">
+                        <input
+                            type="checkbox"
+                            checked={removeBackground}
+                            onChange={(e) => setRemoveBackground(e.target.checked)}
+                        />
+                        <span>
+                            Remove background
+                            <small>Turn on for turntable captures (object spins, camera stays still).</small>
+                        </span>
+                    </label>
 
                     <button
                         className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
