@@ -16,5 +16,14 @@ struct SplatTrimmerParam
     int minPerVoxel = 5;    //Drop splats whose voxel holds fewer than this
 };
 
-//One byte per input splat: 1 = keep, 0 = trimmed
+//One byte per input splat, 1 = keep, 0 = trim
 std::vector<uint8_t> ComputeKeepMask(const std::vector<SplatVertex>& splats, const SplatTrimmerParam& params);
+
+//Copies only the splats whose mask entry is 1. Mask of the wrong size returns unchanged.
+std::vector<SplatVertex> ApplyKeepMask(const std::vector<SplatVertex>& splats, const std::vector<uint8_t>& keep);
+
+//Sensible trim settings for a scan, with the density cell size derived from the scene extent
+SplatTrimmerParam MakeDefaultTrimmerParams(const std::vector<SplatVertex>& splats);
+
+//Convenience trims with the default settings
+std::vector<SplatVertex> TrimSplats(const std::vector<SplatVertex>& splats);

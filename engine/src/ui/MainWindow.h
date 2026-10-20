@@ -75,7 +75,7 @@ private:
     // Queues a .ply for import; files load one at a time on a worker thread.
     void importSplat(const QString& path);
     void startNextImport();
-    void finishImport(const QString& path, std::vector<SplatVertex>& splats);
+    void finishImport(const QString& path, std::vector<SplatVertex>& splats, size_t originalCount);
     void selectModel(int index);
     void renameModel(int index, const QString& name);
     void deleteSelectedModel();
@@ -117,6 +117,7 @@ private:
     QAction* m_gaussianAction = nullptr;
     QAction* m_recenterCameraAction = nullptr;
     QAction* m_statsOverlayAction = nullptr;
+    QAction* m_trimOnImportAction = nullptr;
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;
     QMenu* m_windowMenu = nullptr;
