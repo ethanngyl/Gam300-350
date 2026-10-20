@@ -21,9 +21,8 @@ const TABS = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shield' }, // comment out this line to disable the tab
+    { id: 'scene', label: 'Scene Builder', icon: 'shield' },
     { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
-    { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
 ];
 
 function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, onOpenAccount, onSignOut, onToggleMenu }) {
@@ -125,7 +124,9 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
                                 onSignOut();
                             }}
                         >
-                            <Icon name="logout" size={14} /> Sign out
+                            {user.isGuest
+                                ? <><Icon name="user" size={14} /> Sign in</>
+                                : <><Icon name="logout" size={14} /> Sign out</>}
                         </button>
                     </div>
                 )}

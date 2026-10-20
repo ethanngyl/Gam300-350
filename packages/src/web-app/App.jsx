@@ -4,16 +4,17 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 08-10-2026
+\date 17-10-2026
 \brief
 Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
-dashboard (top nav + sidebar + Home / Library / Photo Editor / Scene
-Builder / Account) and the full-page flows for capturing photos, polling
-reconstruction progress, viewing a finished splat result (asking for the
-model's name when training has just finished), the YouTube
-ingest screen and the image gallery. Owns the active job id and uploads a
-finished photo batch to the backend to kick off reconstruction.
+dashboard (top nav + sidebar) with these pages inside it: Home, Library,
+Photo Editor, Scene Builder, Model Viewer, YouTube Extractor, Capture and
+Account. YouTube Extractor and Capture are opened from the sidebar.
+Polling reconstruction progress, the finished splat result, a local .ply
+opened from the Model Viewer and the legacy image gallery still replace
+the whole screen. Owns the active job id and uploads a finished photo
+batch to the backend to kick off reconstruction.
 **************************************************************************/
 
 import { useState } from 'react';
@@ -52,7 +53,8 @@ function loadSavedUser() {
 function App() {
     const [currentUser, setCurrentUser] = useState(loadSavedUser);
 
-    // Dashboard tab: home | library | editor | scene | viewer | account
+    // Page shown inside the shell:
+    // home | library | editor | scene | viewer | youtube | capture | account
     const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState('models');
@@ -60,8 +62,8 @@ function App() {
     // sidebar highlights that shortcut instead of "Media Library".
     const [openedFromYourWork, setOpenedFromYourWork] = useState(false);
 
-    // Full-page flows that temporarily replace the dashboard. null shows the
-    // dashboard; otherwise 'capture' | 'processing' | 'result' | 'local-model' | 'youtube' | 'gallery'
+    // Full-page screens that replace the whole shell. null shows the shell;
+    // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
     const [screen, setScreen] = useState(null);
     const [jobId, setJobId] = useState(null);
     // A .ply opened from the user's computer in the Model Viewer: { url, name }
@@ -70,6 +72,7 @@ function App() {
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
+    // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     function handleLogin(user) {
@@ -90,23 +93,21 @@ function App() {
         }
         setCurrentUser(null);
         setScreen(null);
+        setIsMenuOpen(false);
         setActiveTab('home');
+    }
+
+    // Every navigation goes through here: it closes the phone drawer and
+    // clears a stale upload error so it doesn't reappear on the next visit.
+    function goToTab(tab) {
+        setIsMenuOpen(false);
+        setUploadError(null);
+        setActiveTab(tab);
     }
 
     function openLibrary(subTab) {
         setLibrarySubTab(subTab);
-        setActiveTab('library');
-        setOpenedFromYourWork(true);
-    }
-
-    function navigate(tab) {
-        setActiveTab(tab);
-        setOpenedFromYourWork(false);
-    }
-
-    function handleTabChange(tab) {
-        setIsMenuOpen(false);
-        navigate(tab);
+        goToTab('library');
     }
 
     // Uploads the real batch to the backend and starts reconstruction.
@@ -121,6 +122,9 @@ function App() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
             setJobId(data.id);
+            // The capture page closes once processing starts, so returning
+            // from the result screen lands on Home instead of an empty capture.
+            setActiveTab('home');
             setScreen('processing');
         } catch (err) {
             setUploadError(err.message);
@@ -135,8 +139,12 @@ function App() {
         setJobId(null);
         setUploadError(null);
         setScreen(null);
+        setActiveTab('home');
     }
 
+    // Opens a finished model in the full-page splat viewer (the same screen
+    // the reconstruction flow ends on). Back to dashboard returns to the page
+    // it was opened from (Library or Model Viewer).
     function openModel(modelJobId) {
         setJobId(modelJobId);
         setScreen('result');
@@ -156,16 +164,6 @@ function App() {
 
     if (!currentUser) {
         return <LoginScreen onLogin={handleLogin} />;
-    }
-
-    if (screen === 'capture') {
-        return (
-            <CameraCapture
-                onBatchReady={handleBatchReady}
-                onBack={backToDashboard}
-                uploadError={uploadError}
-            />
-        );
     }
 
     if (screen === 'processing' && jobId) {
@@ -192,7 +190,14 @@ function App() {
                     className="genesis-overlay"
                     style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, zIndex: 10 }}
                 >
-                    <button className="btn btn-primary" onClick={() => { playSound('click'); resetJob(); }}>
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                            playSound('click');
+                            resetJob();
+                            goToTab('capture');
+                        }}
+                    >
                         New scan
                     </button>
                     <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
@@ -231,33 +236,13 @@ function App() {
         return <ImageGallery onBack={backToDashboard} />;
     }
 
-    if (screen === 'youtube') {
-        return (
-
-            <div className="genesis-page" style={{ padding: 0 }}>
-                <YoutubeIngest
-                    onBack={() => {
-                        playSound('click3');
-                        backToDashboard();
-                    }}
-                />
-            </div>
-        );
-    }
-
     return (
         <div className="forma-app genesis-shell">
-
             <TopNav
                 activeTab={activeTab}
-                openedFromYourWork={openedFromYourWork}
-                onTabChange={handleTabChange}
-                onYoutube={() => {
-                    setIsMenuOpen(false);
-                    setScreen('youtube');
-                }}
+                onTabChange={goToTab}
                 user={currentUser}
-                onOpenAccount={() => handleTabChange('account')}
+                onOpenAccount={() => goToTab('account')}
                 onSignOut={handleSignOut}
                 onToggleMenu={() => setIsMenuOpen((wasOpen) => !wasOpen)}
             />
@@ -276,41 +261,54 @@ function App() {
                 <Sidebar
                     activeTab={activeTab}
                     librarySubTab={librarySubTab}
-                    openedFromYourWork={openedFromYourWork}
-                    onNavigate={navigate}
+                    onNavigate={goToTab}
                     onOpenLibrary={openLibrary}
-                    onNewModel={() => setScreen('capture')}
-                    onYoutube={() => setScreen('youtube')}
+                    onNewModel={() => goToTab('capture')}
                     isOpen={isMenuOpen}
                     onClose={() => setIsMenuOpen(false)}
                 />
 
-                <div className="genesis-main">
+                {/* key resets the scroll position, so each page opens at the top. */}
+                <div className="genesis-main" key={activeTab}>
                     {activeTab === 'home' && (
                         <HomeScreen
                             userName={currentUser.name}
-                            onNewGeneration={() => setScreen('capture')}
-                            onYoutube={() => setScreen('youtube')}
-                            onNavigate={navigate}
+                            onNewGeneration={() => goToTab('capture')}
+                            onYoutube={() => goToTab('youtube')}
+                            onNavigate={goToTab}
                             onOpenLibrary={openLibrary}
+                            onOpenModel={openModel}
                         />
                     )}
                     {activeTab === 'library' && (
                         <LibraryScreen
                             subTab={librarySubTab}
                             onSubTabChange={setLibrarySubTab}
-                            onGenerateModel={() => setScreen('capture')}
-                            onUploadPhotos={() => setScreen('capture')}
+                            onGenerateModel={() => goToTab('capture')}
+                            onUploadPhotos={() => goToTab('capture')}
+                            onOpenModel={openModel}
                         />
                     )}
                     {activeTab === 'editor' && (
-                        <PhotoEditorScreen onGenerateModel={() => setScreen('capture')} />
+                        <PhotoEditorScreen onGenerateModel={handleBatchReady} uploadError={uploadError} />
                     )}
                     {activeTab === 'scene' && (
                         <SceneBuilderScreen onAddFromLibrary={() => openLibrary('models')} />
                     )}
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
+                    )}
+                    {activeTab === 'youtube' && (
+                        // YoutubeIngest plays the click sound itself, so none here.
+                        <YoutubeIngest onBack={() => goToTab('home')} />
+                    )}
+                    {activeTab === 'capture' && (
+                        // CameraCapture plays the click sound itself, so none here.
+                        <CameraCapture
+                            onBatchReady={handleBatchReady}
+                            onBack={() => goToTab('home')}
+                            uploadError={uploadError}
+                        />
                     )}
                     {activeTab === 'account' && (
                         <AccountScreen user={currentUser} onSignOut={handleSignOut} />

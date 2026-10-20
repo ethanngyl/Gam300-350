@@ -19,6 +19,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
+import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 
 const HARD_CAP = 200;
 
@@ -44,6 +45,8 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
     // Mask out the background before reconstruction. Needed for turntable
     // captures, where the static background makes the model come out flat.
     const [removeBackground, setRemoveBackground] = useState(false);
+
+    const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -189,6 +192,13 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
                 setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
                 setTimeout(() => setUploadFeedback(null), 2000);
             }
+        }
+    }
+    function handleLibraryPhotos(files) {
+        const addedCount = addFiles(files);
+        if (addedCount > 0) {
+            setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} added from library`);
+            setTimeout(() => setUploadFeedback(null), 2000);
         }
     }
 
@@ -385,6 +395,24 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
                             style={{ display: 'none' }}
                         />
                     </div>
+
+                    <button
+                        type="button"
+                        className="forma-btn capture-library-btn"
+                        onClick={() => {
+                            playSound('click');
+                            setIsLibraryPickerOpen(true);
+                        }}
+                    >
+                        <Icon name="layers" size={14} /> Add from library
+                    </button>
+
+                    {isLibraryPickerOpen && (
+                        <LibraryPhotoPicker
+                            onAddFiles={handleLibraryPhotos}
+                            onClose={() => setIsLibraryPickerOpen(false)}
+                        />
+                    )}
 
                     {uploadFeedback && <div className="capture-feedback">{uploadFeedback}</div>}
 
