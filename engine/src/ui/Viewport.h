@@ -7,9 +7,11 @@
 \date 01-10-2026
 \brief
 Declares Viewport, the QOpenGLWidget 3D view. It owns the OpenGL context,
-the splat renderer, the orbit camera and the ImGui overlay, turns Qt mouse
-and keyboard events into InputManager events, and repaints continuously
-(vsync paced) in place of the old GLFW main loop.
+the splat renderer, the orbit camera and the ImGui stats overlay, turns Qt
+mouse and keyboard events into InputManager events, and repaints
+continuously (vsync paced) in place of the old GLFW main loop. Scene editing
+(importing, selecting, transforming) is driven by the Qt editor panels
+through renderer().
 **************************************************************************/
 #pragma once
 
@@ -24,11 +26,8 @@ and keyboard events into InputManager events, and repaints continuously
 #include <QPointF>
 
 #include <cstddef>
-#include <filesystem>
 #include <functional>
 #include <memory>
-#include <string>
-#include <vector>
 
 class SplatRenderer;
 
@@ -43,8 +42,18 @@ public:
     // Engine -> Qt UI: called once per frame with the latest stats.
     std::function<void(float fps, std::size_t splatCount)> onStats;
 
-    // Qt UI -> ImGui: whether the ImGui "Engine Stats" window is drawn.
+    // Engine -> Qt UI: called once the GL context and renderer() exist.
+    std::function<void()> onInitialized;
+
+    // Qt UI -> ImGui: whether the ImGui "Engine Stats" overlay is drawn.
     void setShowImGuiStats(bool show) { m_showImGuiStats = show; }
+
+    // The scene renderer the editor panels operate on. Null until the GL
+    // context exists (i.e. before the widget is first shown).
+    SplatRenderer* renderer() const { return m_renderer.get(); }
+
+    // Moves the orbit camera's pan target back to where it started.
+    void recenterCamera() { m_camera.ResetPosition(); }
 
 protected:
     void initializeGL() override;
@@ -64,7 +73,6 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
-    bool LoadSplatFile(const std::filesystem::path& path);
 
     Camera m_camera;
     InputManager m_input;
@@ -78,10 +86,4 @@ private:
     bool m_leftHeld = false;
     bool m_rightHeld = false;
     QPointF m_lastMousePos;
-
-    // .ply browser state
-    std::filesystem::path m_splatDir;
-    std::string m_loadedPath;
-    std::vector<std::filesystem::path> m_plyFiles;
-    int m_selectedIndex = -1; // file highlighted in the browser; -1 = none
 };

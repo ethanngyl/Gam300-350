@@ -26,6 +26,12 @@ public:
     void ProcessRightClick(InputManager&, InputManager::INPUT_TYPE inputType);
     void ProcessScroll(InputManager&, InputManager::INPUT_TYPE);
 
+    //Raw camera moves, used by the Process* callbacks above and by the web build
+    //(which has no InputManager). dx/dy are pixel deltas, scrollY is wheel notches.
+    void Orbit(float dx, float dy);
+    void Pan(float dx, float dy);
+    void Zoom(float scrollY);
+
     glm::mat4 getView() const;
     glm::mat4 getProjection(float aspect) const;
     glm::vec3 getPosition() const;

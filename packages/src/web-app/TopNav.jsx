@@ -7,8 +7,8 @@
 \date 09-10-2026
 \brief
 Top navigation bar: a menu button (phones only) that opens the sidebar
-drawer, GENESIS logo, Home / Library / Photo Editor / Scene Builder tabs
-(with click sound), a workspace status indicator, and the signed-in
+drawer, GENESIS logo, Home / Library / Photo Editor / Scene Builder /
+YouTube Extractor / Model Viewer tabs (with click sound), a workspace status indicator, and the signed-in
 user's avatar. Clicking the avatar opens a small account menu with links
 to the account page and sign out.
 **************************************************************************/
@@ -21,10 +21,11 @@ const TABS = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shield' }, // comment out this line to disable the tab
+    { id: 'scene', label: 'Scene Builder', icon: 'shield' },
+    { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
 ];
 
-function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {
+function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, onOpenAccount, onSignOut, onToggleMenu }) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuContainerRef = useRef(null);
 
@@ -65,10 +66,16 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                 {TABS.map((tab) => (
                     <button
                         key={tab.id}
-                        className={activeTab === tab.id ? 'forma-tab is-active' : 'forma-tab'}
+                        className={activeTab === tab.id && !(tab.id === 'library' && openedFromYourWork)
+                            ? 'forma-tab is-active'
+                            : 'forma-tab'}
                         onClick={() => {
                             playSound('click');
-                            onTabChange(tab.id);
+                            if (tab.id === 'youtube') {
+                                onYoutube();
+                            } else {
+                                onTabChange(tab.id);
+                            }
                         }}
                         aria-label={tab.label}
                     >
@@ -117,7 +124,9 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                                 onSignOut();
                             }}
                         >
-                            <Icon name="logout" size={14} /> Sign out
+                            {user.isGuest
+                                ? <><Icon name="user" size={14} /> Sign in</>
+                                : <><Icon name="logout" size={14} /> Sign out</>}
                         </button>
                     </div>
                 )}

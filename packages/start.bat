@@ -1,9 +1,10 @@
 @echo off
 REM ============================================================
 REM  CoDeFine - one-click launcher
-REM  Installs deps, fetches COLMAP / Brush / cloudflared on first
-REM  run, builds the web app, then starts the backend + Cloudflare
-REM  tunnel in their own windows so teammates can use the app.
+REM  Installs deps, fetches COLMAP / Brush / cloudflared / the
+REM  Emscripten SDK on first run, builds the engine renderer and
+REM  web app, then starts the backend + Cloudflare tunnel in their
+REM  own windows so teammates can use the app.
 REM
 REM  Keep BOTH new windows open while teammates are using it.
 REM  Close them (or press Ctrl+C in each) to stop.
@@ -21,7 +22,7 @@ REM Install/refresh dependencies first. node_modules is not in git, and it goes
 REM stale whenever someone pulls a commit that adds a package -- building
 REM without this fails with "failed to resolve import". It's a fast no-op when
 REM everything is already up to date.
-echo [1/5] Installing dependencies (npm install)...
+echo [1/6] Installing dependencies (npm install)...
 call npm install
 if errorlevel 1 (
     echo.
@@ -31,7 +32,22 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/5] Building the web app (npm run build)...
+REM The engine renderer, compiled to WebAssembly for the web app's 3D viewer.
+REM build-web.bat downloads the Emscripten SDK into engine\Library\emsdk on the
+REM first run (one-time, a few hundred MB), then only rebuilds what changed.
+REM It must run before npm run build, which copies its output into dist. Not
+REM fatal: without it the viewer falls back to the three.js renderer.
+echo [2/6] Building the engine renderer for the web (engine\build-web.bat)...
+call "%~dp0..\engine\build-web.bat"
+if errorlevel 1 (
+    echo.
+    echo     *** Engine web build failed - the 3D viewer will use the three.js renderer.
+    echo     *** Run engine\build-web.bat by hand to see the full error.
+)
+cd /d "%~dp0"
+
+echo.
+echo [3/6] Building the web app (npm run build)...
 call npm run build
 if errorlevel 1 (
     echo.
@@ -45,7 +61,7 @@ REM COLMAP, Brush and cloudflared are standalone programs, not npm packages, so
 REM npm install doesn't provide them. Each is fetched once into tools\ (all
 REM gitignored) if the backend can't already find it.
 echo.
-echo [3/5] Checking for external tools...
+echo [4/6] Checking for external tools...
 
 REM COLMAP / Brush: ask the backend's own config.js where it resolves each
 REM binary (repo tools\, sibling ..\gsplat-tools, or COLMAP_BIN / BRUSH_BIN).
@@ -134,10 +150,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/5] Starting backend on http://localhost:5005 ...
+echo [5/6] Starting backend on http://localhost:5005 ...
 start "CoDeFine Backend" cmd /k "cd /d %~dp0src\backend && node server.js"
 
-echo [5/5] Starting Cloudflare tunnel ...
+echo [6/6] Starting Cloudflare tunnel ...
 start "CoDeFine Tunnel" cmd /k "cloudflared tunnel --protocol http2 --url http://localhost:5005"
 
 echo.

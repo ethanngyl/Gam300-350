@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
 #  CoDeFine - one-click launcher (macOS counterpart of start.bat)
-#  Installs deps, fetches COLMAP / Brush / cloudflared on first
-#  run, builds the web app, then starts the backend + Cloudflare
-#  tunnel so teammates can use the app.
+#  Installs deps, fetches COLMAP / Brush / cloudflared / the
+#  Emscripten SDK on first run, builds the engine renderer and
+#  web app, then starts the backend + Cloudflare tunnel so
+#  teammates can use the app.
 #
 #  Run from Terminal:  ./packages/start.sh
 #  Keep this Terminal window open while teammates are using it.
@@ -48,11 +49,23 @@ fi
 # stale whenever someone pulls a commit that adds a package -- building
 # without this fails with "failed to resolve import". It's a fast no-op when
 # everything is already up to date.
-echo "[1/5] Installing dependencies (npm install)..."
+echo "[1/6] Installing dependencies (npm install)..."
 npm install || fail "npm install failed - check your internet connection and Node.js install."
 
 echo
-echo "[2/5] Building the web app (npm run build)..."
+# The engine renderer, compiled to WebAssembly for the web app's 3D viewer.
+# build-web.sh downloads the Emscripten SDK into engine/Library/emsdk on the
+# first run (one-time, a few hundred MB), then only rebuilds what changed.
+# It must run before npm run build, which copies its output into dist. Not
+# fatal: without it the viewer falls back to the three.js renderer.
+echo "[2/6] Building the engine renderer for the web (engine/build-web.sh)..."
+if ! bash "$PKG_DIR/../engine/build-web.sh"; then
+    echo "    *** Engine web build failed - the 3D viewer will use the three.js renderer."
+    echo "    *** It needs cmake (brew install cmake). Run engine/build-web.sh by hand to see the full error."
+fi
+
+echo
+echo "[3/6] Building the web app (npm run build)..."
 npm run build || fail "Build failed - fix the errors above, then run this again."
 
 # ---- External tools ------------------------------------------------------
@@ -60,7 +73,7 @@ npm run build || fail "Build failed - fix the errors above, then run this again.
 # npm install doesn't provide them. Each is fetched once into tools/ (all
 # gitignored) if the backend can't already find it.
 echo
-echo "[3/5] Checking for external tools..."
+echo "[4/6] Checking for external tools..."
 
 # COLMAP / Brush: ask the backend's own config.js where it resolves each
 # binary (repo tools/, sibling ../gsplat-tools, PATH, or COLMAP_BIN /
@@ -175,11 +188,11 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
 
 echo
-echo "[4/5] Starting backend on http://localhost:5005 ..."
+echo "[5/6] Starting backend on http://localhost:5005 ..."
 (cd "$PKG_DIR/src/backend" && exec node server.js) &
 BACKEND_PID=$!
 
-echo "[5/5] Starting Cloudflare tunnel ..."
+echo "[6/6] Starting Cloudflare tunnel ..."
 cloudflared tunnel --protocol http2 --url http://localhost:5005 >"$TUNNEL_LOG" 2>&1 &
 TUNNEL_PID=$!
 

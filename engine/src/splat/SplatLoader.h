@@ -13,6 +13,7 @@
 
 #include "SplatData.h"
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -21,3 +22,7 @@
 // should treat "no splats" as a valid, non-fatal state (e.g. a missing
 // sample asset shouldn't crash the engine).
 std::vector<SplatVertex> LoadSplatPly(const std::string& path);
+
+// Same as above, but parses a .ply already held in memory (used by the web build,
+// where the file arrives as fetched bytes). `label` is only used in error logs.
+std::vector<SplatVertex> LoadSplatPlyFromMemory(const unsigned char* data, size_t size, const std::string& label);

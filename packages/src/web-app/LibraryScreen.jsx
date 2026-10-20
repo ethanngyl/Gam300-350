@@ -9,27 +9,36 @@
 Library tab with two sub-views: a searchable, sortable grid of generated
 3D models and a Photo Library that embeds ImageGallery in its compact
 variant. The 3D Models grid is built from GET /jobs: finished jobs show
-as Ready and open the full-page splat viewer when clicked, jobs still
-running show as Processing, and failed or cancelled jobs are hidden. The
-active sub-tab is controlled by the parent so the sidebar can open
-either one directly.
+as Ready, jobs still running show as Processing, and failed or cancelled
+jobs are hidden. Viewing a model is left to the Model Viewer tab;
+right-clicking a card here renames or deletes it. The active sub-tab is
+controlled by the parent so the sidebar can open either one directly.
 **************************************************************************/
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import ImageGallery from './ImageGallery.jsx';
+import ContextMenu from './ContextMenu.jsx';
+import { menuPosition } from './menuPosition.js';
+import ActionDialog from './ActionDialog.jsx';
+import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 
 // Statuses where a job has stopped for good. 'done' is the only one that
 // produces a model; the others are hidden from the grid.
 const FINISHED_STATUSES = ['done', 'error', 'cancelled'];
 
-function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos, onOpenModel }) {
+function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos }) {
     const [search, setSearch] = useState('');
     const [sortOrder, setSortOrder] = useState('newest');
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
+    // Open right-click menu ({ x, y, items }) and rename/delete dialog (ActionDialog props).
+    const [menu, setMenu] = useState(null);
+    const [dialog, setDialog] = useState(null);
+    const closeMenu = useCallback(() => setMenu(null), []);
+    const closeDialog = useCallback(() => setDialog(null), []);
 
     // Fetch the job list whenever the 3D Models sub-tab is opened, so a model
     // that finished since the last visit shows up without a page reload.
@@ -64,8 +73,10 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
         .filter((job) => job.status === 'done' || !FINISHED_STATUSES.includes(job.status))
         .map((job) => ({
             id: job.id,
-            name: `Model ${job.id.slice(0, 8)}`,
+            name: jobDisplayName(job, 'Model'),
+            customName: job.name ?? '',
             photoCount: job.images?.length ?? 0,
+            createdAt: job.createdAt,
             isReady: job.status === 'done',
         }));
 
@@ -74,7 +85,54 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
         `${model.name} ${model.id}`.toLowerCase().includes(normalizedSearch)
     );
     if (sortOrder === 'oldest') visibleModels.reverse();
-    if (sortOrder === 'name') visibleModels.sort((a, b) => a.id.localeCompare(b.id));
+    if (sortOrder === 'name') visibleModels.sort((a, b) => a.name.localeCompare(b.name));
+
+    function openModelMenu(event, model) {
+        event.preventDefault();
+        setMenu({
+            ...menuPosition(event),
+            items: [
+                { label: 'Rename', icon: 'edit', onSelect: () => openRenameDialog(model) },
+                { label: 'Delete', icon: 'trash', danger: true, onSelect: () => openDeleteDialog(model) },
+            ],
+        });
+    }
+
+    function openRenameDialog(model) {
+        setDialog({
+            title: 'Rename model',
+            message: 'Also renames its .ply in the engine samples folder (spaces become _). '
+                + 'Leave empty to use the default name.',
+            initialValue: model.customName || model.name,
+            confirmLabel: 'Rename',
+            onConfirm: async (name) => {
+                const result = await renameJob(model.id, name);
+                setJobs((current) =>
+                    current.map((job) => (job.id === model.id ? { ...job, name: result.name } : job))
+                );
+                playSound('click');
+                setDialog(null);
+            },
+        });
+    }
+
+    function openDeleteDialog(model) {
+        const photos = model.photoCount === 1 ? '1 source photo' : `${model.photoCount} source photos`;
+        setDialog({
+            title: `Delete ${model.name}?`,
+            message: model.isReady
+                ? `This permanently deletes the model and its ${photos}.`
+                : `This stops processing and permanently deletes its ${photos}.`,
+            confirmLabel: 'Delete',
+            danger: true,
+            onConfirm: async () => {
+                await deleteJob(model.id);
+                setJobs((current) => current.filter((job) => job.id !== model.id));
+                playSound('click');
+                setDialog(null);
+            },
+        });
+    }
 
     return (
         <div className="library-screen">
@@ -140,15 +198,17 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
 
                     <div className="library-grid">
                         {visibleModels.map((model) => (
-                            <button
+                            <div
                                 key={model.id}
-                                type="button"
-                                className="forma-card library-item library-item-button"
-                                disabled={!model.isReady}
-                                onClick={() => {
-                                    playSound('click');
-                                    onOpenModel(model.id);
-                                }}
+                                // Focusable so the keyboard menu key can open the menu too.
+                                tabIndex={0}
+                                className={
+                                    model.isReady
+                                        ? 'forma-card library-item library-item-actionable'
+                                        : 'forma-card library-item library-item-actionable is-processing'
+                                }
+                                title="Right-click to rename or delete"
+                                onContextMenu={(event) => openModelMenu(event, model)}
                             >
                                 <div className="library-thumb">
                                     <span
@@ -165,9 +225,13 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                                 <div className="library-item-name">{model.name}</div>
                                 <div className="library-item-meta">
                                     <span>{model.photoCount} photos</span>
-                                    <span>{model.isReady ? 'Click to view' : 'In progress'}</span>
+                                    <span>
+                                        {model.isReady
+                                            ? new Date(model.createdAt).toLocaleDateString()
+                                            : 'In progress'}
+                                    </span>
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </div>
                 </>
@@ -175,6 +239,9 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                 // Live data: fetched and owned by ImageGallery's own load() logic.
                 <ImageGallery variant="compact" searchTerm={search} sortOrder={sortOrder} />
             )}
+
+            {menu && <ContextMenu {...menu} onClose={closeMenu} />}
+            {dialog && <ActionDialog {...dialog} onCancel={closeDialog} />}
         </div>
     );
 }

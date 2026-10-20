@@ -203,6 +203,8 @@ export async function scanJob(id, jobsDir = config.jobsDir)
       error,
       detail: null,
       source: saved?.source ?? null,
+      name: saved?.name ?? null,
+      sampleFile: saved?.sampleFile ?? null,
       // birthtime is 0 on some filesystems; fall back to mtime.
       createdAt: saved?.createdAt ?? (st.birthtimeMs || st.mtimeMs),
       updatedAt: saved?.updatedAt ?? st.mtimeMs,

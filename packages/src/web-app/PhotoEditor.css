@@ -1,0 +1,746 @@
+/* ============================================================
+   Photo Editor - GENESIS theme
+   Uses the --forma-* variables from AppTheme.css.
+   Layout is mobile-first: one column by default, photo grid beside
+   the side panel only on wide screens.
+   ============================================================ */
+
+.photo-editor {
+    padding: 20px 16px 0;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---------- Heading ---------- */
+
+.photo-editor-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+    .photo-editor-heading > .forma-btn {
+        align-self: flex-start;
+    }
+
+.photo-editor .photo-editor-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.photo-editor .photo-editor-subtitle {
+    margin-top: 8px;
+    max-width: 620px;
+    color: var(--forma-text-muted);
+    line-height: 1.6;
+}
+
+/* ---------- Empty state ---------- */
+
+.photo-editor-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 260px;
+    border: 2px dashed var(--forma-border-strong);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+    .photo-editor-empty:hover,
+    .photo-editor-empty.is-dragging {
+        border-color: var(--forma-blue);
+        background: rgba(63, 152, 173, 0.08);
+    }
+
+.photo-editor-empty-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--forma-text);
+}
+
+.photo-editor-empty-hint {
+    font-size: 0.82rem;
+}
+
+/* ---------- Summary bar ---------- */
+
+.photo-editor-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.photo-editor-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    font-size: 0.84rem;
+    color: var(--forma-text-muted);
+}
+
+    .photo-editor-counts b {
+        color: var(--forma-text);
+        font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .photo-editor-counts .is-warning b {
+        color: var(--forma-coral);
+    }
+
+.photo-editor-checking {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.76rem;
+    color: var(--forma-teal-text);
+}
+
+.photo-editor-summary-actions {
+    display: flex;
+    gap: 8px;
+}
+
+    .photo-editor-summary-actions .forma-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+/* ---------- Body: grid + side panel ---------- */
+
+.photo-editor-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    border-radius: 10px;
+}
+
+    .photo-editor-body.is-dragging {
+        outline: 2px dashed var(--forma-blue);
+        outline-offset: 6px;
+    }
+
+/* ---------- Photo grid ---------- */
+
+.photo-editor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 8px;
+}
+
+.photo-editor-thumb {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    background: var(--forma-panel-alt);
+}
+
+    .photo-editor-thumb.is-selected {
+        border-color: var(--forma-teal-text);
+    }
+
+.photo-editor-thumb-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+    .photo-editor-thumb-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.photo-editor-thumb.is-excluded img {
+    opacity: 0.3;
+}
+
+.photo-editor-excluded-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--forma-text);
+}
+
+.photo-editor-issue-badges {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.photo-editor-issue {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: #ffd9cf;
+    background: rgba(240, 111, 96, 0.85);
+}
+
+/* 30px on phones so it's easy to tap; smaller on desktop below. */
+.photo-editor-keep-toggle {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--forma-border-strong);
+    background: rgba(17, 29, 41, 0.85);
+    color: var(--forma-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+}
+
+    .photo-editor-keep-toggle.is-kept {
+        background: var(--forma-blue);
+        border-color: var(--forma-blue);
+        color: #f4fbfd;
+    }
+
+/* ---------- Side panel ---------- */
+
+.photo-editor-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.photo-editor-preview,
+.photo-editor-adjust {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.photo-editor .photo-editor-preview,
+.photo-editor .photo-editor-adjust {
+    padding: 16px;
+}
+
+.photo-editor-preview-frame {
+    aspect-ratio: 4 / 3;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--forma-bg);
+}
+
+    .photo-editor-preview-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+
+.photo-editor-preview-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.photo-editor .photo-editor-preview-note {
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--forma-text-muted);
+}
+
+    .photo-editor .photo-editor-preview-note.is-good {
+        color: var(--forma-green);
+    }
+
+.photo-editor-issue-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+    .photo-editor-issue-list li {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: var(--forma-text-muted);
+    }
+
+    .photo-editor-issue-list b {
+        color: var(--forma-coral);
+    }
+
+.photo-editor-preview-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+    .photo-editor-preview-actions .forma-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+        /* Stops the browser selecting text while the button is held down. */
+        .photo-editor-preview-actions .forma-btn:first-child {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+.photo-editor-slider {
+    display: block;
+}
+
+    .photo-editor-slider span {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.82rem;
+        color: var(--forma-text-muted);
+        margin-bottom: 6px;
+    }
+
+    .photo-editor-slider b {
+        color: var(--forma-teal-text);
+        font-family: 'IBM Plex Mono', monospace;
+        font-weight: 500;
+    }
+
+    .photo-editor-slider input[type='range'] {
+        width: 100%;
+        accent-color: var(--forma-blue);
+    }
+
+.photo-editor .photo-editor-hint {
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: var(--forma-text-dim);
+}
+
+.photo-editor-adjust > .forma-btn {
+    align-self: flex-start;
+}
+
+/* ---------- Bottom bar ---------- */
+
+/* Sticks to the bottom of the scrolling page so Generate is always in reach.
+   Negative side margins stretch it to the page edges. */
+.photo-editor-footer {
+    position: sticky;
+    bottom: 0;
+    margin: auto -16px 0;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--forma-sidebar);
+    border-top: 1px solid var(--forma-border);
+    z-index: 5;
+}
+
+    .photo-editor-footer .forma-btn-primary {
+        justify-content: center;
+    }
+
+.photo-editor-footer-text {
+    font-size: 0.82rem;
+    color: var(--forma-text-muted);
+}
+
+.photo-editor-error {
+    color: var(--forma-red);
+}
+
+/* Space so the last row of photos isn't hidden behind the bottom bar. */
+.photo-editor-body {
+    margin-bottom: 24px;
+}
+
+/* ---------- Tablets and up ---------- */
+
+@media (min-width: 761px) {
+    .photo-editor {
+        padding: 32px 40px 0;
+    }
+
+        .photo-editor .photo-editor-title {
+            font-size: 2rem;
+        }
+
+    .photo-editor-heading {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 24px;
+    }
+
+        .photo-editor-heading > div {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .photo-editor-heading > .forma-btn {
+            flex: none;
+        }
+
+    .photo-editor-summary {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .photo-editor-summary-actions .forma-btn {
+        flex: none;
+    }
+
+    .photo-editor-grid {
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+        gap: 10px;
+    }
+
+    .photo-editor-keep-toggle {
+        width: 24px;
+        height: 24px;
+    }
+
+    .photo-editor-footer {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        margin: auto -40px 0;
+        padding: 14px 40px;
+    }
+}
+
+/* ---------- Wide screens: grid beside the side panel ---------- */
+
+@media (min-width: 981px) {
+    .photo-editor-body {
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 20px;
+    }
+
+    /* Panel stays in view while scrolling a long photo grid. */
+    .photo-editor-panel {
+        position: sticky;
+        top: 16px;
+    }
+}
+
+/* ============================================================
+   Additions: library button, crop tool, per-photo editing
+   ============================================================ */
+
+.photo-editor-heading-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.photo-editor-start {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.photo-editor-start-library {
+    align-self: center;
+}
+
+/* The preview now shows a canvas at the photo's own shape, so the
+   frame no longer forces 4:3. */
+.photo-editor .photo-editor-preview-frame {
+    aspect-ratio: auto;
+    min-height: 160px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Shrinks to the canvas so the crop overlay lines up with the photo. */
+.photo-editor-canvas-wrap {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+}
+
+.photo-editor-preview-canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 300px;
+}
+
+.photo-editor-crop-overlay {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+/* The huge shadow darkens everything outside the crop. */
+.photo-editor-crop-box {
+    position: absolute;
+    border: 2px solid var(--forma-teal-text);
+    box-shadow: 0 0 0 9999px rgba(8, 14, 20, 0.6);
+}
+
+.photo-editor-crop-handle {
+    position: absolute;
+    background: var(--forma-teal-text);
+    border-radius: 3px;
+    touch-action: none;
+}
+
+    /* Larger invisible area around each handle so it's easy to grab. */
+    .photo-editor-crop-handle::before {
+        content: '';
+        position: absolute;
+        inset: -10px;
+    }
+
+    .photo-editor-crop-handle.is-top {
+        top: 3px;
+        left: 50%;
+        width: 36px;
+        height: 7px;
+        transform: translateX(-50%);
+        cursor: ns-resize;
+    }
+
+    .photo-editor-crop-handle.is-bottom {
+        bottom: 3px;
+        left: 50%;
+        width: 36px;
+        height: 7px;
+        transform: translateX(-50%);
+        cursor: ns-resize;
+    }
+
+    .photo-editor-crop-handle.is-left {
+        left: 3px;
+        top: 50%;
+        width: 7px;
+        height: 36px;
+        transform: translateY(-50%);
+        cursor: ew-resize;
+    }
+
+    .photo-editor-crop-handle.is-right {
+        right: 3px;
+        top: 50%;
+        width: 7px;
+        height: 36px;
+        transform: translateY(-50%);
+        cursor: ew-resize;
+    }
+
+/* "All photos / This photo" switch */
+.photo-editor-target {
+    display: flex;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border);
+    border-radius: 8px;
+    padding: 3px;
+}
+
+    .photo-editor-target button {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--forma-text-muted);
+        font-family: inherit;
+        font-size: 0.8rem;
+        padding: 7px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+        .photo-editor-target button.is-active {
+            background: var(--forma-panel-raised);
+            color: var(--forma-text);
+            font-weight: 600;
+        }
+
+.photo-editor-edited-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: #e3f4f7;
+    background: rgba(63, 152, 173, 0.9);
+}
+
+.photo-editor .photo-editor-warning {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--forma-coral);
+}
+
+.photo-editor-adjust-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Stops text selection while "Hold to see original" is held down. */
+.photo-editor-hold-button {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+
+/* ============================================================
+   Additions: auto tools, white balance, warnings, originals switch
+   ============================================================ */
+
+/* Holds the thumbnail colour filters; takes up no space. */
+.photo-editor-filter-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+/* The fieldset only groups the controls so they can be disabled together. */
+.photo-editor-adjust-fields {
+    border: none;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+    .photo-editor-adjust-fields:disabled {
+        opacity: 0.45;
+    }
+
+.photo-editor-auto-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+    .photo-editor-auto-actions .forma-btn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+/* Strong-setting warning on a slider */
+.photo-editor-slider.is-strong b {
+    color: var(--forma-coral);
+}
+
+.photo-editor-slider-warning {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.74rem;
+    line-height: 1.4;
+    color: var(--forma-coral);
+}
+
+.photo-editor-preview-canvas.is-picking {
+    cursor: crosshair;
+}
+
+/* "Use original photos" switch in the bottom bar */
+.photo-editor-originals {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.84rem;
+    color: var(--forma-text);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* Own copy of the toggle style, so it doesn't depend on the old
+   Photo Editor rules in AppTheme.css. */
+.photo-editor-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 34px;
+    height: 20px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    position: relative;
+    cursor: pointer;
+    flex: none;
+}
+
+    .photo-editor-switch::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--forma-text-muted);
+        transition: transform 0.15s ease;
+    }
+
+    .photo-editor-switch:checked {
+        background: rgba(63, 152, 173, 0.45);
+        border-color: var(--forma-blue);
+    }
+
+        .photo-editor-switch:checked::after {
+            transform: translateX(14px);
+            background: #fff;
+        }
+
+@media (min-width: 761px) {
+    .photo-editor-footer {
+        gap: 20px;
+    }
+
+    .photo-editor-footer-text {
+        flex: 1;
+    }
+}

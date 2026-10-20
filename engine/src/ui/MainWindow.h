@@ -6,50 +6,134 @@
 \par Software Engineering Project 5
 \date 01-10-2026
 \brief
-Declares MainWindow, the QMainWindow that is the single editor window: it
-hosts the 3D Viewport (with its ImGui overlay) in the centre and the Qt
-dock panels (the stats label and the ImGui "Engine Stats" toggle) around it.
+Declares MainWindow, the editor shell. It hosts the 3D Viewport in the
+centre and arranges the editor around it: menu bar, main toolbar, status
+bar, and the dockable Scene (outliner), Inspector, Assets, Console and
+Audio panels. It owns the scene-editing commands (import, select, rename,
+delete, render mode), loads .ply files on a worker thread, accepts .ply
+drag-and-drop, and persists layout and preferences with QSettings.
 **************************************************************************/
 #pragma once
 
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QMainWindow>
+#include <QPointer>
+#include <QStringList>
 
-#include <memory>
+#include <vector>
 
+class QAction;
+class QActionGroup;
+class QDockWidget;
 class QLabel;
-class QListWidget;
-class Viewport;
-class AudioManager;
+class QMenu;
+class QProgressBar;
+class QThread;
+class QToolBar;
 
-// The single editor window: the 3D viewport (with its ImGui overlay) in the
-// centre and Qt dock panels around it.
+struct SplatVertex;
+
+class AssetBrowserPanel;
+class AudioPanel;
+class ConsolePanel;
+class InspectorPanel;
+class OutlinerPanel;
+class Viewport;
+
 class MainWindow : public QMainWindow {
+    Q_OBJECT
+
 public:
     MainWindow();
     ~MainWindow() override;
 
+    // Imports each .ply in paths (e.g. from the command line). Safe to call
+    // before the window is shown; loading starts once the renderer exists.
+    void openFiles(const QStringList& paths);
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
+
 private:
-    // Builds the "Audio" dock panel (folder list + play/stop controls) and
-    // wires its widgets to m_audio.
-    void buildAudioPanel();
+    // ---- construction ----
+    void createActions();
+    void createMenus();
+    void createToolBar();
+    void createDocks();
+    void createStatusBar();
+    QDockWidget* addPanelDock(const QString& title, const QString& objectName,
+                              QWidget* panel, Qt::DockWidgetArea area);
 
-    // Refills the folder list widget with the audio files found in dir.
-    void populateAudioList(const QString& dir);
+    // ---- persistence ----
+    void restoreSettings();
+    void saveSettings() const;
 
-    // Plays every file currently selected in the list (they layer together).
-    void playSelectedAudio();
+    // ---- scene commands ----
+    // Queues a .ply for import; files load one at a time on a worker thread.
+    void importSplat(const QString& path);
+    void startNextImport();
+    void finishImport(const QString& path, std::vector<SplatVertex>& splats, size_t originalCount);
+    void selectModel(int index);
+    void renameModel(int index, const QString& name);
+    void deleteSelectedModel();
+    void setRenderMode(int mode); // SplatRenderer::RenderMode as int
 
-    Viewport* m_viewport = nullptr;        // owned by this window
-    QLabel* m_statsLabel = nullptr;        // owned by the dock panel
+    // Rebuilds the outliner/inspector from the renderer and updates which
+    // scene actions are enabled.
+    void refreshScenePanels();
+    void setImportBusy(const QString& fileName); // empty = idle
+
+    // ---- recent files ----
+    void addRecentFile(const QString& path);
+    void rebuildRecentMenu();
+
+    // ---- help ----
+    void showControls();
+    void showAbout();
+
+    Viewport* m_viewport = nullptr;
+
+    // Panels (owned by their docks).
+    OutlinerPanel* m_outliner = nullptr;
+    InspectorPanel* m_inspector = nullptr;
+    AssetBrowserPanel* m_assets = nullptr;
+    ConsolePanel* m_console = nullptr;
+    AudioPanel* m_audio = nullptr;
+    QList<QDockWidget*> m_docks;
+    QToolBar* m_toolBar = nullptr;
+
+    // Actions.
+    QAction* m_importAction = nullptr;
+    QAction* m_exitAction = nullptr;
+    QAction* m_renameAction = nullptr;
+    QAction* m_deleteAction = nullptr;
+    QAction* m_deselectAction = nullptr;
+    QAction* m_resetPositionAction = nullptr;
+    QActionGroup* m_renderModeGroup = nullptr;
+    QAction* m_pointCloudAction = nullptr;
+    QAction* m_gaussianAction = nullptr;
+    QAction* m_recenterCameraAction = nullptr;
+    QAction* m_statsOverlayAction = nullptr;
+    QAction* m_trimOnImportAction = nullptr;
+    QAction* m_resetLayoutAction = nullptr;
+    QMenu* m_recentMenu = nullptr;
+    QMenu* m_windowMenu = nullptr;
+
+    // Status bar.
+    QLabel* m_loadingLabel = nullptr;
+    QProgressBar* m_loadingBar = nullptr;
+    QLabel* m_sceneLabel = nullptr;
+    QLabel* m_modeLabel = nullptr;
+    QLabel* m_fpsLabel = nullptr;
     QElapsedTimer m_statsTimer;
 
-    // Audio dock panel widgets (owned by the panel/window).
-    QListWidget* m_audioList = nullptr;
-    QLabel* m_audioFolderLabel = nullptr;  // which folder is listed
-    QLabel* m_audioStatusLabel = nullptr;  // last action / errors
-    QLabel* m_voicesLabel = nullptr;       // live count of playing sounds
+    // Import queue / worker.
+    QStringList m_pendingImports;
+    QPointer<QThread> m_loadThread;
 
-    std::unique_ptr<AudioManager> m_audio; // FMOD wrapper driving the buttons
-    QString m_audioFolder;                 // folder currently listed
+    QStringList m_recentFiles;
+    QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
 };

@@ -20,6 +20,7 @@ An optional onBack prop adds a "Back to dashboard" button to the heading.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSound } from '../audio/Audio.js';
+import NameModelPrompt from './NameModelPrompt.jsx';
 import './YoutubeIngest.css';
 
 const YT_HOSTS = new Set([
@@ -86,6 +87,8 @@ function YoutubeIngest({ onBack }) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
     const [job, setJob] = useState(null);
+    // Set when training finishes, to ask for the model's name.
+    const [namePromptJobId, setNamePromptJobId] = useState(null);
     const jobRef = useRef(null);
     const pollRef = useRef(null);
 
@@ -126,6 +129,7 @@ function YoutubeIngest({ onBack }) {
                     setJob(data);
                     if (FINISHED.includes(data.status)) {
                         stopPolling();
+                        if (data.status === 'done') setNamePromptJobId(id);
                     }
                 } catch (err) {
                     setError(`Lost contact with the server: ${err.message}`);
@@ -299,6 +303,9 @@ function YoutubeIngest({ onBack }) {
                     )}
                 </div>
             </div>
+            {namePromptJobId && (
+                <NameModelPrompt jobId={namePromptJobId} onClose={() => setNamePromptJobId(null)} />
+            )}
         </div>
     );
 }

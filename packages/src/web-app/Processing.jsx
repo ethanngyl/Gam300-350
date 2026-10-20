@@ -33,6 +33,7 @@ import './Processing.css'
 // Friendly labels for the backend's phase names.
 const PHASE_LABELS = {
     upload: 'Uploading photos',
+    masking: 'Removing backgrounds',
     'colmap-features': 'Analyzing photos',
     'colmap-matching': 'Matching photos',
     'colmap-mapping': 'Recovering camera positions',
@@ -45,6 +46,7 @@ const PHASE_LABELS = {
 // tracker (display only, does not affect the job).
 const PHASE_ORDER = [
     'upload',
+    'masking',
     'colmap-features',
     'colmap-matching',
     'colmap-mapping',
@@ -125,7 +127,9 @@ export default function Processing({ jobId, onDone, onCancel }) {
 
     const pct = Math.round((job?.progress ?? 0) * 100)
     const label = PHASE_LABELS[job?.phase] ?? 'Working'
-    const phaseIndex = PHASE_ORDER.indexOf(job?.phase)
+    // The masking step only runs for jobs sent with "Remove background" on.
+    const phases = PHASE_ORDER.filter((p) => p !== 'masking' || job?.removeBackground)
+    const phaseIndex = phases.indexOf(job?.phase)
 
     // Which state a step in the tracker is in (display only, does not affect the job).
     function stepState(index) {
@@ -172,7 +176,7 @@ export default function Processing({ jobId, onDone, onCancel }) {
                         </div>
 
                         <ol className="processing-steps">
-                            {PHASE_ORDER.map((phaseKey, index) => (
+                            {phases.map((phaseKey, index) => (
                                 <li key={phaseKey} className={`processing-step processing-step-${stepState(index)}`}>
                                     <span className="processing-step-dot"></span>
                                     {PHASE_LABELS[phaseKey]}

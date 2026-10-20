@@ -58,6 +58,7 @@ import express from 'express'
 import crypto from 'node:crypto'
 import { config } from './config.js'
 import { saveJob } from './status.js'
+import { getHardwareInfo } from './metrics.js'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -78,9 +79,9 @@ from './scan.js'
 import 
 { 
   cancelJob, canonicalYoutubeUrl, jobs,
-  killChildren, makeJob, restoreJob,
-  runPipeline, runYoutubePipeline,
-} 
+  killChildren, makeJob, pickSampleFileName, restoreJob,
+  runPipeline, runYoutubePipeline, sampleFileName,
+}
 from './pipeline.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -504,6 +505,9 @@ app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxF
   const job = makeJob(req.jobId)
   job.imageCount = files.length
   job.source = 'upload'
+  // Optional multipart text field: mask out the background before COLMAP
+  // (needed for turntable captures, see generateMasks in pipeline.js).
+  job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
   saveJob(job) // gives upload-only jobs a status record from the start
   runPipeline(job) // fire-and-forget; do not await
   res.status(202).json({ id: job.id, imageCount: files.length })
@@ -536,6 +540,7 @@ app.get('/jobs', requireUser, async (req, res) =>
       const job = jobs.get(record.id) ?? restoreJob(record);
       return {
         id: record.id,
+        name: job.name ?? null,
         status: job.status,
         phase: job.phase,
         progress: job.progress,
@@ -645,6 +650,7 @@ app.get('/jobs/:id', requireJobAccess, async (req, res) =>
     error: job.error,
     updatedAt: job.updatedAt ?? null,
     imageCount: job.imageCount ?? null,
+    removeBackground: !!job.removeBackground,
     hasResult: job.status === 'done' && !!job.resultPath,
     logTail: job.log.slice(-40),
   })
@@ -692,6 +698,92 @@ app.get('/jobs/:id/result.ply', requireJobAccess, async (req, res) =>
   }
   res.setHeader('Content-Type', 'application/octet-stream')
   res.sendFile(job.resultPath)
+})
+
+const MAX_JOB_NAME_LENGTH = 80
+
+/************************************************************************/
+/*!
+  \brief
+    Rename a job (the model and its photo batch share one name). Body:
+    { name: string }. An empty name resets it to the default. The
+    display name is saved in status.json, and the model's copy in the
+    engine's samples folder is renamed to match (see pickSampleFileName).
+    The job folders keep their id.
+  \return
+    404 if job not found, 400 if the name is too long, 409 if the sample
+    file can't be renamed (e.g. open in another program), else the new
+    name and sample filename
+*/
+/************************************************************************/
+app.patch('/jobs/:id', async (req, res) =>
+{
+  const job = await getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
+
+  const { name } = req.body || {}
+  const trimmed = typeof name === 'string' ? name.trim() : ''
+  if (trimmed.length > MAX_JOB_NAME_LENGTH)
+    return res.status(400).json({ error: `Name must be at most ${MAX_JOB_NAME_LENGTH} characters.` })
+
+  const newName = trimmed || null
+  const oldFile = sampleFileName(job)
+  const newFile = pickSampleFileName(job, newName)
+  if (newFile !== oldFile)
+  {
+    try
+    {
+      await fs.promises.rename(
+        path.join(config.engineSamplesDir, oldFile),
+        path.join(config.engineSamplesDir, newFile),
+      )
+    }
+    catch (err)
+    {
+      // No copy yet (still processing, or trained before copies existed):
+      // the new filename is still recorded, so the pipeline copies under it.
+      if (err.code !== 'ENOENT')
+        return res.status(409).json({ error: `Couldn't rename ${oldFile} in the engine samples folder (${err.code}). Close any program using it and try again.` })
+    }
+  }
+
+  job.name = newName
+  job.sampleFile = newFile
+  saveJob(job)
+  res.json({ id: job.id, name: job.name, sampleFile: newFile })
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Permanently delete a job: its photos, COLMAP files, splat output and
+    the copy in the engine's samples folder. A job still processing is
+    cancelled first so its tools stop writing into the folders.
+  \return
+    404 if job not found, else 200 once the folders are gone
+*/
+/************************************************************************/
+app.delete('/jobs/:id/files', async (req, res, next) =>
+{
+  const job = await getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
+
+  cancelJob(job) // no-op for a finished job
+  jobs.delete(job.id)
+
+  try
+  {
+    // Retries cover Windows briefly locking files of a tool that was just killed.
+    const rmOpts = { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }
+    await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
+    await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
+    await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
+    res.json({ id: job.id, deleted: true })
+  }
+  catch (err)
+  {
+    next(err)
+  }
 })
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/
@@ -1108,5 +1200,9 @@ app.listen(config.port, () =>
   console.log(`[backend] http://localhost:${config.port}`)
   console.log(`[backend] COLMAP: ${config.colmapBin}`)
   console.log(`[backend] Brush:  ${config.brushBin}`)
+  console.log(`[backend] Python: ${config.pythonBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
+  // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
+  getHardwareInfo().then((hw) =>
+    console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))
 })

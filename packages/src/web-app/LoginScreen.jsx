@@ -11,9 +11,8 @@ form shape (email format, 6+ character password, name when creating an
 account), then posts it to the backend: /auth/signup creates the account
 in the SQLite database (password stored only as a hash), /auth/login checks
 the password. On success the user object the server returns is handed to
-the parent, which keeps it as this browser's session. "Remember me" keeps
-the login after the browser is closed; unticked, the server's session
-cookie ends when the browser closes.
+the parent, which keeps it as this browser's session. "Continue as guest"
+skips the backend and hands the parent a local guest user instead.
 **************************************************************************/
 
 import { useState } from 'react';
@@ -35,6 +34,18 @@ function LoginScreen({ onLogin }) {
         playSound('click');
         setMode(isSignUp ? 'signin' : 'signup');
         setErrorMessage(null);
+    }
+
+    // Temporary bypass: skips the backend and signs in as a local-only guest.
+    // The backend does not check the session, so every feature still works.
+    function continueAsGuest() {
+        playSound('click');
+        onLogin({
+            name: 'Guest',
+            email: 'Not signed in',
+            memberSince: new Date().toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
+            isGuest: true,
+        });
     }
 
     async function handleSubmit(event) {
@@ -142,6 +153,15 @@ function LoginScreen({ onLogin }) {
                     disabled={isSubmitting}
                 >
                     {isSubmitting ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}
+                </button>
+
+                <button
+                    type="button"
+                    className="forma-btn login-submit"
+                    onClick={continueAsGuest}
+                    disabled={isSubmitting}
+                >
+                    Continue as guest
                 </button>
 
                 <button type="button" className="login-switch" onClick={switchMode}>

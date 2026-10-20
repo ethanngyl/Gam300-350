@@ -22,6 +22,10 @@ rather than hardcoding a layout.
 - findOnPath(name)
 Returns the absolute path of name if it is on the system PATH (e.g. a
 Homebrew install), else null.
+- findPython()
+The Python interpreter to run the tools/ scripts with. On Windows it skips
+the Microsoft Store "python.exe" stub that only says Python isn't
+installed.
 - colmapHasCuda(exe)
 Runs COLMAP with -h and checks the output for "with CUDA". Decides whether
 COLMAP should use the GPU when COLMAP_USE_GPU isn't set.
@@ -112,6 +116,30 @@ function findOnPath(name) {
     if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
   }
   return null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Picks the Python interpreter for the tools/ scripts. On Windows,
+    %LOCALAPPDATA%\Microsoft\WindowsApps often holds a python.exe stub
+    that only prints "Python was not found" (exit code 9009); when it is
+    earlier on PATH than a real install, plain `python` runs the stub. So
+    the first python.exe outside WindowsApps is used. If there is none,
+    `python` is kept as-is: Python installed from the Microsoft Store
+    lives in WindowsApps and works there.
+  \return
+    string, an absolute path or a command name
+*/
+/************************************************************************/
+function findPython() {
+  if (!isWindows) return 'python3'
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir || /[\\/]Microsoft[\\/]WindowsApps[\\/]?$/i.test(dir)) continue
+    const full = path.join(dir, 'python.exe')
+    if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
+  }
+  return 'python'
 }
 
 // Windows builds ship .exe files; the macOS / Linux builds have no extension
@@ -284,7 +312,7 @@ export const config = {
   brushBin,
 
   // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 1000,
+  trainIters: Number(process.env.TRAIN_ITERS) || 7000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
   // Name of Brush's iteration-count flag for the installed build (see above).
   brushItersFlag: brushItersFlagName,
@@ -304,7 +332,7 @@ export const config = {
   // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
   // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
   // to its virtualenv's interpreter).
-  pythonBin: process.env.PYTHON_BIN || (isWindows ? 'python' : 'python3'),
+  pythonBin: process.env.PYTHON_BIN || findPython(),
   // Extracts evenly spaced frames from a YouTube video into a job's images/.
   ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
   // Default extraction rate (frames per second) and cap on frames pulled.
@@ -319,7 +347,11 @@ export const config = {
   // Recenters/rescales the trained splat into the viewer's frame.
   normalizeScript:
     process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
-
+  // Optional background removal: writes per-photo foreground masks that
+  // COLMAP and Brush use to ignore the background (turntable captures).
+  maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),
+  // rembg model used for the masks (see make_masks.py).
+  maskModel: process.env.MASK_MODEL || 'isnet-general-use',
   /*
   // --- Account authority (centralized accounts on the VM) --------------------
   // 'authority': this instance owns the accounts DB (the VM). It serves
