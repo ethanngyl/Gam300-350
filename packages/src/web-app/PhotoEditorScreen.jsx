@@ -27,7 +27,7 @@ import {
     findPhotoIssues,
     ISSUE_EXPLANATIONS,
     ISSUE_LABELS,
-} from './photoChecks.js';
+} from './PhotoChecks.js';
 import {
     buildChannelTransfer,
     computeAutoFix,
@@ -43,7 +43,7 @@ import {
     NO_CROP,
     renderEditedCanvas,
     sampleColor,
-} from './photoEdits.js';
+} from './PhotoEdits.js';
 import './PhotoEditor.css';
 
 // Fewest kept photos allowed before building a model (matches capture).
