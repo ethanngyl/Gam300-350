@@ -17,6 +17,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
+#include "splat/SplatTrimmer.h"
 #include "ui/AssetBrowserPanel.h"
 #include "ui/AudioPanel.h"
 #include "ui/ConsolePanel.h"
@@ -73,6 +74,7 @@ namespace {
     const QString kRecentFilesKey = QStringLiteral("files/recent");
     const QString kRenderModeKey = QStringLiteral("view/renderMode");
     const QString kStatsOverlayKey = QStringLiteral("view/statsOverlay");
+    const QString kTrimOnImportKey = QStringLiteral("files/trimOnImport");
 
     bool IsPlyFile(const QString& path) {
         return path.endsWith(".ply", Qt::CaseInsensitive);
@@ -229,6 +231,12 @@ void MainWindow::createActions() {
     m_statsOverlayAction->setStatusTip("Show the FPS / splat count overlay in the viewport");
     connect(m_statsOverlayAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowImGuiStats(on); });
 
+    m_trimOnImportAction = new QAction("&Trim Splats on Import", this);
+    m_trimOnImportAction->setCheckable(true);
+    m_trimOnImportAction->setChecked(true);
+    m_trimOnImportAction->setStatusTip("Remove faint, stray and out-of-range splats when importing. "
+                                       "Uncheck to import the original data untouched.");
+
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
@@ -238,6 +246,7 @@ void MainWindow::createActions() {
 void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(m_importAction);
+    fileMenu->addAction(m_trimOnImportAction);
     m_recentMenu = fileMenu->addMenu("Open &Recent");
     fileMenu->addSeparator();
     fileMenu->addAction(m_exitAction);
@@ -389,6 +398,7 @@ void MainWindow::restoreSettings() {
                           static_cast<int>(SplatRenderer::RenderMode::GaussianSplat);
     (gaussian ? m_gaussianAction : m_pointCloudAction)->setChecked(true);
     m_statsOverlayAction->setChecked(settings.value(kStatsOverlayKey, true).toBool());
+    m_trimOnImportAction->setChecked(settings.value(kTrimOnImportKey, true).toBool());
 
     m_recentFiles = settings.value(kRecentFilesKey).toStringList();
     rebuildRecentMenu();
@@ -404,6 +414,7 @@ void MainWindow::saveSettings() const {
                                           ? static_cast<int>(SplatRenderer::RenderMode::GaussianSplat)
                                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
     settings.setValue(kStatsOverlayKey, m_statsOverlayAction->isChecked());
+    settings.setValue(kTrimOnImportKey, m_trimOnImportAction->isChecked());
     settings.setValue(kRecentFilesKey, m_recentFiles);
 }
 
@@ -492,17 +503,28 @@ void MainWindow::startNextImport() {
     // the editor. The renderer is only touched back on the GUI thread.
     auto splats = std::make_shared<std::vector<SplatVertex>>();
     const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
-    m_loadThread = QThread::create([splats, nativePath] { *splats = LoadSplatPly(nativePath); });
-    connect(m_loadThread, &QThread::finished, this, [this, splats, path] {
+    auto originalCount = std::make_shared<size_t>(0);
+    const bool trim = m_trimOnImportAction->isChecked();
+    m_loadThread = QThread::create([splats, originalCount, nativePath, trim] {
+        *splats = LoadSplatPly(nativePath);
+        *originalCount = splats->size();
+        if (trim && !splats->empty()) {
+            std::vector<SplatVertex> trimmed = TrimSplats(*splats);
+            if (!trimmed.empty()) { // never trim a scene down to nothing
+                *splats = std::move(trimmed);
+            }
+        }
+    });
+    connect(m_loadThread, &QThread::finished, this, [this, splats, originalCount, path] {
         m_loadThread->deleteLater();
         m_loadThread = nullptr;
-        finishImport(path, *splats);
+        finishImport(path, *splats, *originalCount);
         startNextImport();
     });
     m_loadThread->start();
 }
 
-void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& splats) {
+void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& splats, size_t originalCount) {
     setImportBusy(m_pendingImports.isEmpty() ? QString() : QFileInfo(m_pendingImports.front()).fileName());
 
     const QString fileName = QFileInfo(path).fileName();
@@ -526,8 +548,14 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     refreshScenePanels();
 
     const QString countText = QLocale().toString(static_cast<qulonglong>(count));
-    qInfo("Imported %s (%s splats).", qPrintable(fileName), qPrintable(countText));
-    statusBar()->showMessage(QString("Imported %1 (%2 splats)").arg(fileName, countText), kStatusMessageMs);
+    QString summary = QString("%1 splats").arg(countText);
+    if (originalCount > count) {
+        summary += QString(", trimmed %1 of %2")
+                       .arg(QLocale().toString(static_cast<qulonglong>(originalCount - count)),
+                            QLocale().toString(static_cast<qulonglong>(originalCount)));
+    }
+    qInfo("Imported %s (%s).", qPrintable(fileName), qPrintable(summary));
+    statusBar()->showMessage(QString("Imported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
 }
 
 void MainWindow::selectModel(int index) {
