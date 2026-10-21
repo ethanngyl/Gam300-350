@@ -1,6 +1,6 @@
 # NVIDIA GPU passthrough (CUDA COLMAP + Brush). Needs an NVIDIA card and
 # driver; on Windows, Docker Desktop's WSL2 backend handles the rest.
-#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up
 services:
   app:
     environment:

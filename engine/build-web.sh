@@ -28,7 +28,7 @@ echo "========================================"
 echo "Codefine Engine - Web (WebAssembly) build"
 echo "========================================"
 
-# Keep in sync with CF_EMSDK_VERSION in build-web.bat and the Dockerfile.
+# Keep in sync with CF_EMSDK_VERSION in build-web.bat and docker/Dockerfile.
 # (Not named EMSDK_*: emsdk's own environment script owns those names.)
 CF_EMSDK_VERSION="4.0.10"
 CF_EMSDK_DIR="Library/emsdk"

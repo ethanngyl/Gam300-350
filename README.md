@@ -40,13 +40,13 @@ Application Installations:
 
 ## Run with Docker
 Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
-- Open a terminal in the repo root
-- Start: `docker compose up -d --build`, then open http://localhost:5005
-- Logs: `docker compose logs -f app`
-- Public link for teammates: `docker compose --profile tunnel up -d`, the trycloudflare.com URL is printed in `docker compose logs tunnel`
-- Stop: `docker compose down` (uploaded jobs and results are kept in a Docker volume)
-- NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
-- Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker-compose.yml for quick tests
+- Docker files live in the `docker/` folder. Open a terminal in the repo root
+- Start: `docker compose -f docker/docker-compose.yml up -d --build`, then open http://localhost:5005
+- Logs: `docker compose -f docker/docker-compose.yml logs -f app`
+- Public link for teammates: `docker compose -f docker/docker-compose.yml --profile tunnel up -d`, the trycloudflare.com URL is printed in `docker compose -f docker/docker-compose.yml logs tunnel`
+- Stop: `docker compose -f docker/docker-compose.yml down` (uploaded jobs and results are kept in a Docker volume)
+- NVIDIA GPU: `docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up -d --build`
+- Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker/docker-compose.yml for quick tests
 - The engine's desktop editor is not included (build it natively as below), but its renderer is: the image compiles it to WebAssembly for the web app's viewer
 
 ## How to Run Engine
