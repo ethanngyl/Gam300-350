@@ -31,6 +31,19 @@ requireUser answers 401 when nobody is logged in.
 Role check: admins can access every job, users only jobs they created.
 requireJobAccess guards the /jobs/:id routes and answers 404 for someone
 else's job.
+- requireAuthorityKey / callAuthority / clientAuthProblem /
+  logAuthorityFailure
+Centralized accounts (config.authMode). On the VM ('authority'),
+requireAuthorityKey guards /register and /verify-account with the shared
+key. On other machines ('client'), callAuthority forwards signup/login to
+the VM (8 s timeout), clientAuthProblem refuses to run without a key or
+over plain http://, and logAuthorityFailure names setup mistakes in the
+log. 'local' keeps accounts on this machine.
+- validateSignup(body) / checkCredentials(email, password)
+Shared signup rules, and the password check with a per-email limit of 10
+wrong passwords per 15 minutes.
+- limitByIp(limiter) / tooManyAttempts(retryAfterSec)
+Per-IP request limits for /auth/login and /auth/signup (429 when passed).
 - assigneJobId(req, res, next)
 Runs before multer. Generates a UUID job ID, resets a file counter on req, 
 and creates jobs/<id>/images/, so every file in the request goes into the same 
@@ -67,9 +80,11 @@ import
 {
   SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
   findSessionUser, findUserByEmail, getJobOwnerId,
-  listOwnedJobIds, setJobOwner, verifyPassword,
+  listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
+  verifyPassword,
 }
 from './db.js'
+import { createLimiter } from './ratelimit.js'
 import
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
@@ -107,7 +122,27 @@ for (const record of restored)
 
 console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
 
+// A machine that sends accounts to the VM can't keep its own: their ids and
+// emails would clash with the VM's. Only the first client-mode start finds any.
+if (config.authMode === 'client')
+{
+  const { removed, backupPath } = retireLocalAccounts()
+  if (removed > 0)
+  {
+    console.log(`[backend] client mode: removed ${removed} local account(s); their uploads are now admin-only.`)
+    console.log(`[backend] database backup before that: ${backupPath}`)
+  }
+}
+
 const app = express()
+
+// Behind a reverse proxy (Caddy on the VM) req.ip / req.secure would describe
+// the proxy, not the browser. TRUST_PROXY tells Express which hop to believe.
+if (config.trustProxy)
+{
+  const value = config.trustProxy
+  app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value)
+}
 
 // Parse JSON bodies (used by /jobs/from-youtube). Only applies to
 // application/json requests, so the multipart photo upload is unaffected.
@@ -203,7 +238,9 @@ function readCookie(req, name)
 /************************************************************************/
 function startSession(res, userId, remember)
 {
-  const options = { httpOnly: true, sameSite: 'lax', path: '/' }
+  // secure: over HTTPS (e.g. behind Caddy) the browser never sends the
+  // cookie over plain HTTP. Stays off for http://localhost development.
+  const options = { httpOnly: true, sameSite: 'lax', path: '/', secure: res.req.secure }
   if (remember) options.maxAge = SESSION_TTL_MS
   res.cookie(SESSION_COOKIE, createSession(userId, remember ? SESSION_TTL_MS : SHORT_SESSION_TTL_MS), options)
 }
@@ -435,44 +472,201 @@ function shutdown(reason, exitCode = 0)
     503 if this instance isn't the authority, 401 on a missing/wrong key
 */
 /************************************************************************/
-/*
+
 function requireAuthorityKey(req, res, next)
 {
   if (config.authMode !== 'authority')
     return res.status(503).json({ error: 'This server is not the account authority.' })
-  const key = req.get('X-Auth-Key')
-  // constant-time compare so the key can't be guessed by timing
-  const expected = config.authApiKey
-  if (!expected || !key ||
-      key.length !== expected.length ||
-      !crypto.timingSafeEqual(Buffer.from(key), Buffer.from(expected)))
+  const key = Buffer.from(req.get('X-Auth-Key') ?? '')
+  // constant-time compare so the key can't be guessed by timing. Byte
+  // lengths must match first or timingSafeEqual throws.
+  const expected = Buffer.from(config.authApiKey)
+  if (expected.length === 0 || key.length !== expected.length ||
+      !crypto.timingSafeEqual(key, expected))
     return res.status(401).json({ error: 'Unauthorized.' })
   next()
 }
-*/
+
 
 /************************************************************************/
 /*!
   \brief
     Call the account authority (VM). Adds the shared API key and parses the
-    JSON reply. Throws on a network failure so the route can answer 503.
+    JSON reply. Gives up after 8 seconds so a VM that is down can't leave
+    the Sign in button spinning. Throws on a network failure or timeout so
+    the route can answer 503.
   \param endpoint  '/register' or '/verify-account'
   \param body      the JSON payload
   \return          { status, data }
 */
 /************************************************************************/
-/*
 async function callAuthority(endpoint, body)
 {
   const resp = await fetch(`${config.vmAuthUrl}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Auth-Key': config.authApiKey },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
   })
   const data = await resp.json().catch(() => ({}))
   return { status: resp.status, data }
 }
+
+/************************************************************************/
+/*!
+  \brief
+    In client mode, why this machine can't talk to the VM safely, or null
+    if it can. Checked before every call, and logged once at startup.
+  \return
+    string describing the problem, or null
 */
+/************************************************************************/
+function clientAuthProblem()
+{
+  if (!config.authApiKey)
+    return 'AUTH_API_KEY is not set (see packages/src/backend/.env.example).'
+  let url
+  try
+  {
+    url = new URL(config.vmAuthUrl)
+  }
+  catch
+  {
+    return `VM_AUTH_URL "${config.vmAuthUrl}" is not a valid URL.`
+  }
+  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.protocol !== 'https:' && !isLocal && !config.allowInsecureAuth)
+    return `VM_AUTH_URL must be https:// (passwords are sent to it). ` +
+      `Set AUTH_ALLOW_HTTP=1 only for temporary testing.`
+  return null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Turns an unexpected reply from the VM into a log line naming the likely
+    cause, so a setup mistake doesn't look like a wrong password.
+  \param endpoint
+    '/register' or '/verify-account'
+  \param status
+    The VM's HTTP status
+  \param data
+    The VM's JSON reply
+*/
+/************************************************************************/
+function logAuthorityFailure(endpoint, status, data)
+{
+  const cause =
+    status === 401 ? 'the VM rejected this machine\'s AUTH_API_KEY (keys must match exactly)' :
+    status === 503 ? 'the VM is not running with AUTH_MODE=authority' :
+    `unexpected reply ${status}: ${JSON.stringify(data)}`
+  console.error(`[backend] account authority ${endpoint} failed -- ${cause}`)
+}
+
+// --- Rate limits -------------------------------------------------------------
+// Slow down password guessing and signup spam. Per-IP limits run on every
+// machine; the per-email failure limit runs where passwords are checked
+// (authority or local), so attempts relayed through client machines count too.
+const loginIpLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 30 })
+const signupIpLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
+const failedLoginLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 10 })
+
+/************************************************************************/
+/*!
+  \brief
+    The message for a rate-limited request.
+  \param retryAfterSec
+  number
+    Seconds until the limit lifts
+  \return
+    string
+*/
+/************************************************************************/
+function tooManyAttempts(retryAfterSec)
+{
+  const minutes = Math.max(1, Math.ceil(retryAfterSec / 60))
+  return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware factory: counts each request against the caller's IP and
+    answers 429 once the limiter's maximum is passed.
+  \param limiter
+    A limiter from createLimiter
+  \return
+    Express middleware
+*/
+/************************************************************************/
+function limitByIp(limiter)
+{
+  return (req, res, next) =>
+  {
+    const { allowed, retryAfterSec } = limiter.hit(req.ip)
+    if (allowed) return next()
+    res.set('Retry-After', String(retryAfterSec))
+    res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Checks a signup body. Shared by /auth/signup (authority / local) and
+    the VM's /register so the rules stay identical.
+  \param body
+    { name, email, password }
+  \return
+    { error } if invalid, else { name, email, password } with name and
+    email trimmed
+*/
+/************************************************************************/
+function validateSignup(body)
+{
+  const { name, email, password } = body || {}
+  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+  if (!EMAIL_RE.test(trimmedEmail)) return { error: 'Enter a valid email address.' }
+  if (typeof password !== 'string' || password.length < 6)
+    return { error: 'Password must be at least 6 characters.' }
+  if (!trimmedName) return { error: 'Enter your name.' }
+  return { name: trimmedName, email: trimmedEmail, password }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Checks an email + password against this machine's accounts, with the
+    per-email failure limit: after 10 wrong passwords in 15 minutes that
+    email is locked until the window ends, even with the right password.
+    A correct password clears the count. Shared by /auth/login (authority /
+    local) and the VM's /verify-account.
+  \param email
+  string
+  \param password
+  string
+  \return
+    { status: 'ok', user } | { status: 'invalid' } |
+    { status: 'locked', retryAfterSec }
+*/
+/************************************************************************/
+async function checkCredentials(email, password)
+{
+  const key = email.trim().toLowerCase()
+  const lock = failedLoginLimiter.check(key)
+  if (!lock.allowed) return { status: 'locked', retryAfterSec: lock.retryAfterSec }
+
+  const user = findUserByEmail(email.trim())
+  if (!user || !(await verifyPassword(password, user.password_hash)))
+  {
+    failedLoginLimiter.hit(key)
+    return { status: 'invalid' }
+  }
+  failedLoginLimiter.reset(key)
+  return { status: 'ok', user }
+}
+
 
 // ----- End of Functions ----------------------------------------------------- //
 
@@ -823,6 +1017,7 @@ function publicUser(user)
     user, and a session cookie
 */
 /************************************************************************/
+/*
 app.post('/auth/signup', async (req, res, next) =>
 {
   const { name, email, password, remember } = req.body || {}
@@ -848,27 +1043,21 @@ app.post('/auth/signup', async (req, res, next) =>
       return res.status(409).json({ error: 'An account with that email already exists.' })
     next(err)
   }
-})
+})*/
 
-/*
-app.post('/auth/signup', async (req, res, next) =>
+
+app.post('/auth/signup', limitByIp(signupIpLimiter), async (req, res, next) =>
 {
-  const { name, email, password, remember } = req.body || {}
+  const { remember } = req.body || {}
 
-  // Authority (VM): behave exactly as before, using the local accounts DB.
-  if (config.authMode === 'authority')
+  // Authority (VM) or local: the account lives in this machine's database.
+  if (config.authMode !== 'client')
   {
-    const trimmedEmail = typeof email === 'string' ? email.trim() : ''
-    const trimmedName = typeof name === 'string' ? name.trim() : ''
-    if (!EMAIL_RE.test(trimmedEmail))
-      return res.status(400).json({ error: 'Enter a valid email address.' })
-    if (typeof password !== 'string' || password.length < 6)
-      return res.status(400).json({ error: 'Password must be at least 6 characters.' })
-    if (!trimmedName)
-      return res.status(400).json({ error: 'Enter your name.' })
+    const input = validateSignup(req.body)
+    if (input.error) return res.status(400).json({ error: input.error })
     try
     {
-      const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
+      const user = await createUser(input)
       startSession(res, user.id, remember === true)
       return res.status(201).json(publicUser(user))
     }
@@ -881,21 +1070,36 @@ app.post('/auth/signup', async (req, res, next) =>
   }
 
   // Client: forward to the VM, mirror the returned user, then start a local session.
+  const problem = clientAuthProblem()
+  if (problem)
+  {
+    console.error(`[backend] signup refused -- ${problem}`)
+    return res.status(503).json({ error: 'Account service is not configured on this machine.' })
+  }
   try
   {
+    const { name, email, password } = req.body || {}
     const { status, data } = await callAuthority('/register', { name, email, password })
-    if (status !== 201)
+    if (status === 201)
+    {
+      upsertLocalUser(data)                 // mirror VM id -> local users
+      startSession(res, data.id, remember === true)
+      // The mirrored row, so memberSince comes from a real stored date.
+      return res.status(201).json(publicUser(findUserByEmail(data.email)))
+    }
+    // The user's own mistakes (bad input, email taken, too many tries) pass through.
+    if (status === 400 || status === 409 || status === 429)
       return res.status(status).json({ error: data.error || 'Signup failed.' })
-    upsertLocalUser(data)                 // mirror VM id -> local users
-    startSession(res, data.id, remember === true)
-    res.status(201).json(publicUser({ ...data, created_at: new Date().toISOString() }))
+    logAuthorityFailure('/register', status, data)
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
   }
-  catch
+  catch (err)
   {
+    console.error('[backend] account authority call failed:', err)
     res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
   }
 })
-*/
+
 
 /************************************************************************/
 /*!
@@ -908,6 +1112,7 @@ app.post('/auth/signup', async (req, res, next) =>
     cookie
 */
 /************************************************************************/
+/*
 app.post('/auth/login', async (req, res, next) =>
 {
   const { email, password, remember } = req.body || {}
@@ -926,45 +1131,65 @@ app.post('/auth/login', async (req, res, next) =>
   {
     next(err)
   }
-})
+})*/
 
-/*
-app.post('/auth/login', async (req, res, next) =>
+
+app.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) =>
 {
   const { email, password, remember } = req.body || {}
   if (typeof email !== 'string' || typeof password !== 'string')
     return res.status(400).json({ error: 'Enter your email and password.' })
 
-  // Authority (VM): unchanged local-DB behavior.
-  if (config.authMode === 'authority')
+  // Authority (VM) or local: check this machine's database.
+  if (config.authMode !== 'client')
   {
     try
     {
-      const user = findUserByEmail(email.trim())
-      if (!user || !(await verifyPassword(password, user.password_hash)))
+      const result = await checkCredentials(email, password)
+      if (result.status === 'locked')
+      {
+        res.set('Retry-After', String(result.retryAfterSec))
+        return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+      }
+      if (result.status === 'invalid')
         return res.status(401).json({ error: 'Incorrect email or password.' })
-      startSession(res, user.id, remember === true)
-      return res.json(publicUser(user))
+      startSession(res, result.user.id, remember === true)
+      return res.json(publicUser(result.user))
     }
     catch (err) { return next(err) }
   }
 
   // Client: verify against the VM, mirror the user, start a local session.
+  const problem = clientAuthProblem()
+  if (problem)
+  {
+    console.error(`[backend] login refused -- ${problem}`)
+    return res.status(503).json({ error: 'Account service is not configured on this machine.' })
+  }
   try
   {
     const { status, data } = await callAuthority('/verify-account', { email, password })
-    if (status !== 200 || !data.valid)
+    if (status === 200 && data.valid)
+    {
+      upsertLocalUser(data)
+      startSession(res, data.id, remember === true)
+      // The mirrored row, so memberSince comes from a real stored date.
+      return res.json(publicUser(findUserByEmail(data.email)))
+    }
+    if (status === 200)
       return res.status(401).json({ error: 'Incorrect email or password.' })
-    upsertLocalUser(data)
-    startSession(res, data.id, remember === true)
-    res.json(publicUser({ ...data, created_at: new Date().toISOString() }))
+    if (status === 429)
+      return res.status(429).json({ error: data.error || tooManyAttempts(0) })
+    logAuthorityFailure('/verify-account', status, data)
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
   }
-  catch
+  catch (err)
   {
+    console.error('[backend] account authority call failed:', err)
     res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
   }
 })
-*/
+
 
 /************************************************************************/
 /*!
@@ -1053,21 +1278,14 @@ function serveWikiPage(rawPage, res) {
     400 invalid input, 409 email taken, 201 { id, email, name, role }
 */
 /************************************************************************/
-/*
+
 app.post('/register', requireAuthorityKey, async (req, res, next) =>
 {
-  const { name, email, password } = req.body || {}
-  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
-  const trimmedName = typeof name === 'string' ? name.trim() : ''
-  if (!EMAIL_RE.test(trimmedEmail))
-    return res.status(400).json({ error: 'Enter a valid email address.' })
-  if (typeof password !== 'string' || password.length < 6)
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' })
-  if (!trimmedName)
-    return res.status(400).json({ error: 'Enter your name.' })
+  const input = validateSignup(req.body)
+  if (input.error) return res.status(400).json({ error: input.error })
   try
   {
-    const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
+    const user = await createUser(input)
     res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role })
   }
   catch (err)
@@ -1077,19 +1295,21 @@ app.post('/register', requireAuthorityKey, async (req, res, next) =>
     next(err)
   }
 })
-*/
+
 
 /************************************************************************/
 /*!
   \brief
     Authority-only: check credentials against the VM's database. Unknown
     email and wrong password return the same { valid: false } so the
-    endpoint can't be used to probe which emails are registered.
+    endpoint can't be used to probe which emails are registered. Shares
+    the per-email failure limit with this VM's own /auth/login.
   \return
-    200 { valid: true, id, email, name, role } or { valid: false }
+    200 { valid: true, id, email, name, role } or { valid: false },
+    429 when that email has had too many wrong passwords
 */
 /************************************************************************/
-/*
+
 app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
 {
   const { email, password } = req.body || {}
@@ -1097,9 +1317,12 @@ app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
     return res.status(400).json({ error: 'Email and password required.' })
   try
   {
-    const user = findUserByEmail(email.trim())
-    if (!user || !(await verifyPassword(password, user.password_hash)))
+    const result = await checkCredentials(email, password)
+    if (result.status === 'locked')
+      return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+    if (result.status === 'invalid')
       return res.json({ valid: false })
+    const { user } = result
     res.json({ valid: true, id: user.id, email: user.email, name: user.name, role: user.role })
   }
   catch (err)
@@ -1107,7 +1330,7 @@ app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
     next(err)
   }
 })
-*/
+
 
 // ----- End of Routes -------------------------------------------------------- //
 
@@ -1202,6 +1425,25 @@ app.listen(config.port, () =>
   console.log(`[backend] Brush:  ${config.brushBin}`)
   console.log(`[backend] Python: ${config.pythonBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
+  // Which account mode this machine is in, and whether it can work.
+  if (config.authMode === 'authority')
+  {
+    console.log('[backend] accounts: authority (this machine holds the account database)')
+    if (!config.authApiKey)
+      console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
+  }
+  else if (config.authMode === 'client')
+  {
+    console.log(`[backend] accounts: client -> ${config.vmAuthUrl}`)
+    const problem = clientAuthProblem()
+    if (problem) console.warn(`[backend] *** sign up / log in will not work: ${problem} ***`)
+    else if (config.allowInsecureAuth && new URL(config.vmAuthUrl).protocol !== 'https:')
+      console.warn('[backend] *** AUTH_ALLOW_HTTP=1: passwords are sent to the VM unencrypted. Testing only. ***')
+  }
+  else
+  {
+    console.log('[backend] accounts: local (this machine\'s own database)')
+  }
   // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
   getHardwareInfo().then((hw) =>
     console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))

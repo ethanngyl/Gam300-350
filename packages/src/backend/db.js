@@ -42,6 +42,13 @@ Records who created a job.
 Returns the owner's user id, or null if the job has no owner.
 - listOwnedJobIds(userId)
 Returns a Set of the job ids that user created.
+- upsertLocalUser({ id, email, name, role })
+On a 'client' machine: copies a user the VM vouched for into this machine's
+users table under the VM's id (no password stored).
+- retireLocalAccounts()
+On a 'client' machine: backs up the database, then removes accounts made on
+this machine so they can't clash with the VM's. Their uploads become
+admin-only.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -140,7 +147,7 @@ const upsertJobOwner = db.prepare(
 )
 const selectJobOwner = db.prepare('SELECT owner_id FROM jobs WHERE id = ?')
 const selectOwnedJobIds = db.prepare('SELECT id FROM jobs WHERE owner_id = ?')
-/*
+
 // Upsert a user the authority (VM) vouched for. The VM's id is authoritative,
 // so we insert/replace by that id. No password is stored locally — the VM
 // holds the only password hash. password_hash is NOT NULL in the schema, so a
@@ -155,7 +162,14 @@ const upsertMirroredUser = db.prepare(`
     name  = excluded.name,
     role  = excluded.role
 `)
-*/
+// A different row holding the same email would break the UNIQUE email rule
+// when mirroring; it can only be a stale copy, so it is removed first.
+const deleteOtherUserWithEmail = db.prepare('DELETE FROM users WHERE email = ? AND id != ?')
+
+// Accounts created on this machine (not mirrored from the VM).
+const countLocalAccounts = db.prepare(`SELECT COUNT(*) AS n FROM users WHERE password_hash != 'remote'`)
+const deleteLocalAccounts = db.prepare(`DELETE FROM users WHERE password_hash != 'remote'`)
+
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -380,11 +394,48 @@ export function listOwnedJobIds(userId)
     nothing
 */
 /************************************************************************/
-/*
 export function upsertLocalUser({ id, email, name, role })
 {
-  upsertMirroredUser.run(id, email, name, role === 'admin' ? 'admin' : 'user')
+  // One transaction, so a failed save can't leave the old row deleted.
+  db.exec('BEGIN')
+  try
+  {
+    deleteOtherUserWithEmail.run(email, id)
+    upsertMirroredUser.run(id, email, name, role === 'admin' ? 'admin' : 'user')
+    db.exec('COMMIT')
+  }
+  catch (err)
+  {
+    db.exec('ROLLBACK')
+    throw err
+  }
 }
+
+/************************************************************************/
+/*!
+  \brief
+    For a machine switching to 'client' mode: removes every account that
+    was created on this machine (anything not mirrored from the VM), so
+    their ids and emails can't clash with the VM's. Through the foreign
+    keys their sessions are deleted and their uploads lose their owner,
+    which makes those uploads admin-only. Backs up the database first.
+    Does nothing (and makes no backup) when there are no local accounts.
+  \return
+    { removed, backupPath } -- backupPath is null when nothing was removed
 */
+/************************************************************************/
+export function retireLocalAccounts()
+{
+  const { n } = countLocalAccounts.get()
+  if (n === 0) return { removed: 0, backupPath: null }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupPath = path.join(DATA_DIR, `app.db.bak-${stamp}`)
+  db.prepare('VACUUM INTO ?').run(backupPath)
+
+  const { changes } = deleteLocalAccounts.run()
+  return { removed: Number(changes), backupPath }
+}
+
 
 // ----- End of Functions ----------------------------------------------------- //
