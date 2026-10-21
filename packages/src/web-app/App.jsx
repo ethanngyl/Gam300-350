@@ -11,7 +11,8 @@ Top-level app shell. Shows the login screen until a user is signed in
 dashboard (top nav + sidebar) with these pages inside it: Home, Library,
 Photo Editor, Scene Builder, Model Viewer, YouTube Extractor, Capture and
 Account. YouTube Extractor is in the top nav and sidebar; Capture opens
-from the sidebar's New model button.
+from the sidebar's New model button, and its "Review photos first" hands
+the batch to the Photo Editor.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -111,6 +112,9 @@ function App() {
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
+    // Batch sent from Camera Capture's "Review photos first" to the Photo
+    // Editor: { files, removeBackground }. Cleared on any other navigation.
+    const [photosForEditor, setPhotosForEditor] = useState(null);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -136,7 +140,14 @@ function App() {
     function goToTab(tab) {
         setIsMenuOpen(false);
         setUploadError(null);
+        setPhotosForEditor(null);
         setActiveTab(tab);
+    }
+
+    // Opens the Photo Editor with the photos from Camera Capture loaded.
+    function reviewPhotosInEditor(files, { removeBackground = false } = {}) {
+        goToTab('editor');
+        setPhotosForEditor({ files, removeBackground });
     }
 
     function openLibrary(subTab) {
@@ -328,9 +339,15 @@ function App() {
                         />
                     )}
                     {activeTab === 'editor' && (
-                        <PhotoEditorScreen onGenerateModel={handleBatchReady} uploadError={uploadError} />
+                        <PhotoEditorScreen
+                            onGenerateModel={handleBatchReady}
+                            uploadError={uploadError}
+                            initialPhotos={photosForEditor}
+                        />
                     )}
-                    {activeTab === 'scene' && <SceneBuilderScreen />}
+                    {activeTab === 'scene' && (
+                        <SceneBuilderScreen />
+                    )}
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}
@@ -342,6 +359,7 @@ function App() {
                         // CameraCapture plays the click sound itself, so none here.
                         <CameraCapture
                             onBatchReady={handleBatchReady}
+                            onReviewPhotos={reviewPhotosInEditor}
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
                         />

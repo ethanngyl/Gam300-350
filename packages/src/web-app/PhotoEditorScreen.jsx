@@ -15,7 +15,8 @@ default; on desktop a photo can also be edited on its own. Strong
 settings, lost highlight/shadow detail, large crops and mixed crops all
 show warnings. "Use original photos" bypasses every edit. Edits are only
 settings until upload, so the originals are never changed. Phones get a
-simpler, batch-only set of tools.
+simpler, batch-only set of tools. "Review photos first" in Camera Capture
+opens the editor with that batch already loaded (initialPhotos).
 **************************************************************************/
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -84,6 +85,23 @@ const CLIPPING_INCREASE_WARNING = 0.03;
 const CROP_EDGES = ['top', 'right', 'bottom', 'left'];
 
 let nextPhotoNumber = 0;
+
+// One entry in the editor's photo list. Checks start as 'pending'.
+function createEditorPhoto(file) {
+    return {
+        id: `photo-${nextPhotoNumber++}`,
+        file,
+        url: URL.createObjectURL(file),
+        analysisStatus: 'pending',
+        analysis: null,
+        isExcluded: false,
+        customEdits: null,
+    };
+}
+
+function isImageFile(file) {
+    return file.type.startsWith('image/');
+}
 
 // True on phone-sized screens; updates when the window is resized.
 function useIsPhone() {
@@ -206,7 +224,9 @@ function CropOverlay({ crop, onChange }) {
     );
 }
 
-function PhotoEditorScreen({ onGenerateModel, uploadError }) {
+// initialPhotos: { files, removeBackground } handed over from Camera Capture,
+// or null when the editor is opened on its own.
+function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null }) {
     const isPhone = useIsPhone();
     const fileInputRef = useRef(null);
     const previewCanvasRef = useRef(null);
@@ -215,7 +235,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
     // Latest photo list, read when the screen closes to release preview URLs.
     const photosRef = useRef([]);
 
-    const [photos, setPhotos] = useState([]);
+    const [photos, setPhotos] = useState(() =>
+        (initialPhotos?.files ?? []).filter(isImageFile).map(createEditorPhoto)
+    );
+    // Carried over from Camera Capture so the build uses the same setting.
+    const removeBackground = initialPhotos?.removeBackground ?? false;
     const [selectedPhotoId, setSelectedPhotoId] = useState(null);
     // Edits shared by every photo that hasn't been edited on its own.
     const [batchEdits, setBatchEdits] = useState(DEFAULT_EDITS);
@@ -383,17 +407,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
     }
 
     function addFiles(fileList) {
-        const newPhotos = Array.from(fileList)
-            .filter((file) => file.type.startsWith('image/'))
-            .map((file) => ({
-                id: `photo-${nextPhotoNumber++}`,
-                file,
-                url: URL.createObjectURL(file),
-                analysisStatus: 'pending',
-                analysis: null,
-                isExcluded: false,
-                customEdits: null,
-            }));
+        const newPhotos = Array.from(fileList).filter(isImageFile).map(createEditorPhoto);
 
         if (newPhotos.length > 0) {
             setPhotos((currentPhotos) => [...currentPhotos, ...newPhotos]);
@@ -609,7 +623,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError }) {
             }
             // On success App switches to the processing screen; on failure it
             // sets uploadError, which is shown in the bottom bar.
-            await onGenerateModel(filesToUpload);
+            await onGenerateModel(filesToUpload, { removeBackground });
         } finally {
             setPreparedCount(null);
         }

@@ -10,24 +10,38 @@ In-browser photo capture screen for scanning an object, laid out to match
 the GENESIS theme: a camera panel (live preview, manual or interval-based
 auto-capture with a user-adjustable photo cap) beside a batch panel
 (drag-and-drop and file-picker uploads, live thumbnails with per-photo
-removal, and the button that sends the batch for reconstruction). The
-capture, upload and camera-release logic is unchanged from the previous
-version; only the markup and styling were redesigned.
+removal, and the button that sends the batch for reconstruction).
+Each photo is checked in the background for blur, bad exposure and
+near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
+suggests "Review photos first", which opens the batch in the Photo Editor.
 **************************************************************************/
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
+import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
 
 const HARD_CAP = 200;
 
-function CameraCapture({ onBatchReady, onBack, uploadError }) {
+// Builds the warning above the buttons, e.g. "3 look blurry, 2 are near-duplicates".
+const ISSUE_SUMMARY_PHRASES = {
+    blurry: (count) => `${count} look${count === 1 ? 's' : ''} blurry`,
+    duplicate: (count) => `${count} ${count === 1 ? 'is a near-duplicate' : 'are near-duplicates'}`,
+    dark: (count) => `${count} ${count === 1 ? 'is' : 'are'} too dark`,
+    bright: (count) => `${count} ${count === 1 ? 'is' : 'are'} too bright`,
+};
+
+function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
     const streamRef = useRef(null);
+    // Latest photo list, read when the page closes to release preview URLs.
+    const photosRef = useRef([]);
+    // Id of the photo currently being checked, so only one runs at a time.
+    const analyzingPhotoIdRef = useRef(null);
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
@@ -90,10 +104,54 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
     }, []);
 
     useEffect(() => {
-        return () => {
-            photos.forEach((photo) => URL.revokeObjectURL(photo.url));
-        };
+        photosRef.current = photos;
     }, [photos]);
+
+    // Release every thumbnail URL when the page closes. (Removed photos
+    // release theirs in removePhoto.)
+    useEffect(() => {
+        return () => {
+            photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url));
+        };
+    }, []);
+
+    // Check pending photos one at a time, same as the Photo Editor. Each
+    // finished check updates the list, which starts the next one.
+    useEffect(() => {
+        if (analyzingPhotoIdRef.current) return;
+
+        const pendingPhoto = photos.find((photo) => photo.analysisStatus === 'pending');
+        if (!pendingPhoto) return;
+
+        analyzingPhotoIdRef.current = pendingPhoto.id;
+        analyzePhoto(pendingPhoto.file)
+            .then((analysis) => ({ analysisStatus: 'done', analysis }))
+            .catch(() => ({ analysisStatus: 'failed', analysis: null }))
+            .then((checkResult) => {
+                analyzingPhotoIdRef.current = null;
+                setPhotos((currentPhotos) =>
+                    currentPhotos.map((photo) =>
+                        photo.id === pendingPhoto.id ? { ...photo, ...checkResult } : photo
+                    )
+                );
+            });
+    }, [photos]);
+
+    const issuesById = useMemo(() => findPhotoIssues(photos), [photos]);
+    const flaggedCount = photos.filter((photo) => issuesById[photo.id]?.length > 0).length;
+    const isChecking = photos.some((photo) => photo.analysisStatus === 'pending');
+
+    // "3 look blurry, 2 are near-duplicates", or null when nothing is flagged.
+    const issueSummary = useMemo(() => {
+        const countsByIssue = {};
+        Object.values(issuesById).flat().forEach((issue) => {
+            countsByIssue[issue] = (countsByIssue[issue] ?? 0) + 1;
+        });
+        const phrases = Object.keys(ISSUE_SUMMARY_PHRASES)
+            .filter((issue) => countsByIssue[issue] > 0)
+            .map((issue) => ISSUE_SUMMARY_PHRASES[issue](countsByIssue[issue]));
+        return phrases.length > 0 ? phrases.join(', ') : null;
+    }, [issuesById]);
 
     const addFiles = useCallback((fileList) => {
         const newPhotos = Array.from(fileList)
@@ -102,6 +160,8 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
                 id: `${file.name}-${file.lastModified}-${Math.random()}`,
                 url: URL.createObjectURL(file),
                 file,
+                analysisStatus: 'pending',
+                analysis: null,
             }));
 
         setPhotos((prev) => [...prev, ...newPhotos]);
@@ -203,7 +263,16 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
     }
 
     function removePhoto(id) {
+        const removedPhoto = photos.find((p) => p.id === id);
+        if (removedPhoto) URL.revokeObjectURL(removedPhoto.url);
         setPhotos((prev) => prev.filter((p) => p.id !== id));
+    }
+
+    // Opens the batch in the Photo Editor. App switches tabs, which closes
+    // this page and releases the thumbnails; the File objects stay valid.
+    function handleReview() {
+        setIsAutoCapturing(false);
+        onReviewPhotos(photos.map((p) => p.file), { removeBackground });
     }
 
     // "Train model" is the only trigger that starts the reconstruction.
@@ -421,7 +490,11 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
                     {photos.length > 0 && (
                         <div className="capture-thumbnails">
                             {photos.map((photo) => (
-                                <div key={photo.id} className="capture-thumb">
+                                <div
+                                    key={photo.id}
+                                    className={issuesById[photo.id]?.length > 0 ? 'capture-thumb has-issue' : 'capture-thumb'}
+                                    title={issuesById[photo.id]?.length > 0 ? 'Flagged: open Review photos first to see why' : undefined}
+                                >
                                     <img src={photo.url} alt="" />
                                     <button
                                         className="capture-thumb-remove"
@@ -449,6 +522,30 @@ function CameraCapture({ onBatchReady, onBack, uploadError }) {
                             <small>Turn on for turntable captures (object spins, camera stays still).</small>
                         </span>
                     </label>
+
+                    {issueSummary && (
+                        <p className="capture-issues" role="status">
+                            <Icon name="triangle" size={14} />
+                            <span>
+                                {flaggedCount} of {photos.length} photos may hurt your model: {issueSummary}.
+                                Review them before building.
+                            </span>
+                        </p>
+                    )}
+                    {!issueSummary && isChecking && photos.length > 1 && (
+                        <p className="capture-checking">Checking photos...</p>
+                    )}
+
+                    <button
+                        className={issueSummary ? 'forma-btn batch-review-btn is-suggested' : 'forma-btn batch-review-btn'}
+                        disabled={photos.length === 0}
+                        onClick={() => {
+                            playSound('click');
+                            handleReview();
+                        }}
+                    >
+                        <Icon name="edit" size={14} /> Review photos first
+                    </button>
 
                     <button
                         className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}

@@ -759,4 +759,11 @@
     .scene-builder-viewport {
         min-height: 0;
     }
+
+    /* Size the map by height here, leaving room for the note underneath. */
+    .scene-builder-map {
+        width: auto;
+        height: calc(100% - 72px);
+        max-width: 92%;
+    }
 }

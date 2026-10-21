@@ -476,3 +476,47 @@
 .capture-batch .capture-library-btn {
     justify-content: center;
 }
+/* ---------- Photo checks and Review photos first ---------- */
+
+.capture-thumb.has-issue {
+    outline: 2px solid var(--forma-coral);
+    outline-offset: -2px;
+}
+
+.capture-issues {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--forma-text);
+    background: rgba(244, 145, 123, 0.12);
+    border: 1px solid rgba(244, 145, 123, 0.4);
+}
+
+    .capture-issues svg {
+        flex: none;
+        margin-top: 2px;
+        color: var(--forma-coral);
+    }
+
+.capture-checking {
+    margin: 0 0 10px;
+    font-size: 0.78rem;
+    color: var(--forma-text-muted);
+}
+
+.capture-batch .batch-review-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 11px;
+    margin-bottom: 8px;
+}
+
+    .capture-batch .batch-review-btn.is-suggested {
+        border-color: var(--forma-coral);
+        color: var(--forma-heading);
+    }
