@@ -81,6 +81,11 @@ The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), 
 - Select a model in the **Scene** panel; edit its name and position in the **Inspector**. F2 renames, Delete removes it from the scene (the file is untouched).
 - Camera: right-drag to orbit, left-drag to pan, scroll to zoom, Home to recenter. With the viewport focused, WASD/Arrow keys nudge the selected model and Esc deselects.
 - Switch between Point Cloud and Gaussian Splat rendering from the toolbar (Ctrl+1 / Ctrl+2).
+- Export: File > Export (Ctrl+E), or right-click a model in the **Scene** panel, converts the selected model (or the whole scene) to another format. Trimming and position changes are included.
+  - .glb (glTF), .obj, .ply: points, or a mesh with one coloured ellipsoid per splat, for Blender, Unity, Unreal, MeshLab, etc.
+  - .stl: mesh without colour, for 3D printing / CAD
+  - Gaussian splat .ply or .splat: stays a splat, for Codefine and other splat viewers (view-dependent colour is not kept)
+  - Mesh exports get large: raise "Min opacity" to drop faint haze splats, and use Low mesh detail for big scans
 - Engine output (`std::cout`/`std::cerr` and Qt messages) appears in the **Console** panel. Help > Controls lists every shortcut.
 
 ## Current Features

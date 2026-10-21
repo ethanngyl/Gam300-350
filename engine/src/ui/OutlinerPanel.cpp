@@ -88,6 +88,7 @@ OutlinerPanel::OutlinerPanel(QWidget* parent)
 
         QMenu menu(this);
         menu.addAction("Rename", this, [this] { editSelectedName(); });
+        menu.addAction("Export...", this, [this, index] { emit exportRequested(index); });
         menu.addSeparator();
         menu.addAction("Delete", this, [this, index] { emit deleteRequested(index); });
         menu.exec(m_tree->viewport()->mapToGlobal(pos));

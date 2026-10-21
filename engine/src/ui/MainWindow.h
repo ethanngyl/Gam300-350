@@ -10,7 +10,8 @@ Declares MainWindow, the editor shell. It hosts the 3D Viewport in the
 centre and arranges the editor around it: menu bar, main toolbar, status
 bar, and the dockable Scene (outliner), Inspector, Assets, Console and
 Audio panels. It owns the scene-editing commands (import, select, rename,
-delete, render mode), loads .ply files on a worker thread, accepts .ply
+delete, render mode, export), loads .ply files and writes exports on
+worker threads, accepts .ply
 drag-and-drop, and persists layout and preferences with QSettings.
 **************************************************************************/
 #pragma once
@@ -80,6 +81,9 @@ private:
     void renameModel(int index, const QString& name);
     void deleteSelectedModel();
     void setRenderMode(int mode); // SplatRenderer::RenderMode as int
+    // Asks for export options and a file name, then writes the selected
+    // model (or the whole scene) on a worker thread.
+    void exportModels();
 
     // Rebuilds the outliner/inspector from the renderer and updates which
     // scene actions are enabled.
@@ -107,6 +111,7 @@ private:
 
     // Actions.
     QAction* m_importAction = nullptr;
+    QAction* m_exportAction = nullptr;
     QAction* m_exitAction = nullptr;
     QAction* m_renameAction = nullptr;
     QAction* m_deleteAction = nullptr;
@@ -133,6 +138,7 @@ private:
     // Import queue / worker.
     QStringList m_pendingImports;
     QPointer<QThread> m_loadThread;
+    QPointer<QThread> m_exportThread;
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
