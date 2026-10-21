@@ -10,7 +10,8 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (top nav + sidebar) with these pages inside it: Home, Library,
 Photo Editor, Scene Builder, Model Viewer, YouTube Extractor, Capture and
-Account. YouTube Extractor and Capture are opened from the sidebar.
+Account. YouTube Extractor is in the top nav and sidebar; Capture opens
+from the sidebar's New model button.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -99,9 +100,6 @@ function App() {
     const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState('models');
-    // True when the Library was opened from a "Your work" shortcut, so the
-    // sidebar highlights that shortcut instead of "Media Library".
-    const [openedFromYourWork, setOpenedFromYourWork] = useState(false);
 
     // Full-page screens that replace the whole shell. null shows the shell;
     // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
@@ -186,9 +184,6 @@ function App() {
         setScreen('result');
     }
 
-    if (isCheckingSession) {
-        return <div className="genesis-page" />;
-    }
     function openLocalModel(file) {
         setLocalModel({ url: URL.createObjectURL(file), name: file.name });
         setScreen('local-model');
@@ -199,6 +194,10 @@ function App() {
         URL.revokeObjectURL(localModel.url);
         setLocalModel(null);
         setScreen(null);
+    }
+
+    if (isCheckingSession) {
+        return <div className="genesis-page" />;
     }
 
     if (!currentUser) {
@@ -331,9 +330,7 @@ function App() {
                     {activeTab === 'editor' && (
                         <PhotoEditorScreen onGenerateModel={handleBatchReady} uploadError={uploadError} />
                     )}
-                    {activeTab === 'scene' && (
-                        <SceneBuilderScreen onAddFromLibrary={() => openLibrary('models')} />
-                    )}
+                    {activeTab === 'scene' && <SceneBuilderScreen />}
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}

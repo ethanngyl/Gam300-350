@@ -8,7 +8,7 @@
 \brief
 Top navigation bar: a menu button (phones only) that opens the sidebar
 drawer, GENESIS logo, Home / Library / Photo Editor / Scene Builder /
-YouTube Extractor / Model Viewer tabs (with click sound), a workspace status indicator, and the signed-in
+YouTube Extractor tabs (with click sound), a workspace status indicator, and the signed-in
 user's avatar. Clicking the avatar opens a small account menu with links
 to the account page and sign out.
 **************************************************************************/
@@ -25,7 +25,7 @@ const TABS = [
     { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
 ];
 
-function TopNav({ activeTab, openedFromYourWork, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {
+function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuContainerRef = useRef(null);
 
@@ -66,7 +66,7 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, user, onOpenAccoun
                 {TABS.map((tab) => (
                     <button
                         key={tab.id}
-                        className={activeTab === tab.id && !(tab.id === 'library' && openedFromYourWork)
+                        className={activeTab === tab.id
                             ? 'forma-tab is-active'
                             : 'forma-tab'}
                         onClick={() => {
