@@ -276,9 +276,11 @@ if(CODEFINE_MAKENSIS)
     set(CPACK_NSIS_INSTALLED_ICON_NAME "Codefine.exe")
     set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Codefine.exe")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    # Backslashes are escaped twice: once for this file, once for the
+    # CPackConfig.cmake that CPack generates from it.
     set(CPACK_NSIS_CREATE_ICONS_EXTRA
-        "CreateShortCut '$DESKTOP\\Codefine Engine.lnk' '$INSTDIR\\Codefine.exe'")
-    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\Codefine Engine.lnk'")
+        "CreateShortCut '$DESKTOP\\\\Codefine Engine.lnk' '$INSTDIR\\\\Codefine.exe'")
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\Codefine Engine.lnk'")
 endif()
 
 include(CPack)
