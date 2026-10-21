@@ -25,7 +25,7 @@ const TABS = [
     { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
 ];
 
-function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, onOpenAccount, onSignOut, onToggleMenu }) {
+function TopNav({ activeTab, openedFromYourWork, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuContainerRef = useRef(null);
 
@@ -71,11 +71,7 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
                             : 'forma-tab'}
                         onClick={() => {
                             playSound('click');
-                            if (tab.id === 'youtube') {
-                                onYoutube();
-                            } else {
-                                onTabChange(tab.id);
-                            }
+                            onTabChange(tab.id);
                         }}
                         aria-label={tab.label}
                     >
