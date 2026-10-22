@@ -10,7 +10,9 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (top nav + sidebar) with these pages inside it: Home, Library,
 Photo Editor, Scene Builder, Model Viewer, YouTube Extractor, Capture and
-Account. YouTube Extractor and Capture are opened from the sidebar.
+Account. YouTube Extractor is in the top nav and sidebar; Capture opens
+from the sidebar's New model button, and its "Review photos first" hands
+the batch to the Photo Editor.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -99,9 +101,6 @@ function App() {
     const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState('models');
-    // True when the Library was opened from a "Your work" shortcut, so the
-    // sidebar highlights that shortcut instead of "Media Library".
-    const [openedFromYourWork, setOpenedFromYourWork] = useState(false);
 
     // Full-page screens that replace the whole shell. null shows the shell;
     // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
@@ -113,6 +112,9 @@ function App() {
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
+    // Batch sent from Camera Capture's "Review photos first" to the Photo
+    // Editor: { files, removeBackground }. Cleared on any other navigation.
+    const [photosForEditor, setPhotosForEditor] = useState(null);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -138,7 +140,14 @@ function App() {
     function goToTab(tab) {
         setIsMenuOpen(false);
         setUploadError(null);
+        setPhotosForEditor(null);
         setActiveTab(tab);
+    }
+
+    // Opens the Photo Editor with the photos from Camera Capture loaded.
+    function reviewPhotosInEditor(files, { removeBackground = false } = {}) {
+        goToTab('editor');
+        setPhotosForEditor({ files, removeBackground });
     }
 
     function openLibrary(subTab) {
@@ -186,9 +195,6 @@ function App() {
         setScreen('result');
     }
 
-    if (isCheckingSession) {
-        return <div className="genesis-page" />;
-    }
     function openLocalModel(file) {
         setLocalModel({ url: URL.createObjectURL(file), name: file.name });
         setScreen('local-model');
@@ -199,6 +205,10 @@ function App() {
         URL.revokeObjectURL(localModel.url);
         setLocalModel(null);
         setScreen(null);
+    }
+
+    if (isCheckingSession) {
+        return <div className="genesis-page" />;
     }
 
     if (!currentUser) {
@@ -329,10 +339,14 @@ function App() {
                         />
                     )}
                     {activeTab === 'editor' && (
-                        <PhotoEditorScreen onGenerateModel={handleBatchReady} uploadError={uploadError} />
+                        <PhotoEditorScreen
+                            onGenerateModel={handleBatchReady}
+                            uploadError={uploadError}
+                            initialPhotos={photosForEditor}
+                        />
                     )}
                     {activeTab === 'scene' && (
-                        <SceneBuilderScreen onAddFromLibrary={() => openLibrary('models')} />
+                        <SceneBuilderScreen />
                     )}
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
@@ -345,6 +359,7 @@ function App() {
                         // CameraCapture plays the click sound itself, so none here.
                         <CameraCapture
                             onBatchReady={handleBatchReady}
+                            onReviewPhotos={reviewPhotosInEditor}
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
                         />
