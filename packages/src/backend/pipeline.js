@@ -675,6 +675,11 @@ export async function runPipeline(job) {
     const iterRe = /\biter[= ](\d[\d,]*)/i
     // Samples VRAM / utilisation for the metrics record (NVIDIA only).
     const stopGpuSampler = startGpuSampler(job)
+    // With masks, train the background as empty space so the masked-out
+    // surroundings don't leave a haze of splats around the object.
+    const alphaArgs = job.removeBackground && config.brushHasAlphaMode
+      ? ['--alpha-mode', 'transparent']
+      : []
     try {
       await run(
         job,
@@ -686,6 +691,7 @@ export async function runPipeline(job) {
           '--export-path', `./${outDirName}/`,
           '--export-name', 'splat_{iter}.ply',
           '--export-every', String(total),
+          ...alphaArgs,
         ],
         {
           cwd: config.jobsDir,

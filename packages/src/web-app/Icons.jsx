@@ -46,6 +46,7 @@ const ICON_PATHS = {
     stepForward: <path d="m9 5 8 7-8 7z" />,
     skipForward: (<><path d="M18 5v14" /><path d="m5 5 10 7-10 7z" /></>),
     menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+    trash: (<><path d="M4 7h16M10 7V4h4v3" /><path d="M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></>),
     check: <path d="m5 12 5 5 9-10" />,
 };
 
