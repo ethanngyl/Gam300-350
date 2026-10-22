@@ -9,12 +9,14 @@
 Implements MainWindow, the editor shell: builds the menus, toolbar, status
 bar and dock panels around the Viewport; routes scene commands (import,
 select, rename, delete, render mode) to the SplatRenderer and keeps the
-panels in sync with it; loads .ply files on a worker thread so the UI stays
+panels in sync with it; wires the Account menu and My Models panel to
+the backend; loads .ply files on a worker thread so the UI stays
 responsive; and saves/restores the layout and preferences via QSettings.
 **************************************************************************/
 #include "ui/Viewport.h"
 #include "ui/MainWindow.h"
 
+#include "net/BackendClient.h"
 #include "splat/SplatExporter.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
@@ -24,7 +26,9 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/ConsolePanel.h"
 #include "ui/ExportDialog.h"
 #include "ui/InspectorPanel.h"
+#include "ui/LoginDialog.h"
 #include "ui/OutlinerPanel.h"
+#include "ui/RemoteModelsPanel.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -64,7 +68,7 @@ namespace {
 
     // Bump when docks are added/removed/renamed so a stale saved layout is
     // ignored instead of restoring a broken arrangement.
-    constexpr int kLayoutVersion = 1;
+    constexpr int kLayoutVersion = 2;
 
     const QString kAppTitle = QStringLiteral("Codefine Engine");
 
@@ -97,6 +101,8 @@ MainWindow::MainWindow() {
 
     // The console goes first so it captures output from everything built after it.
     m_console = new ConsolePanel(this);
+
+    m_backend = new BackendClient(this);
 
     m_viewport = new Viewport(this);
     setCentralWidget(m_viewport);
@@ -137,6 +143,11 @@ MainWindow::MainWindow() {
                                   .arg(renderer->ModelCount() == 1 ? "" : "s")
                                   .arg(QLocale().toString(static_cast<qulonglong>(splatCount))));
     };
+
+    // Resume a remembered web app session (quietly does nothing without one).
+    connect(m_backend, &BackendClient::sessionChanged, this, [this] { updateAccountActions(); });
+    updateAccountActions();
+    m_backend->restoreSession();
 
     m_viewport->setFocus();
 }
@@ -248,6 +259,17 @@ void MainWindow::createActions() {
     m_trimOnImportAction->setStatusTip("Remove faint, stray and out-of-range splats when importing. "
                                        "Uncheck to import the original data untouched.");
 
+    m_accountInfoAction = new QAction(this);
+    m_accountInfoAction->setEnabled(false); // a label, not a command
+
+    m_signInAction = new QAction("Sign &In...", this);
+    m_signInAction->setStatusTip("Sign in with your web app account to open the models you uploaded");
+    connect(m_signInAction, &QAction::triggered, this, [this] { showSignIn(); });
+
+    m_signOutAction = new QAction("Sign &Out", this);
+    m_signOutAction->setStatusTip("Sign out and delete this account's downloaded models from this PC");
+    connect(m_signOutAction, &QAction::triggered, this, [this] { m_backend->signOut(); });
+
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
@@ -278,6 +300,12 @@ void MainWindow::createMenus() {
     viewMenu->addSeparator();
     viewMenu->addAction(m_recenterCameraAction);
     viewMenu->addAction(m_statsOverlayAction);
+
+    QMenu* accountMenu = menuBar()->addMenu("&Account");
+    accountMenu->addAction(m_accountInfoAction);
+    accountMenu->addSeparator();
+    accountMenu->addAction(m_signInAction);
+    accountMenu->addAction(m_signOutAction);
 
     // Filled in createDocks() once the docks exist.
     m_windowMenu = menuBar()->addMenu("&Window");
@@ -338,12 +366,16 @@ void MainWindow::createDocks() {
     m_assets = new AssetBrowserPanel(this);
     QDockWidget* assetsDock = addPanelDock("Assets", "AssetsDock", m_assets, Qt::BottomDockWidgetArea);
 
+    m_remoteModels = new RemoteModelsPanel(m_backend, this);
+    QDockWidget* modelsDock = addPanelDock("My Models", "MyModelsDock", m_remoteModels, Qt::BottomDockWidgetArea);
+
     QDockWidget* consoleDock = addPanelDock("Console", "ConsoleDock", m_console, Qt::BottomDockWidgetArea);
 
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
-    tabifyDockWidget(assetsDock, consoleDock);
+    tabifyDockWidget(assetsDock, modelsDock);
+    tabifyDockWidget(modelsDock, consoleDock);
     tabifyDockWidget(consoleDock, audioDock);
     assetsDock->raise();
 
@@ -361,6 +393,8 @@ void MainWindow::createDocks() {
 
     // Panel -> scene commands.
     connect(m_assets, &AssetBrowserPanel::importRequested, this, &MainWindow::importSplat);
+    connect(m_remoteModels, &RemoteModelsPanel::importRequested, this, &MainWindow::importSplat);
+    connect(m_remoteModels, &RemoteModelsPanel::signInRequested, this, [this] { showSignIn(); });
     connect(m_outliner, &OutlinerPanel::selectionChanged, this, &MainWindow::selectModel);
     connect(m_outliner, &OutlinerPanel::renameRequested, this, &MainWindow::renameModel);
     connect(m_outliner, &OutlinerPanel::deleteRequested, this, [this](int index) {
@@ -560,7 +594,10 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
 
     const size_t count = splats.size();
     renderer->SetSplats(splats, fileName.toStdString());
-    addRecentFile(path);
+    // Downloaded models are deleted on sign-out, so they don't belong in Recent.
+    if (!BackendClient::IsCachedModel(path)) {
+        addRecentFile(path);
+    }
 
     selectModel(static_cast<int>(renderer->ModelCount()) - 1);
     refreshScenePanels();
@@ -763,6 +800,34 @@ void MainWindow::rebuildRecentMenu() {
 }
 
 // ===========================================================================
+// Account
+// ===========================================================================
+
+void MainWindow::showSignIn() {
+    if (m_backend->isSignedIn()) {
+        return;
+    }
+    LoginDialog dialog(m_backend, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        // Bring the user's models into view.
+        if (QDockWidget* dock = qobject_cast<QDockWidget*>(m_remoteModels->parentWidget())) {
+            dock->show();
+            dock->raise();
+        }
+        statusBar()->showMessage(QString("Signed in as %1").arg(m_backend->user().email), kStatusMessageMs);
+    }
+}
+
+void MainWindow::updateAccountActions() {
+    const bool signedIn = m_backend->isSignedIn();
+    const RemoteUser& user = m_backend->user();
+    m_accountInfoAction->setText(signedIn ? QString("Signed in as %1%2").arg(user.email, user.isAdmin() ? " (admin)" : "")
+                                          : QString("Not signed in"));
+    m_signInAction->setEnabled(!signedIn);
+    m_signOutAction->setEnabled(signedIn);
+}
+
+// ===========================================================================
 // Help
 // ===========================================================================
 
@@ -787,6 +852,8 @@ void MainWindow::showControls() {
         "<tr><td>F2 / Delete</td><td>Rename / remove selected model</td></tr>"
         "<tr><td>Ctrl+1 / Ctrl+2</td><td>Point Cloud / Gaussian Splat</td></tr>"
         "<tr><td>Drag &amp; drop</td><td>Drop .ply files onto the window to import</td></tr>"
+        "<tr><td colspan='2'><br><b>Account</b></td></tr>"
+        "<tr><td>Account &gt; Sign In</td><td>Open the models you uploaded through the web app</td></tr>"
         "</table>");
     box.exec();
 }

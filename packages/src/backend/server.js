@@ -903,14 +903,15 @@ const MAX_JOB_NAME_LENGTH = 80
     { name: string }. An empty name resets it to the default. The
     display name is saved in status.json, and the model's copy in the
     engine's samples folder is renamed to match (see pickSampleFileName).
-    The job folders keep their id.
+    The job folders keep their id. Only the job's owner or an admin can
+    rename it.
   \return
-    404 if job not found, 400 if the name is too long, 409 if the sample
+    401 if not logged in, 404 if job not found or isn't theirs, 400 if the name is too long, 409 if the sample
     file can't be renamed (e.g. open in another program), else the new
     name and sample filename
 */
 /************************************************************************/
-app.patch('/jobs/:id', async (req, res) =>
+app.patch('/jobs/:id', requireJobAccess, async (req, res) =>
 {
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
@@ -952,12 +953,14 @@ app.patch('/jobs/:id', async (req, res) =>
   \brief
     Permanently delete a job: its photos, COLMAP files, splat output and
     the copy in the engine's samples folder. A job still processing is
-    cancelled first so its tools stop writing into the folders.
+    cancelled first so its tools stop writing into the folders. Only the
+    job's owner or an admin can delete it.
   \return
-    404 if job not found, else 200 once the folders are gone
+    401 if not logged in, 404 if job not found or isn't theirs, else 200
+    once the folders are gone
 */
 /************************************************************************/
-app.delete('/jobs/:id/files', async (req, res, next) =>
+app.delete('/jobs/:id/files', requireJobAccess, async (req, res, next) =>
 {
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })

@@ -8,8 +8,9 @@
 \brief
 Declares MainWindow, the editor shell. It hosts the 3D Viewport in the
 centre and arranges the editor around it: menu bar, main toolbar, status
-bar, and the dockable Scene (outliner), Inspector, Assets, Console and
-Audio panels. It owns the scene-editing commands (import, select, rename,
+bar, and the dockable Scene (outliner), Inspector, Assets, My Models,
+Console and Audio panels, plus the Account menu for signing in with a web
+app account. It owns the scene-editing commands (import, select, rename,
 delete, render mode, export), loads .ply files and writes exports on
 worker threads, accepts .ply
 drag-and-drop, and persists layout and preferences with QSettings.
@@ -37,9 +38,11 @@ struct SplatVertex;
 
 class AssetBrowserPanel;
 class AudioPanel;
+class BackendClient;
 class ConsolePanel;
 class InspectorPanel;
 class OutlinerPanel;
+class RemoteModelsPanel;
 class Viewport;
 
 class MainWindow : public QMainWindow {
@@ -94,6 +97,11 @@ private:
     void addRecentFile(const QString& path);
     void rebuildRecentMenu();
 
+    // ---- account ----
+    // Opens the sign-in dialog for the web app account.
+    void showSignIn();
+    void updateAccountActions();
+
     // ---- help ----
     void showControls();
     void showAbout();
@@ -106,6 +114,7 @@ private:
     AssetBrowserPanel* m_assets = nullptr;
     ConsolePanel* m_console = nullptr;
     AudioPanel* m_audio = nullptr;
+    RemoteModelsPanel* m_remoteModels = nullptr;
     QList<QDockWidget*> m_docks;
     QToolBar* m_toolBar = nullptr;
 
@@ -126,6 +135,12 @@ private:
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;
     QMenu* m_windowMenu = nullptr;
+    QAction* m_accountInfoAction = nullptr;
+    QAction* m_signInAction = nullptr;
+    QAction* m_signOutAction = nullptr;
+
+    // Connection to the web app's backend (accounts, uploaded models).
+    BackendClient* m_backend = nullptr;
 
     // Status bar.
     QLabel* m_loadingLabel = nullptr;

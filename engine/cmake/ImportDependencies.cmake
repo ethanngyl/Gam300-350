@@ -329,7 +329,7 @@ macro(import_qt)
             CACHE PATH "Qt 6 SDK root (the folder containing bin/ and lib/cmake/)")
         list(APPEND CMAKE_PREFIX_PATH "${CODEFINE_QT_DIR}")
 
-        find_package(Qt6 COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
+        find_package(Qt6 COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Network)
         if(NOT Qt6_FOUND)
             message(FATAL_ERROR
                 "Qt 6 not found at: ${CODEFINE_QT_DIR}\n"
