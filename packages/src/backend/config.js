@@ -30,9 +30,11 @@ installed.
 - colmapHasCuda(exe)
 Runs COLMAP with -h and checks the output for "with CUDA". Decides whether
 COLMAP should use the GPU when COLMAP_USE_GPU isn't set.
-- brushItersFlag(exe)
-Runs Brush with --help to find out which iteration-count flag this build
-understands (--total-steps or --total-train-iters).
+- readBrushHelp(exe)
+Runs Brush with --help once; the flag probes read its output.
+- brushItersFlag(help)
+Finds out which iteration-count flag this build understands
+(--total-steps or --total-train-iters).
 - config
 The exported settings object used by server.js, pipeline.js, scan.js and
 status.js.
@@ -231,33 +233,54 @@ const colmapUseGpu =
 /************************************************************************/
 /*!
   \brief
-    Passing the wrong name makes Brush exit with code 2 before training
-    starts. Ask the binary once which one it understands. Override with
-    BRUSH_ITERS_FLAG if the probe can't run.
-      v0.3.0 release : --total-steps
-      main branch    : --total-train-iters
+    Runs Brush with --help once, so the probes below can check which
+    flags this build understands.
   \param exe
     string
     The path to the Brush executable.
   \return
-    '--total-steps' if Brush's help lists it, else '--total-train-iters'.
+    The help text, or '' if Brush couldn't be run.
 */
 /************************************************************************/
-function brushItersFlag(exe) {
+function readBrushHelp(exe) {
   try {
     const r = spawnSync(exe, ['--help'], {
       encoding: 'utf8',
       timeout: 10_000,
       windowsHide: true,
     })
-    const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
-    if (/--total-steps\b/.test(help)) return '--total-steps'
+    return `${r.stdout ?? ''}${r.stderr ?? ''}`
   } catch {
-    // Fall through to the source-build name.
+    return ''
   }
+}
+const brushHelp = readBrushHelp(brushBin)
+
+/************************************************************************/
+/*!
+  \brief
+    Passing the wrong name makes Brush exit with code 2 before training
+    starts. Ask the binary once which one it understands. Override with
+    BRUSH_ITERS_FLAG if the probe can't run.
+      v0.3.0 release : --total-steps
+      main branch    : --total-train-iters
+  \param help
+    string
+    Brush's --help output (see readBrushHelp).
+  \return
+    '--total-steps' if Brush's help lists it, else '--total-train-iters'.
+*/
+/************************************************************************/
+function brushItersFlag(help) {
+  if (/--total-steps\b/.test(help)) return '--total-steps'
   return '--total-train-iters'
 }
-const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushBin)
+const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushHelp)
+
+// --alpha-mode transparent makes the masked-out background count as empty
+// space, so Brush removes splats there instead of ignoring them. Builds
+// without the flag would exit on it, so it is only passed when listed.
+const brushHasAlphaMode = /--alpha-mode\b/.test(brushHelp)
 
 // COLMAP 4.x renamed the SiftExtraction/SiftMatching option namespaces to
 // FeatureExtraction/FeatureMatching. Passing the wrong one makes COLMAP exit
@@ -328,10 +351,12 @@ export const config = {
   brushBin,
 
   // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 7000,
+  trainIters: Number(process.env.TRAIN_ITERS) || 30000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
   // Name of Brush's iteration-count flag for the installed build (see above).
   brushItersFlag: brushItersFlagName,
+  // Whether this Brush build accepts --alpha-mode (see above).
+  brushHasAlphaMode,
 
   // Use the GPU for COLMAP SIFT (requires the CUDA build of COLMAP).
   colmapUseGpu,
