@@ -626,7 +626,7 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
     m_sortOrder.resize(m_totalSplatCount);
 
     //Comparison sort too slow for this many splats
-    //Instead it has 3 passes
+    //Instead it has 3 passes O(n + 65536 + n) = O (n) instead of std::sort O(n logn)
     //1st Pass (Count): Modulo each depth by 65536 (16 bits), place it into a bucket based onthe result
     //2nd Pass (Prefix): Alloclate space for each bucket slot in array, e.g.
     // Bucket 0 has 2 items, it gets slots 0 - 1
