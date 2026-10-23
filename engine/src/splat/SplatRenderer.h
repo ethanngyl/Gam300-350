@@ -92,7 +92,9 @@ private:
 
     //Gaussian sort cache, lets us skip the sort while nothing moved
     bool m_sortDirty = true;
-    glm::mat4 m_lastSortView = glm::mat4(1.0f);
+    glm::vec3 m_lastSortPos = glm::vec3(0.0f);                //Camera position at the last sort
+    glm::vec3 m_lastSortForward = glm::vec3(0.0f, 0.0f, -1.0f); //Camera forward at the last sort
+    float m_lastSortRange = 1.0f;                             //Depth range (max - min) at the last sort
     std::vector<glm::mat4> m_lastSortTransforms;
     std::vector<float> m_sortKeys;          //View-space depth per splat
     std::vector<unsigned int> m_sortOrder;  //Splat indices, far to near
@@ -102,6 +104,8 @@ private:
     static constexpr float kSortBudgetMs = 4.0f; //Alloclated sorting time
     static constexpr int kDisableAfterFrames = 3; //How many frames overbudget to disable
     static constexpr int kReEnableAfterFrames = 120; //How many frames to reenable sorting
+    static constexpr float kSortRotationCos = 0.9998f; //Re-sort once the camera turns more than ~1 degree
+    static constexpr float kSortMoveFraction = 0.01f;  //Re-sort once the camera moves 1% of the scene depth
     bool m_sortEnabled = false;
     int m_framesOverBudget = 0;
     int m_framesUnderBudget = 0;

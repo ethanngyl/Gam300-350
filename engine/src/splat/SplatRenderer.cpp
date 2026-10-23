@@ -604,8 +604,16 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
     transforms.reserve(m_models.size());
     for (const auto& model : m_models) transforms.push_back(model->GetTransform());
 
-    //The order only depends on the view the model transforms and the splat set
-    if (!m_sortDirty && view == m_lastSortView && transforms == m_lastSortTransforms) return;
+    //The order only depends on the camera, the model transforms and the splat set
+    //Small camera changes barely alter order, so only re-sort past a certain threshold
+    const glm::mat4 invView = glm::inverse(view);
+    const glm::vec3 camPos = glm::vec3(invView[3]);
+    const glm::vec3 camForward = -glm::vec3(invView[2]);
+    if (!m_sortDirty && transforms == m_lastSortTransforms) {
+        const bool rotated = glm::dot(camForward, m_lastSortForward) < kSortRotationCos;
+        const bool moved = glm::length(camPos - m_lastSortPos) > kSortMoveFraction * m_lastSortRange;
+        if (!rotated && !moved) return;
+    }
 
     //View-space z of a splat = row 2 of (view * model) dot (position, 1).
     //Computed once per model, then it is a single dot product per splat.
@@ -636,6 +644,8 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
     //  Splat 5 & 77 belongs to bucket 0, Splat 6, 11 & 33 belong to bucket 1
     // m_sortOrder = [5, 77, 6, 11, 33, ...]
 
+    float depthRange = 1.0f;
+
     //Skip if no splats somehow
     if (m_totalSplatCount > 0) {
         //Returns min and max values
@@ -644,6 +654,7 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
         const float minKey = *minIt;
         //Range of min to max value
         const float range = *maxIt - minKey;
+        depthRange = range;
         //Number of buckets (1u bitshifted 16 = 16bits = 65536)
         constexpr unsigned int kBuckets = 1u << 16;
         //Scale factor, convert depth into nunmber, if range is 0, move to bucket 1 (do not divide by 0)
@@ -662,7 +673,7 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
             m_sortBucketCounts[bSlot] += m_sortBucketCounts[bSlot - 1]; //counts[bSlot] = first slot of bucket bSlot
 
         //Pass 3: Scatter
-        //Put each splat into their next open bucket slot sequentally
+        //Put each splat into their next open bucket slot sequentalldept
         for (size_t i = 0; i < m_totalSplatCount; ++i) {
             unsigned int bucket = static_cast<unsigned int>((m_sortKeys[i] - minKey) * toBucket); //Calculate bucket
             m_sortOrder[m_sortBucketCounts[bucket]++] = static_cast<unsigned int>(i); //Add into bucket slot
@@ -681,7 +692,10 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
         static_cast<GLsizeiptr>(m_sortOrder.size() * sizeof(unsigned int)), m_sortOrder.data());
 #endif
 
-    m_lastSortView = view;
+    //Set sorted values
+    m_lastSortPos = camPos;
+    m_lastSortForward = camForward;
+    m_lastSortRange = depthRange;
     m_lastSortTransforms = std::move(transforms);
     m_sortDirty = false;
 }
