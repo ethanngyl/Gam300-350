@@ -525,6 +525,14 @@ void SplatRenderer::UpdateModel(SplatModel* model, const std::vector<SplatVertex
     m_modified = true;
 }
 
+void SplatRenderer::SetModelHidden(int index, bool hidden) {
+    SplatModel* model = GetModel(index);
+    if (!model || model->GetIsHidden() == hidden)
+        return;
+    model->SetHidden(hidden);
+    m_modified = true; //Hidden models are left out of the combined buffer
+}
+
 void SplatRenderer::TranslateModel(SplatModel* model, const glm::vec3& delta) {
     model->Translate(delta); // no buffer rebuild needed -- transform is GPU-side
 }
@@ -800,6 +808,8 @@ void SplatRenderer::RebuildCombinedBuffer()
     m_combined.clear();
 
     for (size_t modelIdx = 0; modelIdx < m_models.size(); ++modelIdx) {
+        //Skipped, but modelIdx stays the model's slot in the transform array
+        if (m_models[modelIdx]->GetIsHidden()) continue;
         const auto& splats = m_models[modelIdx]->splats();
         //Copy, about to mutate modelId
         for (SplatVertex v : splats) { 

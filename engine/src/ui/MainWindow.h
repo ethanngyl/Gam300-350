@@ -32,6 +32,8 @@ class QProgressBar;
 class QThread;
 class QToolBar;
 
+#include "splat/SplatTrimmer.h"
+
 struct SplatVertex;
 
 class AssetBrowserPanel;
@@ -75,10 +77,14 @@ private:
     // Queues a .ply for import; files load one at a time on a worker thread.
     void importSplat(const QString& path);
     void startNextImport();
-    void finishImport(const QString& path, std::vector<SplatVertex>& splats, size_t originalCount);
+    // `original` holds the untrimmed data, or is empty if the import was not trimmed.
+    void finishImport(const QString& path, std::vector<SplatVertex>& splats, std::vector<SplatVertex>& original);
+    void showTrimDialog();
+    void applyTrimSettings(const SplatTrimSettings& settings); // saves them, re-trims the selected model
     void selectModel(int index);
     void renameModel(int index, const QString& name);
     void deleteSelectedModel();
+    void toggleModelHidden(int index);
     void setRenderMode(int mode); // SplatRenderer::RenderMode as int
 
     // Rebuilds the outliner/inspector from the renderer and updates which
@@ -111,6 +117,7 @@ private:
     QAction* m_renameAction = nullptr;
     QAction* m_deleteAction = nullptr;
     QAction* m_deselectAction = nullptr;
+    QAction* m_toggleVisibilityAction = nullptr;
     QAction* m_resetPositionAction = nullptr;
     QActionGroup* m_renderModeGroup = nullptr;
     QAction* m_pointCloudAction = nullptr;
@@ -118,6 +125,8 @@ private:
     QAction* m_recenterCameraAction = nullptr;
     QAction* m_statsOverlayAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
+    QAction* m_trimSettingsAction = nullptr;
+    SplatTrimSettings m_trimSettings;
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;
     QMenu* m_windowMenu = nullptr;

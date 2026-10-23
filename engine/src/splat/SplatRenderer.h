@@ -51,6 +51,8 @@ public:
     SplatModel* GetModel(int index);
     //Updates a model
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
+    //Shows or hides a model without removing it; out-of-range indices are ignored
+    void SetModelHidden(int index, bool hidden);
     //Moves model
     void TranslateModel(SplatModel* model, const glm::vec3& delta);
     //View and projection are passed separately because Gaussian mode needs the view-space
