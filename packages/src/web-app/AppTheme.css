@@ -1,27 +1,49 @@
 /* ============================================================
-   GENESIS theme - dark blue-slate with teal accent and coral highlight
+   GENESIS theme - neutral charcoal with blue accent and amber highlight
    ============================================================ */
 
 :root {
-    --forma-bg: #111d29;
-    --forma-sidebar: #162636;
-    --forma-panel: #1b2f42;
-    --forma-panel-alt: #223a50;
-    --forma-panel-raised: #2a4660;
-    --forma-border: rgba(140, 190, 215, 0.14);
-    --forma-border-strong: rgba(140, 190, 215, 0.28);
-    --forma-text: #e6edf2;
-    --forma-heading: #f7e4d2;
-    --forma-text-muted: #8fa5b8;
-    --forma-text-dim: #5f7a90;
-    --forma-blue: #3f98ad;
-    --forma-blue-hover: #4aa9bf;
-    --forma-teal-text: #6cc6d6;
+    /* ----- Fonts (loaded in index.html) ----- */
+    --forma-font: 'Inter', system-ui, sans-serif;
+    --forma-font-mono: 'JetBrains Mono', monospace;
+    /* ----- Surfaces, darkest to lightest ----- */
+    --forma-bg: #0d0d0f;
+    --forma-sidebar: #121214;
+    --forma-panel: #18181b;
+    --forma-panel-alt: #202024;
+    --forma-panel-raised: #2a2a2f;
+    --forma-border: #242428;
+    --forma-border-strong: #34343a;
+    /* ----- Text ----- */
+    --forma-text: #f4f4f5;
+    --forma-text-soft: #d4d4d8;
+    --forma-heading: #fafafa;
+    --forma-text-muted: #a1a1aa;
+    --forma-text-dim: #8b8b94;
+    /* Text on top of an accent or coral fill */
+    --forma-on-accent: #ffffff;
+    --forma-on-coral: #1a1204;
+    /* ----- Accents ----- */
+    --forma-blue: #3b82f6;
+    --forma-blue-hover: #4f8df7;
+    --forma-teal-text: #73a7ff;
+    --forma-coral: #f59e0b;
     --forma-green: #4fc4a6;
     --forma-red: #f06f60;
-    --forma-coral: #f4917b;
+    --forma-red-text: #ff8c7c;
     --forma-purple: #a78bfa;
     --forma-orange: #f97316;
+    /* ----- Same colours as R, G, B for see-through tints:
+             rgba(var(--forma-accent-rgb), 0.16) ----- */
+    --forma-accent-rgb: 59, 130, 246;
+    --forma-accent-light-rgb: 115, 167, 255;
+    --forma-coral-rgb: 245, 158, 11;
+    --forma-red-rgb: 240, 111, 96;
+    --forma-green-rgb: 79, 196, 166;
+    --forma-purple-rgb: 167, 139, 250;
+    --forma-orange-rgb: 249, 115, 22;
+    --forma-bg-rgb: 13, 13, 15;
+    --forma-backdrop-rgb: 5, 5, 7;
 }
 
 html {
@@ -33,7 +55,7 @@ html {
 .genesis-page {
     background: var(--forma-bg);
     color: var(--forma-text);
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--forma-font);
 }
 
     /* App.css (old theme) styles bare h1/h2/h3/p; neutralise that inside the new screens. */
@@ -45,7 +67,7 @@ html {
     }
 
 .eyebrow {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -96,7 +118,7 @@ html {
     gap: 10px;
     padding-right: 20px;
     border-right: 1px solid var(--forma-border);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-weight: 700;
     font-size: 0.78rem;
     letter-spacing: 0.16em;
@@ -142,16 +164,16 @@ html {
     }
 
     .forma-tab.is-active {
-        color: #e3f4f7;
-        background: rgba(63, 152, 173, 0.16);
-        border-color: rgba(63, 152, 173, 0.4);
+        color: var(--forma-text);
+        background: rgba(var(--forma-accent-rgb), 0.16);
+        border-color: rgba(var(--forma-accent-rgb), 0.4);
     }
 
 .forma-status {
     display: flex;
     align-items: center;
     gap: 7px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.72rem;
     color: var(--forma-text-muted);
     white-space: nowrap;
@@ -254,7 +276,7 @@ html {
     }
 
 .genesis-side-label {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.64rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -272,7 +294,7 @@ html {
     border: 1px solid transparent;
     border-left: 2px solid transparent;
     background: transparent;
-    color: #e3d3c3;
+    color: var(--forma-text-soft);
     font-family: inherit;
     font-size: 0.84rem;
     text-align: left;
@@ -284,8 +306,8 @@ html {
     }
 
     .genesis-side-item.is-active {
-        background: rgba(63, 152, 173, 0.16);
-        border-color: rgba(63, 152, 173, 0.28);
+        background: rgba(var(--forma-accent-rgb), 0.16);
+        border-color: rgba(var(--forma-accent-rgb), 0.28);
         border-left-color: var(--forma-blue);
         color: #fff;
     }
@@ -330,7 +352,7 @@ html {
 .forma-btn-primary {
     background: var(--forma-blue);
     border-color: var(--forma-blue);
-    color: #f4fbfd;
+    color: var(--forma-on-accent);
 }
 
     .forma-btn-primary:hover {
@@ -339,7 +361,7 @@ html {
     }
 
 .forma-badge {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.64rem;
     letter-spacing: 0.06em;
     padding: 3px 8px;
@@ -350,14 +372,14 @@ html {
 
 .forma-badge-ready {
     color: var(--forma-teal-text);
-    background: rgba(63, 152, 173, 0.16);
-    border-color: rgba(63, 152, 173, 0.4);
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    border-color: rgba(var(--forma-accent-rgb), 0.4);
 }
 
 .forma-badge-processing {
-    color: #ff8c7c;
-    background: rgba(240, 111, 96, 0.14);
-    border-color: rgba(240, 111, 96, 0.4);
+    color: var(--forma-red-text);
+    background: rgba(var(--forma-red-rgb), 0.14);
+    border-color: rgba(var(--forma-red-rgb), 0.4);
 }
 
 .forma-card {
@@ -469,7 +491,7 @@ html {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.66rem;
     }
 
@@ -479,7 +501,7 @@ html {
     border-radius: 14px;
     border: none;
     background: var(--forma-coral);
-    color: #3a1c16;
+    color: var(--forma-on-coral);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -536,22 +558,22 @@ html {
 
 .home-tool-icon-library {
     color: var(--forma-teal-text);
-    background: rgba(63, 152, 173, 0.14);
+    background: rgba(var(--forma-accent-rgb), 0.14);
 }
 
 .home-tool-icon-editor {
     color: var(--forma-purple);
-    background: rgba(167, 139, 250, 0.12);
+    background: rgba(var(--forma-purple-rgb), 0.12);
 }
 
 .home-tool-icon-scene {
     color: var(--forma-green);
-    background: rgba(79, 196, 166, 0.12);
+    background: rgba(var(--forma-green-rgb), 0.12);
 }
 
 .home-tool-icon-youtube {
     color: var(--forma-orange);
-    background: rgba(249, 115, 22, 0.12);
+    background: rgba(var(--forma-orange-rgb), 0.12);
 }
 
 .home-tool-arrow {
@@ -576,7 +598,7 @@ html {
 
 .home-tool-footer {
     margin-top: 8px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-teal-text);
 }
@@ -619,7 +641,7 @@ html {
 }
 
 .home-recent-poly {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
     margin-top: 3px;
@@ -771,7 +793,7 @@ html {
     display: flex;
     justify-content: space-between;
     padding: 0 14px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
 }
@@ -858,7 +880,7 @@ html {
     align-items: center;
     justify-content: center;
     padding: 16px;
-    background: rgba(8, 14, 20, 0.6);
+    background: rgba(var(--forma-backdrop-rgb), 0.6);
 }
 
 .action-dialog {
@@ -991,7 +1013,7 @@ html {
 .library-photo-overflow {
     position: absolute;
     inset: 0;
-    background: rgba(17, 29, 41, 0.7);
+    background: rgba(var(--forma-bg-rgb), 0.7);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1012,7 +1034,7 @@ html {
 
 .library-photo-count {
     padding: 0 14px 12px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
 }
@@ -1033,7 +1055,7 @@ html {
 }
 
     .gallery-compact .gallery-job h3 span {
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.7rem;
         color: var(--forma-text-muted);
     }
@@ -1103,7 +1125,7 @@ html {
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border-strong);
     color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     padding: 5px 12px;
     border-radius: 5px;
@@ -1111,14 +1133,14 @@ html {
 }
 
     .scene-chip.is-active {
-        background: rgba(63, 152, 173, 0.22);
+        background: rgba(var(--forma-accent-rgb), 0.22);
         border-color: var(--forma-blue);
-        color: #e3f4f7;
+        color: var(--forma-text);
     }
 
 .scene-color-space {
     margin-left: auto;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     color: var(--forma-text-dim);
 }
@@ -1140,7 +1162,7 @@ html {
 
 .scene-panel-title {
     padding: 10px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.78rem;
     font-weight: 700;
     border-bottom: 1px solid var(--forma-border);
@@ -1160,7 +1182,7 @@ html {
     border: 1px solid var(--forma-border-strong);
     border-radius: 5px;
     color: var(--forma-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.72rem;
     padding: 6px 8px;
     outline: none;
@@ -1178,7 +1200,7 @@ html {
     gap: 6px;
     padding: 5px 8px;
     border-radius: 4px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     color: var(--forma-text-muted);
     cursor: pointer;
@@ -1189,7 +1211,7 @@ html {
     }
 
     .scene-outliner-item.is-active {
-        background: rgba(63, 152, 173, 0.18);
+        background: rgba(var(--forma-accent-rgb), 0.18);
         color: var(--forma-teal-text);
     }
 
@@ -1217,7 +1239,7 @@ html {
     background: transparent;
     border: 1px dashed var(--forma-border-strong);
     color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     padding: 9px;
     border-radius: 6px;
@@ -1251,7 +1273,7 @@ html {
 
 .scene-viewport-label {
     margin-left: auto;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     color: var(--forma-text-dim);
 }
 
@@ -1268,7 +1290,7 @@ html {
     align-items: center;
     padding: 8px 0;
     gap: 10px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.6rem;
     color: var(--forma-text-dim);
 }
@@ -1302,7 +1324,7 @@ html {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.62rem;
 }
 
@@ -1335,7 +1357,7 @@ html {
     background: var(--forma-bg);
     border: 1px solid var(--forma-border-strong);
     color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     padding: 8px 14px;
     border-radius: 5px;
@@ -1385,7 +1407,7 @@ html {
     border: none;
     border-top: 1px solid var(--forma-border);
     color: var(--forma-teal-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     padding: 9px 14px;
     cursor: pointer;
@@ -1397,7 +1419,7 @@ html {
     align-items: center;
     justify-content: space-between;
     padding: 4px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-muted);
 }
@@ -1408,7 +1430,7 @@ html {
         border: 1px solid var(--forma-border);
         border-radius: 3px;
         color: var(--forma-teal-text);
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.7rem;
         padding: 3px 6px;
         text-align: right;
@@ -1420,7 +1442,7 @@ html {
     flex-direction: column;
     gap: 6px;
     padding: 8px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-muted);
 }
@@ -1462,14 +1484,14 @@ html {
     border: none;
     border-right: 1px solid var(--forma-border);
     color: var(--forma-text-dim);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.62rem;
     padding: 5px 0;
     cursor: pointer;
 }
 
     .scene-frame.is-active {
-        background: rgba(63, 152, 173, 0.35);
+        background: rgba(var(--forma-accent-rgb), 0.35);
         color: #fff;
     }
 
@@ -1495,7 +1517,7 @@ html {
 
 .scene-frame-count {
     margin-left: auto;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
 }
@@ -1665,7 +1687,7 @@ html {
 }
 
 .account-since {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     color: var(--forma-text-dim);
     margin-top: 8px;
@@ -1698,7 +1720,7 @@ html {
 
 .home-stat-note {
     color: var(--forma-teal-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     margin-top: 8px;
 }
@@ -1722,7 +1744,7 @@ html {
     .genesis-overlay .btn-primary {
         background: var(--forma-blue);
         border-color: var(--forma-blue);
-        color: #f4fbfd;
+        color: var(--forma-on-accent);
     }
 
         .genesis-page .btn-primary:hover,
@@ -1856,7 +1878,7 @@ html {
         inset: 0;
         z-index: 55;
         border: none;
-        background: rgba(8, 14, 20, 0.6);
+        background: rgba(var(--forma-backdrop-rgb), 0.6);
     }
 
     /* iPhone Safari zooms in on focused fields with text under 16px. */
@@ -2084,5 +2106,539 @@ html {
     .genesis-overlay {
         flex-wrap: wrap;
         right: 16px;
+    }
+}
+
+/* ============================================================
+   Theme 2 layout (Jia Ming's Figma design)
+   - No top nav on wider screens: the sidebar holds the logo, every
+     page and the account menu, and can collapse to icons only.
+   - Home: welcome + "Recent" with Your files / Generated models tabs.
+   - Login: hero panel on the left, form on the right.
+   Kept at the very end of this file: several rules here override
+   earlier ones, and in CSS the later rule wins.
+   ============================================================ */
+
+/* ---------- Shell ---------- */
+
+.genesis-body {
+    grid-template-columns: 232px minmax(0, 1fr);
+    transition: grid-template-columns 0.18s ease;
+}
+
+.genesis-shell.is-sidebar-collapsed .genesis-body {
+    grid-template-columns: 68px minmax(0, 1fr);
+}
+
+/* ---------- Sidebar ---------- */
+
+.genesis-sidebar {
+    padding: 16px 14px 14px;
+    gap: 4px;
+}
+
+.genesis-side-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.genesis-side-logo {
+    border-right: none;
+    padding-right: 0;
+    min-width: 0;
+}
+
+.genesis-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    border-radius: 8px;
+    border: 1px solid var(--forma-border-strong);
+    background: transparent;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .genesis-collapse-btn:hover {
+        color: var(--forma-text);
+        background: var(--forma-panel-alt);
+    }
+
+    /* The chevron icon points down; turn it to point left while expanded. */
+    .genesis-collapse-btn svg {
+        transform: rotate(90deg);
+    }
+
+.genesis-new-model,
+.genesis-add-photos {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 12px;
+}
+
+.genesis-new-model {
+    margin-bottom: 6px;
+}
+
+.genesis-add-photos {
+    margin-bottom: 8px;
+}
+
+    .genesis-side-item span,
+    .genesis-new-model span,
+    .genesis-add-photos span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+/* ---------- Profile at the bottom of the sidebar ---------- */
+
+.genesis-profile {
+    position: relative;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--forma-border);
+}
+
+.genesis-profile-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .genesis-profile-btn:hover,
+    .genesis-profile-btn.is-active {
+        background: var(--forma-panel-alt);
+    }
+
+    .genesis-profile-btn .forma-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+    }
+
+    /* Chevron points up, toward the menu that opens above. */
+    .genesis-profile-btn > svg {
+        flex: none;
+        color: var(--forma-text-dim);
+        transform: rotate(180deg);
+    }
+
+.genesis-profile-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.genesis-profile-name,
+.genesis-profile-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.genesis-profile-name {
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.genesis-profile-email {
+    font-family: var(--forma-font-mono);
+    font-size: 0.68rem;
+    color: var(--forma-text-dim);
+}
+
+.genesis-profile-menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 6px);
+    min-width: 210px;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border-strong);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    z-index: 50;
+}
+
+/* ---------- Collapsed sidebar: icons only (wider screens) ---------- */
+
+@media (min-width: 761px) {
+    /* The sidebar replaces the top nav. */
+    .forma-nav {
+        display: none;
+    }
+
+    .genesis-sidebar.is-collapsed {
+        padding-left: 10px;
+        padding-right: 10px;
+        align-items: center;
+    }
+
+        .genesis-sidebar.is-collapsed .genesis-side-top {
+            flex-direction: column;
+        }
+
+        .genesis-sidebar.is-collapsed .forma-logo-text,
+        .genesis-sidebar.is-collapsed .genesis-side-label,
+        .genesis-sidebar.is-collapsed .genesis-side-item span,
+        .genesis-sidebar.is-collapsed .genesis-new-model span,
+        .genesis-sidebar.is-collapsed .genesis-add-photos span,
+        .genesis-sidebar.is-collapsed .genesis-profile-text,
+        .genesis-sidebar.is-collapsed .genesis-profile-btn > svg {
+            display: none;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-collapse-btn svg {
+            transform: rotate(-90deg);
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-new-model,
+        .genesis-sidebar.is-collapsed .genesis-add-photos,
+        .genesis-sidebar.is-collapsed .genesis-side-item,
+        .genesis-sidebar.is-collapsed .genesis-profile-btn {
+            width: 44px;
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-profile {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-profile-menu {
+            left: 0;
+            right: auto;
+        }
+}
+
+/* ---------- Phones: the sidebar is a drawer, so never collapsed ---------- */
+
+@media (max-width: 760px) {
+    .genesis-body,
+    .genesis-shell.is-sidebar-collapsed .genesis-body {
+        grid-template-columns: 1fr;
+    }
+
+    /* The drawer can't collapse; the header has the menu button. */
+    .genesis-collapse-btn {
+        display: none;
+    }
+
+    .genesis-sidebar .forma-logo-text {
+        display: inline;
+    }
+}
+
+/* ---------- Home ---------- */
+
+.home-welcome {
+    margin-bottom: 36px;
+}
+
+    .home-welcome h1 {
+        font-size: 2.3rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--forma-heading);
+    }
+
+.home-recent-v2-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+    .home-recent-v2-header .home-section-title {
+        margin-bottom: 10px !important;
+    }
+
+.home-recent-tabs {
+    display: flex;
+    gap: 20px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.home-recent-tab {
+    padding: 0 0 10px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .home-recent-tab:hover {
+        color: var(--forma-text);
+    }
+
+    .home-recent-tab.is-active {
+        color: var(--forma-text);
+        border-bottom-color: var(--forma-blue);
+    }
+
+.home-file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 14px;
+}
+
+.home-file-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .home-file-card:hover {
+        border-color: var(--forma-border-strong);
+    }
+
+.home-file-preview {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-panel-alt);
+    color: var(--forma-text-dim);
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .home-file-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.home-file-type {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(var(--forma-bg-rgb), 0.85);
+    border: 1px solid var(--forma-border-strong);
+    color: var(--forma-teal-text);
+}
+
+.home-file-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px;
+    min-width: 0;
+}
+
+.home-file-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--forma-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-file-kind {
+    font-family: var(--forma-font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--forma-text-muted);
+}
+
+.home-file-time {
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+    margin-top: 6px;
+}
+
+.home-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--forma-text-muted);
+}
+
+    .home-empty svg {
+        color: var(--forma-teal-text);
+    }
+
+    .home-empty h3 {
+        font-size: 1.05rem;
+        color: var(--forma-heading);
+    }
+
+    .home-empty p {
+        max-width: 42ch;
+        font-size: 0.86rem;
+    }
+
+    .home-empty .forma-btn {
+        margin-top: 6px;
+    }
+
+@media (max-width: 760px) {
+    .home-welcome {
+        margin-bottom: 24px;
+    }
+
+        .home-welcome h1 {
+            font-size: 1.7rem;
+        }
+
+    .home-recent-v2-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .home-file-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
+/* ---------- Login ---------- */
+
+.genesis-login-v2 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+    align-items: stretch;
+    padding: 0;
+}
+
+.login-hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 32px;
+    padding: 48px 64px;
+    border-right: 1px solid var(--forma-border);
+    background: radial-gradient(circle at 15% 85%, rgba(var(--forma-accent-rgb), 0.16), transparent 45%), radial-gradient(circle at 80% 15%, rgba(var(--forma-coral-rgb), 0.08), transparent 40%), linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-sidebar);
+}
+
+.login-hero-logo {
+    border-right: none;
+    padding-right: 0;
+}
+
+.login-hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 560px;
+}
+
+    .login-hero-copy .eyebrow {
+        margin: 0;
+    }
+
+.genesis-login .login-hero-copy h2 {
+    font-size: clamp(2.6rem, 5vw, 4.2rem);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    color: var(--forma-heading);
+}
+
+.login-hero-copy p:not(.eyebrow) {
+    color: var(--forma-text-soft);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.login-hero-steps {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+    .login-hero-steps li {
+        padding: 9px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--forma-border-strong);
+        background: rgba(var(--forma-bg-rgb), 0.6);
+        font-size: 0.8rem;
+        color: var(--forma-text);
+    }
+
+.genesis-login .login-hero-footer {
+    font-family: var(--forma-font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--forma-text-dim);
+}
+
+.login-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+}
+
+/* The form sits straight on the page, not in a card. */
+.genesis-login-v2 .login-card {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+/* The hero already shows the logo on wider screens. */
+.genesis-login-v2 .login-logo {
+    display: none;
+}
+
+@media (max-width: 900px) {
+    .genesis-login-v2 {
+        grid-template-columns: 1fr;
+    }
+
+    .login-hero {
+        display: none;
+    }
+
+    .genesis-login-v2 .login-logo {
+        display: flex;
     }
 }

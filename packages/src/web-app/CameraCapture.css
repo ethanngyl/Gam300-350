@@ -81,7 +81,7 @@
     justify-content: center;
     gap: 10px;
     color: var(--forma-text-dim);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.78rem;
 }
 
@@ -129,12 +129,12 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--forma-text-muted);
-    background: rgba(17, 29, 41, 0.75);
+    background: rgba(var(--forma-bg-rgb), 0.75);
     border: 1px solid var(--forma-border-strong);
     border-radius: 4px;
     padding: 3px 8px;
@@ -142,7 +142,7 @@
 
     .capture-live.is-live {
         color: var(--forma-teal-text);
-        border-color: rgba(63, 152, 173, 0.45);
+        border-color: rgba(var(--forma-accent-rgb), 0.45);
     }
 
 .capture-live-dot {
@@ -195,7 +195,7 @@
     justify-content: center;
     background: var(--forma-coral);
     border-color: var(--forma-coral);
-    color: #3a1c16;
+    color: var(--forma-on-coral);
     padding: 11px 22px;
 }
 
@@ -236,7 +236,7 @@
 
 .capture-auto-status {
     flex: 1 1 100%;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     color: var(--forma-teal-text);
 }
@@ -244,7 +244,7 @@
 /* ---------- Feedback and errors ---------- */
 
 .capture-feedback {
-    background: rgba(63, 152, 173, 0.14);
+    background: rgba(var(--forma-accent-rgb), 0.14);
     border: 1px solid var(--forma-blue);
     color: var(--forma-text);
     font-size: 0.84rem;
@@ -295,7 +295,7 @@
 
     .capture-dropzone.is-dragging {
         border-color: var(--forma-blue);
-        background: rgba(63, 152, 173, 0.1);
+        background: rgba(var(--forma-accent-rgb), 0.1);
         color: var(--forma-text);
     }
 
@@ -306,13 +306,13 @@
 
 .capture-dropzone-types {
     margin-top: 6px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     color: var(--forma-text-dim);
 }
 
 .capture-count {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.78rem;
     color: var(--forma-text-muted);
 }
@@ -350,7 +350,7 @@
     height: 28px;
     border-radius: 50%;
     border: none;
-    background: rgba(17, 29, 41, 0.8);
+    background: rgba(var(--forma-bg-rgb), 0.8);
     color: var(--forma-text);
     display: flex;
     align-items: center;
@@ -397,7 +397,7 @@
 
 .batch-btn.is-sent,
 .batch-btn.is-sent:hover {
-    background: rgba(79, 196, 166, 0.14);
+    background: rgba(var(--forma-green-rgb), 0.14);
     border-color: var(--forma-green);
     color: var(--forma-text);
 }
@@ -493,8 +493,8 @@
     font-size: 0.8rem;
     line-height: 1.45;
     color: var(--forma-text);
-    background: rgba(244, 145, 123, 0.12);
-    border: 1px solid rgba(244, 145, 123, 0.4);
+    background: rgba(var(--forma-coral-rgb), 0.12);
+    border: 1px solid rgba(var(--forma-coral-rgb), 0.4);
 }
 
     .capture-issues svg {

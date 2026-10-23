@@ -101,7 +101,7 @@
     flex-direction: column;
     gap: 6px;
     flex: none;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -115,7 +115,7 @@
         border: 1px solid var(--forma-border-strong);
         border-radius: 8px;
         color: var(--forma-text);
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.86rem;
         padding: 10px 12px;
         outline: none;
@@ -173,7 +173,7 @@
 }
 
 .yt-badge {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.64rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -186,21 +186,21 @@
 
 .yt-badge-running {
     color: var(--forma-teal-text);
-    background: rgba(63, 152, 173, 0.16);
-    border-color: rgba(63, 152, 173, 0.4);
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    border-color: rgba(var(--forma-accent-rgb), 0.4);
 }
 
 .yt-badge-done {
     color: var(--forma-green);
-    background: rgba(79, 196, 166, 0.14);
-    border-color: rgba(79, 196, 166, 0.4);
+    background: rgba(var(--forma-green-rgb), 0.14);
+    border-color: rgba(var(--forma-green-rgb), 0.4);
 }
 
 .yt-badge-error,
 .yt-badge-cancelled {
-    color: #ff8c7c;
-    background: rgba(240, 111, 96, 0.14);
-    border-color: rgba(240, 111, 96, 0.4);
+    color: var(--forma-red-text);
+    background: rgba(var(--forma-red-rgb), 0.14);
+    border-color: rgba(var(--forma-red-rgb), 0.4);
 }
 
 .yt-phase {
@@ -210,7 +210,7 @@
 
 .yt-frames {
     margin-left: auto;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.72rem;
     color: var(--forma-text-muted);
 }
@@ -289,7 +289,7 @@
     border: 1px solid var(--forma-border);
     border-radius: 8px;
     padding: 12px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     line-height: 1.6;
     color: var(--forma-text-muted);

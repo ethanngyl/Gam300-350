@@ -6,7 +6,7 @@
     overflow-y: auto;
     background: var(--forma-bg);
     color: var(--forma-text);
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--forma-font);
 }
 
     /* App.css still styles bare h1 and p with the old theme, so reset them here. */
@@ -88,7 +88,7 @@
 
 .processing-pct {
     text-align: right;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     color: var(--forma-teal-text);
 }
