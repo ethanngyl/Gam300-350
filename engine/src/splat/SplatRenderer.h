@@ -21,6 +21,7 @@
 
 #include <glm/glm.hpp>
 
+#include <future>
 #include <memory>
 #include <vector>
 
@@ -87,6 +88,10 @@ private:
     void DrawGaussian(const glm::mat4& view, const glm::mat4& proj, float viewportWidthPixels, float viewportHeightPixels);
     //Fills the element buffer with splat indices ordered far -> near (only re-sorts if needed)
     void SortSplatsBackToFront(const glm::mat4& view);
+    //Computes the depth order into m_pendingOrder from the m_pending* snapshot, no GL (worker thread safe)
+    void BuildSortOrder();
+    //Publishes m_pendingOrder to the GPU and records the snapshot as the last sort, main thread only
+    void ApplyPendingSort();
 
     RenderMode m_renderMode = RenderMode::PointCloud;
 
@@ -99,6 +104,16 @@ private:
     std::vector<float> m_sortKeys;          //View-space depth per splat
     std::vector<unsigned int> m_sortOrder;  //Splat indices, far to near
     std::vector<unsigned int> m_sortBucketCounts; //Counting sort scratch
+
+    //Background sort: the snapshot the worker sorts for and the result it writes.
+    //The worker only touches these, m_sortKeys and m_sortBucketCounts (and reads m_combined).
+    std::future<void> m_sortFuture;
+    std::vector<unsigned int> m_pendingOrder;
+    glm::mat4 m_pendingView = glm::mat4(1.0f);
+    std::vector<glm::mat4> m_pendingTransforms;
+    glm::vec3 m_pendingPos = glm::vec3(0.0f);
+    glm::vec3 m_pendingForward = glm::vec3(0.0f, 0.0f, -1.0f);
+    float m_pendingRange = 1.0f;
 
     //Sorting Vars
     static constexpr float kSortBudgetMs = 4.0f; //Alloclated sorting time
