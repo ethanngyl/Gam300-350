@@ -8,8 +8,10 @@
 \par Software Engineering Project 5
 \date 08-10-2026
 \brief
-React page that shows every photo stored under backend/jobs/<jobId>/images,
-grouped by job. It fetches the job list once when it opens (load() is
+React page that shows the photos under backend/jobs/<jobId>/images that the
+signed-in user may see, grouped by job: every job for admins, only the
+user's own jobs otherwise (the backend filters GET /jobs by the session
+cookie). It fetches the job list once when it opens (load() is
 unchanged). The "full" variant shows a section per job with a download-on-
 click thumbnail grid. The "compact" variant, used inside the Library tab's
 Photo Library, shows one preview card per job (with search and sort);
@@ -26,6 +28,7 @@ Renders one job's heading and download-on-click thumbnail grid.
 
 // ----- Headers ------------------------------------------------------- //
 import { useEffect, useState } from 'react';
+import { jobDisplayName } from './mediaApi.js';
 import './ImageGallery.css';
 
 const PREVIEW_COUNT = 4;
@@ -35,9 +38,9 @@ const PREVIEW_COUNT = 4;
 /************************************************************************/
 /*!
   \brief
-    Shows every photo stored under backend/jobs/<jobId>/images, grouped by
-    job. Data comes from GET /jobs (list) and GET /jobs/:id/images/:name
-    (each image).
+    Shows the signed-in user's photos (every job's photos for admins),
+    grouped by job. Data comes from GET /jobs (list, already filtered by
+    role on the server) and GET /jobs/:id/images/:name (each image).
   \param onBack
     function, optional
     Called when the Back button is clicked. No Back button is rendered
@@ -100,7 +103,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         return (
             <section key={job.id} className="gallery-job">
                 <h3>
-                    Job {job.id.slice(0, 8)}
+                    {jobDisplayName(job, 'Job')}
                     <span>{job.status}</span>
                     <span>{job.images.length} photos</span>
                 </h3>
@@ -140,10 +143,12 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
 
         const normalizedSearch = searchTerm.trim().toLowerCase();
         const visibleJobs = jobs.filter((job) =>
-            `${job.id} ${job.status}`.toLowerCase().includes(normalizedSearch)
+            `${jobDisplayName(job, 'Batch')} ${job.id} ${job.status}`.toLowerCase().includes(normalizedSearch)
         );
         if (sortOrder === 'oldest') visibleJobs.reverse();
-        if (sortOrder === 'name') visibleJobs.sort((a, b) => a.id.localeCompare(b.id));
+        if (sortOrder === 'name') {
+            visibleJobs.sort((a, b) => jobDisplayName(a, 'Batch').localeCompare(jobDisplayName(b, 'Batch')));
+        }
 
         return (
             <div className="gallery gallery-compact">
@@ -181,7 +186,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                                         {job.status}
                                     </span>
                                 </div>
-                                <div className="library-photo-name">Batch {job.id.slice(0, 8)}</div>
+                                <div className="library-photo-name">{jobDisplayName(job, 'Batch')}</div>
                                 {/* The /jobs data has no created-at date or upload-vs-YouTube
                                     origin yet, so the design's date and UPLOAD/YOUTUBE badge
                                     show the job status instead. Swap in when the backend adds them. */}

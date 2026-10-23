@@ -24,6 +24,7 @@ function LoginScreen({ onLogin }) {
     const [displayName, setDisplayName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,8 +71,8 @@ function LoginScreen({ onLogin }) {
 
         try {
             const body = isSignUp
-                ? { name: displayName.trim(), email: trimmedEmail, password }
-                : { email: trimmedEmail, password };
+                ? { name: displayName.trim(), email: trimmedEmail, password, remember: rememberMe }
+                : { email: trimmedEmail, password, remember: rememberMe };
             const res = await fetch(isSignUp ? '/auth/signup' : '/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -134,6 +135,14 @@ function LoginScreen({ onLogin }) {
                         onChange={(event) => setPassword(event.target.value)}
                         autoComplete={isSignUp ? 'new-password' : 'current-password'}
                     />
+                </label>
+                <label className="login-remember">
+                    <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(event) => setRememberMe(event.target.checked)}
+                    />
+                    Remember me
                 </label>
 
                 {errorMessage && <p className="login-error" role="alert">{errorMessage}</p>}

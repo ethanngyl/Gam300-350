@@ -1,8 +1,9 @@
 # ============================================================
 #  CoDeFine backend + web app (photos -> COLMAP -> Brush -> .ply)
 #
-#  Build:  docker compose build
-#  Run:    docker compose up            (http://localhost:5005)
+#  Build:  docker compose -f docker/docker-compose.yml build
+#  Run:    docker compose -f docker/docker-compose.yml up   (http://localhost:5005)
+#  Build context is the repo root; ignore rules are in Dockerfile.dockerignore.
 #
 #  The C++ engine's desktop editor is not part of this image, but
 #  its splat renderer is, compiled to WebAssembly for the web app.

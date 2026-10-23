@@ -249,6 +249,10 @@ html {
     margin-bottom: 10px;
 }
 
+    .genesis-new-model.is-active {
+        box-shadow: 0 0 0 2px var(--forma-sidebar), 0 0 0 4px var(--forma-teal-text);
+    }
+
 .genesis-side-label {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.64rem;
@@ -621,6 +625,32 @@ html {
     margin-top: 3px;
 }
 
+.home-recent-button {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .home-recent-button:hover {
+        border-color: var(--forma-blue);
+    }
+
+.home-recent-thumb {
+    overflow: hidden;
+}
+
+    .home-recent-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.home-recent-note {
+    color: var(--forma-text-muted);
+    font-size: 0.86rem;
+}
+
 /* ---------- Library ---------- */
 
 .library-screen {
@@ -764,6 +794,132 @@ html {
         opacity: 0.75;
     }
 
+/* Library model cards: no click action, right-click opens Rename / Delete */
+.library-item-actionable {
+    cursor: context-menu;
+    outline: none;
+}
+
+    .library-item-actionable:hover,
+    .library-item-actionable:focus-visible {
+        border-color: var(--forma-blue);
+    }
+
+    .library-item-actionable.is-processing {
+        opacity: 0.75;
+    }
+
+/* ---------- Right-click menu (ContextMenu.jsx) ---------- */
+
+.context-menu {
+    position: fixed;
+    z-index: 100;
+    min-width: 160px;
+    padding: 4px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.context-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--forma-text);
+    font-family: inherit;
+    font-size: 0.84rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .context-menu-item:hover,
+    .context-menu-item:focus-visible {
+        background: var(--forma-panel-alt);
+        outline: none;
+    }
+
+    .context-menu-item.is-danger {
+        color: var(--forma-red);
+    }
+
+/* ---------- Rename / delete dialog (ActionDialog.jsx) ---------- */
+
+.action-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(8, 14, 20, 0.6);
+}
+
+.action-dialog {
+    width: min(420px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+    .action-dialog h3 {
+        margin: 0;
+        font-size: 1rem;
+        color: var(--forma-heading);
+        overflow-wrap: anywhere;
+    }
+
+.action-dialog-message {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--forma-text-muted);
+}
+
+.action-dialog-input {
+    font-family: inherit;
+    font-size: 0.9rem;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel-alt);
+    color: var(--forma-text);
+}
+
+    .action-dialog-input:focus {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+.action-dialog-error {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--forma-red);
+}
+
+.action-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.forma-btn-danger {
+    background: var(--forma-red);
+    border-color: var(--forma-red);
+    color: #fff;
+}
+
+    .forma-btn-danger:hover {
+        filter: brightness(1.08);
+        border-color: var(--forma-red);
+    }
+
 .library-note {
     padding: 0 28px;
     margin-bottom: 16px;
@@ -895,386 +1051,6 @@ html {
         border-radius: 8px;
         border: 1px solid var(--forma-border);
         display: block;
-    }
-
-/* ---------- Photo Editor ---------- */
-
-.editor-screen {
-    display: grid;
-    grid-template-columns: 48px 1fr 280px;
-    height: 100%;
-    min-height: 0;
-}
-
-.editor-tools {
-    border-right: 1px solid var(--forma-border);
-    padding: 12px 6px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    background: var(--forma-sidebar);
-}
-
-.editor-tool {
-    width: 34px;
-    height: 34px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    color: var(--forma-text-muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-    .editor-tool:hover {
-        color: var(--forma-text);
-    }
-
-    .editor-tool.is-active {
-        background: rgba(63, 152, 173, 0.2);
-        border-color: rgba(63, 152, 173, 0.5);
-        color: #e3f4f7;
-    }
-
-.editor-tool-settings {
-    margin-top: auto;
-}
-
-.editor-canvas-area {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-}
-
-.editor-canvas-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--forma-border);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.74rem;
-    color: var(--forma-text-muted);
-}
-
-.editor-dim {
-    color: var(--forma-text-dim);
-}
-
-.editor-zoom {
-    margin-left: auto;
-    display: flex;
-    border: 1px solid var(--forma-border-strong);
-    border-radius: 6px;
-    overflow: hidden;
-}
-
-    .editor-zoom button {
-        background: var(--forma-panel-alt);
-        border: none;
-        border-right: 1px solid var(--forma-border);
-        color: var(--forma-text-muted);
-        font-family: inherit;
-        font-size: 0.72rem;
-        padding: 5px 12px;
-        cursor: pointer;
-    }
-
-        .editor-zoom button:last-child {
-            border-right: none;
-        }
-
-        .editor-zoom button.is-active {
-            background: var(--forma-panel-raised);
-            color: var(--forma-text);
-        }
-
-.editor-ruler {
-    display: flex;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.58rem;
-    color: #4fa3b8;
-    background: var(--forma-sidebar);
-}
-
-    .editor-ruler span {
-        flex: 1;
-        padding: 3px 0 0 4px;
-        border-left: 1px solid var(--forma-border);
-    }
-
-.editor-ruler-x {
-    border-bottom: 1px solid var(--forma-border);
-    margin-left: 28px;
-    height: 20px;
-}
-
-.editor-ruler-y {
-    flex-direction: column;
-    width: 28px;
-    border-right: 1px solid var(--forma-border);
-    flex: none;
-}
-
-    .editor-ruler-y span {
-        border-left: none;
-        border-top: 1px solid var(--forma-border);
-        padding: 2px 0 0 3px;
-    }
-
-.editor-canvas-row {
-    flex: 1;
-    display: flex;
-    min-height: 0;
-}
-
-.editor-canvas {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--forma-bg);
-    padding: 24px;
-    min-width: 0;
-}
-
-.editor-frame {
-    position: relative;
-    width: min(100%, 520px);
-    aspect-ratio: 4 / 3;
-    background: var(--forma-panel-alt);
-    border: 1px solid rgba(63, 152, 173, 0.5);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: var(--forma-text-dim);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.74rem;
-}
-
-    .editor-frame p {
-        margin: 0;
-    }
-
-.editor-corner {
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    border: 2px solid var(--forma-blue);
-}
-
-.editor-corner-tl {
-    top: -2px;
-    left: -2px;
-    border-right: none;
-    border-bottom: none;
-}
-
-.editor-corner-tr {
-    top: -2px;
-    right: -2px;
-    border-left: none;
-    border-bottom: none;
-}
-
-.editor-corner-bl {
-    bottom: -2px;
-    left: -2px;
-    border-right: none;
-    border-top: none;
-}
-
-.editor-corner-br {
-    bottom: -2px;
-    right: -2px;
-    border-left: none;
-    border-top: none;
-}
-
-.editor-history {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border-top: 1px solid var(--forma-border);
-    overflow-x: auto;
-}
-
-.editor-history-label {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--forma-text-dim);
-    flex: none;
-}
-
-.editor-history-step {
-    background: var(--forma-panel-alt);
-    border: 1px solid var(--forma-border);
-    color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.64rem;
-    padding: 7px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    flex: none;
-}
-
-    .editor-history-step.is-active {
-        border-color: var(--forma-blue);
-        color: var(--forma-text);
-    }
-
-.editor-panel {
-    border-left: 1px solid var(--forma-border);
-    padding: 18px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    background: var(--forma-sidebar);
-}
-
-    .editor-panel h4 {
-        font-family: 'IBM Plex Mono', monospace;
-        font-size: 0.66rem;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--forma-text);
-        margin: 22px 0 14px;
-    }
-
-        .editor-panel h4:first-child {
-            margin-top: 0;
-        }
-
-.editor-slider {
-    display: block;
-    margin-bottom: 16px;
-}
-
-    .editor-slider span {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.8rem;
-        color: var(--forma-text-muted);
-        margin-bottom: 6px;
-    }
-
-        .editor-slider span b {
-            color: var(--forma-teal-text);
-            font-family: 'IBM Plex Mono', monospace;
-            font-weight: 500;
-        }
-
-    .editor-slider input[type='range'] {
-        width: 100%;
-        accent-color: var(--forma-blue);
-    }
-
-.editor-grade-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-
-.editor-grade-tile {
-    text-align: left;
-    background: var(--forma-panel-alt);
-    border: 1px solid var(--forma-border);
-    border-radius: 6px;
-    padding: 10px;
-    color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.66rem;
-    cursor: pointer;
-}
-
-    .editor-grade-tile.is-active {
-        border-color: var(--forma-blue);
-        color: var(--forma-text);
-    }
-
-.editor-grade-bar {
-    display: block;
-    height: 3px;
-    background: var(--forma-border-strong);
-    margin-top: 8px;
-    border-radius: 2px;
-}
-
-    .editor-grade-bar span {
-        display: block;
-        height: 100%;
-        background: var(--forma-blue);
-        border-radius: 2px;
-    }
-
-.editor-toggles {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.editor-toggle-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.82rem;
-    color: var(--forma-text-muted);
-}
-
-.switch {
-    appearance: none;
-    width: 32px;
-    height: 18px;
-    border-radius: 999px;
-    background: var(--forma-panel-raised);
-    border: 1px solid var(--forma-border-strong);
-    position: relative;
-    cursor: pointer;
-    flex: none;
-}
-
-    .switch::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: var(--forma-text-muted);
-        transition: transform 0.15s ease;
-    }
-
-    .switch:checked {
-        background: rgba(63, 152, 173, 0.45);
-        border-color: var(--forma-blue);
-    }
-
-        .switch:checked::after {
-            transform: translateX(14px);
-            background: #fff;
-        }
-
-.editor-actions {
-    margin-top: auto;
-    padding-top: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-    .editor-actions .forma-btn {
-        width: 100%;
-        justify-content: center;
     }
 
 /* ---------- Scene Builder ---------- */
@@ -1789,6 +1565,20 @@ html {
         .login-field input:focus {
             border-color: var(--forma-blue);
         }
+
+.login-remember {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .login-remember input {
+        accent-color: var(--forma-blue);
+        cursor: pointer;
+    }
 
 .login-error {
     color: var(--forma-red);

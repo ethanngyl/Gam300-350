@@ -36,11 +36,18 @@ or returns null for anything else (playlists, channels, other sites).
 - extractYoutubeFrames(job, url, { fps, maxFrames })
 Runs tools/youtube_frames.py to download a video and save frames into the
 job's images/ folder. Returns the number of frames written.
+- generateMasks(job, imagesDir, jobDir)
+Runs tools/make_masks.py to write foreground masks for every photo, so COLMAP
+and Brush ignore the background. Only used when job.removeBackground is set.
 - runYoutubePipeline(job, url, opts)
 Extracts the frames, checks there are at least 8, then runs runPipeline.
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.
+- sampleFileName(job)
+The job's filename in the engine's samples folder.
+- pickSampleFileName(job, name)
+The samples filename to use for a job's display name after a rename.
 - restoreJob(record)
 Rebuilds an in-memory job from a record scanned off disk (see scan.js).
 **************************************************************************/
@@ -63,8 +70,8 @@ import { saveJob } from './status.js'
     can restore them after a restart. Each job:
       { id, status, phase, progress, log[], error, createdAt, resultPath }
     status: queued | running | done | error | cancelled
-    phase:  upload | extract | colmap-features | colmap-matching |
-            colmap-mapping | training | normalize | done
+    phase:  upload | extract | masking | colmap-features |
+            colmap-matching | colmap-mapping | training | normalize | done
 */
 /************************************************************************/
 export const jobs = new Map()
@@ -96,6 +103,7 @@ function makeJob(id) {
     detail: null, // short human-readable sub-status, e.g. "Downloading video… 40%"
     cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
     child: null, // the tool process currently running for this job, if any
+    removeBackground: false, // mask out the background before COLMAP (turntables)
   }
   jobs.set(id, job)
   return job
@@ -501,6 +509,73 @@ export async function runYoutubePipeline(job, url, opts = {}) {
   await runPipeline(job)
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Write a foreground mask for every photo with tools/make_masks.py.
+    Turntable captures need this: the static background otherwise makes
+    COLMAP think the camera never moved, and the splat comes out flat.
+    The photos are left untouched; two mask sets are written instead:
+      <jobDir>/masks/<stem>.png           read by Brush automatically
+      <jobDir>/colmap_stencils/<name>.png passed to COLMAP's mask_path
+    (The COLMAP set lives in its own folder so Brush doesn't see two masks
+    per image.)
+  \param job
+    The job to mask
+  \param imagesDir
+    string
+    The job's images/ folder
+  \param jobDir
+    string
+    The job's folder
+  \return
+    The COLMAP mask folder to pass as --ImageReader.mask_path
+*/
+/************************************************************************/
+async function generateMasks(job, imagesDir, jobDir) {
+  const colmapMaskDir = path.join(jobDir, 'colmap_stencils')
+  // Masking owns whatever is left of the bar before COLMAP's 0.05.
+  const base = Math.min(job.progress ?? 0, 0.05)
+  setPhase(job, 'masking', base)
+  job.detail = 'Loading background-removal model…'
+  saveJob(job)
+
+  let scriptError = null
+  const onData = (line) => {
+    const p = line.match(/^PROGRESS mask ([\d.]+)/)
+    if (p) {
+      const frac = Number(p[1])
+      job.progress = base + (0.05 - base) * frac
+      job.detail = `Removing backgrounds… ${Math.round(frac * 100)}%`
+      saveJob(job, { throttle: true })
+      return
+    }
+    const e = line.match(/^ERROR:\s*(.+)/)
+    if (e) scriptError = e[1]
+  }
+
+  try {
+    await run(
+      job,
+      config.pythonBin,
+      [
+        config.maskScript,
+        imagesDir,
+        '--colmap-out', colmapMaskDir,
+        '--brush-out', path.join(jobDir, 'masks'),
+        '--model', config.maskModel,
+      ],
+      { onData },
+    )
+  } catch (err) {
+    if (scriptError && !job.cancelled) throw new Error(scriptError, { cause: err })
+    throw err
+  } finally {
+    job.detail = null
+  }
+  return colmapMaskDir
+}
+
 // Shown for any flavor of "mapper couldn't build a model from these photos":
 // it exiting non-zero (e.g. no good initial image pair) and it exiting 0 but
 // writing no sparse model both mean the same thing to the user.
@@ -535,6 +610,11 @@ export async function runPipeline(job) {
     if (job.cancelled) return
     job.status = 'running'
 
+    // --- Optional: mask out the background (turntable captures) ---
+    const maskArgs = job.removeBackground
+      ? ['--ImageReader.mask_path', await generateMasks(job, imagesDir, jobDir)]
+      : []
+
     // --- COLMAP: feature extraction ---
     setPhase(job, 'colmap-features', 0.05)
     await run(job, config.colmapBin, [
@@ -542,6 +622,7 @@ export async function runPipeline(job) {
       '--database_path', dbPath,
       '--image_path', imagesDir,
       '--ImageReader.single_camera', '1',
+      ...maskArgs,
       config.colmapExtractionUseGpuFlag, config.colmapUseGpu,
     ])
 
@@ -671,7 +752,7 @@ export async function runPipeline(job) {
     // still servable from resultPath/the Download button either way.
     try {
       fs.mkdirSync(config.engineSamplesDir, { recursive: true })
-      const enginePath = path.join(config.engineSamplesDir, `${job.id.slice(0, 8)}.ply`)
+      const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
       fs.copyFileSync(job.resultPath, enginePath)
       appendLog(job, `Copied to engine samples: ${enginePath}`)
     } catch (err) {
@@ -690,6 +771,56 @@ export async function runPipeline(job) {
     appendLog(job, `\nERROR: ${err.message}`)
     saveJob(job)
   }
+}
+
+// Names Windows won't accept as a filename, with or without an extension.
+const RESERVED_FILE_RE = /^(con|prn|aux|nul|com\d|lpt\d)$/i
+const MAX_SAMPLE_BASE_LENGTH = 60
+
+/************************************************************************/
+/*!
+  \brief
+    The job's filename in the engine's samples folder: the one chosen by
+    the last rename, else the short job id.
+  \param job
+    The job
+  \return
+    string, e.g. "09e367bd.ply" or "Office_Chair.ply"
+*/
+/************************************************************************/
+export function sampleFileName(job) {
+  return job.sampleFile ?? `${job.id.slice(0, 8)}.ply`
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The samples filename for a job's new display name. The name is made
+    filename-safe (spaces and other characters become _); with no usable
+    name it goes back to the short job id. If another model's file
+    already has that name, the short id is added so it isn't overwritten.
+  \param job
+    The job being renamed
+  \param name
+    string or null, the new display name
+  \return
+    string, the filename to rename the job's sample to
+*/
+/************************************************************************/
+export function pickSampleFileName(job, name) {
+  const shortId = job.id.slice(0, 8)
+  const base = (name ?? '')
+    .replace(/[^\w-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, MAX_SAMPLE_BASE_LENGTH)
+  if (!base) return `${shortId}.ply`
+  if (RESERVED_FILE_RE.test(base)) return `${base}_${shortId}.ply`
+
+  const preferred = `${base}.ply`
+  // Case-insensitive: Windows treats Chair.ply and chair.ply as one file.
+  const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
+  if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
+  return `${base}_${shortId}.ply`
 }
 
 /************************************************************************/
@@ -715,6 +846,8 @@ export function restoreJob(record) {
     resultPath: record.resultPath,
     imageCount: record.imageCount,
     source: record.source,
+    name: record.name,
+    sampleFile: record.sampleFile,
     updatedAt: record.updatedAt,
     log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
   })

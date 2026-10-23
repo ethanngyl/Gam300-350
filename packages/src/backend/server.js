@@ -18,8 +18,32 @@ scan.js, pipeline.js", this file focuses on startup, shutdown and HTTP
 matters.
 - getJod(id)
 Returns the job from the in-memory jobs map. If it isn't there, it looks for 
-the job's folder on disk (scanJob) and adopts it with restoreJob. This covers 
+the job's folder on disk (scanJob) and adopts it with restoreJob. This covers
 folders that appeared after startup. Returns null if the job doesn't exist.
+- readCookie(req, name) / startSession(res, userId, remember)
+Read a cookie from the request / log a user in by setting the HttpOnly
+session cookie (the session itself is stored in db.js). With "Remember me"
+the cookie lasts 7 days; without it the browser drops it on close.
+- loadUser / requireUser (middleware)
+loadUser sets req.user from the session cookie on every request;
+requireUser answers 401 when nobody is logged in.
+- canAccessJob(user, jobId) / requireJobAccess (middleware)
+Role check: admins can access every job, users only jobs they created.
+requireJobAccess guards the /jobs/:id routes and answers 404 for someone
+else's job.
+- requireAuthorityKey / callAuthority / clientAuthProblem /
+  logAuthorityFailure
+Centralized accounts (config.authMode). On the VM ('authority'),
+requireAuthorityKey guards /register and /verify-account with the shared
+key. On other machines ('client'), callAuthority forwards signup/login to
+the VM (8 s timeout), clientAuthProblem refuses to run without a key or
+over plain http://, and logAuthorityFailure names setup mistakes in the
+log. 'local' keeps accounts on this machine.
+- validateSignup(body) / checkCredentials(email, password)
+Shared signup rules, and the password check with a per-email limit of 10
+wrong passwords per 15 minutes.
+- limitByIp(limiter) / tooManyAttempts(retryAfterSec)
+Per-IP request limits for /auth/login and /auth/signup (429 when passed).
 - assigneJobId(req, res, next)
 Runs before multer. Generates a UUID job ID, resets a file counter on req, 
 and creates jobs/<id>/images/, so every file in the request goes into the same 
@@ -52,7 +76,15 @@ import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
-import { createUser, findUserByEmail, verifyPassword } from './db.js'
+import
+{
+  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
+  findSessionUser, findUserByEmail, getJobOwnerId,
+  listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
+  verifyPassword,
+}
+from './db.js'
+import { createLimiter } from './ratelimit.js'
 import
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
@@ -62,9 +94,9 @@ from './scan.js'
 import 
 { 
   cancelJob, canonicalYoutubeUrl, jobs,
-  killChildren, makeJob, restoreJob,
-  runPipeline, runYoutubePipeline,
-} 
+  killChildren, makeJob, pickSampleFileName, restoreJob,
+  runPipeline, runYoutubePipeline, sampleFileName,
+}
 from './pipeline.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -90,7 +122,27 @@ for (const record of restored)
 
 console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
 
+// A machine that sends accounts to the VM can't keep its own: their ids and
+// emails would clash with the VM's. Only the first client-mode start finds any.
+if (config.authMode === 'client')
+{
+  const { removed, backupPath } = retireLocalAccounts()
+  if (removed > 0)
+  {
+    console.log(`[backend] client mode: removed ${removed} local account(s); their uploads are now admin-only.`)
+    console.log(`[backend] database backup before that: ${backupPath}`)
+  }
+}
+
 const app = express()
+
+// Behind a reverse proxy (Caddy on the VM) req.ip / req.secure would describe
+// the proxy, not the browser. TRUST_PROXY tells Express which hop to believe.
+if (config.trustProxy)
+{
+  const value = config.trustProxy
+  app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value)
+}
 
 // Parse JSON bodies (used by /jobs/from-youtube). Only applies to
 // application/json requests, so the multipart photo upload is unaffected.
@@ -98,6 +150,9 @@ app.use(express.json())
 
 // Serve the built React frontend (run `npm run build` to produce web-app/dist).
 app.use(express.static(path.join(__dirname, '../web-app/dist')))
+
+// Work out who is calling (from the session cookie) before any route runs.
+app.use(loadUser)
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -123,6 +178,143 @@ async function getJob(id)
   const record = await scanJob(id)
 
   return record ? (jobs.get(id) ?? restoreJob(record)) : null
+}
+
+// --- Accounts and access ----------------------------------------------------
+const SESSION_COOKIE = 'genesis_session'
+
+/************************************************************************/
+/*!
+  \brief
+    Reads one cookie from the request's Cookie header (Express doesn't
+    parse cookies without the cookie-parser package).
+  \param req
+    The request from the user
+  \param name
+  string
+    The cookie's name
+  \return
+    The cookie's value, or null if it isn't set
+*/
+/************************************************************************/
+function readCookie(req, name)
+{
+  for (const part of (req.headers.cookie ?? '').split(';'))
+  {
+    const eq = part.indexOf('=')
+    if (eq !== -1 && part.slice(0, eq).trim() === name)
+    {
+      try
+      {
+        return decodeURIComponent(part.slice(eq + 1).trim())
+      }
+      catch
+      {
+        return null
+      }
+    }
+  }
+  return null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Starts a session for a user and sends it to the browser as an
+    HttpOnly cookie (page scripts can't read it). The browser then sends
+    it with every request to this server, including <img> loads.
+  \param res
+    The response from the backend
+  \param userId
+  number
+    The user's id
+  \param remember
+  bool
+    true ("Remember me" ticked): the cookie lasts SESSION_TTL_MS (7 days).
+    false: no maxAge, so it is a browser-session cookie that is dropped
+    when the browser closes; the server also expires it after
+    SHORT_SESSION_TTL_MS in case the browser stays open or restores it.
+*/
+/************************************************************************/
+function startSession(res, userId, remember)
+{
+  // secure: over HTTPS (e.g. behind Caddy) the browser never sends the
+  // cookie over plain HTTP. Stays off for http://localhost development.
+  const options = { httpOnly: true, sameSite: 'lax', path: '/', secure: res.req.secure }
+  if (remember) options.maxAge = SESSION_TTL_MS
+  res.cookie(SESSION_COOKIE, createSession(userId, remember ? SESSION_TTL_MS : SHORT_SESSION_TTL_MS), options)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware: sets req.user to the logged-in user ({ id, email, name,
+    role, created_at }) or null. Never rejects; requireUser does that.
+  \param req
+    The request from the user
+  \param _res
+    The response from the backend
+  \param next
+    moving on
+*/
+/************************************************************************/
+function loadUser(req, _res, next)
+{
+  req.user = findSessionUser(readCookie(req, SESSION_COOKIE))
+  next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware: rejects the request unless someone is logged in.
+  \return
+    401 if not logged in
+*/
+/************************************************************************/
+function requireUser(req, res, next)
+{
+  if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+  next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether a user may see / use a job: admins can access every job,
+    other users only the jobs they created. A job with no recorded owner
+    (made before accounts existed) is admin-only.
+  \param user
+    req.user
+  \param jobId
+  string
+    The job's id
+  \return
+    bool
+*/
+/************************************************************************/
+function canAccessJob(user, jobId)
+{
+  if (!user) return false
+  if (user.role === 'admin') return true
+  return getJobOwnerId(jobId) === user.id
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware for /jobs/:id routes: login required, and the job must be
+    accessible to the caller. Someone else's job answers 404, not 403, so
+    it can't be used to find out which job ids exist.
+  \return
+    401 if not logged in, 404 if the job isn't theirs
+*/
+/************************************************************************/
+function requireJobAccess(req, res, next)
+{
+  if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+  if (!canAccessJob(req.user, req.params.id)) return res.status(404).json({ error: 'job not found' })
+  next()
 }
 
 // --- Upload handling --------------------------------------------------------
@@ -270,6 +462,212 @@ function shutdown(reason, exitCode = 0)
   process.exit(exitCode)
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Middleware for the authority-only account API (/register,
+    /verify-account). Rejects any request without the shared secret in the
+    X-Auth-Key header. Only meaningful when this instance is the authority.
+  \return
+    503 if this instance isn't the authority, 401 on a missing/wrong key
+*/
+/************************************************************************/
+
+function requireAuthorityKey(req, res, next)
+{
+  if (config.authMode !== 'authority')
+    return res.status(503).json({ error: 'This server is not the account authority.' })
+  const key = Buffer.from(req.get('X-Auth-Key') ?? '')
+  // constant-time compare so the key can't be guessed by timing. Byte
+  // lengths must match first or timingSafeEqual throws.
+  const expected = Buffer.from(config.authApiKey)
+  if (expected.length === 0 || key.length !== expected.length ||
+      !crypto.timingSafeEqual(key, expected))
+    return res.status(401).json({ error: 'Unauthorized.' })
+  next()
+}
+
+
+/************************************************************************/
+/*!
+  \brief
+    Call the account authority (VM). Adds the shared API key and parses the
+    JSON reply. Gives up after 8 seconds so a VM that is down can't leave
+    the Sign in button spinning. Throws on a network failure or timeout so
+    the route can answer 503.
+  \param endpoint  '/register' or '/verify-account'
+  \param body      the JSON payload
+  \return          { status, data }
+*/
+/************************************************************************/
+async function callAuthority(endpoint, body)
+{
+  const resp = await fetch(`${config.vmAuthUrl}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-Key': config.authApiKey },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
+  })
+  const data = await resp.json().catch(() => ({}))
+  return { status: resp.status, data }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    In client mode, why this machine can't talk to the VM safely, or null
+    if it can. Checked before every call, and logged once at startup.
+  \return
+    string describing the problem, or null
+*/
+/************************************************************************/
+function clientAuthProblem()
+{
+  if (!config.authApiKey)
+    return 'AUTH_API_KEY is not set (see packages/src/backend/.env.example).'
+  let url
+  try
+  {
+    url = new URL(config.vmAuthUrl)
+  }
+  catch
+  {
+    return `VM_AUTH_URL "${config.vmAuthUrl}" is not a valid URL.`
+  }
+  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.protocol !== 'https:' && !isLocal && !config.allowInsecureAuth)
+    return `VM_AUTH_URL must be https:// (passwords are sent to it). ` +
+      `Set AUTH_ALLOW_HTTP=1 only for temporary testing.`
+  return null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Turns an unexpected reply from the VM into a log line naming the likely
+    cause, so a setup mistake doesn't look like a wrong password.
+  \param endpoint
+    '/register' or '/verify-account'
+  \param status
+    The VM's HTTP status
+  \param data
+    The VM's JSON reply
+*/
+/************************************************************************/
+function logAuthorityFailure(endpoint, status, data)
+{
+  const cause =
+    status === 401 ? 'the VM rejected this machine\'s AUTH_API_KEY (keys must match exactly)' :
+    status === 503 ? 'the VM is not running with AUTH_MODE=authority' :
+    `unexpected reply ${status}: ${JSON.stringify(data)}`
+  console.error(`[backend] account authority ${endpoint} failed -- ${cause}`)
+}
+
+// --- Rate limits -------------------------------------------------------------
+// Slow down password guessing and signup spam. Per-IP limits run on every
+// machine; the per-email failure limit runs where passwords are checked
+// (authority or local), so attempts relayed through client machines count too.
+const loginIpLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 30 })
+const signupIpLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
+const failedLoginLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 10 })
+
+/************************************************************************/
+/*!
+  \brief
+    The message for a rate-limited request.
+  \param retryAfterSec
+  number
+    Seconds until the limit lifts
+  \return
+    string
+*/
+/************************************************************************/
+function tooManyAttempts(retryAfterSec)
+{
+  const minutes = Math.max(1, Math.ceil(retryAfterSec / 60))
+  return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware factory: counts each request against the caller's IP and
+    answers 429 once the limiter's maximum is passed.
+  \param limiter
+    A limiter from createLimiter
+  \return
+    Express middleware
+*/
+/************************************************************************/
+function limitByIp(limiter)
+{
+  return (req, res, next) =>
+  {
+    const { allowed, retryAfterSec } = limiter.hit(req.ip)
+    if (allowed) return next()
+    res.set('Retry-After', String(retryAfterSec))
+    res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Checks a signup body. Shared by /auth/signup (authority / local) and
+    the VM's /register so the rules stay identical.
+  \param body
+    { name, email, password }
+  \return
+    { error } if invalid, else { name, email, password } with name and
+    email trimmed
+*/
+/************************************************************************/
+function validateSignup(body)
+{
+  const { name, email, password } = body || {}
+  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+  if (!EMAIL_RE.test(trimmedEmail)) return { error: 'Enter a valid email address.' }
+  if (typeof password !== 'string' || password.length < 6)
+    return { error: 'Password must be at least 6 characters.' }
+  if (!trimmedName) return { error: 'Enter your name.' }
+  return { name: trimmedName, email: trimmedEmail, password }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Checks an email + password against this machine's accounts, with the
+    per-email failure limit: after 10 wrong passwords in 15 minutes that
+    email is locked until the window ends, even with the right password.
+    A correct password clears the count. Shared by /auth/login (authority /
+    local) and the VM's /verify-account.
+  \param email
+  string
+  \param password
+  string
+  \return
+    { status: 'ok', user } | { status: 'invalid' } |
+    { status: 'locked', retryAfterSec }
+*/
+/************************************************************************/
+async function checkCredentials(email, password)
+{
+  const key = email.trim().toLowerCase()
+  const lock = failedLoginLimiter.check(key)
+  if (!lock.allowed) return { status: 'locked', retryAfterSec: lock.retryAfterSec }
+
+  const user = findUserByEmail(email.trim())
+  if (!user || !(await verifyPassword(password, user.password_hash)))
+  {
+    failedLoginLimiter.hit(key)
+    return { status: 'invalid' }
+  }
+  failedLoginLimiter.reset(key)
+  return { status: 'ok', user }
+}
+
+
 // ----- End of Functions ----------------------------------------------------- //
 
 // ----- Start of Routes ------------------------------------------------------ // 
@@ -279,12 +677,13 @@ function shutdown(reason, exitCode = 0)
   \brief
     Create a reconstruction job from uploaded photos. Returns a job id 
     immediately and runs COLMAP + Brush in the background -- the frontend 
-    polls for status.
-  \return 
-    400 if less than 8 photos given, 202 if successful
+    polls for status. The job is owned by the logged-in user. requireUser
+    runs before assignJobId so a logged-out request never creates a folder.
+  \return
+    401 if not logged in, 400 if less than 8 photos given, 202 if successful
 */
 /************************************************************************/
-app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => 
+app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) =>
 {
   const files = req.files || []
   if (files.length < 8)
@@ -296,9 +695,13 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
       error: `Need at least 8 photos (got ${files.length}). More overlapping photos = better reconstruction.`,
     })
   }
+  setJobOwner(req.jobId, req.user.id)
   const job = makeJob(req.jobId)
   job.imageCount = files.length
   job.source = 'upload'
+  // Optional multipart text field: mask out the background before COLMAP
+  // (needed for turntable captures, see generateMasks in pipeline.js).
+  job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
   saveJob(job) // gives upload-only jobs a status record from the start
   runPipeline(job) // fire-and-forget; do not await
   res.status(202).json({ id: job.id, imageCount: files.length })
@@ -310,21 +713,28 @@ app.post('/upload', assignJobId, upload.array('images', config.maxFiles), onlyIm
     List every job folder that has images, newest first. The folders on 
     disk are scanned on each call (see scan.js), so photos and results from 
     before a restart -- or dropped in by hand -- show up. A job that is 
-    live in memory keeps its live status: the disk can't tell "running" 
-    from "interrupted".
-  \return 
-    A reecord of every job's details 
+    live in memory keeps its live status: the disk can't tell "running"
+    from "interrupted". Admins get every job; other users only the jobs
+    they created.
+  \return
+    401 if not logged in, else a record of every visible job's details
 */
 /************************************************************************/
-app.get('/jobs', async (_req, res) => 
+app.get('/jobs', requireUser, async (req, res) =>
 {
-  const records = await scanJobs(config.jobsDir)
+  let records = await scanJobs(config.jobsDir)
+  if (req.user.role !== 'admin')
+  {
+    const owned = listOwnedJobIds(req.user.id)
+    records = records.filter((record) => owned.has(record.id))
+  }
   res.json(
     records.map((record) =>
     {
       const job = jobs.get(record.id) ?? restoreJob(record);
       return {
         id: record.id,
+        name: job.name ?? null,
         status: job.status,
         phase: job.phase,
         progress: job.progress,
@@ -345,13 +755,14 @@ app.get('/jobs', async (_req, res) =>
 /*!
   \brief
     Serve a single uploaded image. id/name are whitelisted to plain filename
-    characters so a request can't use `..` or slashes to escape the jobs 
-    folder.
-  \return 
-    404 if image doesn't exist or else the image itself
+    characters so a request can't use `..` or slashes to escape the jobs
+    folder. Only the job's owner or an admin can load it.
+  \return
+    401 if not logged in, 404 if image doesn't exist or isn't theirs, else
+    the image itself
 */
 /************************************************************************/
-app.get('/jobs/:id/images/:name', (req, res) => 
+app.get('/jobs/:id/images/:name', requireJobAccess, (req, res) =>
 {
   const { id, name } = req.params
   if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
@@ -369,14 +780,14 @@ app.get('/jobs/:id/images/:name', (req, res) =>
   \brief
     Create a reconstruction job from a YouTube link. Frames are extracted 
     server side (tools/youtube_frames.py) into the job's images/ folder, 
-    then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?: 
-    number, maxFrames?: number }
-  \return 
-    400 if url doesn't work, else 202 and starts a job and runs youtube
-    pipeline
+    then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?:
+    number, maxFrames?: number }. The job is owned by the logged-in user.
+  \return
+    401 if not logged in, 400 if url doesn't work, else 202 and starts a
+    job and runs youtube pipeline
 */
 /************************************************************************/
-app.post('/jobs/from-youtube', (req, res) => 
+app.post('/jobs/from-youtube', requireUser, (req, res) =>
 {
   const { url, fps, maxFrames } = req.body || {}
   // Only single YouTube videos; the canonical form drops any playlist params.
@@ -390,6 +801,7 @@ app.post('/jobs/from-youtube', (req, res) =>
 
   const jobId = crypto.randomUUID()
   fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
+  setJobOwner(jobId, req.user.id)
   const job = makeJob(jobId)
   job.source = 'youtube'
   saveJob(job)
@@ -411,13 +823,14 @@ app.post('/jobs/from-youtube', (req, res) =>
 /************************************************************************/
 /*!
   \brief
-    Poll a job's status (bounded log tail, not the full log).
-  \return 
-    404 if job not found
+    Poll a job's status (bounded log tail, not the full log). Owner or
+    admin only.
+  \return
+    401 if not logged in, 404 if job not found or isn't theirs
     else status, phase, progress, error and the last 40 log lines
 */
 /************************************************************************/
-app.get('/jobs/:id', async (req, res) => 
+app.get('/jobs/:id', requireJobAccess, async (req, res) =>
 {
   const job = await getJob(req.params.id)
   if (!job) 
@@ -431,6 +844,7 @@ app.get('/jobs/:id', async (req, res) =>
     error: job.error,
     updatedAt: job.updatedAt ?? null,
     imageCount: job.imageCount ?? null,
+    removeBackground: !!job.removeBackground,
     hasResult: job.status === 'done' && !!job.resultPath,
     logTail: job.log.slice(-40),
   })
@@ -441,13 +855,15 @@ app.get('/jobs/:id', async (req, res) =>
   \brief
     Cancel a running job: kills its COLMAP / Brush / python process so the 
     GPU is freed immediately. Idempotent; a finished job answers 409.
-  \return 
-    404 if job not found
+    Owner or admin only.
+  \return
+    401 if not logged in
+    404 if job not found or isn't theirs
     409 if job is finished
     kills processes and frees GPU
 */
 /************************************************************************/
-app.delete('/jobs/:id', async (req, res) => 
+app.delete('/jobs/:id', requireJobAccess, async (req, res) =>
 {
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
@@ -462,12 +878,12 @@ app.delete('/jobs/:id', async (req, res) =>
 /************************************************************************/
 /*!
   \brief
-    Download / stream the finished splat .ply.
-  \return 
-    404 if result is not ready
+    Download / stream the finished splat .ply. Owner or admin only.
+  \return
+    401 if not logged in, 404 if result is not ready or isn't theirs
 */
 /************************************************************************/
-app.get('/jobs/:id/result.ply', async (req, res) => 
+app.get('/jobs/:id/result.ply', requireJobAccess, async (req, res) =>
 {
   const job = await getJob(req.params.id)
   if (!job || job.status !== 'done' || !job.resultPath) 
@@ -478,6 +894,92 @@ app.get('/jobs/:id/result.ply', async (req, res) =>
   res.sendFile(job.resultPath)
 })
 
+const MAX_JOB_NAME_LENGTH = 80
+
+/************************************************************************/
+/*!
+  \brief
+    Rename a job (the model and its photo batch share one name). Body:
+    { name: string }. An empty name resets it to the default. The
+    display name is saved in status.json, and the model's copy in the
+    engine's samples folder is renamed to match (see pickSampleFileName).
+    The job folders keep their id.
+  \return
+    404 if job not found, 400 if the name is too long, 409 if the sample
+    file can't be renamed (e.g. open in another program), else the new
+    name and sample filename
+*/
+/************************************************************************/
+app.patch('/jobs/:id', async (req, res) =>
+{
+  const job = await getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
+
+  const { name } = req.body || {}
+  const trimmed = typeof name === 'string' ? name.trim() : ''
+  if (trimmed.length > MAX_JOB_NAME_LENGTH)
+    return res.status(400).json({ error: `Name must be at most ${MAX_JOB_NAME_LENGTH} characters.` })
+
+  const newName = trimmed || null
+  const oldFile = sampleFileName(job)
+  const newFile = pickSampleFileName(job, newName)
+  if (newFile !== oldFile)
+  {
+    try
+    {
+      await fs.promises.rename(
+        path.join(config.engineSamplesDir, oldFile),
+        path.join(config.engineSamplesDir, newFile),
+      )
+    }
+    catch (err)
+    {
+      // No copy yet (still processing, or trained before copies existed):
+      // the new filename is still recorded, so the pipeline copies under it.
+      if (err.code !== 'ENOENT')
+        return res.status(409).json({ error: `Couldn't rename ${oldFile} in the engine samples folder (${err.code}). Close any program using it and try again.` })
+    }
+  }
+
+  job.name = newName
+  job.sampleFile = newFile
+  saveJob(job)
+  res.json({ id: job.id, name: job.name, sampleFile: newFile })
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Permanently delete a job: its photos, COLMAP files, splat output and
+    the copy in the engine's samples folder. A job still processing is
+    cancelled first so its tools stop writing into the folders.
+  \return
+    404 if job not found, else 200 once the folders are gone
+*/
+/************************************************************************/
+app.delete('/jobs/:id/files', async (req, res, next) =>
+{
+  const job = await getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
+
+  cancelJob(job) // no-op for a finished job
+  jobs.delete(job.id)
+
+  try
+  {
+    // Retries cover Windows briefly locking files of a tool that was just killed.
+    const rmOpts = { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }
+    await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
+    await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
+    await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
+    res.json({ id: job.id, deleted: true })
+  }
+  catch (err)
+  {
+    next(err)
+  }
+})
+
 const EMAIL_RE = /^\S+@\S+\.\S+$/
 
 /************************************************************************/
@@ -486,9 +988,9 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/
     Shapes a users row into what the frontend keeps as the session. Never
     includes password_hash.
   \param user
-    { email, name, createdAt } or a users row
+    { email, name, role, createdAt } or a users row
   \return
-    { name, email, memberSince }
+    { name, email, role, memberSince }
 */
 /************************************************************************/
 function publicUser(user)
@@ -498,6 +1000,7 @@ function publicUser(user)
   return {
     name: user.name,
     email: user.email,
+    role: user.role,
     memberSince: created.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
   }
 }
@@ -505,16 +1008,19 @@ function publicUser(user)
 /************************************************************************/
 /*!
   \brief
-    Create an account. Body: { name, email, password }. The password is
-    stored only as a salted scrypt hash (see db.js).
+    Create an account and log it in. Body: { name, email, password,
+    remember? }. The password is stored only as a salted scrypt hash (see
+    db.js). New accounts are always role 'user'. remember: true keeps the
+    login after the browser closes (see startSession).
   \return
-    400 if input is invalid, 409 if the email is taken, else 201 and the
-    user
+    400 if input is invalid, 409 if the email is taken, else 201, the
+    user, and a session cookie
 */
 /************************************************************************/
+/*
 app.post('/auth/signup', async (req, res, next) =>
 {
-  const { name, email, password } = req.body || {}
+  const { name, email, password, remember } = req.body || {}
   const trimmedEmail = typeof email === 'string' ? email.trim() : ''
   const trimmedName = typeof name === 'string' ? name.trim() : ''
 
@@ -528,6 +1034,7 @@ app.post('/auth/signup', async (req, res, next) =>
   try
   {
     const user = await createUser({ email: trimmedEmail, name: trimmedName, password })
+    startSession(res, user.id, remember === true)
     res.status(201).json(publicUser(user))
   }
   catch (err)
@@ -536,20 +1043,79 @@ app.post('/auth/signup', async (req, res, next) =>
       return res.status(409).json({ error: 'An account with that email already exists.' })
     next(err)
   }
+})*/
+
+
+app.post('/auth/signup', limitByIp(signupIpLimiter), async (req, res, next) =>
+{
+  const { remember } = req.body || {}
+
+  // Authority (VM) or local: the account lives in this machine's database.
+  if (config.authMode !== 'client')
+  {
+    const input = validateSignup(req.body)
+    if (input.error) return res.status(400).json({ error: input.error })
+    try
+    {
+      const user = await createUser(input)
+      startSession(res, user.id, remember === true)
+      return res.status(201).json(publicUser(user))
+    }
+    catch (err)
+    {
+      if (err.code === 'EMAIL_TAKEN')
+        return res.status(409).json({ error: 'An account with that email already exists.' })
+      return next(err)
+    }
+  }
+
+  // Client: forward to the VM, mirror the returned user, then start a local session.
+  const problem = clientAuthProblem()
+  if (problem)
+  {
+    console.error(`[backend] signup refused -- ${problem}`)
+    return res.status(503).json({ error: 'Account service is not configured on this machine.' })
+  }
+  try
+  {
+    const { name, email, password } = req.body || {}
+    const { status, data } = await callAuthority('/register', { name, email, password })
+    if (status === 201)
+    {
+      upsertLocalUser(data)                 // mirror VM id -> local users
+      startSession(res, data.id, remember === true)
+      // The mirrored row, so memberSince comes from a real stored date.
+      return res.status(201).json(publicUser(findUserByEmail(data.email)))
+    }
+    // The user's own mistakes (bad input, email taken, too many tries) pass through.
+    if (status === 400 || status === 409 || status === 429)
+      return res.status(status).json({ error: data.error || 'Signup failed.' })
+    logAuthorityFailure('/register', status, data)
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+  }
+  catch (err)
+  {
+    console.error('[backend] account authority call failed:', err)
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+  }
 })
+
 
 /************************************************************************/
 /*!
   \brief
-    Sign in. Body: { email, password }. Unknown email and wrong password
-    get the same answer so the endpoint can't be used to probe accounts.
+    Sign in. Body: { email, password, remember? }. Unknown email and wrong
+    password get the same answer so the endpoint can't be used to probe
+    accounts. remember: true keeps the login after the browser closes.
   \return
-    401 if the credentials don't match, else 200 and the user
+    401 if the credentials don't match, else 200, the user, and a session
+    cookie
 */
 /************************************************************************/
+/*
 app.post('/auth/login', async (req, res, next) =>
 {
-  const { email, password } = req.body || {}
+  const { email, password, remember } = req.body || {}
   if (typeof email !== 'string' || typeof password !== 'string')
     return res.status(400).json({ error: 'Enter your email and password.' })
 
@@ -558,12 +1124,101 @@ app.post('/auth/login', async (req, res, next) =>
     const user = findUserByEmail(email.trim())
     if (!user || !(await verifyPassword(password, user.password_hash)))
       return res.status(401).json({ error: 'Incorrect email or password.' })
+    startSession(res, user.id, remember === true)
     res.json(publicUser(user))
   }
   catch (err)
   {
     next(err)
   }
+})*/
+
+
+app.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) =>
+{
+  const { email, password, remember } = req.body || {}
+  if (typeof email !== 'string' || typeof password !== 'string')
+    return res.status(400).json({ error: 'Enter your email and password.' })
+
+  // Authority (VM) or local: check this machine's database.
+  if (config.authMode !== 'client')
+  {
+    try
+    {
+      const result = await checkCredentials(email, password)
+      if (result.status === 'locked')
+      {
+        res.set('Retry-After', String(result.retryAfterSec))
+        return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+      }
+      if (result.status === 'invalid')
+        return res.status(401).json({ error: 'Incorrect email or password.' })
+      startSession(res, result.user.id, remember === true)
+      return res.json(publicUser(result.user))
+    }
+    catch (err) { return next(err) }
+  }
+
+  // Client: verify against the VM, mirror the user, start a local session.
+  const problem = clientAuthProblem()
+  if (problem)
+  {
+    console.error(`[backend] login refused -- ${problem}`)
+    return res.status(503).json({ error: 'Account service is not configured on this machine.' })
+  }
+  try
+  {
+    const { status, data } = await callAuthority('/verify-account', { email, password })
+    if (status === 200 && data.valid)
+    {
+      upsertLocalUser(data)
+      startSession(res, data.id, remember === true)
+      // The mirrored row, so memberSince comes from a real stored date.
+      return res.json(publicUser(findUserByEmail(data.email)))
+    }
+    if (status === 200)
+      return res.status(401).json({ error: 'Incorrect email or password.' })
+    if (status === 429)
+      return res.status(429).json({ error: data.error || tooManyAttempts(0) })
+    logAuthorityFailure('/verify-account', status, data)
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+  }
+  catch (err)
+  {
+    console.error('[backend] account authority call failed:', err)
+    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+  }
+})
+
+
+/************************************************************************/
+/*!
+  \brief
+    Who is logged in, according to the session cookie. Lets the frontend
+    check a saved session is still valid (and pick up role changes).
+  \return
+    401 if not logged in, else the user
+*/
+/************************************************************************/
+app.get('/auth/me', requireUser, (req, res) =>
+{
+  res.json(publicUser(req.user))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Log out: deletes the session and clears the cookie. Safe to call when
+    already logged out.
+  \return
+    204
+*/
+/************************************************************************/
+app.post('/auth/logout', (req, res) =>
+{
+  deleteSession(readCookie(req, SESSION_COOKIE))
+  res.clearCookie(SESSION_COOKIE, { path: '/' })
+  res.status(204).end()
 })
 
 // /wiki with no page → show Home
@@ -612,6 +1267,70 @@ function serveWikiPage(rawPage, res) {
     `)
   })
 }
+
+/************************************************************************/
+/*!
+  \brief
+    Authority-only: create an account in the VM's database. Called by a
+    client backend's /auth/signup, not by browsers. Returns the new user's
+    canonical id so clients can own jobs by it.
+  \return
+    400 invalid input, 409 email taken, 201 { id, email, name, role }
+*/
+/************************************************************************/
+
+app.post('/register', requireAuthorityKey, async (req, res, next) =>
+{
+  const input = validateSignup(req.body)
+  if (input.error) return res.status(400).json({ error: input.error })
+  try
+  {
+    const user = await createUser(input)
+    res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role })
+  }
+  catch (err)
+  {
+    if (err.code === 'EMAIL_TAKEN')
+      return res.status(409).json({ error: 'An account with that email already exists.' })
+    next(err)
+  }
+})
+
+
+/************************************************************************/
+/*!
+  \brief
+    Authority-only: check credentials against the VM's database. Unknown
+    email and wrong password return the same { valid: false } so the
+    endpoint can't be used to probe which emails are registered. Shares
+    the per-email failure limit with this VM's own /auth/login.
+  \return
+    200 { valid: true, id, email, name, role } or { valid: false },
+    429 when that email has had too many wrong passwords
+*/
+/************************************************************************/
+
+app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
+{
+  const { email, password } = req.body || {}
+  if (typeof email !== 'string' || typeof password !== 'string')
+    return res.status(400).json({ error: 'Email and password required.' })
+  try
+  {
+    const result = await checkCredentials(email, password)
+    if (result.status === 'locked')
+      return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+    if (result.status === 'invalid')
+      return res.json({ valid: false })
+    const { user } = result
+    res.json({ valid: true, id: user.id, email: user.email, name: user.name, role: user.role })
+  }
+  catch (err)
+  {
+    next(err)
+  }
+})
+
 
 // ----- End of Routes -------------------------------------------------------- //
 
@@ -704,7 +1423,27 @@ app.listen(config.port, () =>
   console.log(`[backend] http://localhost:${config.port}`)
   console.log(`[backend] COLMAP: ${config.colmapBin}`)
   console.log(`[backend] Brush:  ${config.brushBin}`)
+  console.log(`[backend] Python: ${config.pythonBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
+  // Which account mode this machine is in, and whether it can work.
+  if (config.authMode === 'authority')
+  {
+    console.log('[backend] accounts: authority (this machine holds the account database)')
+    if (!config.authApiKey)
+      console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
+  }
+  else if (config.authMode === 'client')
+  {
+    console.log(`[backend] accounts: client -> ${config.vmAuthUrl}`)
+    const problem = clientAuthProblem()
+    if (problem) console.warn(`[backend] *** sign up / log in will not work: ${problem} ***`)
+    else if (config.allowInsecureAuth && new URL(config.vmAuthUrl).protocol !== 'https:')
+      console.warn('[backend] *** AUTH_ALLOW_HTTP=1: passwords are sent to the VM unencrypted. Testing only. ***')
+  }
+  else
+  {
+    console.log('[backend] accounts: local (this machine\'s own database)')
+  }
   // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
   getHardwareInfo().then((hw) =>
     console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))

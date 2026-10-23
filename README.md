@@ -40,13 +40,13 @@ Application Installations:
 
 ## Run with Docker
 Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
-- Open a terminal in the repo root
-- Start: `docker compose up -d --build`, then open http://localhost:5005
-- Logs: `docker compose logs -f app`
-- Public link for teammates: `docker compose --profile tunnel up -d`, the trycloudflare.com URL is printed in `docker compose logs tunnel`
-- Stop: `docker compose down` (uploaded jobs and results are kept in a Docker volume)
-- NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
-- Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker-compose.yml for quick tests
+- Docker files live in the `docker/` folder. Open a terminal in the repo root
+- Start: `docker compose -f docker/docker-compose.yml up -d --build`, then open http://localhost:5005
+- Logs: `docker compose -f docker/docker-compose.yml logs -f app`
+- Public link for teammates: `docker compose -f docker/docker-compose.yml --profile tunnel up -d`, the trycloudflare.com URL is printed in `docker compose -f docker/docker-compose.yml logs tunnel`
+- Stop: `docker compose -f docker/docker-compose.yml down` (uploaded jobs and results are kept in a Docker volume)
+- NVIDIA GPU: `docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up -d --build`
+- Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker/docker-compose.yml for quick tests
 - The engine's desktop editor is not included (build it natively as below), but its renderer is: the image compiles it to WebAssembly for the web app's viewer
 
 ## How to Run Engine
@@ -57,6 +57,14 @@ Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in 
 - Once you are in the solution, right click on codefine and set it as the start up project
 - Start the debugger
 - .ply files can be added into the engine/assets folder
+
+## How to Package the Engine as a Desktop App
+Builds a Release copy that runs on any Windows PC, with no Visual Studio, Qt or repo needed.
+- Run engine/run.bat once first (downloads Qt and sets up the build folder)
+- Double click engine/package.bat
+- engine/dist/Codefine.exe is the ready-to-run app; engine/build/Codefine-0.1.0-win64.zip is the same folder zipped for sharing
+- With NSIS installed (https://nsis.sourceforge.io), package.bat also produces a Codefine-0.1.0-win64.exe installer with Start Menu and desktop shortcuts
+- The sample splats add ~180 MB; configure with `-DCODEFINE_PACKAGE_SAMPLES=OFF` to leave them out
 
 ## Engine renderer in the web app
 The web app's 3D viewer can render with the engine's own splat renderer (`engine/src/splat`, `engine/src/gfx`) compiled to WebAssembly, instead of the Three.js viewer.
@@ -73,6 +81,11 @@ The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), 
 - Select a model in the **Scene** panel; edit its name and position in the **Inspector**. F2 renames, Delete removes it from the scene (the file is untouched).
 - Camera: right-drag to orbit, left-drag to pan, scroll to zoom, Home to recenter. With the viewport focused, WASD/Arrow keys nudge the selected model and Esc deselects.
 - Switch between Point Cloud and Gaussian Splat rendering from the toolbar (Ctrl+1 / Ctrl+2).
+- Export: File > Export (Ctrl+E), or right-click a model in the **Scene** panel, converts the selected model (or the whole scene) to another format. Trimming and position changes are included.
+  - .glb (glTF), .obj, .ply: points, or a mesh with one coloured ellipsoid per splat, for Blender, Unity, Unreal, MeshLab, etc.
+  - .stl: mesh without colour, for 3D printing / CAD
+  - Gaussian splat .ply or .splat: stays a splat, for Codefine and other splat viewers (view-dependent colour is not kept)
+  - Mesh exports get large: raise "Min opacity" to drop faint haze splats, and use Low mesh detail for big scans
 - Engine output (`std::cout`/`std::cerr` and Qt messages) appears in the **Console** panel. Help > Controls lists every shortcut.
 
 ## Current Features

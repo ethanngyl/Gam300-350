@@ -13,6 +13,7 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 **************************************************************************/
 #include "ui/Viewport.h"
 
+#include "ui/AssetPaths.h"
 #include "ui/ImGuiQtBackend.h"
 #include "splat/SplatRenderer.h"
 
@@ -71,6 +72,11 @@ void Viewport::initializeGL() {
     // ImGui setup -- foundation for the sandbox UI in later milestones.
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    // Keep imgui.ini in the per-user data folder: the working directory of an
+    // installed copy is often read-only (Program Files) or arbitrary.
+    static const std::string iniPath =
+        (AssetPaths::UserDataDir() + "/imgui.ini").toStdString();
+    ImGui::GetIO().IniFilename = iniPath.c_str();
     ImGui::StyleColorsDark();
     ImGuiQtBackend::Init();
     ImGui_ImplOpenGL3_Init("#version 330");

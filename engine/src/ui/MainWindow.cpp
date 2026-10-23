@@ -15,12 +15,14 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/Viewport.h"
 #include "ui/MainWindow.h"
 
+#include "splat/SplatExporter.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
 #include "splat/SplatTrimmer.h"
 #include "ui/AssetBrowserPanel.h"
 #include "ui/AudioPanel.h"
 #include "ui/ConsolePanel.h"
+#include "ui/ExportDialog.h"
 #include "ui/InspectorPanel.h"
 #include "ui/OutlinerPanel.h"
 #include "ui/TrimDialog.h"
@@ -80,6 +82,7 @@ namespace {
     const QString kTrimCropKey = QStringLiteral("trim/cropPct");
     const QString kTrimDivisionsKey = QStringLiteral("trim/voxelDivisions");
     const QString kTrimMinPerVoxelKey = QStringLiteral("trim/minPerVoxel");
+    const QString kExportFolderKey = QStringLiteral("files/exportFolder");
 
     bool IsPlyFile(const QString& path) {
         return path.endsWith(".ply", Qt::CaseInsensitive);
@@ -144,10 +147,12 @@ MainWindow::MainWindow() {
 }
 
 MainWindow::~MainWindow() {
-    // Never destroy a running QThread: wait for an in-flight import to finish.
-    if (m_loadThread) {
-        m_loadThread->wait();
-        delete m_loadThread.data();
+    // Never destroy a running QThread: wait for an in-flight import or export to finish.
+    for (QThread* thread : { m_loadThread.data(), m_exportThread.data() }) {
+        if (thread) {
+            thread->wait();
+            delete thread;
+        }
     }
 }
 
@@ -169,6 +174,12 @@ void MainWindow::createActions() {
             importSplat(path);
         }
     });
+
+    m_exportAction = new QAction(s->standardIcon(QStyle::SP_DialogSaveButton), "&Export...", this);
+    m_exportAction->setShortcut(QKeySequence("Ctrl+E"));
+    m_exportAction->setStatusTip("Convert the selected model or the whole scene to .glb, .obj, .ply, .stl or .splat");
+    m_exportAction->setEnabled(false); // until a model is loaded
+    connect(m_exportAction, &QAction::triggered, this, [this] { exportModels(); });
 
     m_exitAction = new QAction("E&xit", this);
     m_exitAction->setShortcut(QKeySequence("Ctrl+Q"));
@@ -267,6 +278,8 @@ void MainWindow::createMenus() {
     fileMenu->addAction(m_trimOnImportAction);
     m_recentMenu = fileMenu->addMenu("Open &Recent");
     fileMenu->addSeparator();
+    fileMenu->addAction(m_exportAction);
+    fileMenu->addSeparator();
     fileMenu->addAction(m_exitAction);
 
     QMenu* editMenu = menuBar()->addMenu("&Edit");
@@ -304,6 +317,7 @@ void MainWindow::createToolBar() {
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
     m_toolBar->addAction(m_importAction);
+    m_toolBar->addAction(m_exportAction);
     m_toolBar->addSeparator();
 
     auto* modeLabel = new QLabel("  Render: ", m_toolBar);
@@ -375,6 +389,10 @@ void MainWindow::createDocks() {
         deleteSelectedModel();
     });
     connect(m_outliner, &OutlinerPanel::toggleHiddenRequested, this, &MainWindow::toggleModelHidden);
+    connect(m_outliner, &OutlinerPanel::exportRequested, this, [this](int index) {
+        selectModel(index);
+        exportModels();
+    });
     connect(m_inspector, &InspectorPanel::nameChanged, this, [this](const QString& name) {
         if (SplatRenderer* renderer = m_viewport->renderer()) {
             renameModel(renderer->GetSelectedModel(), name);
@@ -702,6 +720,89 @@ void MainWindow::setRenderMode(int mode) {
     }
 }
 
+void MainWindow::exportModels() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer || renderer->ModelCount() == 0 || m_exportThread) {
+        return;
+    }
+
+    const int selected = renderer->GetSelectedModel();
+    const QString selectedName = selected >= 0 ? QString::fromStdString(renderer->GetModelName(selected)) : QString();
+    ExportDialog dialog(selectedName, selected >= 0 ? renderer->GetSplatCount(selected) : 0,
+                        renderer->TotalSplatCount(), this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const ExportOptions options = dialog.options();
+    const bool wholeScene = dialog.wholeScene();
+
+    // Suggest "<model name>.<ext>" (or "scene.<ext>") in the last export folder.
+    const QString extension = ExportFormatExtension(options.format);
+    QString baseName = wholeScene ? QStringLiteral("scene") : QFileInfo(selectedName).completeBaseName();
+    if (baseName.isEmpty()) baseName = QStringLiteral("model");
+    QSettings settings;
+    const QString folder = settings.value(kExportFolderKey, m_assets->folder()).toString();
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export", QDir(folder).filePath(baseName + extension),
+        QString("%1 (*%2)").arg(ExportFormatName(options.format), extension));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (!path.endsWith(extension, Qt::CaseInsensitive)) {
+        path += extension;
+    }
+    settings.setValue(kExportFolderKey, QFileInfo(path).absolutePath());
+
+    // Snapshot the splats: the user can delete or move models while the export runs.
+    auto splatData = std::make_shared<std::vector<std::vector<SplatVertex>>>();
+    auto transforms = std::make_shared<std::vector<glm::mat4>>();
+    for (int i = 0; i < static_cast<int>(renderer->ModelCount()); ++i) {
+        if (!wholeScene && i != selected) continue;
+        const SplatModel* model = renderer->GetModel(i);
+        splatData->push_back(model->splats());
+        transforms->push_back(model->GetTransform());
+    }
+
+    const QString fileName = QFileInfo(path).fileName();
+    qInfo("Exporting %s...", qPrintable(QDir::toNativeSeparators(path)));
+    m_exportAction->setEnabled(false);
+    statusBar()->showMessage(QString("Exporting %1...").arg(fileName));
+
+    auto result = std::make_shared<ExportResult>();
+    const std::filesystem::path nativePath = path.toStdWString();
+    m_exportThread = QThread::create([splatData, transforms, result, nativePath, options] {
+        std::vector<ExportSource> sources;
+        for (size_t i = 0; i < splatData->size(); ++i) {
+            sources.push_back({ &(*splatData)[i], (*transforms)[i] });
+        }
+        *result = ExportSplats(sources, nativePath, options);
+    });
+    connect(m_exportThread, &QThread::finished, this, [this, result, path, fileName] {
+        m_exportThread->deleteLater();
+        m_exportThread = nullptr;
+        refreshScenePanels(); // re-enables the export action
+
+        if (!result->ok) {
+            qWarning("Export of %s failed: %s", qPrintable(fileName), result->error.c_str());
+            statusBar()->showMessage(QString("Export of %1 failed").arg(fileName), kStatusMessageMs);
+            QMessageBox::warning(this, "Export Failed",
+                                 QString("%1 could not be exported.\n\n%2")
+                                     .arg(fileName, QString::fromStdString(result->error)));
+            return;
+        }
+
+        const QLocale locale;
+        QString summary = QString("%1 splats").arg(locale.toString(static_cast<qulonglong>(result->splatCount)));
+        if (result->triangleCount > 0) {
+            summary += QString(", %1 triangles").arg(locale.toString(static_cast<qulonglong>(result->triangleCount)));
+        }
+        summary += QString(", %1").arg(locale.formattedDataSize(QFileInfo(path).size()));
+        qInfo("Exported %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
+        statusBar()->showMessage(QString("Exported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
+    });
+    m_exportThread->start();
+}
+
 void MainWindow::refreshScenePanels() {
     SplatRenderer* renderer = m_viewport->renderer();
     if (!renderer) {
@@ -709,6 +810,7 @@ void MainWindow::refreshScenePanels() {
     }
     m_outliner->rebuild(*renderer);
     selectModel(renderer->GetSelectedModel());
+    m_exportAction->setEnabled(renderer->ModelCount() > 0 && !m_exportThread);
 }
 
 void MainWindow::setImportBusy(const QString& fileName) {
@@ -773,6 +875,7 @@ void MainWindow::showControls() {
         "<tr><td>Esc</td><td>Deselect</td></tr>"
         "<tr><td colspan='2'><br><b>Editor</b></td></tr>"
         "<tr><td>Ctrl+O</td><td>Import splat (.ply)</td></tr>"
+        "<tr><td>Ctrl+E</td><td>Export to .glb / .obj / .ply / .stl / .splat</td></tr>"
         "<tr><td>F2 / Delete</td><td>Rename / remove selected model</td></tr>"
         "<tr><td>Ctrl+1 / Ctrl+2</td><td>Point Cloud / Gaussian Splat</td></tr>"
         "<tr><td>Drag &amp; drop</td><td>Drop .ply files onto the window to import</td></tr>"

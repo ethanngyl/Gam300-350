@@ -12,8 +12,9 @@ Central configuration for the reconstruction backend. It works out where the
 COLMAP and Brush executables are, probes them once at startup for GPU support
 and the right command-line flag, and exports a single config object that
 every other backend file reads (ports, folders, tool paths, training knobs,
-upload limits, python scripts). Any value can be overridden with an
-environment variable.
+upload limits, python scripts, account mode). Any value can be overridden
+with an environment variable, or in an optional .env file next to this
+file (see .env.example), which is loaded first.
 - findExe(roots, re, fallback)
 Searches each root folder recursively, in order, for a file whose name
 matches re. Returns the first match, or fallback if none is found. The
@@ -22,6 +23,10 @@ rather than hardcoding a layout.
 - findOnPath(name)
 Returns the absolute path of name if it is on the system PATH (e.g. a
 Homebrew install), else null.
+- findPython()
+The Python interpreter to run the tools/ scripts with. On Windows it skips
+the Microsoft Store "python.exe" stub that only says Python isn't
+installed.
 - colmapHasCuda(exe)
 Runs COLMAP with -h and checks the output for "with CUDA". Decides whether
 COLMAP should use the GPU when COLMAP_USE_GPU isn't set.
@@ -40,6 +45,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Per-machine settings (AUTH_MODE, AUTH_API_KEY, ...) live in an optional,
+// gitignored .env next to this file -- see .env.example. Loaded first so
+// every process.env read below sees it.
+const envFile = path.join(__dirname, '.env')
+if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
 
 // Repo root (this file lives at packages/src/backend/).
 const repoRoot = path.join(__dirname, '..', '..', '..')
@@ -112,6 +123,30 @@ function findOnPath(name) {
     if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
   }
   return null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Picks the Python interpreter for the tools/ scripts. On Windows,
+    %LOCALAPPDATA%\Microsoft\WindowsApps often holds a python.exe stub
+    that only prints "Python was not found" (exit code 9009); when it is
+    earlier on PATH than a real install, plain `python` runs the stub. So
+    the first python.exe outside WindowsApps is used. If there is none,
+    `python` is kept as-is: Python installed from the Microsoft Store
+    lives in WindowsApps and works there.
+  \return
+    string, an absolute path or a command name
+*/
+/************************************************************************/
+function findPython() {
+  if (!isWindows) return 'python3'
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir || /[\\/]Microsoft[\\/]WindowsApps[\\/]?$/i.test(dir)) continue
+    const full = path.join(dir, 'python.exe')
+    if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
+  }
+  return 'python'
 }
 
 // Windows builds ship .exe files; the macOS / Linux builds have no extension
@@ -266,6 +301,15 @@ const colmapMatchingNs = colmapUseFeatureNs ? 'FeatureMatching' : 'SiftMatching'
  * running tools/get-colmap.ps1 and tools/get-brush.ps1. Override any of these
  * with environment variables to point at a copy installed elsewhere.
  */
+// A typo here must not quietly fall back to another mode (see authMode below).
+const AUTH_MODES = ['local', 'client', 'authority']
+const authMode = (process.env.AUTH_MODE || 'local').trim().toLowerCase()
+if (!AUTH_MODES.includes(authMode))
+{
+  console.error(`[backend] AUTH_MODE="${process.env.AUTH_MODE}" is not one of: ${AUTH_MODES.join(', ')}`)
+  process.exit(1)
+}
+
 export const config = {
   // HTTP port the API listens on (Vite proxies /api here in dev).
   port: Number(process.env.PORT) || 5005,
@@ -284,7 +328,7 @@ export const config = {
   brushBin,
 
   // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 1000,
+  trainIters: Number(process.env.TRAIN_ITERS) || 7000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
   // Name of Brush's iteration-count flag for the installed build (see above).
   brushItersFlag: brushItersFlagName,
@@ -304,7 +348,7 @@ export const config = {
   // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
   // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
   // to its virtualenv's interpreter).
-  pythonBin: process.env.PYTHON_BIN || (isWindows ? 'python' : 'python3'),
+  pythonBin: process.env.PYTHON_BIN || findPython(),
   // Extracts evenly spaced frames from a YouTube video into a job's images/.
   ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
   // Default extraction rate (frames per second) and cap on frames pulled.
@@ -319,4 +363,31 @@ export const config = {
   // Recenters/rescales the trained splat into the viewer's frame.
   normalizeScript:
     process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
+  // Optional background removal: writes per-photo foreground masks that
+  // COLMAP and Brush use to ignore the background (turntable captures).
+  maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),
+  // rembg model used for the masks (see make_masks.py).
+  maskModel: process.env.MASK_MODEL || 'isnet-general-use',
+  
+  // --- Account authority (centralized accounts on the VM) --------------------
+  // 'local' (default): accounts live in this machine's own database, as
+  //   before the VM existed. Safe default: 'client' deletes local accounts.
+  // 'authority': this instance owns the accounts DB (only the VM). It serves
+  //   /register and /verify-account, and its /auth/* routes use db.js directly.
+  // 'client': this instance forwards signup/login to the authority.
+  authMode,
+  // Where the authority lives (only used in 'client' mode). No trailing slash.
+  // Must be https:// (passwords are sent to it) unless allowInsecureAuth.
+  vmAuthUrl: (process.env.VM_AUTH_URL || 'https://51-79-240-131.sslip.io').replace(/\/+$/, ''),
+  // Shared secret between clients and the authority. MUST be set (same value)
+  // on the VM and every client via AUTH_API_KEY. Empty means signup/login
+  // refuse to run rather than silently accepting anything.
+  authApiKey: process.env.AUTH_API_KEY || '',
+  // AUTH_ALLOW_HTTP=1 lets a client send credentials to a plain http://
+  // authority. Only for testing before HTTPS is set up on the VM.
+  allowInsecureAuth: process.env.AUTH_ALLOW_HTTP === '1',
+  // Express "trust proxy" setting. Set TRUST_PROXY=loopback on the VM, where
+  // Caddy forwards from the same machine, so req.ip is the real client
+  // address (for rate limits) and req.secure reflects HTTPS (for cookies).
+  trustProxy: process.env.TRUST_PROXY || null,
 }

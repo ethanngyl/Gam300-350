@@ -1,0 +1,198 @@
+/* ============================================================
+   Library photo picker - GENESIS theme
+   Full-screen on phones, centred dialog on larger screens.
+   ============================================================ */
+
+.library-picker {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--forma-text);
+}
+
+.library-picker-backdrop {
+    position: absolute;
+    inset: 0;
+    border: none;
+    background: rgba(8, 14, 20, 0.7);
+}
+
+.library-picker-dialog {
+    position: relative;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--forma-panel);
+    min-height: 0;
+}
+
+.library-picker-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.library-picker .library-picker-title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.library-picker-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.library-picker .library-picker-note {
+    margin: 0;
+    color: var(--forma-text-muted);
+    font-size: 0.86rem;
+}
+
+.library-picker-error {
+    color: var(--forma-red);
+}
+
+.library-picker-batch-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-bottom: 10px;
+}
+
+.library-picker-batch-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.library-picker-batch-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--forma-text-dim);
+}
+
+.library-picker-select-all {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    padding: 6px 0;
+}
+
+    .library-picker-select-all:hover:not(:disabled) {
+        text-decoration: underline;
+    }
+
+.library-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 8px;
+}
+
+.library-picker-photo {
+    position: relative;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--forma-panel-alt);
+    cursor: pointer;
+}
+
+    .library-picker-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .library-picker-photo.is-selected {
+        border-color: var(--forma-teal-text);
+    }
+
+.library-picker-tick {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--forma-border-strong);
+    background: rgba(17, 29, 41, 0.75);
+    color: #f4fbfd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.library-picker-photo.is-selected .library-picker-tick {
+    background: var(--forma-blue);
+    border-color: var(--forma-blue);
+}
+
+.library-picker-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--forma-border);
+    background: var(--forma-sidebar);
+}
+
+    .library-picker-footer .forma-btn-primary {
+        justify-content: center;
+    }
+
+.library-picker-footer-text {
+    font-size: 0.84rem;
+    color: var(--forma-text-muted);
+}
+
+@media (min-width: 761px) {
+    .library-picker {
+        align-items: center;
+        padding: 32px;
+    }
+
+    .library-picker-dialog {
+        max-width: 880px;
+        max-height: 85vh;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .library-picker-header,
+    .library-picker-body {
+        padding: 20px 24px;
+    }
+
+    .library-picker-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    }
+
+    .library-picker-footer {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 24px;
+    }
+}

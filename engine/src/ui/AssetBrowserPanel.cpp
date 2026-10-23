@@ -11,6 +11,7 @@ with size/date columns and context menu, and the file-system watcher that
 keeps the list current.
 **************************************************************************/
 #include "ui/AssetBrowserPanel.h"
+#include "ui/AssetPaths.h"
 
 #include <QDesktopServices>
 #include <QDir>
@@ -30,11 +31,8 @@ keeps the list current.
 #include <QVBoxLayout>
 
 namespace {
-#ifdef ENGINE_ASSETS_DIR
-    const QString kDefaultSplatDir = QStringLiteral(ENGINE_ASSETS_DIR "/samples");
-#else
-    const QString kDefaultSplatDir = QStringLiteral("assets/samples");
-#endif
+    // Folder opened first: the bundled sample splats.
+    QString DefaultSplatDir() { return AssetPaths::AssetsSubdir("samples"); }
 
     enum Column { kNameColumn = 0, kSizeColumn = 1, kModifiedColumn = 2 };
 
@@ -138,12 +136,12 @@ AssetBrowserPanel::AssetBrowserPanel(QWidget* parent)
     // from the reconstruction pipeline lands in the folder).
     connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { refresh(); });
 
-    setFolder(kDefaultSplatDir);
+    setFolder(DefaultSplatDir());
 }
 
 void AssetBrowserPanel::setFolder(const QString& requestedDir) {
     const QString dir = requestedDir.isEmpty() || !QDir(requestedDir).exists()
-                            ? kDefaultSplatDir : requestedDir;
+                            ? DefaultSplatDir() : requestedDir;
 
     if (!m_watcher->directories().isEmpty()) {
         m_watcher->removePaths(m_watcher->directories());

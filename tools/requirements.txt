@@ -7,3 +7,8 @@
 # Keep yt-dlp current -- YouTube changes regularly break older releases.
 yt-dlp[default]>=2025.11.12
 opencv-python>=4.8.0
+
+# Optional background removal (make_masks.py), used when a job is submitted
+# with "Remove background" on. The segmentation model downloads on first use.
+rembg[cpu]>=2.0.60
+pillow>=10.0.0
