@@ -96,6 +96,7 @@ private:
     std::vector<glm::mat4> m_lastSortTransforms;
     std::vector<float> m_sortKeys;          //View-space depth per splat
     std::vector<unsigned int> m_sortOrder;  //Splat indices, far to near
+    std::vector<unsigned int> m_sortBucketCounts; //Counting sort scratch
 
     //Sorting Vars
     static constexpr float kSortBudgetMs = 4.0f; //Alloclated sorting time
@@ -118,7 +119,6 @@ private:
     unsigned int m_quadVbo = 0;      //The 4 corners of the unit quad
     unsigned int m_orderVbo = 0;     //Per-instance splat index, far -> near
     unsigned int m_splatTexture = 0; //RGBA32F copy of m_combined
-    std::vector<unsigned int> m_sortBucketCounts; //Counting sort scratch
 #endif
 
     size_t m_totalSplatCount = 0; //Number of models

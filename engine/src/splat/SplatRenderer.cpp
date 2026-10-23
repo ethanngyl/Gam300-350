@@ -624,37 +624,57 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
 
     //Camera looks down -z, so farther = more negative z = comes first
     m_sortOrder.resize(m_totalSplatCount);
-#ifdef CODEFINE_GLES
-    //Single-threaded WebAssembly is too slow for a comparison sort of millions of splats
-    //every time the camera moves, so use a linear-time counting sort on 16-bit depth buckets.
-    //Splats closer together than 1/65536 of the scene depth may blend in either order.
+
+    //Comparison sort too slow for this many splats
+    //Instead it has 3 passes
+    //1st Pass (Count): Modulo each depth by 65536 (16 bits), place it into a bucket based onthe result
+    //2nd Pass (Prefix): Alloclate space for each bucket slot in array, e.g.
+    // Bucket 0 has 2 items, it gets slots 0 - 1
+    // Bucket 1 has 5 items, it gets slots 2 - 6
+    // etc.
+    //3rd Pass (Scatter): Iterate through the splat list and place each splat into an empty space alloclated to the bucket, e.g.
+    //  Splat 5 & 77 belongs to bucket 0, Splat 6, 11 & 33 belong to bucket 1
+    // m_sortOrder = [5, 77, 6, 11, 33, ...]
+
+    //Skip if no splats somehow
     if (m_totalSplatCount > 0) {
+        //Returns min and max values
         auto [minIt, maxIt] = std::minmax_element(m_sortKeys.begin(), m_sortKeys.end());
+        //Min value
         const float minKey = *minIt;
+        //Range of min to max value
         const float range = *maxIt - minKey;
+        //Number of buckets (1u bitshifted 16 = 16bits = 65536)
         constexpr unsigned int kBuckets = 1u << 16;
+        //Scale factor, convert depth into nunmber, if range is 0, move to bucket 1 (do not divide by 0)
         const float toBucket = range > 0.0f ? (kBuckets - 1) / range : 0.0f;
 
+        //Pass 1: Count
         m_sortBucketCounts.assign(kBuckets + 1, 0u);
+        //Interation 1, compute bucket sizes
         for (float key : m_sortKeys)
             ++m_sortBucketCounts[static_cast<unsigned int>((key - minKey) * toBucket) + 1];
-        for (unsigned int b = 1; b <= kBuckets; ++b)
-            m_sortBucketCounts[b] += m_sortBucketCounts[b - 1]; //counts[b] = first slot of bucket b
+
+        //Pass 2: Prefix
+        //Shift by +1, each slot is the sum of the slost behind and itself
+        //(Alloclating space for each bucket slot)
+        for (unsigned int bSlot = 1; bSlot <= kBuckets; ++bSlot)
+            m_sortBucketCounts[bSlot] += m_sortBucketCounts[bSlot - 1]; //counts[bSlot] = first slot of bucket bSlot
+
+        //Pass 3: Scatter
+        //Put each splat into their next open bucket slot sequentally
         for (size_t i = 0; i < m_totalSplatCount; ++i) {
-            unsigned int bucket = static_cast<unsigned int>((m_sortKeys[i] - minKey) * toBucket);
-            m_sortOrder[m_sortBucketCounts[bucket]++] = static_cast<unsigned int>(i);
+            unsigned int bucket = static_cast<unsigned int>((m_sortKeys[i] - minKey) * toBucket); //Calculate bucket
+            m_sortOrder[m_sortBucketCounts[bucket]++] = static_cast<unsigned int>(i); //Add into bucket slot
         }
     }
 
+#ifdef CODEFINE_GLES
     //Per-instance splat index buffer read by the quad VAO
     glBindBuffer(GL_ARRAY_BUFFER, m_orderVbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
         static_cast<GLsizeiptr>(m_sortOrder.size() * sizeof(unsigned int)), m_sortOrder.data());
 #else
-    std::iota(m_sortOrder.begin(), m_sortOrder.end(), 0u);
-    std::sort(m_sortOrder.begin(), m_sortOrder.end(),
-        [this](unsigned int a, unsigned int b) { return m_sortKeys[a] < m_sortKeys[b]; });
-
     //The VAO is bound by caller, this updates its element buffer
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
