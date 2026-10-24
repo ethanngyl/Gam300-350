@@ -4,15 +4,16 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 17-10-2026
+\date 23-10-2026
 \brief
 Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
-dashboard (top nav + sidebar) with these pages inside it: Home, Library,
-Photo Editor, Scene Builder, Model Viewer, YouTube Extractor, Capture and
-Account. YouTube Extractor is in the top nav and sidebar; Capture opens
-from the sidebar's New model button, and its "Review photos first" hands
-the batch to the Photo Editor.
+dashboard (theme 2: a collapsible sidebar, plus a slim header on phones)
+with these pages inside it: Home, Library, Photo Editor, Scene Builder,
+Model Viewer, YouTube Extractor, Capture and Account. Capture opens from
+the sidebar's New model button, or from Add photos with the chosen photos
+already in the batch; its "Review photos first" hands the batch to the
+Photo Editor.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -40,6 +41,16 @@ import './AppTheme.css';
 import './App.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
+const SIDEBAR_COLLAPSED_KEY = 'genesis-sidebar-collapsed';
+
+// Whether the sidebar was left collapsed last time (desktop only).
+function loadSidebarCollapsed() {
+    try {
+        return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
 
 // Reads the saved session once on first render. Storage can be blocked
 // (private windows, site data off), so every access is wrapped.
@@ -115,8 +126,24 @@ function App() {
     // Batch sent from Camera Capture's "Review photos first" to the Photo
     // Editor: { files, removeBackground }. Cleared on any other navigation.
     const [photosForEditor, setPhotosForEditor] = useState(null);
+    // Photos chosen with the sidebar's Add photos button, handed to the
+    // capture page's batch. Cleared on any other navigation.
+    const [photosForCapture, setPhotosForCapture] = useState(null);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    // Whether the sidebar shows icons only (wider screens only).
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(loadSidebarCollapsed);
+
+    function toggleSidebarCollapsed() {
+        setIsSidebarCollapsed((wasCollapsed) => {
+            try {
+                window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(!wasCollapsed));
+            } catch {
+                // Storage unavailable: the choice just isn't remembered.
+            }
+            return !wasCollapsed;
+        });
+    }
 
     function handleLogin(user) {
         saveUser(user);
@@ -141,7 +168,14 @@ function App() {
         setIsMenuOpen(false);
         setUploadError(null);
         setPhotosForEditor(null);
+        setPhotosForCapture(null);
         setActiveTab(tab);
+    }
+
+    // Opens the capture page with the photos from Add photos in its batch.
+    function addPhotosToCapture(files) {
+        goToTab('capture');
+        setPhotosForCapture(files);
     }
 
     // Opens the Photo Editor with the photos from Camera Capture loaded.
@@ -286,15 +320,8 @@ function App() {
     }
 
     return (
-        <div className="forma-app genesis-shell">
-            <TopNav
-                activeTab={activeTab}
-                onTabChange={goToTab}
-                user={currentUser}
-                onOpenAccount={() => goToTab('account')}
-                onSignOut={handleSignOut}
-                onToggleMenu={() => setIsMenuOpen((wasOpen) => !wasOpen)}
-            />
+        <div className={isSidebarCollapsed ? 'forma-app genesis-shell is-sidebar-collapsed' : 'forma-app genesis-shell'}>
+            <TopNav onToggleMenu={() => setIsMenuOpen((wasOpen) => !wasOpen)} />
 
             <div className="genesis-body">
                 {/* Dark overlay behind the phone drawer; tapping it closes the drawer. */}
@@ -309,10 +336,14 @@ function App() {
 
                 <Sidebar
                     activeTab={activeTab}
-                    librarySubTab={librarySubTab}
                     onNavigate={goToTab}
-                    onOpenLibrary={openLibrary}
                     onNewModel={() => goToTab('capture')}
+                    onAddPhotos={addPhotosToCapture}
+                    user={currentUser}
+                    onOpenAccount={() => goToTab('account')}
+                    onSignOut={handleSignOut}
+                    isCollapsed={isSidebarCollapsed}
+                    onToggleCollapsed={toggleSidebarCollapsed}
                     isOpen={isMenuOpen}
                     onClose={() => setIsMenuOpen(false)}
                 />
@@ -362,6 +393,7 @@ function App() {
                             onReviewPhotos={reviewPhotosInEditor}
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
+                            initialFiles={photosForCapture}
                         />
                     )}
                     {activeTab === 'account' && (

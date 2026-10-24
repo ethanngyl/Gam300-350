@@ -13,11 +13,16 @@ in the SQLite database (password stored only as a hash), /auth/login checks
 the password. On success the user object the server returns is handed to
 the parent, which keeps it as this browser's session. "Continue as guest"
 skips the backend and hands the parent a local guest user instead.
+Theme 2 layout: a hero panel on the left (hidden on phones) and the form
+on the right.
 **************************************************************************/
 
 import { useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
+
+// Short summary of the workflow shown on the hero panel.
+const HERO_STEPS = ['Capture source photos', 'Generate detailed models', 'Build complete scenes'];
 
 function LoginScreen({ onLogin }) {
     const [mode, setMode] = useState('signin');
@@ -95,79 +100,100 @@ function LoginScreen({ onLogin }) {
     }
 
     return (
-        <div className="genesis-login">
-            <form className="login-card" onSubmit={handleSubmit}>
-                <div className="forma-logo login-logo">
+        <div className="genesis-login genesis-login-v2">
+            <aside className="login-hero">
+                <div className="forma-logo login-hero-logo">
                     <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
                     GENESIS
                 </div>
-                <p className="eyebrow">{isSignUp ? 'Create account' : 'Sign in'}</p>
-                <h1>{isSignUp ? 'Create your account' : 'Welcome back'}</h1>
-                <p className="login-subtitle">
-                    Turn photos and video frames into polished 3D assets.
-                </p>
+                <div className="login-hero-copy">
+                    <p className="eyebrow eyebrow-accent">Creative 3D workspace</p>
+                    <h2>Shape ideas into worlds.</h2>
+                    <p>
+                        Turn source photos and video frames into polished 3D assets, then
+                        refine and arrange them in one connected workspace.
+                    </p>
+                    <ul className="login-hero-steps">
+                        {HERO_STEPS.map((step) => <li key={step}>{step}</li>)}
+                    </ul>
+                </div>
+                <p className="login-hero-footer">Image to model - Model to scene</p>
+            </aside>
 
-                {isSignUp && (
+            <div className="login-panel">
+                <form className="login-card" onSubmit={handleSubmit}>
+                    <div className="forma-logo login-logo">
+                        <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
+                        GENESIS
+                    </div>
+                    <p className="eyebrow">{isSignUp ? 'Create account' : 'Sign in'}</p>
+                    <h1>{isSignUp ? 'Create your account' : 'Welcome back'}</h1>
+                    <p className="login-subtitle">
+                        Turn photos and video frames into polished 3D assets.
+                    </p>
+
+                    {isSignUp && (
+                        <label className="login-field">
+                            Name
+                            <input
+                                type="text"
+                                value={displayName}
+                                onChange={(event) => setDisplayName(event.target.value)}
+                                autoComplete="name"
+                            />
+                        </label>
+                    )}
                     <label className="login-field">
-                        Name
+                        Email
                         <input
-                            type="text"
-                            value={displayName}
-                            onChange={(event) => setDisplayName(event.target.value)}
-                            autoComplete="name"
+                            type="email"
+                            value={email}
+                            onChange={(event) => setEmail(event.target.value)}
+                            autoComplete="email"
                         />
                     </label>
-                )}
-                <label className="login-field">
-                    Email
-                    <input
-                        type="email"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        autoComplete="email"
-                    />
-                </label>
-                <label className="login-field">
-                    Password
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                    />
-                </label>
-                <label className="login-remember">
-                    <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(event) => setRememberMe(event.target.checked)}
-                    />
-                    Remember me
-                </label>
+                    <label className="login-field">
+                        Password
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(event) => setPassword(event.target.value)}
+                            autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                        />
+                    </label>
+                    <label className="login-remember">
+                        <input
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(event) => setRememberMe(event.target.checked)}
+                        />
+                        Remember me
+                    </label>
 
-                {errorMessage && <p className="login-error" role="alert">{errorMessage}</p>}
+                    {errorMessage && <p className="login-error" role="alert">{errorMessage}</p>}
 
-                <button
-                    type="submit"
-                    className="forma-btn forma-btn-primary login-submit"
-                    disabled={isSubmitting}
-                >
-                    {isSubmitting ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}
-                </button>
+                    <button
+                        type="submit"
+                        className="forma-btn forma-btn-primary login-submit"
+                        disabled={isSubmitting}
+                    >
+                        {isSubmitting ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}
+                    </button>
 
-                <button
-                    type="button"
-                    className="forma-btn login-submit"
-                    onClick={continueAsGuest}
-                    disabled={isSubmitting}
-                >
-                    Continue as guest
-                </button>
+                    <button
+                        type="button"
+                        className="forma-btn login-submit"
+                        onClick={continueAsGuest}
+                        disabled={isSubmitting}
+                    >
+                        Continue as guest
+                    </button>
 
-                <button type="button" className="login-switch" onClick={switchMode}>
-                    {isSignUp ? 'Already have an account? Sign in' : 'New here? Create an account'}
-                </button>
-            </form>
+                    <button type="button" className="login-switch" onClick={switchMode}>
+                        {isSignUp ? 'Already have an account? Sign in' : 'New here? Create an account'}
+                    </button>
+                </form>
+            </div>
         </div>
     );
 }

@@ -14,6 +14,7 @@ removal, and the button that sends the batch for reconstruction).
 Each photo is checked in the background for blur, bad exposure and
 near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
+Photos picked with the sidebar's Add photos button arrive as initialFiles.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -33,7 +34,19 @@ const ISSUE_SUMMARY_PHRASES = {
     bright: (count) => `${count} ${count === 1 ? 'is' : 'are'} too bright`,
 };
 
-function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
+// Builds one batch entry. Checks start as 'pending'.
+function createBatchPhoto(file) {
+    return {
+        id: `${file.name}-${file.lastModified}-${Math.random()}`,
+        url: URL.createObjectURL(file),
+        file,
+        analysisStatus: 'pending',
+        analysis: null,
+    };
+}
+
+// initialFiles: photos chosen with the sidebar's Add photos button, or null.
+function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, initialFiles = null }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -46,7 +59,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
-    const [photos, setPhotos] = useState([]);
+    const [photos, setPhotos] = useState(() =>
+        (initialFiles ?? []).filter((file) => file.type.startsWith('image/')).map(createBatchPhoto)
+    );
 
     const [captureFeedback, setCaptureFeedback] = useState(null);
     const [uploadFeedback, setUploadFeedback] = useState(null);
@@ -156,13 +171,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
     const addFiles = useCallback((fileList) => {
         const newPhotos = Array.from(fileList)
             .filter((file) => file.type.startsWith('image/'))
-            .map((file) => ({
-                id: `${file.name}-${file.lastModified}-${Math.random()}`,
-                url: URL.createObjectURL(file),
-                file,
-                analysisStatus: 'pending',
-                analysis: null,
-            }));
+            .map(createBatchPhoto);
 
         setPhotos((prev) => [...prev, ...newPhotos]);
 
