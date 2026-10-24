@@ -12,16 +12,17 @@ handler) so any component can trigger a named sound by key instead of
 managing its own Audio objects.
 **************************************************************************/
 
-import buttonClick from './ButtonClick.wav';
-import buttonClick2 from './ButtonClick2.wav';
-import buttonClick3 from './ButtonClick3.wav';
+import tapSound from './Tap.wav';
+import confirmSound from './Confirm.wav';
+import backSound from './Back.wav';
 // import success from './Success.wav';
 // import error from './Error.wav';
+// import cameraSound from './Camera.wav';
 
 const SOUND_SOURCES = {
-    click: buttonClick,
-    click2: buttonClick2,
-    click3: buttonClick3,
+    tap: tapSound,
+    confirm: confirmSound,
+    back: backSound,
     // success: success,
     // error: error,
 };

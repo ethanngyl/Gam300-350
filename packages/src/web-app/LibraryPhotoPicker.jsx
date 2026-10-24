@@ -73,7 +73,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     }
 
     function toggleBatch(job) {
-        playSound('click');
+        playSound('tap');
         const batchKeys = job.images.map((image) => photoKey(job.id, image.name));
         const isWholeBatchSelected = batchKeys.every((key) => selectedKeys.has(key));
         setSelectedKeys((currentKeys) => {
@@ -90,7 +90,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     }
 
     async function handleAdd() {
-        playSound('click');
+        playSound('tap');
 
         const chosenPhotos = [];
         batches.forEach((job) => {
@@ -149,7 +149,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                         <div className="eyebrow eyebrow-accent">Photo library</div>
                         <h2 className="library-picker-title">Choose photos</h2>
                     </div>
-                    <button className="forma-btn" onClick={() => { playSound('click3'); onClose(); }}>
+                    <button className="forma-btn" onClick={() => { playSound('back'); onClose(); }}>
                         Close
                     </button>
                 </div>

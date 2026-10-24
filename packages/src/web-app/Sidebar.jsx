@@ -43,7 +43,7 @@ function Sidebar({ activeTab, librarySubTab, onNavigate, onOpenLibrary, onNewMod
                         : 'forma-btn forma-btn-primary genesis-new-model'
                 }
                 onClick={() => {
-                    playSound('click');
+                    playSound('tap');
                     onClose();
                     onNewModel();
                 }}
@@ -57,7 +57,7 @@ function Sidebar({ activeTab, librarySubTab, onNavigate, onOpenLibrary, onNewMod
                     key={item.id}
                     className={activeTab === item.id ? 'genesis-side-item is-active' : 'genesis-side-item'}
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         onClose();
                         onNavigate(item.id);
                     }}
@@ -75,7 +75,7 @@ function Sidebar({ activeTab, librarySubTab, onNavigate, onOpenLibrary, onNewMod
                         key={item.id}
                         className={isCurrentPage ? 'genesis-side-item is-active' : 'genesis-side-item'}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             onClose();
                             onOpenLibrary(item.librarySubTab);
                         }}

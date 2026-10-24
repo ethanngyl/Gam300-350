@@ -300,7 +300,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                 <button
                     className="forma-btn capture-back"
                     onClick={() => {
-                        playSound('click3');
+                        playSound('back');
                         onBack();
                     }}
                 >
@@ -341,7 +341,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                             <button
                                 className={captureMode === 'manual' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
                                 onClick={() => {
-                                    playSound('click');
+                                    playSound('tap');
                                     handleModeChange('manual');
                                 }}
                             >
@@ -350,7 +350,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                             <button
                                 className={captureMode === 'auto' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
                                 onClick={() => {
-                                    playSound('click');
+                                    playSound('tap');
                                     handleModeChange('auto');
                                 }}
                             >
@@ -362,7 +362,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                             <button
                                 className="forma-btn capture-btn"
                                 onClick={() => {
-                                    playSound('click');
+                                    playSound('tap');
                                     capturePhoto(true);
                                 }}
                                 disabled={!stream}
@@ -374,7 +374,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                                 <button
                                     className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
                                     onClick={() => {
-                                        playSound('click');
+                                        playSound('tap');
                                         setIsAutoCapturing((prev) => !prev);
                                     }}
                                     disabled={!stream}
@@ -433,7 +433,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             handleBrowseClick();
                         }}
                         role="button"
@@ -447,7 +447,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                             className="forma-btn"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                playSound('click');
+                                playSound('tap');
                                 handleBrowseClick();
                             }}
                         >
@@ -469,7 +469,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                         type="button"
                         className="forma-btn capture-library-btn"
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             setIsLibraryPickerOpen(true);
                         }}
                     >
@@ -499,7 +499,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                                     <button
                                         className="capture-thumb-remove"
                                         onClick={() => {
-                                            playSound('click');
+                                            playSound('tap');
                                             removePhoto(photo.id);
                                         }}
                                         aria-label="Remove photo"
@@ -540,7 +540,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                         className={issueSummary ? 'forma-btn batch-review-btn is-suggested' : 'forma-btn batch-review-btn'}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             handleReview();
                         }}
                     >
@@ -551,7 +551,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                         className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             handleTrain();
                         }}
                     >

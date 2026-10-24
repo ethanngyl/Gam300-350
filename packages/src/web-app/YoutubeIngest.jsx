@@ -142,7 +142,7 @@ function YoutubeIngest({ onBack }) {
 
     async function handleSubmit(e) {
         e.preventDefault();
-        playSound('click');
+        playSound('tap');
         setError(null);
 
         const trimmed = normalizeYoutubeUrl(url.trim());
@@ -198,7 +198,7 @@ function YoutubeIngest({ onBack }) {
                     <button
                         className="forma-btn yt-back"
                         onClick={() => {
-                            playSound('click3');
+                            playSound('back');
                             onBack();
                         }}
                     >

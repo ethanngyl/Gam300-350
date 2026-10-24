@@ -397,12 +397,12 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function openFilePicker() {
-        playSound('click');
+        playSound('tap');
         fileInputRef.current?.click();
     }
 
     function openLibraryPicker() {
-        playSound('click');
+        playSound('tap');
         setIsLibraryPickerOpen(true);
     }
 
@@ -436,7 +436,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function toggleExcluded(photoId) {
-        playSound('click');
+        playSound('tap');
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
                 photo.id === photoId ? { ...photo, isExcluded: !photo.isExcluded } : photo
@@ -445,7 +445,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function removePhoto(photoId) {
-        playSound('click');
+        playSound('tap');
         const photoToRemove = photos.find((photo) => photo.id === photoId);
         if (photoToRemove) URL.revokeObjectURL(photoToRemove.url);
         setPhotos((currentPhotos) => currentPhotos.filter((photo) => photo.id !== photoId));
@@ -462,7 +462,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
             toggleExcluded(photoId);
             return;
         }
-        playSound('click');
+        playSound('tap');
         setPreviewFailed(false);
         setPreviewClippedShare(null);
         setColorMessage(null);
@@ -470,7 +470,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function leaveOutFlagged() {
-        playSound('click');
+        playSound('tap');
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
                 issuesById[photo.id]?.length > 0 ? { ...photo, isExcluded: true } : photo
@@ -479,7 +479,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function keepAll() {
-        playSound('click');
+        playSound('tap');
         setPhotos((currentPhotos) => currentPhotos.map((photo) => ({ ...photo, isExcluded: false })));
     }
 
@@ -500,13 +500,13 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function changeEditTarget(target) {
-        playSound('click');
+        playSound('tap');
         setEditTarget(target);
         setColorMessage(null);
     }
 
     function resetCurrentEdits() {
-        playSound('click');
+        playSound('tap');
         setColorMessage(null);
         if (isEditingSinglePhoto) {
             updateEdits({ ...DEFAULT_EDITS });
@@ -517,7 +517,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
 
     // Drops the selected photo's own edits so it follows the shared ones again.
     function matchAllPhotos() {
-        playSound('click');
+        playSound('tap');
         const matchedPhotoId = selectedPhoto.id;
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
@@ -527,14 +527,14 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function handleAutoFix() {
-        playSound('click');
+        playSound('tap');
         const correction = computeAutoFix(autoSourceAnalyses);
         if (correction) updateEdits(correction);
     }
 
     // Gray world: the average colour across the photos should be neutral.
     function handleAutoColor() {
-        playSound('click');
+        playSound('tap');
         const sourceCount = autoSourceAnalyses.length;
         if (sourceCount === 0) return;
 
@@ -552,7 +552,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function togglePickNeutral() {
-        playSound('click');
+        playSound('tap');
         setColorMessage(null);
         setIsPickingNeutral((wasPicking) => !wasPicking);
     }
@@ -572,7 +572,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
             const sampledColor = await sampleColor(selectedPhoto.file, displayedCrop, fractionX, fractionY);
             const correction = computeWhiteBalance(sampledColor.red, sampledColor.green, sampledColor.blue);
             if (correction) {
-                playSound('click');
+                playSound('tap');
                 updateEdits(correction);
                 setColorMessage(null);
             } else {
@@ -584,13 +584,13 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function toggleCropTool() {
-        playSound('click');
+        playSound('tap');
         setIsPickingNeutral(false);
         setIsCropping((wasCropping) => !wasCropping);
     }
 
     function resetCrop() {
-        playSound('click');
+        playSound('tap');
         updateEdits({ crop: NO_CROP });
     }
 
@@ -604,14 +604,14 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function handleUseOriginalsChange(event) {
-        playSound('click');
+        playSound('tap');
         setUseOriginals(event.target.checked);
         setIsCropping(false);
         setIsPickingNeutral(false);
     }
 
     async function handleGenerate() {
-        playSound('click');
+        playSound('tap');
         setIsCropping(false);
         setIsPickingNeutral(false);
         setPreparedCount(0);

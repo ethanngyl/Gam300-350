@@ -92,7 +92,7 @@ function AccountScreen({ user, onSignOut }) {
                 <button
                     className="forma-btn"
                     onClick={() => {
-                        playSound('click3');
+                        playSound('back');
                         onSignOut();
                     }}
                 >

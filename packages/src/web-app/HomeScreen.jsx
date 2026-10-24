@@ -79,7 +79,7 @@ function HomeScreen({ userName, onNewGeneration, onYoutube, onNavigate, onOpenLi
     }
 
     function handleToolClick(toolId) {
-        playSound('click2');
+        playSound('confirm');
         if (toolId === 'youtube') {
             onYoutube();
         } else {
@@ -98,7 +98,7 @@ function HomeScreen({ userName, onNewGeneration, onYoutube, onNavigate, onOpenLi
                 <button
                     className="forma-btn"
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         onOpenLibrary('photos');
                     }}
                 >
@@ -122,7 +122,7 @@ function HomeScreen({ userName, onNewGeneration, onYoutube, onNavigate, onOpenLi
                     className="home-banner-camera"
                     aria-label="Start a new generation"
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         onNewGeneration();
                     }}
                 >
@@ -161,7 +161,7 @@ function HomeScreen({ userName, onNewGeneration, onYoutube, onNavigate, onOpenLi
                 <button
                     className="home-link"
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         onOpenLibrary('models');
                     }}
                 >
@@ -186,7 +186,7 @@ function HomeScreen({ userName, onNewGeneration, onYoutube, onNavigate, onOpenLi
                                 type="button"
                                 className="forma-card home-recent-item home-recent-button"
                                 onClick={() => {
-                                    playSound('click');
+                                    playSound('tap');
                                     onOpenModel(job.id);
                                 }}
                             >

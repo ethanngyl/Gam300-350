@@ -30,7 +30,7 @@ function NameModelPrompt({ jobId, onClose }) {
             onConfirm={async (name) => {
                 if (name.trim()) {
                     await renameJob(jobId, name);
-                    playSound('click');
+                    playSound('tap');
                 }
                 onClose();
             }}

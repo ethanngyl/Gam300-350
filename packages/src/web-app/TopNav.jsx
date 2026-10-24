@@ -49,7 +49,7 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
             <button
                 className="forma-menu-btn"
                 onClick={() => {
-                    playSound('click');
+                    playSound('tap');
                     onToggleMenu();
                 }}
                 aria-label="Open menu"
@@ -70,7 +70,7 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                             ? 'forma-tab is-active'
                             : 'forma-tab'}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             onTabChange(tab.id);
                         }}
                         aria-label={tab.label}
@@ -90,7 +90,7 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                 <button
                     className="forma-avatar"
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         setIsMenuOpen((wasOpen) => !wasOpen);
                     }}
                     aria-label="Open account menu"
@@ -105,7 +105,7 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                         <button
                             className="forma-account-menu-item"
                             onClick={() => {
-                                playSound('click');
+                                playSound('tap');
                                 setIsMenuOpen(false);
                                 onOpenAccount();
                             }}
@@ -115,7 +115,7 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                         <button
                             className="forma-account-menu-item"
                             onClick={() => {
-                                playSound('click3');
+                                playSound('back');
                                 setIsMenuOpen(false);
                                 onSignOut();
                             }}

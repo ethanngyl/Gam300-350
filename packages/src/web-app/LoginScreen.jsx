@@ -31,7 +31,7 @@ function LoginScreen({ onLogin }) {
     const isSignUp = mode === 'signup';
 
     function switchMode() {
-        playSound('click');
+        playSound('tap');
         setMode(isSignUp ? 'signin' : 'signup');
         setErrorMessage(null);
     }
@@ -39,7 +39,7 @@ function LoginScreen({ onLogin }) {
     // Temporary bypass: skips the backend and signs in as a local-only guest.
     // The backend does not check the session, so every feature still works.
     function continueAsGuest() {
-        playSound('click');
+        playSound('tap');
         onLogin({
             name: 'Guest',
             email: 'Not signed in',
@@ -65,7 +65,7 @@ function LoginScreen({ onLogin }) {
             return;
         }
 
-        playSound('click');
+        playSound('tap');
         setErrorMessage(null);
         setIsSubmitting(true);
 

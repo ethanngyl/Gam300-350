@@ -242,7 +242,7 @@ function App() {
                     <button
                         className="btn btn-primary"
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             resetJob();
                             goToTab('capture');
                         }}
@@ -250,10 +250,10 @@ function App() {
                         New scan
                     </button>
                     <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
-                        onClick={() => playSound('click')}>
+                        onClick={() => playSound('tap')}>
                         Download .ply
                     </a>
-                    <button className="btn btn-ghost" onClick={() => { playSound('click'); backToDashboard(); }}>
+                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); backToDashboard(); }}>
                         Back to dashboard
                     </button>
                 </div>
@@ -272,7 +272,7 @@ function App() {
                     className="genesis-overlay"
                     style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, alignItems: 'center', zIndex: 10 }}
                 >
-                    <button className="btn btn-ghost" onClick={() => { playSound('click'); closeLocalModel(); }}>
+                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); closeLocalModel(); }}>
                         Back to dashboard
                     </button>
                     <span style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8 }}>{localModel.name}</span>

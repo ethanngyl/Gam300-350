@@ -110,7 +110,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                 setJobs((current) =>
                     current.map((job) => (job.id === model.id ? { ...job, name: result.name } : job))
                 );
-                playSound('click');
+                playSound('tap');
                 setDialog(null);
             },
         });
@@ -128,7 +128,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             onConfirm: async () => {
                 await deleteJob(model.id);
                 setJobs((current) => current.filter((job) => job.id !== model.id));
-                playSound('click');
+                playSound('tap');
                 setDialog(null);
             },
         });
