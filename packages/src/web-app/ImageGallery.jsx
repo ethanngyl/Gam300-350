@@ -29,6 +29,7 @@ Renders one job's heading and download-on-click thumbnail grid.
 // ----- Headers ------------------------------------------------------- //
 import { useEffect, useState } from 'react';
 import { jobDisplayName } from './mediaApi.js';
+import { playSound } from '../audio/Audio.js';
 import './ImageGallery.css';
 
 const PREVIEW_COUNT = 4;
@@ -133,7 +134,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         if (openJob) {
             return (
                 <div className="gallery gallery-compact">
-                    <button className="forma-btn gallery-compact-back" onClick={() => setOpenJobId(null)}>
+                    <button className="forma-btn gallery-compact-back" onClick={() => { playSound('back'); setOpenJobId(null); }}>
                         All batches
                     </button>
                     {renderJobSection(openJob)}
@@ -168,7 +169,10 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                                 key={job.id}
                                 type="button"
                                 className="forma-card library-photo-card"
-                                onClick={() => setOpenJobId(job.id)}
+                                onClick={() => {
+                                    playSound('tap');
+                                    setOpenJobId(job.id);
+                                }}
                             >
                                 <div className="library-photo-thumbgrid">
                                     {previewImages.map((img, index) => (
@@ -203,7 +207,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         <div className="gallery">
             <div className="gallery-head">
                 {onBack && (
-                    <button className="btn btn-ghost" onClick={onBack}>Back</button>
+                    <button className="btn btn-ghost" onClick={() => { playSound('back'); onBack(); }}>Back</button>
                 )}
                 <h2>Uploaded images</h2>
             </div>

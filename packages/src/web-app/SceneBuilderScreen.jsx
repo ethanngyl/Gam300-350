@@ -814,7 +814,7 @@ function SceneBuilderScreen() {
     }
 
     async function handleSave() {
-        playSound('tap');
+        playSound('confirm');
         try {
             const savedScene = await saveScene({
                 id: sceneId ?? undefined,

@@ -16,7 +16,6 @@ onClose runs after the name is saved or the prompt is skipped.
 
 import ActionDialog from './ActionDialog.jsx';
 import { renameJob } from './mediaApi.js';
-import { playSound } from '../audio/Audio.js';
 
 function NameModelPrompt({ jobId, onClose }) {
     return (
@@ -30,7 +29,6 @@ function NameModelPrompt({ jobId, onClose }) {
             onConfirm={async (name) => {
                 if (name.trim()) {
                     await renameJob(jobId, name);
-                    playSound('tap');
                 }
                 onClose();
             }}

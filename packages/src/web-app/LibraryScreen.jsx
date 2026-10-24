@@ -110,7 +110,6 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                 setJobs((current) =>
                     current.map((job) => (job.id === model.id ? { ...job, name: result.name } : job))
                 );
-                playSound('tap');
                 setDialog(null);
             },
         });
@@ -128,7 +127,6 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             onConfirm: async () => {
                 await deleteJob(model.id);
                 setJobs((current) => current.filter((job) => job.id !== model.id));
-                playSound('tap');
                 setDialog(null);
             },
         });
@@ -140,13 +138,19 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                 <div className="library-subtabs">
                     <button
                         className={subTab === 'models' ? 'library-subtab is-active' : 'library-subtab'}
-                        onClick={() => onSubTabChange('models')}
+                        onClick={() => {
+                            playSound('tap');
+                            onSubTabChange('models');
+                        }}
                     >
                         3D Models
                     </button>
                     <button
                         className={subTab === 'photos' ? 'library-subtab is-active' : 'library-subtab'}
-                        onClick={() => onSubTabChange('photos')}
+                        onClick={() => {
+                            playSound('tap');
+                            onSubTabChange('photos');
+                        }}
                     >
                         Photo Library
                     </button>
@@ -172,11 +176,11 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                 </label>
 
                 {subTab === 'models' ? (
-                    <button className="forma-btn forma-btn-primary" onClick={onGenerateModel}>
+                    <button className="forma-btn forma-btn-primary" onClick={() => { playSound('tap'); onGenerateModel(); }}>
                         <Icon name="plus" size={14} /> Generate Model
                     </button>
                 ) : (
-                    <button className="forma-btn forma-btn-primary" onClick={onUploadPhotos}>
+                    <button className="forma-btn forma-btn-primary" onClick={() => { playSound('tap'); onUploadPhotos(); }}>
                         <Icon name="plus" size={14} /> Upload Photos
                     </button>
                 )}

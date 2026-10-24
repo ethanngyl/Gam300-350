@@ -540,7 +540,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                         className={issueSummary ? 'forma-btn batch-review-btn is-suggested' : 'forma-btn batch-review-btn'}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('tap');
+                            playSound('confirm');
                             handleReview();
                         }}
                     >
@@ -551,7 +551,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                         className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('tap');
+                            playSound('confirm');
                             handleTrain();
                         }}
                     >

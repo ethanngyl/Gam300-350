@@ -611,7 +611,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     async function handleGenerate() {
-        playSound('tap');
+        playSound('confirm');
         setIsCropping(false);
         setIsPickingNeutral(false);
         setPreparedCount(0);

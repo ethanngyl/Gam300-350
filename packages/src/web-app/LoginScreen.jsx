@@ -65,7 +65,7 @@ function LoginScreen({ onLogin }) {
             return;
         }
 
-        playSound('tap');
+        playSound('confirm');
         setErrorMessage(null);
         setIsSubmitting(true);
 

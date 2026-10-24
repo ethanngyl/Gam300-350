@@ -90,7 +90,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     }
 
     async function handleAdd() {
-        playSound('tap');
+        playSound('confirm');
 
         const chosenPhotos = [];
         batches.forEach((job) => {

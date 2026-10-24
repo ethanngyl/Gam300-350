@@ -142,7 +142,7 @@ function YoutubeIngest({ onBack }) {
 
     async function handleSubmit(e) {
         e.preventDefault();
-        playSound('tap');
+        playSound('confirm');
         setError(null);
 
         const trimmed = normalizeYoutubeUrl(url.trim());
