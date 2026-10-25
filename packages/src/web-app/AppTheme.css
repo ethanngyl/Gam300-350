@@ -683,6 +683,8 @@ html {
     padding: 7px 16px;
     border-radius: 6px;
     cursor: pointer;
+    /* Fixed width, so the bold active tab doesn't shift the toolbar. */
+    min-width: 110px;
 }
 
     .library-subtab.is-active {
@@ -931,12 +933,16 @@ html {
     color: var(--forma-red);
 }
 
-/* Photo Library cards (ImageGallery compact variant) */
+/* Photo Library cards (ImageGallery compact variant). Laid out exactly like
+   the 3D Models grid: full width, same columns, card height and text rows. */
 
 .gallery-compact {
     padding: 0;
     background: transparent;
     color: var(--forma-text);
+    /* ImageGallery.css centres .gallery in a 1100px column; undo that here. */
+    max-width: none;
+    margin: 0;
 }
 
     .gallery-compact .gallery-note {
@@ -971,7 +977,9 @@ html {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 2px;
-    aspect-ratio: 16 / 10;
+    /* Same height as .library-thumb on the 3D Models cards. */
+    aspect-ratio: auto;
+    height: 128px;
     background: var(--forma-bg);
 }
 
@@ -1000,8 +1008,13 @@ html {
 
 .library-photo-badge {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 10px;
+    right: 10px;
+}
+
+/* Solid backing so the badge stays readable on top of photos. */
+.library-photo-thumbgrid .library-photo-badge {
+    background-color: rgba(17, 29, 41, 0.9);
 }
 
 .library-photo-name {
@@ -2073,7 +2086,8 @@ html {
         padding: 0 16px;
     }
 
-    .library-thumb {
+    .library-thumb,
+    .library-photo-thumbgrid {
         height: 96px;
     }
 
