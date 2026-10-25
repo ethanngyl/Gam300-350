@@ -16,7 +16,10 @@ settings, lost highlight/shadow detail, large crops and mixed crops all
 show warnings. "Use original photos" bypasses every edit. Edits are only
 settings until upload, so the originals are never changed. Phones get a
 simpler, batch-only set of tools. "Review photos first" in Camera Capture
-opens the editor with that batch already loaded (initialPhotos).
+opens the editor with that batch already loaded (initialPhotos); its
+"Back to camera" button returns the photos to the capture page. Opened
+on its own, the same button reads "Go to camera" and takes any photos
+added here to the capture page, so more can be taken.
 **************************************************************************/
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -225,8 +228,9 @@ function CropOverlay({ crop, onChange }) {
 }
 
 // initialPhotos: { files, removeBackground } handed over from Camera Capture,
-// or null when the editor is opened on its own.
-function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null }) {
+// or null when the editor is opened on its own. onBackToCapture(files,
+// { removeBackground }) sends the photos to Camera Capture.
+function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null, onBackToCapture }) {
     const isPhone = useIsPhone();
     const fileInputRef = useRef(null);
     const previewCanvasRef = useRef(null);
@@ -240,6 +244,9 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     );
     // Carried over from Camera Capture so the build uses the same setting.
     const removeBackground = initialPhotos?.removeBackground ?? false;
+    // Opened from Camera Capture, so it can send the photos back there.
+    // Fixed when the editor opens, so re-clicking the tab doesn't hide it.
+    const [isFromCapture] = useState(() => initialPhotos !== null && Boolean(onBackToCapture));
     const [selectedPhotoId, setSelectedPhotoId] = useState(null);
     // Edits shared by every photo that hasn't been edited on its own.
     const [batchEdits, setBatchEdits] = useState(DEFAULT_EDITS);
@@ -394,6 +401,14 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
         const photoEdits = editsFor(photo);
         if (!hasColorChange(photoEdits)) return 'none';
         return `url(#${photo.customEdits ? filterIdForPhoto(photo.id) : BATCH_FILTER_ID})`;
+    }
+
+    // Takes every photo here (the original files) to Camera Capture, back
+    // where they came from or there for the first time. Edits and "leave
+    // out" choices only live in the editor, so they reset.
+    function backToCapture() {
+        playSound(isFromCapture ? 'back' : 'tap');
+        onBackToCapture(photos.map((photo) => photo.file), { removeBackground });
     }
 
     function openFilePicker() {
@@ -712,14 +727,23 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                         photos are flagged so you can leave them out.
                     </p>
                 </div>
-                {photos.length > 0 && (
+                {(photos.length > 0 || isFromCapture) && (
                     <div className="photo-editor-heading-actions">
-                        <button className="forma-btn" onClick={openLibraryPicker}>
-                            <Icon name="layers" size={14} /> From library
-                        </button>
-                        <button className="forma-btn" onClick={openFilePicker}>
-                            <Icon name="plus" size={14} /> Add photos
-                        </button>
+                        {onBackToCapture && (
+                            <button className="forma-btn" onClick={backToCapture}>
+                                <Icon name="camera" size={14} /> {isFromCapture ? 'Back to camera' : 'Go to camera'}
+                            </button>
+                        )}
+                        {photos.length > 0 && (
+                            <>
+                                <button className="forma-btn" onClick={openLibraryPicker}>
+                                    <Icon name="layers" size={14} /> From library
+                                </button>
+                                <button className="forma-btn" onClick={openFilePicker}>
+                                    <Icon name="plus" size={14} /> Add photos
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
                 <input
