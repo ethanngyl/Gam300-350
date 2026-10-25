@@ -16,6 +16,7 @@ out.
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
+import genesisLogo from './GenesisLogo.svg';
 import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 
 const TABS = [
@@ -60,7 +61,7 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
             </button>
 
             <div className="forma-logo">
-                <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
+                <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
                 <span className="forma-logo-text">GENESIS</span>
             </div>
 

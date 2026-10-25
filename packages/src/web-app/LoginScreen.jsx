@@ -19,7 +19,7 @@ the backend supports it (GOOGLE_SIGN_IN_READY); until then it says so.
 **************************************************************************/
 
 import { useState } from 'react';
-import Icon from './Icons.jsx';
+import genesisLogo from './GenesisLogo.svg';
 import { playSound } from '../audio/Audio.js';
 
 // TODO(backend): set to true once GET /auth/google starts the Google sign-in
@@ -132,7 +132,7 @@ function LoginScreen({ onLogin }) {
         <div className="genesis-login genesis-login-split">
             <aside className="login-hero">
                 <div className="forma-logo login-hero-logo">
-                    <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
+                    <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
                     GENESIS
                 </div>
                 <div className="login-hero-copy">
@@ -152,7 +152,7 @@ function LoginScreen({ onLogin }) {
             <div className="login-panel">
                 <form className="login-card" onSubmit={handleSubmit}>
                     <div className="forma-logo login-logo">
-                        <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
+                        <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
                         GENESIS
                     </div>
                     <p className="eyebrow">{isSignUp ? 'Create account' : 'Sign in'}</p>
