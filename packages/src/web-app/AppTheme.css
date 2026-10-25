@@ -2202,3 +2202,136 @@ html {
         right: 16px;
     }
 }
+
+/* ---------- Login: split layout (hero left, form right) ---------- */
+
+.genesis-login-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+    align-items: stretch;
+    padding: 0;
+}
+
+.login-hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 32px;
+    padding: 48px 64px;
+    border-right: 1px solid var(--forma-border);
+    background: radial-gradient(circle at 15% 85%, rgba(63, 152, 173, 0.18), transparent 45%), radial-gradient(circle at 80% 15%, rgba(244, 145, 123, 0.1), transparent 40%), linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-sidebar);
+}
+
+.login-hero-logo {
+    border-right: none;
+    padding-right: 0;
+}
+
+.login-hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 560px;
+}
+
+    .login-hero-copy .eyebrow {
+        margin: 0;
+    }
+
+.genesis-login .login-hero-copy h2 {
+    font-size: clamp(2.6rem, 5vw, 4.2rem);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    color: var(--forma-heading);
+}
+
+.login-hero-copy p:not(.eyebrow) {
+    color: var(--forma-text);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.login-hero-steps {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+    .login-hero-steps li {
+        padding: 9px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--forma-border-strong);
+        background: rgba(17, 29, 41, 0.6);
+        font-size: 0.8rem;
+        color: var(--forma-text);
+    }
+
+.genesis-login .login-hero-footer {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--forma-text-dim);
+}
+
+.login-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+}
+
+/* The form sits straight on the page, not in a card. */
+.genesis-login-split .login-card {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+/* The hero already shows the logo on wider screens. */
+.genesis-login-split .login-logo {
+    display: none;
+}
+
+/* "or continue with" line between the email form and Google sign-in. */
+.login-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.74rem;
+    color: var(--forma-text-dim);
+}
+
+    .login-divider::before,
+    .login-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--forma-border);
+    }
+
+.login-google {
+    gap: 10px;
+}
+
+    .login-google svg {
+        flex: none;
+    }
+
+@media (max-width: 900px) {
+    .genesis-login-split {
+        grid-template-columns: 1fr;
+    }
+
+    .login-hero {
+        display: none;
+    }
+
+    .genesis-login-split .login-logo {
+        display: flex;
+    }
+}
