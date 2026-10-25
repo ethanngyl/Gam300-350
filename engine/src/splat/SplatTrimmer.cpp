@@ -107,7 +107,7 @@ std::vector<SplatVertex> ApplyKeepMask(const std::vector<SplatVertex>& splats, c
     return result;
 }
 
-SplatTrimmerParam ToTrimmerParam(const SplatTrimSettings& settings, const std::vector<SplatVertex>& splats)
+SplatTrimmerParam ToTrimmerParam(const TrimData& settings, const std::vector<SplatVertex>& splats)
 {
     SplatTrimmerParam params;
     params.minAlpha = settings.minAlpha;
@@ -131,7 +131,7 @@ SplatTrimmerParam ToTrimmerParam(const SplatTrimSettings& settings, const std::v
     return params;
 }
 
-std::vector<SplatVertex> TrimSplats(const std::vector<SplatVertex>& splats, const SplatTrimSettings& settings)
+std::vector<SplatVertex> TrimSplats(const std::vector<SplatVertex>& splats, const TrimData& settings)
 {
     return ApplyKeepMask(splats, ComputeKeepMask(splats, ToTrimmerParam(settings, splats)));
 }

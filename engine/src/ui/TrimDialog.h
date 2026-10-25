@@ -2,8 +2,8 @@
 \file TrimDialog.h
 \brief
 Declares TrimDialog, a non-modal window for editing the splat trim
-settings. "Apply" saves the settings (used for later imports) and re-trims
-the selected model from its original data.
+default values. "Apply" saves them as the global defaults used for later
+imports; per-model trimming lives in the Inspector.
 **************************************************************************/
 #pragma once
 
@@ -19,13 +19,13 @@ class QSpinBox;
 
 class TrimDialog : public QDialog {
 public:
-    using ApplyCallback = std::function<void(const SplatTrimSettings&)>;
+    using ApplyCallback = std::function<void(const TrimData&)>;
 
-    TrimDialog(const SplatTrimSettings& initial, ApplyCallback onApply, QWidget* parent = nullptr);
+    TrimDialog(const TrimData& initial, ApplyCallback onApply, QWidget* parent = nullptr);
 
 private:
-    void load(const SplatTrimSettings& settings);
-    SplatTrimSettings current() const;
+    void load(const TrimData& settings);
+    TrimData current() const;
 
     QDoubleSpinBox* m_minAlpha = nullptr;
     QDoubleSpinBox* m_cropPct = nullptr;

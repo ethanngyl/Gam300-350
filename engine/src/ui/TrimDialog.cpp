@@ -13,14 +13,14 @@ Implements TrimDialog.
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-TrimDialog::TrimDialog(const SplatTrimSettings& initial, ApplyCallback onApply, QWidget* parent)
+TrimDialog::TrimDialog(const TrimData& initial, ApplyCallback onApply, QWidget* parent)
     : QDialog(parent), m_onApply(std::move(onApply)) {
-    setWindowTitle("Trim Settings");
+    setWindowTitle("Default Trim Settings");
 
     auto* layout = new QVBoxLayout(this);
-    auto* intro = new QLabel("Removes unnecessary splats. Apply re-trims the selected model from its "
-                             "original data and uses these values for future imports. Lower the "
-                             "values (or set them to 0) to keep more detail.", this);
+    auto* intro = new QLabel("Default trim values for new imports. Apply saves them; it does not change "
+                             "models already in the scene (use the Trim section in the Inspector for "
+                             "that). Lower the values (or set them to 0) to keep more detail.", this);
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
@@ -58,21 +58,21 @@ TrimDialog::TrimDialog(const SplatTrimSettings& initial, ApplyCallback onApply, 
     connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked, this,
             [this] { m_onApply(current()); });
     connect(buttons->button(QDialogButtonBox::RestoreDefaults), &QPushButton::clicked, this,
-            [this] { load(SplatTrimSettings{}); });
+            [this] { load(TrimData{}); });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
 
     load(initial);
 }
 
-void TrimDialog::load(const SplatTrimSettings& settings) {
+void TrimDialog::load(const TrimData& settings) {
     m_minAlpha->setValue(settings.minAlpha);
     m_cropPct->setValue(settings.cropPct);
     m_voxelDivisions->setValue(settings.voxelDivisions);
     m_minPerVoxel->setValue(settings.minPerVoxel);
 }
 
-SplatTrimSettings TrimDialog::current() const {
-    SplatTrimSettings settings;
+TrimData TrimDialog::current() const {
+    TrimData settings;
     settings.minAlpha = static_cast<float>(m_minAlpha->value());
     settings.cropPct = static_cast<float>(m_cropPct->value());
     settings.voxelDivisions = m_voxelDivisions->value();

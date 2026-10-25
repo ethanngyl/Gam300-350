@@ -263,7 +263,7 @@ void MainWindow::createActions() {
                                        "Uncheck to import the original data untouched.");
 
     m_trimSettingsAction = new QAction("Trim &Settings...", this);
-    m_trimSettingsAction->setStatusTip("Edit the splat trim values and re-trim the selected model");
+    m_trimSettingsAction->setStatusTip("Edit the default splat trim values used for new imports");
     connect(m_trimSettingsAction, &QAction::triggered, this, [this] { showTrimDialog(); });
 
     m_resetLayoutAction = new QAction("&Reset Layout", this);
@@ -393,6 +393,8 @@ void MainWindow::createDocks() {
         selectModel(index);
         exportModels();
     });
+    connect(m_inspector, &InspectorPanel::trimApplyRequested, this, &MainWindow::applyModelTrim);
+    connect(m_inspector, &InspectorPanel::untrimRequested, this, &MainWindow::untrimModel);
     connect(m_inspector, &InspectorPanel::nameChanged, this, [this](const QString& name) {
         if (SplatRenderer* renderer = m_viewport->renderer()) {
             renameModel(renderer->GetSelectedModel(), name);
@@ -443,6 +445,7 @@ void MainWindow::restoreSettings() {
     m_trimSettings.cropPct = settings.value(kTrimCropKey, m_trimSettings.cropPct).toFloat();
     m_trimSettings.voxelDivisions = settings.value(kTrimDivisionsKey, m_trimSettings.voxelDivisions).toInt();
     m_trimSettings.minPerVoxel = settings.value(kTrimMinPerVoxelKey, m_trimSettings.minPerVoxel).toInt();
+    m_inspector->setDefaultTrim(m_trimSettings);
 
     m_recentFiles = settings.value(kRecentFilesKey).toStringList();
     rebuildRecentMenu();
@@ -553,7 +556,7 @@ void MainWindow::startNextImport() {
     const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
     auto original = std::make_shared<std::vector<SplatVertex>>(); // filled only when trimmed
     const bool trim = m_trimOnImportAction->isChecked();
-    const SplatTrimSettings trimSettings = m_trimSettings;
+    const TrimData trimSettings = m_trimSettings;
     m_loadThread = QThread::create([splats, original, nativePath, trim, trimSettings] {
         *splats = LoadSplatPly(nativePath);
         if (trim && !splats->empty()) {
@@ -564,17 +567,17 @@ void MainWindow::startNextImport() {
             }
         }
     });
-    connect(m_loadThread, &QThread::finished, this, [this, splats, original, path] {
+    connect(m_loadThread, &QThread::finished, this, [this, splats, original, path, trimSettings] {
         m_loadThread->deleteLater();
         m_loadThread = nullptr;
-        finishImport(path, *splats, *original);
+        finishImport(path, *splats, *original, trimSettings);
         startNextImport();
     });
     m_loadThread->start();
 }
 
 void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& splats,
-                              std::vector<SplatVertex>& original) {
+                              std::vector<SplatVertex>& original, const TrimData& trimData) {
     setImportBusy(m_pendingImports.isEmpty() ? QString() : QFileInfo(m_pendingImports.front()).fileName());
 
     const QString fileName = QFileInfo(path).fileName();
@@ -593,9 +596,12 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     const size_t count = splats.size();
     const size_t originalCount = original.empty() ? count : original.size();
     renderer->SetSplats(splats, fileName.toStdString());
-    if (!original.empty()) {
-        renderer->GetModel(static_cast<int>(renderer->ModelCount()) - 1)->SetOriginal(std::move(original));
+    SplatModel* imported = renderer->GetModel(static_cast<int>(renderer->ModelCount()) - 1);
+    const bool wasTrimmed = !original.empty();
+    if (wasTrimmed) {
+        imported->SetOriginal(std::move(original));
     }
+    imported->SetTrimData(trimData, wasTrimmed);
     addRecentFile(path);
 
     selectModel(static_cast<int>(renderer->ModelCount()) - 1);
@@ -613,18 +619,21 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
 }
 
 void MainWindow::showTrimDialog() {
-    auto* dialog = new TrimDialog(m_trimSettings, [this](const SplatTrimSettings& s) { applyTrimSettings(s); }, this);
+    auto* dialog = new TrimDialog(m_trimSettings, [this](const TrimData& d) { applyDefaultTrim(d); }, this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->show();
 }
 
-void MainWindow::applyTrimSettings(const SplatTrimSettings& settings) {
-    m_trimSettings = settings;
+void MainWindow::applyDefaultTrim(const TrimData& trim) {
+    m_trimSettings = trim;
+    m_inspector->setDefaultTrim(trim);
+    statusBar()->showMessage("Default trim settings saved. They apply to new imports.", kStatusMessageMs);
+}
 
+void MainWindow::applyModelTrim(const TrimData& settings) {
     SplatRenderer* renderer = m_viewport->renderer();
     SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
     if (!model) {
-        statusBar()->showMessage("Trim settings saved. Select a model to apply them to it.", kStatusMessageMs);
         return;
     }
 
@@ -641,11 +650,34 @@ void MainWindow::applyTrimSettings(const SplatTrimSettings& settings) {
     const size_t total = source.size();
     const size_t kept = trimmed.size();
     renderer->UpdateModel(model, trimmed);
+    model->SetTrimData(settings, kept < total);
     refreshScenePanels();
+    m_inspector->refreshTrim();
 
     const QString message = QString("Trimmed %1: kept %2 of %3 splats")
                                 .arg(QString::fromStdString(model->GetName()),
                                      QLocale().toString(static_cast<qulonglong>(kept)),
+                                     QLocale().toString(static_cast<qulonglong>(total)));
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
+}
+
+void MainWindow::untrimModel() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+    if (!model || !model->IsTrimmed()) {
+        return;
+    }
+
+    // The untrimmed data is kept on the model, so Apply can trim it again later.
+    const size_t total = model->SourceSplats().size();
+    renderer->UpdateModel(model, model->SourceSplats());
+    model->SetTrimData(model->GetTrimData(), false);
+    refreshScenePanels();
+    m_inspector->refreshTrim();
+
+    const QString message = QString("Restored %1: %2 splats")
+                                .arg(QString::fromStdString(model->GetName()),
                                      QLocale().toString(static_cast<qulonglong>(total)));
     qInfo("%s.", qPrintable(message));
     statusBar()->showMessage(message, kStatusMessageMs);

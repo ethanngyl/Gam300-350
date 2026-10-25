@@ -13,6 +13,7 @@
 #pragma once
 
 #include "SplatData.h"
+#include "SplatTrimmer.h"
 #include "../gfx/Shader.h"
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -33,6 +34,12 @@ public:
     void SetOriginal(std::vector<SplatVertex>&& original) { m_original = std::move(original); }
     void KeepOriginal() { if (m_original.empty()) m_original = m_splats; }
     const std::vector<SplatVertex>& SourceSplats() const { return m_original.empty() ? m_splats : m_original; }
+
+    //Trim values this model was last trimmed with (or will start from if never trimmed),
+    //and whether it has been trimmed at all.
+    void SetTrimData(const TrimData& data, bool trimmed) { m_trimData = data; m_trimmed = trimmed; }
+    const TrimData& GetTrimData() const { return m_trimData; }
+    bool IsTrimmed() const { return m_trimmed; }
 
     void SetName(const std::string& name) { m_name = name; }
     const std::string& GetName() const { return m_name; }
@@ -55,6 +62,9 @@ private:
     std::string m_name;
     std::vector<SplatVertex> m_splats; //Copy of splat data
     std::vector<SplatVertex> m_original; //Untrimmed copy, empty if the model was never trimmed
+
+    TrimData m_trimData; //Values used for the last trim
+    bool m_trimmed = false; //If the model has been trimmed
 
     bool isHidden = false; //If model is currently hhidden
 };

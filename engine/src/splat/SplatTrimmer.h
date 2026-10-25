@@ -16,9 +16,11 @@ struct SplatTrimmerParam
     int minPerVoxel = 5;    //Drop splats whose voxel holds fewer than this
 };
 
-//User-facing trim settings. These are scale independent, so they suit any scan;
+//User-facing trim values. These are scale independent, so they suit any scan;
 //ToTrimmerParam converts them to world units for a particular set of splats.
-struct SplatTrimSettings
+//The default-constructed values are the factory defaults. MainWindow holds one as the global
+//default for new imports and each SplatModel holds the one it was last trimmed with.
+struct TrimData
 {
     float minAlpha = 0.005f;      //Drop splats with alpha below this (0 = off)
     float cropPct = 0.05f;        //Percent trimmed from each end of every axis (0 = off)
@@ -27,7 +29,7 @@ struct SplatTrimSettings
 };
 
 //Converts the settings to world-unit parameters using the extent of the given splats
-SplatTrimmerParam ToTrimmerParam(const SplatTrimSettings& settings, const std::vector<SplatVertex>& splats);
+SplatTrimmerParam ToTrimmerParam(const TrimData& settings, const std::vector<SplatVertex>& splats);
 
 //One byte per input splat, 1 = keep, 0 = trim
 std::vector<uint8_t> ComputeKeepMask(const std::vector<SplatVertex>& splats, const SplatTrimmerParam& params);
@@ -36,4 +38,4 @@ std::vector<uint8_t> ComputeKeepMask(const std::vector<SplatVertex>& splats, con
 std::vector<SplatVertex> ApplyKeepMask(const std::vector<SplatVertex>& splats, const std::vector<uint8_t>& keep);
 
 //Convenience: trims with the given settings
-std::vector<SplatVertex> TrimSplats(const std::vector<SplatVertex>& splats, const SplatTrimSettings& settings);
+std::vector<SplatVertex> TrimSplats(const std::vector<SplatVertex>& splats, const TrimData& settings);
