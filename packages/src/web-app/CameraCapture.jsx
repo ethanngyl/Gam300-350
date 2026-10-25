@@ -14,6 +14,7 @@ removal, and the button that sends the batch for reconstruction).
 Each photo is checked in the background for blur, bad exposure and
 near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
+Taking a photo plays the camera shutter sound (quieter for auto-capture).
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -178,6 +179,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Shutter sound the moment the frame is grabbed. Quieter for
+        // auto-capture, which repeats every few seconds.
+        playSound('camera', showFeedback ? 1 : 0.5);
 
         canvas.toBlob(
             (blob) => {
@@ -362,7 +366,6 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError }) {
                             <button
                                 className="forma-btn capture-btn"
                                 onClick={() => {
-                                    playSound('tap');
                                     capturePhoto(true);
                                 }}
                                 disabled={!stream}
