@@ -79,7 +79,7 @@ import { marked } from 'marked'
 import
 {
   SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
-  findSessionUser, findUserByEmail, getJobOwnerId,
+  findOrCreateGoogleUser, findSessionUser, findUserByEmail, getJobOwnerId,
   listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
   verifyPassword,
 }
@@ -667,7 +667,34 @@ async function checkCredentials(email, password)
   return { status: 'ok', user }
 }
 
+// --- Google sign-in state ----------------------------------------------------
+// The OAuth "state" is kept in a short-lived cookie in the browser that
+// started the sign-in, so a callback link made in another browser (e.g. an
+// attacker's, to log a victim into the attacker's account) is rejected.
+// path '/auth/google' also covers '/auth/google/callback'.
+const GOOGLE_STATE_COOKIE = 'genesis_google_state'
+const GOOGLE_STATE_PATH = '/auth/google'
 
+/************************************************************************/
+/*!
+  \brief
+    Constant-time string comparison, so the state can't be guessed by
+    timing. Byte lengths are checked first because timingSafeEqual throws
+    on unequal lengths.
+  \param a
+  string
+  \param b
+  string
+  \return
+    true if both are non-empty and equal
+*/
+/************************************************************************/
+function safeEqual(a, b)
+{
+  const x = Buffer.from(String(a ?? ''))
+  const y = Buffer.from(String(b ?? ''))
+  return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y)
+}
 // ----- End of Functions ----------------------------------------------------- //
 
 // ----- Start of Routes ------------------------------------------------------ // 
@@ -1334,6 +1361,111 @@ app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
   }
 })
 
+/************************************************************************/
+/*!
+  \brief
+    Start Google sign-in: redirect the browser to Google's consent screen.
+    Authority (VM) only -- the redirect URI is registered against the VM.
+    A random state goes both to Google and into a 10-minute HttpOnly
+    cookie in this browser; the callback requires the two to match.
+  \return
+    302 to Google, or 503 if Google SSO isn't configured
+*/
+/************************************************************************/
+app.get('/auth/google', (req, res) =>
+{
+  if (config.authMode !== 'authority' || !config.googleClientId)
+    return res.status(503).json({ error: 'Google sign-in is not available here.' })
+
+  const state = crypto.randomBytes(16).toString('base64url')
+  // sameSite 'lax' is still sent on Google's redirect back, because that
+  // is a normal top-level navigation.
+  res.cookie(GOOGLE_STATE_COOKIE, state, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: req.secure,
+    path: GOOGLE_STATE_PATH,
+    maxAge: 10 * 60 * 1000,
+  })
+  const params = new URLSearchParams({
+    client_id: config.googleClientId,
+    redirect_uri: config.googleRedirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    // Ask for a fresh account chooser each time.
+    prompt: 'select_account',
+  })
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Google redirects back here with ?code & ?state. Verify state against
+    this browser's state cookie (one use only: the cookie is cleared
+    straight away), exchange the code for tokens, read the verified
+    email/name/sub from the ID token, find-or-create the account, start a
+    session, go to the app.
+  \return
+    302 to "/" on success (logged in), or an error page/redirect on failure
+*/
+/************************************************************************/
+app.get('/auth/google/callback', async (req, res) =>
+{
+  if (config.authMode !== 'authority') return res.status(503).send('Not available here.')
+  const { code, state, error } = req.query
+
+  const expectedState = readCookie(req, GOOGLE_STATE_COOKIE)
+  res.clearCookie(GOOGLE_STATE_COOKIE, { path: GOOGLE_STATE_PATH })
+
+  if (error) return res.redirect('/?login=google_denied')
+  if (!code || !safeEqual(state, expectedState))
+    return res.redirect('/?login=google_failed')
+
+  try
+  {
+    // 1. Exchange the code for tokens (server-to-server, uses the secret).
+    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: config.googleClientId,
+        client_secret: config.googleClientSecret,
+        redirect_uri: config.googleRedirectUri,
+        grant_type: 'authorization_code',
+      }),
+      signal: AbortSignal.timeout(8000),
+    })
+    const tokens = await tokenResp.json()
+    if (!tokenResp.ok || !tokens.id_token) return res.redirect('/?login=google_failed')
+
+    // 2. The ID token is a JWT; its middle segment is the JSON claims. Google
+    //    just issued it to us over TLS from its own endpoint, so for sign-in
+    //    we read the claims directly. (A stricter check would verify Google's
+    //    signature against its public keys; acceptable to skip when the token
+    //    came straight from Google's token endpoint over HTTPS.)
+    const claims = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64url').toString())
+    if (claims.aud !== config.googleClientId || !claims.email || !claims.email_verified)
+      return res.redirect('/?login=google_failed')
+
+    // 3. Find or create the account, link by email, start our own session.
+    const user = findOrCreateGoogleUser({ sub: claims.sub, email: claims.email, name: claims.name })
+    if (!user)
+    {
+      console.warn(`[backend] google sign-in refused: ${claims.email} is already linked to a different Google account`)
+      return res.redirect('/?login=google_failed')
+    }
+    startSession(res, user.id, true)
+    res.redirect('/')
+  }
+  catch (err)
+  {
+    console.error('[backend] google callback failed:', err)
+    res.redirect('/?login=google_failed')
+  }
+})
 
 // ----- End of Routes -------------------------------------------------------- //
 

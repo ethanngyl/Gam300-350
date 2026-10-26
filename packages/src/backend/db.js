@@ -170,6 +170,27 @@ const deleteOtherUserWithEmail = db.prepare('DELETE FROM users WHERE email = ? A
 const countLocalAccounts = db.prepare(`SELECT COUNT(*) AS n FROM users WHERE password_hash != 'remote'`)
 const deleteLocalAccounts = db.prepare(`DELETE FROM users WHERE password_hash != 'remote'`)
 
+// Google accounts have no password; they're matched by Google's stable user
+// id (the ID token's "sub"). Add the column to databases made before SSO.
+const hasGoogleSub = db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'google_sub')
+if (!hasGoogleSub)
+{
+  db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT')
+  // UNIQUE so two rows can't claim the same Google identity. A partial index
+  // lets the many password users keep google_sub = NULL without clashing.
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL')
+}
+
+const selectUserByGoogleSub = db.prepare('SELECT * FROM users WHERE google_sub = ?')
+const insertGoogleUser = db.prepare(
+  `INSERT INTO users (email, name, password_hash, google_sub)
+   VALUES (?, ?, 'google-sso', ?) RETURNING id, email, name, role, created_at`
+)
+// Linking also cancels the account's password: signup never proves email
+// ownership, so a password set before the real owner arrived may not be theirs.
+const linkGoogleToUser = db.prepare(`UPDATE users SET google_sub = ?, password_hash = 'google-sso' WHERE id = ?`)
+const deleteSessionsForUser = db.prepare('DELETE FROM sessions WHERE user_id = ?')
+
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -437,5 +458,54 @@ export function retireLocalAccounts()
   return { removed: Number(changes), backupPath }
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Find-or-create the account for a Google sign-in, linking by email.
+    Match order: (1) by Google sub (returning Google user); (2) by email
+    (an existing password account -> attach this Google id to it); else
+    (3) create a new Google account. password_hash is a sentinel: these
+    accounts never log in by password.
+    Linking (2) cancels the old password and logs out every existing
+    session of that account. Signup doesn't prove email ownership, so
+    someone else may have registered this email first ("pre-hijacking");
+    after linking, only the verified Google owner can get in. An email row
+    already linked to a different Google id is never moved.
+  \param profile
+    { sub, email, name } from Google's verified ID token
+  \return
+    { id, email, name, role, createdAt }, or null if the email belongs to
+    an account linked to a different Google id
+*/
+/************************************************************************/
+export function findOrCreateGoogleUser({ sub, email, name })
+{
+  const bySub = selectUserByGoogleSub.get(sub)
+  if (bySub) return { id: bySub.id, email: bySub.email, name: bySub.name, role: bySub.role, createdAt: bySub.created_at }
 
+  const byEmail = selectUserByEmail.get(email)
+  if (byEmail)
+  {
+    if (byEmail.google_sub && byEmail.google_sub !== sub) return null
+
+    // One transaction, so a password can't be cancelled without its
+    // sessions going too (or the other way round).
+    db.exec('BEGIN')
+    try
+    {
+      linkGoogleToUser.run(sub, byEmail.id)   // link: same email = same account
+      deleteSessionsForUser.run(byEmail.id)   // log out whoever was already in
+      db.exec('COMMIT')
+    }
+    catch (err)
+    {
+      db.exec('ROLLBACK')
+      throw err
+    }
+    return { id: byEmail.id, email: byEmail.email, name: byEmail.name, role: byEmail.role, createdAt: byEmail.created_at }
+  }
+
+  const row = insertGoogleUser.get(email, name || email, sub)
+  return { id: row.id, email: row.email, name: row.name, role: row.role, createdAt: row.created_at }
+}
 // ----- End of Functions ----------------------------------------------------- //

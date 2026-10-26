@@ -25,8 +25,8 @@ import { playSound } from '../audio/Audio.js';
 
 // TODO(backend): set to true once GET /auth/google starts the Google sign-in
 // and redirects back to the site with the session cookie set.
-const GOOGLE_SIGN_IN_READY = false;
-const GOOGLE_SIGN_IN_URL = '/auth/google';
+const GOOGLE_SIGN_IN_READY = true;
+const GOOGLE_SIGN_IN_URL = 'https://51-79-240-131.sslip.io/auth/google';
 
 // TODO(backend): set to true once a password reset flow exists, and point
 // PASSWORD_RESET_URL at its page.
