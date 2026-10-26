@@ -12,17 +12,8 @@
 /* ---------- Heading ---------- */
 
 .yt-heading {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
     margin-bottom: 20px;
 }
-
-    /* On phones the Back button sits above the title. */
-    .yt-heading > .forma-btn {
-        order: -1;
-        align-self: flex-start;
-    }
 
 .yt .yt-title {
     font-size: 1.5rem;
@@ -273,24 +264,9 @@
             font-size: 2rem;
         }
 
-    /* Back button returns to the right of the title. */
     .yt-heading {
-        flex-direction: row;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 24px;
         margin-bottom: 24px;
     }
-
-        .yt-heading > div {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .yt-heading > .forma-btn {
-            order: 0;
-            flex: none;
-        }
 
     .yt-card {
         padding: 22px;

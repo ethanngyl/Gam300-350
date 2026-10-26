@@ -8,8 +8,8 @@
 \brief
 Top navigation bar: a menu button (phones only) that opens the sidebar
 drawer, GENESIS logo, Home / Library / Photo Editor / Scene Builder /
-YouTube Extractor tabs (with click sound), a workspace status indicator, and the signed-in
-user's avatar. Clicking the avatar opens a small account menu with links
+YouTube Extractor tabs (with click sound), and the signed-in user's
+avatar. (The "Workspace ready" indicator was removed.) Clicking the avatar opens a small account menu with links
 to the account page, a quick mute / unmute for sound effects, and sign
 out.
 **************************************************************************/
@@ -82,11 +82,6 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                         <span>{tab.label}</span>
                     </button>
                 ))}
-            </div>
-
-            <div className="forma-status">
-                <span className="forma-status-dot"></span>
-                Workspace ready
             </div>
 
             <div className="forma-account" ref={menuContainerRef}>

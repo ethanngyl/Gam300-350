@@ -13,7 +13,10 @@ or left out. Edits (auto fix, brightness, contrast, warmth, tint, auto
 color, pick a neutral spot, sharpen, crop) apply to all photos by
 default; on desktop a photo can also be edited on its own. Strong
 settings, lost highlight/shadow detail, large crops and mixed crops all
-show warnings. "Use original photos" bypasses every edit. Edits are only
+show warnings. "Use original photos" bypasses every edit, and "Remove
+background" (moved here from Camera Capture, so it covers both captured
+and uploaded batches) masks out the background when the model is
+built. Edits are only
 settings until upload, so the originals are never changed. Phones get a
 simpler, batch-only set of tools. "Review photos first" in Camera Capture
 opens the editor with that batch already loaded (initialPhotos); its
@@ -242,8 +245,10 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     const [photos, setPhotos] = useState(() =>
         (initialPhotos?.files ?? []).filter(isImageFile).map(createEditorPhoto)
     );
-    // Carried over from Camera Capture so the build uses the same setting.
-    const removeBackground = initialPhotos?.removeBackground ?? false;
+    // Mask out the background before reconstruction. Needed for turntable
+    // captures, where the static background makes the model come out flat.
+    // Starts with the choice carried over from Camera Capture, if any.
+    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
     // Opened from Camera Capture, so it can send the photos back there.
     // Fixed when the editor opens, so re-clicking the tab doesn't hide it.
     const [isFromCapture] = useState(() => initialPhotos !== null && Boolean(onBackToCapture));
@@ -628,6 +633,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
         setUseOriginals(event.target.checked);
         setIsCropping(false);
         setIsPickingNeutral(false);
+    }
+
+    function handleRemoveBackgroundChange(event) {
+        playSound('tap');
+        setRemoveBackground(event.target.checked);
     }
 
     async function handleGenerate() {
@@ -1122,15 +1132,29 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                     </div>
 
                     <div className="photo-editor-footer">
-                        <label className="photo-editor-originals">
-                            <input
-                                type="checkbox"
-                                className="photo-editor-switch"
-                                checked={useOriginals}
-                                onChange={handleUseOriginalsChange}
-                            />
-                            Use original photos
-                        </label>
+                        <div className="photo-editor-footer-options">
+                            <label className="photo-editor-originals">
+                                <input
+                                    type="checkbox"
+                                    className="photo-editor-switch"
+                                    checked={useOriginals}
+                                    onChange={handleUseOriginalsChange}
+                                />
+                                Use original photos
+                            </label>
+                            <label
+                                className="photo-editor-originals"
+                                title="Turn on for turntable captures (object spins, camera stays still)."
+                            >
+                                <input
+                                    type="checkbox"
+                                    className="photo-editor-switch"
+                                    checked={removeBackground}
+                                    onChange={handleRemoveBackgroundChange}
+                                />
+                                Remove background
+                            </label>
+                        </div>
                         <div className="photo-editor-footer-text">{renderFooterMessage()}</div>
                         <button
                             className="forma-btn forma-btn-primary"

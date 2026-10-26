@@ -334,8 +334,6 @@ function App() {
                         <HomeScreen
                             userName={currentUser.name}
                             onNewGeneration={() => goToTab('capture')}
-                            onYoutube={() => goToTab('youtube')}
-                            onNavigate={goToTab}
                             onOpenLibrary={openLibrary}
                             onOpenModel={openModel}
                         />
@@ -344,8 +342,6 @@ function App() {
                         <LibraryScreen
                             subTab={librarySubTab}
                             onSubTabChange={setLibrarySubTab}
-                            onGenerateModel={() => goToTab('capture')}
-                            onUploadPhotos={() => goToTab('capture')}
                             onOpenModel={openModel}
                         />
                     )}
@@ -365,7 +361,7 @@ function App() {
                     )}
                     {activeTab === 'youtube' && (
                         // YoutubeIngest plays the click sound itself, so none here.
-                        <YoutubeIngest onBack={() => goToTab('home')} />
+                        <YoutubeIngest />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
