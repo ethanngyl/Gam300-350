@@ -320,9 +320,7 @@ function App() {
 
                 <Sidebar
                     activeTab={activeTab}
-                    librarySubTab={librarySubTab}
                     onNavigate={goToTab}
-                    onOpenLibrary={openLibrary}
                     onNewModel={() => goToTab('capture')}
                     isOpen={isMenuOpen}
                     onClose={() => setIsMenuOpen(false)}
@@ -334,8 +332,6 @@ function App() {
                         <HomeScreen
                             userName={currentUser.name}
                             onNewGeneration={() => goToTab('capture')}
-                            onYoutube={() => goToTab('youtube')}
-                            onNavigate={goToTab}
                             onOpenLibrary={openLibrary}
                             onOpenModel={openModel}
                         />

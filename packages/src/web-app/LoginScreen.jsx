@@ -16,6 +16,7 @@ skips the backend and hands the parent a local guest user instead.
 Layout: a hero panel on the left (hidden on narrow screens) and the form
 on the right. "Continue with Google" sends the browser to /auth/google once
 the backend supports it (GOOGLE_SIGN_IN_READY); until then it says so.
+"Forgot password?" works the same way with PASSWORD_RESET_READY.
 **************************************************************************/
 
 import { useState } from 'react';
@@ -26,6 +27,11 @@ import { playSound } from '../audio/Audio.js';
 // and redirects back to the site with the session cookie set.
 const GOOGLE_SIGN_IN_READY = false;
 const GOOGLE_SIGN_IN_URL = '/auth/google';
+
+// TODO(backend): set to true once a password reset flow exists, and point
+// PASSWORD_RESET_URL at its page.
+const PASSWORD_RESET_READY = false;
+const PASSWORD_RESET_URL = '/auth/forgot-password';
 
 // Short summary of the workflow shown on the hero panel.
 const HERO_STEPS = ['Capture source photos', 'Generate detailed models', 'Build complete scenes'];
@@ -68,6 +74,15 @@ function LoginScreen({ onLogin }) {
             return;
         }
         window.location.href = GOOGLE_SIGN_IN_URL;
+    }
+
+    function handleForgotPassword() {
+        playSound('tap');
+        if (!PASSWORD_RESET_READY) {
+            setErrorMessage('Password reset is coming soon. Ask a team admin to reset it for now.');
+            return;
+        }
+        window.location.href = PASSWORD_RESET_URL;
     }
 
     // Temporary bypass: skips the backend and signs in as a local-only guest.
@@ -156,10 +171,7 @@ function LoginScreen({ onLogin }) {
                         GENESIS
                     </div>
                     <p className="eyebrow">{isSignUp ? 'Create account' : 'Sign in'}</p>
-                    <h1>{isSignUp ? 'Create your account' : 'Welcome back'}</h1>
-                    <p className="login-subtitle">
-                        Turn photos and video frames into polished 3D assets.
-                    </p>
+                    <h1>{isSignUp ? 'Create your account' : 'Welcome to Genesis'}</h1>
 
                     {isSignUp && (
                         <label className="login-field">
@@ -181,15 +193,22 @@ function LoginScreen({ onLogin }) {
                             autoComplete="email"
                         />
                     </label>
-                    <label className="login-field">
-                        Password
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(event) => setPassword(event.target.value)}
-                            autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                        />
-                    </label>
+                    <div className="login-password">
+                        <label className="login-field">
+                            Password
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                            />
+                        </label>
+                        {!isSignUp && (
+                            <button type="button" className="login-forgot" onClick={handleForgotPassword}>
+                                Forgot password?
+                            </button>
+                        )}
+                    </div>
                     <label className="login-remember">
                         <input
                             type="checkbox"

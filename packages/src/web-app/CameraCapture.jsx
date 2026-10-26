@@ -8,7 +8,8 @@
 \brief
 In-browser photo capture screen for scanning an object, laid out to match
 the GENESIS theme: a camera panel (live preview, manual or interval-based
-auto-capture with a user-adjustable photo cap) beside a batch panel
+auto-capture with a user-adjustable photo cap, and the Space key as a
+shortcut for both) beside a batch panel
 (drag-and-drop and file-picker uploads, live thumbnails with per-photo
 removal, and the button that sends the batch for reconstruction).
 Each photo is checked in the background for blur, bad exposure and
@@ -27,6 +28,14 @@ import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
 
 const HARD_CAP = 200;
+
+// Space is the capture shortcut, except while typing or on a focused
+// control outside the camera panel, where it keeps its normal job (e.g.
+// pressing that button). The camera's own buttons always use the shortcut.
+function isShortcutBlockedBy(target) {
+    if (target.closest?.('.capture-controls')) return false;
+    return Boolean(target.closest?.('input, textarea, select, button, a, [contenteditable="true"], [role="dialog"]'));
+}
 
 // Builds the warning above the buttons, e.g. "3 look blurry, 2 are near-duplicates".
 const ISSUE_SUMMARY_PHRASES = {
@@ -226,6 +235,26 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
         return () => clearInterval(id);
     }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto, photos.length]);
 
+    // Space: take a photo in Manual mode, start / stop in Auto mode.
+    useEffect(() => {
+        function handleKeyDown(event) {
+            if (event.code !== 'Space' || event.repeat || !stream) return;
+            if (isLibraryPickerOpen || isShortcutBlockedBy(event.target)) return;
+            event.preventDefault();
+            // A focused camera button would otherwise also be pressed on key-up.
+            if (event.target.closest?.('.capture-controls')) event.target.blur();
+            if (captureMode === 'manual') {
+                capturePhoto(true);
+            } else {
+                playSound('tap');
+                setIsAutoCapturing((wasCapturing) => !wasCapturing);
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [captureMode, stream, capturePhoto, isLibraryPickerOpen]);
+
     function handleModeChange(mode) {
         setCaptureMode(mode);
         if (mode === 'manual') {
@@ -349,8 +378,6 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
 
                     {error && <p className="capture-error">{error}</p>}
 
-                    {captureFeedback && <div className="capture-feedback">{captureFeedback}</div>}
-
                     <div className="capture-controls">
                         <div className="capture-mode-toggle">
                             <button
@@ -382,18 +409,21 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                                 disabled={!stream}
                             >
                                 <Icon name="camera" size={16} /> Capture photo
+                                <kbd className="capture-key">Space</kbd>
                             </button>
                         ) : (
                             <div className="capture-auto-controls">
                                 <button
-                                    className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                                    className={isAutoCapturing ? 'forma-btn capture-btn is-capturing' : 'forma-btn capture-btn'}
                                     onClick={() => {
                                         playSound('tap');
                                         setIsAutoCapturing((prev) => !prev);
                                     }}
                                     disabled={!stream}
                                 >
-                                    {isAutoCapturing ? 'Stop auto-capture' : 'Start auto-capture'}
+                                    <Icon name="camera" size={16} />
+                                    {isAutoCapturing ? ' Stop auto-capture' : ' Start auto-capture'}
+                                    <kbd className="capture-key">Space</kbd>
                                 </button>
 
                                 <label className="capture-interval-label">
@@ -433,6 +463,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                             </div>
                         )}
                     </div>
+
+                    {/* Below the buttons, so showing it doesn't push them down. */}
+                    {captureFeedback && <div className="capture-feedback">{captureFeedback}</div>}
                 </div>
 
                 <div className="forma-card capture-batch">

@@ -9,13 +9,14 @@
 \date 08-10-2026
 \brief
 Lets the user submit a YouTube video link and frame-extraction rate to
-the backend, then polls job status until reconstruction finishes,
-showing phase, progress, and a download link for the resulting .ply.
-Also frees an in-progress server-side job if the user navigates away or
-closes the tab before it completes. The submit, polling and cleanup
-logic is unchanged; the markup was redesigned to the GENESIS theme
-(page heading, link form card, status card with a pipeline step tracker).
-An optional onBack prop adds a "Back to dashboard" button to the heading.
+the backend, then polls job status until reconstruction
+finishes. A thumbnail of the video shows under the link once it is
+valid. The status card only appears while a job exists: a simple
+progress bar while it runs, then the extracted frames and a download
+link for the resulting .ply once it is done. Also frees an in-progress
+server-side job if the user navigates away or closes the tab before it
+completes. An optional onBack prop adds a "Back to dashboard" button to
+the heading.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -28,11 +29,15 @@ const YT_HOSTS = new Set([
     'youtube-nocookie.com', 'www.youtube-nocookie.com',
 ]);
 
-function normalizeYoutubeUrl(input) {
-    const withScheme = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+function withHttpsScheme(input) {
+    return /^https?:\/\//i.test(input) ? input : `https://${input}`;
+}
+
+// The 11-character video id from a single-video link, or null.
+function youtubeVideoId(input) {
     let u;
     try {
-        u = new URL(withScheme);
+        u = new URL(withHttpsScheme(input));
     } catch {
         return null;
     }
@@ -44,10 +49,21 @@ function normalizeYoutubeUrl(input) {
             ? u.searchParams.get('v')
             : u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/]+)/)?.[1];
     }
-    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? withScheme : null;
+    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+}
+
+function normalizeYoutubeUrl(input) {
+    return youtubeVideoId(input) ? withHttpsScheme(input) : null;
+}
+
+function youtubeThumbnailUrl(videoId) {
+    return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }
 
 const FINISHED = ['done', 'error', 'cancelled'];
+
+// How many extracted frames to show once the job is done.
+const FRAME_PREVIEW_COUNT = 24;
 
 async function parseJson(res) {
     const text = await res.text();
@@ -72,21 +88,14 @@ const PHASE_LABELS = {
     upload: 'Preparing',
 };
 
-const PHASE_ORDER = [
-    'extract',
-    'colmap-features',
-    'colmap-matching',
-    'colmap-mapping',
-    'training',
-    'normalize',
-];
-
 function YoutubeIngest({ onBack }) {
     const [url, setUrl] = useState('');
     const [fps, setFps] = useState(2);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
     const [job, setJob] = useState(null);
+    const [extractedFrames, setExtractedFrames] = useState([]);
+    const [hasThumbnailFailed, setHasThumbnailFailed] = useState(false);
     // Set when training finishes, to ask for the model's name.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const jobRef = useRef(null);
@@ -118,6 +127,19 @@ function YoutubeIngest({ onBack }) {
         };
     }, []);
 
+    // /jobs/:id has no image list, so read this job's frames from /jobs.
+    const loadExtractedFrames = useCallback(async (id) => {
+        try {
+            const res = await fetch('/jobs');
+            if (!res.ok) return;
+            const allJobs = await parseJson(res);
+            const finishedJob = Array.isArray(allJobs) ? allJobs.find((listedJob) => listedJob.id === id) : null;
+            setExtractedFrames(finishedJob?.images ?? []);
+        } catch {
+            // The frames are only a preview; the download still works without them.
+        }
+    }, []);
+
     const pollJob = useCallback(
         (id) => {
             stopPolling();
@@ -129,7 +151,10 @@ function YoutubeIngest({ onBack }) {
                     setJob(data);
                     if (FINISHED.includes(data.status)) {
                         stopPolling();
-                        if (data.status === 'done') setNamePromptJobId(id);
+                        if (data.status === 'done') {
+                            setNamePromptJobId(id);
+                            loadExtractedFrames(id);
+                        }
                     }
                 } catch (err) {
                     setError(`Lost contact with the server: ${err.message}`);
@@ -137,7 +162,7 @@ function YoutubeIngest({ onBack }) {
                 }
             }, 1500);
         },
-        [stopPolling],
+        [stopPolling, loadExtractedFrames],
     );
 
     async function handleSubmit(e) {
@@ -153,6 +178,7 @@ function YoutubeIngest({ onBack }) {
 
         setSubmitting(true);
         setJob(null);
+        setExtractedFrames([]);
         try {
             const res = await fetch('/jobs/from-youtube', {
                 method: 'POST',
@@ -173,14 +199,9 @@ function YoutubeIngest({ onBack }) {
     const busy = submitting || (job && !FINISHED.includes(job.status));
     const pct = job ? Math.round((job.progress || 0) * 100) : 0;
     const phaseLabel = job ? PHASE_LABELS[job.phase] || job.phase : '';
-    const phaseIndex = job ? PHASE_ORDER.indexOf(job.phase) : -1;
-
-    function stepState(index) {
-        if (job && job.status === 'done') return 'done';
-        if (index < phaseIndex) return 'done';
-        if (index === phaseIndex) return 'active';
-        return 'pending';
-    }
+    const videoId = youtubeVideoId(url.trim());
+    const isJobDone = job?.status === 'done';
+    const isJobFailed = job && (job.status === 'error' || job.status === 'cancelled');
 
     return (
         <div className="yt">
@@ -220,10 +241,24 @@ function YoutubeIngest({ onBack }) {
                             className="yt-input"
                             placeholder="https://www.youtube.com/watch?v=..."
                             value={url}
-                            onChange={(e) => setUrl(e.target.value)}
+                            onChange={(e) => {
+                                setUrl(e.target.value);
+                                setHasThumbnailFailed(false);
+                            }}
                             disabled={busy}
                             aria-label="YouTube video link"
                         />
+
+                        {videoId && !hasThumbnailFailed && (
+                            <div className="yt-preview">
+                                <img
+                                    src={youtubeThumbnailUrl(videoId)}
+                                    alt="Thumbnail of the linked video"
+                                    onError={() => setHasThumbnailFailed(true)}
+                                />
+                            </div>
+                        )}
+
                         <div className="yt-row">
                             <label className="yt-fps">
                                 fps
@@ -252,56 +287,58 @@ function YoutubeIngest({ onBack }) {
                     {error && <p className="yt-error">{error}</p>}
                 </div>
 
-                <div className="forma-card yt-card">
-                    <div>
-                        <div className="eyebrow">Progress</div>
-                        <h2 className="yt-card-title">Extraction status</h2>
-                    </div>
-
-                    {!job && (
-                        <div className="yt-empty">
-                            No extraction running. Paste a link and extract frames to see
-                            progress here.
+                {job && (
+                    <div className="forma-card yt-card">
+                        <div>
+                            <div className="eyebrow">Progress</div>
+                            <h2 className="yt-card-title">{isJobDone ? 'Extracted frames' : 'Extraction status'}</h2>
                         </div>
-                    )}
 
-                    {job && (
                         <div className="yt-status">
                             <div className="yt-status-head">
                                 <span className={`yt-badge yt-badge-${job.status}`}>{job.status}</span>
-                                <span className="yt-phase">{job.detail || phaseLabel}</span>
+                                <span className="yt-phase">{isJobDone ? 'Done' : job.detail || phaseLabel}</span>
                                 {job.imageCount != null && (
                                     <span className="yt-frames">{job.imageCount} frames</span>
                                 )}
                             </div>
 
-                            <div className="yt-bar" aria-hidden="true">
-                                <div className="yt-bar-fill" style={{ width: `${pct}%` }} />
-                            </div>
-
-                            <ol className="yt-steps">
-                                {PHASE_ORDER.map((phaseKey, index) => (
-                                    <li key={phaseKey} className={`yt-step yt-step-${stepState(index)}`}>
-                                        <span className="yt-step-dot"></span>
-                                        {PHASE_LABELS[phaseKey]}
-                                    </li>
-                                ))}
-                            </ol>
+                            {!isJobDone && !isJobFailed && (
+                                <div
+                                    className="yt-bar"
+                                    role="progressbar"
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={pct}
+                                    aria-label="Extraction progress"
+                                >
+                                    <div className="yt-bar-fill" style={{ width: `${pct}%` }} />
+                                </div>
+                            )}
 
                             {job.error && <p className="yt-error">{job.error}</p>}
 
-                            {job.status === 'done' && (
+                            {isJobDone && extractedFrames.length > 0 && (
+                                <div className="yt-frame-grid">
+                                    {extractedFrames.slice(0, FRAME_PREVIEW_COUNT).map((frame) => (
+                                        <img key={frame.name} src={frame.url} alt={frame.name} loading="lazy" />
+                                    ))}
+                                </div>
+                            )}
+                            {isJobDone && extractedFrames.length > FRAME_PREVIEW_COUNT && (
+                                <p className="yt-hint">
+                                    Showing {FRAME_PREVIEW_COUNT} of {extractedFrames.length} frames. The rest are in the Media Library.
+                                </p>
+                            )}
+
+                            {isJobDone && (
                                 <a className="forma-btn forma-btn-primary yt-download" href={`/jobs/${job.id}/result.ply`}>
                                     Download result (.ply)
                                 </a>
                             )}
-
-                            {Array.isArray(job.logTail) && job.logTail.length > 0 && (
-                                <pre className="yt-log">{job.logTail.join('\n')}</pre>
-                            )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
             {namePromptJobId && (
                 <NameModelPrompt jobId={namePromptJobId} onClose={() => setNamePromptJobId(null)} />

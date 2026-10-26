@@ -524,7 +524,12 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
         playSound('tap');
         setColorMessage(null);
         if (isEditingSinglePhoto) {
-            updateEdits({ ...DEFAULT_EDITS });
+            // Clearing the photo's own edits (rather than zeroing them) drops
+            // its "Edited" badge, so it follows the All photos settings again.
+            const resetPhotoId = selectedPhoto.id;
+            setPhotos((currentPhotos) =>
+                currentPhotos.map((photo) => (photo.id === resetPhotoId ? { ...photo, customEdits: null } : photo))
+            );
         } else {
             setBatchEdits(DEFAULT_EDITS);
         }
@@ -907,7 +912,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                                     onClick={toggleCropTool}
                                                     disabled={useOriginals}
                                                 >
-                                                    <Icon name="crop" size={14} /> {isCropToolActive ? 'Done cropping' : 'Crop'}
+                                                    <Icon name="crop" size={16} /> {isCropToolActive ? 'Done cropping' : 'Crop'}
                                                 </button>
                                                 {isCropToolActive && hasCrop(currentEdits.crop) && (
                                                     <button className="forma-btn" onClick={resetCrop}>
@@ -922,7 +927,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                                         onPointerLeave={() => setIsShowingOriginal(false)}
                                                         onPointerCancel={() => setIsShowingOriginal(false)}
                                                     >
-                                                        <Icon name="eye" size={14} /> Hold to see original
+                                                        <Icon name="eye" size={16} /> Hold to see original
                                                     </button>
                                                 )}
                                                 <button className="forma-btn" onClick={() => toggleExcluded(selectedPhoto.id)}>
@@ -978,7 +983,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                             onClick={handleAutoFix}
                                             disabled={autoSourceAnalyses.length === 0}
                                         >
-                                            <Icon name="wand" size={14} /> Auto fix
+                                            <Icon name="wand" size={16} /> Auto fix
                                         </button>
                                         <button
                                             type="button"
@@ -986,7 +991,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                             onClick={handleAutoColor}
                                             disabled={autoSourceAnalyses.length === 0}
                                         >
-                                            <Icon name="sun" size={14} /> Auto colour
+                                            <Icon name="sun" size={16} /> Auto colour
                                         </button>
                                         {!isPhone && (
                                             <button
@@ -995,7 +1000,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                                 onClick={togglePickNeutral}
                                                 disabled={!selectedPhoto || isCropToolActive}
                                             >
-                                                <Icon name="target" size={14} /> {isPickToolActive ? 'Cancel picking' : 'Pick neutral spot'}
+                                                <Icon name="target" size={16} /> {isPickToolActive ? 'Cancel picking' : 'Pick neutral spot'}
                                             </button>
                                         )}
                                     </div>
@@ -1103,7 +1108,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                             onClick={resetCurrentEdits}
                                             disabled={!hasEdits(currentEdits)}
                                         >
-                                            <Icon name="refresh" size={14} /> Reset
+                                            <Icon name="refresh" size={16} /> Reset
                                         </button>
                                         {isEditingSinglePhoto && selectedPhoto.customEdits && (
                                             <button type="button" className="forma-btn" onClick={matchAllPhotos}>
