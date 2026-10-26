@@ -8,9 +8,10 @@ export default defineConfig([
   // Built bundles and installed deps are generated/vendored, not ours to lint.
   globalIgnores(['**/dist/**', '**/node_modules/**']),
 
-  // Browser code: the React web app and the shared audio helper.
+  // Browser code: the React web app, the shared audio helper and the
+  // metrics dashboard's frontend.
   {
-    files: ['src/web-app/**/*.{js,jsx}', 'src/audio/**/*.js'],
+    files: ['src/web-app/**/*.{js,jsx}', 'src/audio/**/*.js', 'src/metrics-dashboard/web/**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -22,9 +23,10 @@ export default defineConfig([
     },
   },
 
-  // Node code: the Express backend and the build/config scripts at the root.
+  // Node code: the Express backend, the metrics dashboard's server and the
+  // build/config scripts at the root.
   {
-    files: ['src/backend/**/*.js', '*.{js,mjs}'],
+    files: ['src/backend/**/*.js', 'src/metrics-dashboard/server.js', '*.{js,mjs}'],
     extends: [js.configs.recommended],
     languageOptions: {
       globals: globals.node,

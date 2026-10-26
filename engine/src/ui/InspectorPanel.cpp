@@ -7,8 +7,8 @@
 \date 15-10-2026
 \brief
 Implements InspectorPanel: the "nothing selected" state and the property
-form (name, splat count, X/Y/Z position, Reset Position) bound to a
-SplatModel.
+form (name, splat count, X/Y/Z position, Reset Position, trim values) bound
+to a SplatModel.
 **************************************************************************/
 #include "ui/InspectorPanel.h"
 
@@ -24,6 +24,7 @@ SplatModel.
 #include <QLocale>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -97,6 +98,55 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     auto* resetButton = new QPushButton("Reset Position", page);
     layout->addWidget(resetButton, 0, Qt::AlignRight);
 
+    auto* trimHeader = new QLabel("Trim", page);
+    trimHeader->setObjectName("SectionHeader");
+    layout->addWidget(trimHeader);
+
+    auto* trimForm = new QFormLayout();
+    trimForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_minAlpha = new QDoubleSpinBox(page);
+    m_minAlpha->setDecimals(3);
+    m_minAlpha->setRange(0.0, 1.0);
+    m_minAlpha->setSingleStep(0.005);
+    m_minAlpha->setToolTip("Remove splats more transparent than this (0 = off)");
+    trimForm->addRow("Min opacity", m_minAlpha);
+
+    m_cropPct = new QDoubleSpinBox(page);
+    m_cropPct->setDecimals(2);
+    m_cropPct->setRange(0.0, 20.0);
+    m_cropPct->setSingleStep(0.05);
+    m_cropPct->setSuffix(" %");
+    m_cropPct->setToolTip("Remove this percentage of the furthest splats at each end of every axis (0 = off)");
+    trimForm->addRow("Edge crop", m_cropPct);
+
+    m_voxelDivisions = new QSpinBox(page);
+    m_voxelDivisions->setRange(0, 1000);
+    m_voxelDivisions->setToolTip("Density grid resolution across the scene. Higher = smaller cells = "
+                                 "removes less (0 = density filter off)");
+    trimForm->addRow("Density grid", m_voxelDivisions);
+
+    m_minPerVoxel = new QSpinBox(page);
+    m_minPerVoxel->setRange(1, 100);
+    m_minPerVoxel->setToolTip("Remove splats in grid cells holding fewer splats than this (1 = off)");
+    trimForm->addRow("Min per cell", m_minPerVoxel);
+
+    m_trimStatus = new QLabel(page);
+    trimForm->addRow("Status", m_trimStatus);
+    layout->addLayout(trimForm);
+
+    auto* trimButtons = new QHBoxLayout();
+    auto* trimDefaultsButton = new QPushButton("Defaults", page);
+    trimDefaultsButton->setToolTip("Fill the fields with the global defaults (Edit > Trim Settings)");
+    auto* trimApplyButton = new QPushButton("Apply", page);
+    trimApplyButton->setToolTip("Re-trim this model from its original data with these values");
+    m_untrimButton = new QPushButton("Untrim", page);
+    m_untrimButton->setToolTip("Restore this model's original, untrimmed splats");
+    trimButtons->addStretch();
+    trimButtons->addWidget(m_untrimButton);
+    trimButtons->addWidget(trimDefaultsButton);
+    trimButtons->addWidget(trimApplyButton);
+    layout->addLayout(trimButtons);
+
     auto* hint = new QLabel("Tip: with the viewport focused, WASD / arrow keys nudge the "
                             "selected model.", page);
     hint->setObjectName("PanelHint");
@@ -114,6 +164,14 @@ InspectorPanel::InspectorPanel(QWidget* parent)
         }
         emit nameChanged(name);
     });
+
+    connect(trimApplyButton, &QPushButton::clicked, this, [this] {
+        if (m_model) emit trimApplyRequested(currentTrim());
+    });
+    connect(m_untrimButton, &QPushButton::clicked, this, [this] {
+        if (m_model) emit untrimRequested();
+    });
+    connect(trimDefaultsButton,&QPushButton::clicked, this, [this] { loadTrimFields(m_defaultTrim); });
 
     connect(resetButton, &QPushButton::clicked, this, [this] {
         if (!m_model) return;
@@ -137,7 +195,53 @@ void InspectorPanel::setModel(SplatModel* model) {
         m_name->setText(QString::fromStdString(model->GetName()));
     }
     m_splatCount->setText(QLocale().toString(static_cast<qulonglong>(model->GetCount())));
+    loadTrim();
     syncFromModel();
+}
+
+void InspectorPanel::setDefaultTrim(const TrimData& trim) {
+    m_defaultTrim = trim;
+}
+
+void InspectorPanel::refreshTrim() {
+    if (!m_model) {
+        return;
+    }
+    m_splatCount->setText(QLocale().toString(static_cast<qulonglong>(m_model->GetCount())));
+    loadTrim();
+}
+
+void InspectorPanel::loadTrim() {
+    loadTrimFields(m_model->GetTrimData());
+    m_untrimButton->setEnabled(m_model->IsTrimmed());
+    if (m_model->IsTrimmed()) {
+        const qulonglong total = m_model->SourceSplats().size();
+        m_trimStatus->setText(QString("Kept %1 of %2")
+                                  .arg(QLocale().toString(static_cast<qulonglong>(m_model->GetCount())),
+                                       QLocale().toString(total)));
+    } else {
+        m_trimStatus->setText("Not trimmed");
+    }
+}
+
+void InspectorPanel::loadTrimFields(const TrimData& trim) {
+    const QSignalBlocker blockAlpha(m_minAlpha);
+    const QSignalBlocker blockCrop(m_cropPct);
+    const QSignalBlocker blockDivisions(m_voxelDivisions);
+    const QSignalBlocker blockMin(m_minPerVoxel);
+    m_minAlpha->setValue(trim.minAlpha);
+    m_cropPct->setValue(trim.cropPct);
+    m_voxelDivisions->setValue(trim.voxelDivisions);
+    m_minPerVoxel->setValue(trim.minPerVoxel);
+}
+
+TrimData InspectorPanel::currentTrim() const {
+    TrimData trim;
+    trim.minAlpha = static_cast<float>(m_minAlpha->value());
+    trim.cropPct = static_cast<float>(m_cropPct->value());
+    trim.voxelDivisions = m_voxelDivisions->value();
+    trim.minPerVoxel = m_minPerVoxel->value();
+    return trim;
 }
 
 void InspectorPanel::syncFromModel() {

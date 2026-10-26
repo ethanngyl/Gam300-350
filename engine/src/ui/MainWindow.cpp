@@ -29,6 +29,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/LoginDialog.h"
 #include "ui/OutlinerPanel.h"
 #include "ui/RemoteModelsPanel.h"
+#include "ui/TrimDialog.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -81,6 +82,10 @@ namespace {
     const QString kRenderModeKey = QStringLiteral("view/renderMode");
     const QString kStatsOverlayKey = QStringLiteral("view/statsOverlay");
     const QString kTrimOnImportKey = QStringLiteral("files/trimOnImport");
+    const QString kTrimAlphaKey = QStringLiteral("trim/minAlpha");
+    const QString kTrimCropKey = QStringLiteral("trim/cropPct");
+    const QString kTrimDivisionsKey = QStringLiteral("trim/voxelDivisions");
+    const QString kTrimMinPerVoxelKey = QStringLiteral("trim/minPerVoxel");
     const QString kExportFolderKey = QStringLiteral("files/exportFolder");
 
     bool IsPlyFile(const QString& path) {
@@ -206,6 +211,15 @@ void MainWindow::createActions() {
     m_deleteAction->setStatusTip("Remove the selected model from the scene (the file is not touched)");
     connect(m_deleteAction, &QAction::triggered, this, [this] { deleteSelectedModel(); });
 
+    m_toggleVisibilityAction = new QAction("Hide/Show &Model", this);
+    m_toggleVisibilityAction->setShortcut(QKeySequence("Ctrl+H"));
+    m_toggleVisibilityAction->setStatusTip("Hide or show the selected model without removing it");
+    connect(m_toggleVisibilityAction, &QAction::triggered, this, [this] {
+        if (SplatRenderer* renderer = m_viewport->renderer()) {
+            toggleModelHidden(renderer->GetSelectedModel());
+        }
+    });
+
     // Esc and Home act on the viewport only, so they never steal keys from
     // text fields or lists in the panels.
     m_deselectAction = new QAction("D&eselect", this);
@@ -270,6 +284,10 @@ void MainWindow::createActions() {
     m_signOutAction->setStatusTip("Sign out and delete this account's downloaded models from this PC");
     connect(m_signOutAction, &QAction::triggered, this, [this] { m_backend->signOut(); });
 
+    m_trimSettingsAction = new QAction("Trim &Settings...", this);
+    m_trimSettingsAction->setStatusTip("Edit the default splat trim values used for new imports");
+    connect(m_trimSettingsAction, &QAction::triggered, this, [this] { showTrimDialog(); });
+
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
@@ -289,9 +307,12 @@ void MainWindow::createMenus() {
     QMenu* editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(m_renameAction);
     editMenu->addAction(m_deleteAction);
+    editMenu->addAction(m_toggleVisibilityAction);
     editMenu->addSeparator();
     editMenu->addAction(m_resetPositionAction);
     editMenu->addAction(m_deselectAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_trimSettingsAction);
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
     QMenu* renderModeMenu = viewMenu->addMenu("Render &Mode");
@@ -401,10 +422,13 @@ void MainWindow::createDocks() {
         selectModel(index);
         deleteSelectedModel();
     });
+    connect(m_outliner, &OutlinerPanel::toggleHiddenRequested, this, &MainWindow::toggleModelHidden);
     connect(m_outliner, &OutlinerPanel::exportRequested, this, [this](int index) {
         selectModel(index);
         exportModels();
     });
+    connect(m_inspector, &InspectorPanel::trimApplyRequested, this, &MainWindow::applyModelTrim);
+    connect(m_inspector, &InspectorPanel::untrimRequested, this, &MainWindow::untrimModel);
     connect(m_inspector, &InspectorPanel::nameChanged, this, [this](const QString& name) {
         if (SplatRenderer* renderer = m_viewport->renderer()) {
             renameModel(renderer->GetSelectedModel(), name);
@@ -451,6 +475,11 @@ void MainWindow::restoreSettings() {
     (gaussian ? m_gaussianAction : m_pointCloudAction)->setChecked(true);
     m_statsOverlayAction->setChecked(settings.value(kStatsOverlayKey, true).toBool());
     m_trimOnImportAction->setChecked(settings.value(kTrimOnImportKey, true).toBool());
+    m_trimSettings.minAlpha = settings.value(kTrimAlphaKey, m_trimSettings.minAlpha).toFloat();
+    m_trimSettings.cropPct = settings.value(kTrimCropKey, m_trimSettings.cropPct).toFloat();
+    m_trimSettings.voxelDivisions = settings.value(kTrimDivisionsKey, m_trimSettings.voxelDivisions).toInt();
+    m_trimSettings.minPerVoxel = settings.value(kTrimMinPerVoxelKey, m_trimSettings.minPerVoxel).toInt();
+    m_inspector->setDefaultTrim(m_trimSettings);
 
     m_recentFiles = settings.value(kRecentFilesKey).toStringList();
     rebuildRecentMenu();
@@ -467,6 +496,10 @@ void MainWindow::saveSettings() const {
                                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
     settings.setValue(kStatsOverlayKey, m_statsOverlayAction->isChecked());
     settings.setValue(kTrimOnImportKey, m_trimOnImportAction->isChecked());
+    settings.setValue(kTrimAlphaKey, m_trimSettings.minAlpha);
+    settings.setValue(kTrimCropKey, m_trimSettings.cropPct);
+    settings.setValue(kTrimDivisionsKey, m_trimSettings.voxelDivisions);
+    settings.setValue(kTrimMinPerVoxelKey, m_trimSettings.minPerVoxel);
     settings.setValue(kRecentFilesKey, m_recentFiles);
 }
 
@@ -555,28 +588,30 @@ void MainWindow::startNextImport() {
     // the editor. The renderer is only touched back on the GUI thread.
     auto splats = std::make_shared<std::vector<SplatVertex>>();
     const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
-    auto originalCount = std::make_shared<size_t>(0);
+    auto original = std::make_shared<std::vector<SplatVertex>>(); // filled only when trimmed
     const bool trim = m_trimOnImportAction->isChecked();
-    m_loadThread = QThread::create([splats, originalCount, nativePath, trim] {
+    const TrimData trimSettings = m_trimSettings;
+    m_loadThread = QThread::create([splats, original, nativePath, trim, trimSettings] {
         *splats = LoadSplatPly(nativePath);
-        *originalCount = splats->size();
         if (trim && !splats->empty()) {
-            std::vector<SplatVertex> trimmed = TrimSplats(*splats);
-            if (!trimmed.empty()) { // never trim a scene down to nothing
+            std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
+            if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
+                *original = std::move(*splats);
                 *splats = std::move(trimmed);
             }
         }
     });
-    connect(m_loadThread, &QThread::finished, this, [this, splats, originalCount, path] {
+    connect(m_loadThread, &QThread::finished, this, [this, splats, original, path, trimSettings] {
         m_loadThread->deleteLater();
         m_loadThread = nullptr;
-        finishImport(path, *splats, *originalCount);
+        finishImport(path, *splats, *original, trimSettings);
         startNextImport();
     });
     m_loadThread->start();
 }
 
-void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& splats, size_t originalCount) {
+void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& splats,
+                              std::vector<SplatVertex>& original, const TrimData& trimData) {
     setImportBusy(m_pendingImports.isEmpty() ? QString() : QFileInfo(m_pendingImports.front()).fileName());
 
     const QString fileName = QFileInfo(path).fileName();
@@ -593,11 +628,19 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     }
 
     const size_t count = splats.size();
+    const size_t originalCount = original.empty() ? count : original.size();
     renderer->SetSplats(splats, fileName.toStdString());
     // Downloaded models are deleted on sign-out, so they don't belong in Recent.
     if (!BackendClient::IsCachedModel(path)) {
         addRecentFile(path);
     }
+    SplatModel* imported = renderer->GetModel(static_cast<int>(renderer->ModelCount()) - 1);
+    const bool wasTrimmed = !original.empty();
+    if (wasTrimmed) {
+        imported->SetOriginal(std::move(original));
+    }
+    imported->SetTrimData(trimData, wasTrimmed);
+    addRecentFile(path);
 
     selectModel(static_cast<int>(renderer->ModelCount()) - 1);
     refreshScenePanels();
@@ -613,6 +656,71 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     statusBar()->showMessage(QString("Imported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
 }
 
+void MainWindow::showTrimDialog() {
+    auto* dialog = new TrimDialog(m_trimSettings, [this](const TrimData& d) { applyDefaultTrim(d); }, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
+}
+
+void MainWindow::applyDefaultTrim(const TrimData& trim) {
+    m_trimSettings = trim;
+    m_inspector->setDefaultTrim(trim);
+    statusBar()->showMessage("Default trim settings saved. They apply to new imports.", kStatusMessageMs);
+}
+
+void MainWindow::applyModelTrim(const TrimData& settings) {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+    if (!model) {
+        return;
+    }
+
+    // Always trim from the untrimmed data so loosening the values brings detail back.
+    model->KeepOriginal();
+    const std::vector<SplatVertex>& source = model->SourceSplats();
+    std::vector<SplatVertex> trimmed = TrimSplats(source, settings);
+    if (trimmed.empty()) {
+        QMessageBox::warning(this, "Trim Settings",
+                             "These values would remove every splat, so the model was left unchanged.");
+        return;
+    }
+
+    const size_t total = source.size();
+    const size_t kept = trimmed.size();
+    renderer->UpdateModel(model, trimmed);
+    model->SetTrimData(settings, kept < total);
+    refreshScenePanels();
+    m_inspector->refreshTrim();
+
+    const QString message = QString("Trimmed %1: kept %2 of %3 splats")
+                                .arg(QString::fromStdString(model->GetName()),
+                                     QLocale().toString(static_cast<qulonglong>(kept)),
+                                     QLocale().toString(static_cast<qulonglong>(total)));
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
+}
+
+void MainWindow::untrimModel() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+    if (!model || !model->IsTrimmed()) {
+        return;
+    }
+
+    // The untrimmed data is kept on the model, so Apply can trim it again later.
+    const size_t total = model->SourceSplats().size();
+    renderer->UpdateModel(model, model->SourceSplats());
+    model->SetTrimData(model->GetTrimData(), false);
+    refreshScenePanels();
+    m_inspector->refreshTrim();
+
+    const QString message = QString("Restored %1: %2 splats")
+                                .arg(QString::fromStdString(model->GetName()),
+                                     QLocale().toString(static_cast<qulonglong>(total)));
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
+}
+
 void MainWindow::selectModel(int index) {
     SplatRenderer* renderer = m_viewport->renderer();
     if (!renderer) {
@@ -624,6 +732,7 @@ void MainWindow::selectModel(int index) {
     const bool hasSelection = renderer->GetSelectedModel() >= 0;
     m_renameAction->setEnabled(hasSelection);
     m_deleteAction->setEnabled(hasSelection);
+    m_toggleVisibilityAction->setEnabled(hasSelection);
     m_resetPositionAction->setEnabled(hasSelection);
     m_deselectAction->setEnabled(hasSelection);
 }
@@ -637,6 +746,22 @@ void MainWindow::renameModel(int index, const QString& name) {
     // Deferred: this can be reached from the outliner's own edit commit,
     // and rebuilding the tree in the middle of that is unsafe.
     QTimer::singleShot(0, this, [this] { refreshScenePanels(); });
+}
+
+void MainWindow::toggleModelHidden(int index) {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(index) : nullptr;
+    if (!model) {
+        return;
+    }
+    renderer->SetModelHidden(index, !model->GetIsHidden());
+    // Deferred: this can be reached from the outliner's context menu, and
+    // rebuilding the tree in the middle of that is unsafe.
+    QTimer::singleShot(0, this, [this] { refreshScenePanels(); });
+
+    statusBar()->showMessage(QString("%1 %2").arg(QString::fromStdString(model->GetName()),
+                                                  model->GetIsHidden() ? "hidden" : "shown"),
+                             kStatusMessageMs);
 }
 
 void MainWindow::deleteSelectedModel() {
