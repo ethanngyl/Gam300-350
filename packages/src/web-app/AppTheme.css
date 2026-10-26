@@ -114,6 +114,13 @@ html {
     justify-content: center;
 }
 
+    /* The GENESIS logo (GenesisLogo.svg) inside the logo box. */
+    .forma-logo-icon img {
+        width: 20px;
+        height: 20px;
+        display: block;
+    }
+
 .forma-tabs {
     display: flex;
     gap: 4px;
@@ -683,6 +690,8 @@ html {
     padding: 7px 16px;
     border-radius: 6px;
     cursor: pointer;
+    /* Fixed width, so the bold active tab doesn't shift the toolbar. */
+    min-width: 110px;
 }
 
     .library-subtab.is-active {
@@ -931,12 +940,16 @@ html {
     color: var(--forma-red);
 }
 
-/* Photo Library cards (ImageGallery compact variant) */
+/* Photo Library cards (ImageGallery compact variant). Laid out exactly like
+   the 3D Models grid: full width, same columns, card height and text rows. */
 
 .gallery-compact {
     padding: 0;
     background: transparent;
     color: var(--forma-text);
+    /* ImageGallery.css centres .gallery in a 1100px column; undo that here. */
+    max-width: none;
+    margin: 0;
 }
 
     .gallery-compact .gallery-note {
@@ -971,7 +984,9 @@ html {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 2px;
-    aspect-ratio: 16 / 10;
+    /* Same height as .library-thumb on the 3D Models cards. */
+    aspect-ratio: auto;
+    height: 128px;
     background: var(--forma-bg);
 }
 
@@ -1000,8 +1015,13 @@ html {
 
 .library-photo-badge {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 10px;
+    right: 10px;
+}
+
+/* Solid backing so the badge stays readable on top of photos. */
+.library-photo-thumbgrid .library-photo-badge {
+    background-color: rgba(17, 29, 41, 0.9);
 }
 
 .library-photo-name {
@@ -1566,6 +1586,28 @@ html {
             border-color: var(--forma-blue);
         }
 
+/* Password field with the "Forgot password?" link under its right corner. */
+.login-password {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.login-forgot {
+    align-self: flex-end;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+    .login-forgot:hover {
+        text-decoration: underline;
+    }
+
 .login-remember {
     display: flex;
     align-items: center;
@@ -1677,6 +1719,122 @@ html {
     gap: 16px;
 }
 
+/* ---------- Sound settings (Account page) ---------- */
+
+/* On/off switch; usable anywhere as <input type="checkbox" className="forma-switch" />. */
+.forma-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 38px;
+    height: 22px;
+    margin: 0;
+    flex: none;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    position: relative;
+    cursor: pointer;
+}
+
+    .forma-switch::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--forma-text-muted);
+        transition: transform 0.15s ease;
+    }
+
+    .forma-switch:checked {
+        background: rgba(63, 152, 173, 0.45);
+        border-color: var(--forma-blue);
+    }
+
+        .forma-switch:checked::after {
+            transform: translateX(16px);
+            background: #fff;
+        }
+
+    .forma-switch:focus-visible {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 2px;
+    }
+
+.account-sound {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-bottom: 32px;
+    max-width: 560px;
+}
+
+.account-sound-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+}
+
+.account-sound-icon {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-panel-alt);
+    color: var(--forma-teal-text);
+}
+
+.account-sound-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.account-sound-title {
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+
+.account-sound-hint {
+    font-size: 0.78rem;
+    color: var(--forma-text-muted);
+}
+
+.account-sound-volume {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--forma-text-muted);
+}
+
+    .account-sound-volume b {
+        color: var(--forma-text);
+        font-weight: 600;
+    }
+
+    .account-sound-volume input {
+        width: 100%;
+        accent-color: var(--forma-blue);
+        cursor: pointer;
+    }
+
+    .account-sound-volume.is-disabled {
+        opacity: 0.45;
+    }
+
+        .account-sound-volume.is-disabled input {
+            cursor: not-allowed;
+        }
+
 .home-stat {
     background: var(--forma-panel);
     border: 1px solid var(--forma-border);
@@ -1736,6 +1894,185 @@ html {
         border: 1px solid var(--forma-border-strong);
         color: var(--forma-text);
     }
+
+/* ---------- Home: recent files and models ---------- */
+
+.home-new-model {
+    flex: none;
+    padding: 11px 20px;
+}
+
+.home-recent-v2-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+    .home-recent-v2-header .home-section-title {
+        margin-bottom: 10px !important;
+    }
+
+.home-recent-tabs {
+    display: flex;
+    gap: 20px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.home-recent-tab {
+    padding: 0 0 10px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .home-recent-tab:hover {
+        color: var(--forma-text);
+    }
+
+    .home-recent-tab.is-active {
+        color: var(--forma-text);
+        border-bottom-color: var(--forma-blue);
+    }
+
+.home-file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 14px;
+}
+
+.home-file-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .home-file-card:hover {
+        border-color: var(--forma-blue);
+    }
+
+.home-file-preview {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-panel-alt);
+    color: var(--forma-text-dim);
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .home-file-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.home-file-type {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(17, 29, 41, 0.85);
+    border: 1px solid var(--forma-border-strong);
+    color: var(--forma-teal-text);
+}
+
+.home-file-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px;
+    min-width: 0;
+}
+
+.home-file-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--forma-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-file-kind {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--forma-text-muted);
+}
+
+.home-file-time {
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+    margin-top: 6px;
+}
+
+.home-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--forma-text-muted);
+}
+
+    .home-empty svg {
+        color: var(--forma-teal-text);
+    }
+
+    .home-empty h3 {
+        font-size: 1.05rem;
+        color: var(--forma-heading);
+    }
+
+    .home-empty p {
+        max-width: 42ch;
+        font-size: 0.86rem;
+    }
+
+    .home-empty .forma-btn {
+        margin-top: 6px;
+    }
+
+@media (max-width: 760px) {
+    .home-new-model {
+        align-self: stretch;
+        justify-content: center;
+    }
+
+    .home-recent-v2-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+        .home-recent-v2-header .home-link {
+            align-self: flex-start;
+            padding: 0;
+        }
+
+    .home-file-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
 
 /* ============================================================
    Responsive layout: tablets (<=1100px) and phones (<=760px)
@@ -1957,7 +2294,8 @@ html {
         padding: 0 16px;
     }
 
-    .library-thumb {
+    .library-thumb,
+    .library-photo-thumbgrid {
         height: 96px;
     }
 
@@ -2084,5 +2422,138 @@ html {
     .genesis-overlay {
         flex-wrap: wrap;
         right: 16px;
+    }
+}
+
+/* ---------- Login: split layout (hero left, form right) ---------- */
+
+.genesis-login-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+    align-items: stretch;
+    padding: 0;
+}
+
+.login-hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 32px;
+    padding: 48px 64px;
+    border-right: 1px solid var(--forma-border);
+    background: radial-gradient(circle at 15% 85%, rgba(63, 152, 173, 0.18), transparent 45%), radial-gradient(circle at 80% 15%, rgba(244, 145, 123, 0.1), transparent 40%), linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-sidebar);
+}
+
+.login-hero-logo {
+    border-right: none;
+    padding-right: 0;
+}
+
+.login-hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 560px;
+}
+
+    .login-hero-copy .eyebrow {
+        margin: 0;
+    }
+
+.genesis-login .login-hero-copy h2 {
+    font-size: clamp(2.6rem, 5vw, 4.2rem);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    color: var(--forma-heading);
+}
+
+.login-hero-copy p:not(.eyebrow) {
+    color: var(--forma-text);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.login-hero-steps {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+    .login-hero-steps li {
+        padding: 9px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--forma-border-strong);
+        background: rgba(17, 29, 41, 0.6);
+        font-size: 0.8rem;
+        color: var(--forma-text);
+    }
+
+.genesis-login .login-hero-footer {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--forma-text-dim);
+}
+
+.login-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+}
+
+/* The form sits straight on the page, not in a card. */
+.genesis-login-split .login-card {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+/* The hero already shows the logo on wider screens. */
+.genesis-login-split .login-logo {
+    display: none;
+}
+
+/* "or continue with" line between the email form and Google sign-in. */
+.login-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.74rem;
+    color: var(--forma-text-dim);
+}
+
+    .login-divider::before,
+    .login-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--forma-border);
+    }
+
+.login-google {
+    gap: 10px;
+}
+
+    .login-google svg {
+        flex: none;
+    }
+
+@media (max-width: 900px) {
+    .genesis-login-split {
+        grid-template-columns: 1fr;
+    }
+
+    .login-hero {
+        display: none;
+    }
+
+    .genesis-login-split .login-logo {
+        display: flex;
     }
 }

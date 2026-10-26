@@ -16,7 +16,10 @@ settings, lost highlight/shadow detail, large crops and mixed crops all
 show warnings. "Use original photos" bypasses every edit. Edits are only
 settings until upload, so the originals are never changed. Phones get a
 simpler, batch-only set of tools. "Review photos first" in Camera Capture
-opens the editor with that batch already loaded (initialPhotos).
+opens the editor with that batch already loaded (initialPhotos); its
+"Back to camera" button returns the photos to the capture page. Opened
+on its own, the same button reads "Go to camera" and takes any photos
+added here to the capture page, so more can be taken.
 **************************************************************************/
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -225,8 +228,9 @@ function CropOverlay({ crop, onChange }) {
 }
 
 // initialPhotos: { files, removeBackground } handed over from Camera Capture,
-// or null when the editor is opened on its own.
-function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null }) {
+// or null when the editor is opened on its own. onBackToCapture(files,
+// { removeBackground }) sends the photos to Camera Capture.
+function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null, onBackToCapture }) {
     const isPhone = useIsPhone();
     const fileInputRef = useRef(null);
     const previewCanvasRef = useRef(null);
@@ -240,6 +244,9 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     );
     // Carried over from Camera Capture so the build uses the same setting.
     const removeBackground = initialPhotos?.removeBackground ?? false;
+    // Opened from Camera Capture, so it can send the photos back there.
+    // Fixed when the editor opens, so re-clicking the tab doesn't hide it.
+    const [isFromCapture] = useState(() => initialPhotos !== null && Boolean(onBackToCapture));
     const [selectedPhotoId, setSelectedPhotoId] = useState(null);
     // Edits shared by every photo that hasn't been edited on its own.
     const [batchEdits, setBatchEdits] = useState(DEFAULT_EDITS);
@@ -396,13 +403,21 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
         return `url(#${photo.customEdits ? filterIdForPhoto(photo.id) : BATCH_FILTER_ID})`;
     }
 
+    // Takes every photo here (the original files) to Camera Capture, back
+    // where they came from or there for the first time. Edits and "leave
+    // out" choices only live in the editor, so they reset.
+    function backToCapture() {
+        playSound(isFromCapture ? 'back' : 'tap');
+        onBackToCapture(photos.map((photo) => photo.file), { removeBackground });
+    }
+
     function openFilePicker() {
-        playSound('click');
+        playSound('tap');
         fileInputRef.current?.click();
     }
 
     function openLibraryPicker() {
-        playSound('click');
+        playSound('tap');
         setIsLibraryPickerOpen(true);
     }
 
@@ -436,7 +451,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function toggleExcluded(photoId) {
-        playSound('click');
+        playSound('tap');
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
                 photo.id === photoId ? { ...photo, isExcluded: !photo.isExcluded } : photo
@@ -445,7 +460,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function removePhoto(photoId) {
-        playSound('click');
+        playSound('tap');
         const photoToRemove = photos.find((photo) => photo.id === photoId);
         if (photoToRemove) URL.revokeObjectURL(photoToRemove.url);
         setPhotos((currentPhotos) => currentPhotos.filter((photo) => photo.id !== photoId));
@@ -462,7 +477,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
             toggleExcluded(photoId);
             return;
         }
-        playSound('click');
+        playSound('tap');
         setPreviewFailed(false);
         setPreviewClippedShare(null);
         setColorMessage(null);
@@ -470,7 +485,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function leaveOutFlagged() {
-        playSound('click');
+        playSound('tap');
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
                 issuesById[photo.id]?.length > 0 ? { ...photo, isExcluded: true } : photo
@@ -479,7 +494,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function keepAll() {
-        playSound('click');
+        playSound('tap');
         setPhotos((currentPhotos) => currentPhotos.map((photo) => ({ ...photo, isExcluded: false })));
     }
 
@@ -500,16 +515,21 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function changeEditTarget(target) {
-        playSound('click');
+        playSound('tap');
         setEditTarget(target);
         setColorMessage(null);
     }
 
     function resetCurrentEdits() {
-        playSound('click');
+        playSound('tap');
         setColorMessage(null);
         if (isEditingSinglePhoto) {
-            updateEdits({ ...DEFAULT_EDITS });
+            // Clearing the photo's own edits (rather than zeroing them) drops
+            // its "Edited" badge, so it follows the All photos settings again.
+            const resetPhotoId = selectedPhoto.id;
+            setPhotos((currentPhotos) =>
+                currentPhotos.map((photo) => (photo.id === resetPhotoId ? { ...photo, customEdits: null } : photo))
+            );
         } else {
             setBatchEdits(DEFAULT_EDITS);
         }
@@ -517,7 +537,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
 
     // Drops the selected photo's own edits so it follows the shared ones again.
     function matchAllPhotos() {
-        playSound('click');
+        playSound('tap');
         const matchedPhotoId = selectedPhoto.id;
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
@@ -527,14 +547,14 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function handleAutoFix() {
-        playSound('click');
+        playSound('tap');
         const correction = computeAutoFix(autoSourceAnalyses);
         if (correction) updateEdits(correction);
     }
 
     // Gray world: the average colour across the photos should be neutral.
     function handleAutoColor() {
-        playSound('click');
+        playSound('tap');
         const sourceCount = autoSourceAnalyses.length;
         if (sourceCount === 0) return;
 
@@ -552,7 +572,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function togglePickNeutral() {
-        playSound('click');
+        playSound('tap');
         setColorMessage(null);
         setIsPickingNeutral((wasPicking) => !wasPicking);
     }
@@ -572,7 +592,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
             const sampledColor = await sampleColor(selectedPhoto.file, displayedCrop, fractionX, fractionY);
             const correction = computeWhiteBalance(sampledColor.red, sampledColor.green, sampledColor.blue);
             if (correction) {
-                playSound('click');
+                playSound('tap');
                 updateEdits(correction);
                 setColorMessage(null);
             } else {
@@ -584,13 +604,13 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function toggleCropTool() {
-        playSound('click');
+        playSound('tap');
         setIsPickingNeutral(false);
         setIsCropping((wasCropping) => !wasCropping);
     }
 
     function resetCrop() {
-        playSound('click');
+        playSound('tap');
         updateEdits({ crop: NO_CROP });
     }
 
@@ -604,14 +624,14 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
     }
 
     function handleUseOriginalsChange(event) {
-        playSound('click');
+        playSound('tap');
         setUseOriginals(event.target.checked);
         setIsCropping(false);
         setIsPickingNeutral(false);
     }
 
     async function handleGenerate() {
-        playSound('click');
+        playSound('confirm');
         setIsCropping(false);
         setIsPickingNeutral(false);
         setPreparedCount(0);
@@ -712,14 +732,23 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                         photos are flagged so you can leave them out.
                     </p>
                 </div>
-                {photos.length > 0 && (
+                {(photos.length > 0 || isFromCapture) && (
                     <div className="photo-editor-heading-actions">
-                        <button className="forma-btn" onClick={openLibraryPicker}>
-                            <Icon name="layers" size={14} /> From library
-                        </button>
-                        <button className="forma-btn" onClick={openFilePicker}>
-                            <Icon name="plus" size={14} /> Add photos
-                        </button>
+                        {onBackToCapture && (
+                            <button className="forma-btn" onClick={backToCapture}>
+                                <Icon name="camera" size={14} /> {isFromCapture ? 'Back to camera' : 'Go to camera'}
+                            </button>
+                        )}
+                        {photos.length > 0 && (
+                            <>
+                                <button className="forma-btn" onClick={openLibraryPicker}>
+                                    <Icon name="layers" size={14} /> From library
+                                </button>
+                                <button className="forma-btn" onClick={openFilePicker}>
+                                    <Icon name="plus" size={14} /> Add photos
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
                 <input
@@ -883,7 +912,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                                                     onClick={toggleCropTool}
                                                     disabled={useOriginals}
                                                 >
-                                                    <Icon name="crop" size={14} /> {isCropToolActive ? 'Done cropping' : 'Crop'}
+                                                    <Icon name="crop" size={16} /> {isCropToolActive ? 'Done cropping' : 'Crop'}
                                                 </button>
                                                 {isCropToolActive && hasCrop(currentEdits.crop) && (
                                                     <button className="forma-btn" onClick={resetCrop}>
@@ -898,7 +927,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                                                         onPointerLeave={() => setIsShowingOriginal(false)}
                                                         onPointerCancel={() => setIsShowingOriginal(false)}
                                                     >
-                                                        <Icon name="eye" size={14} /> Hold to see original
+                                                        <Icon name="eye" size={16} /> Hold to see original
                                                     </button>
                                                 )}
                                                 <button className="forma-btn" onClick={() => toggleExcluded(selectedPhoto.id)}>
@@ -954,7 +983,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                                             onClick={handleAutoFix}
                                             disabled={autoSourceAnalyses.length === 0}
                                         >
-                                            <Icon name="wand" size={14} /> Auto fix
+                                            <Icon name="wand" size={16} /> Auto fix
                                         </button>
                                         <button
                                             type="button"
@@ -962,7 +991,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                                             onClick={handleAutoColor}
                                             disabled={autoSourceAnalyses.length === 0}
                                         >
-                                            <Icon name="sun" size={14} /> Auto colour
+                                            <Icon name="sun" size={16} /> Auto colour
                                         </button>
                                         {!isPhone && (
                                             <button
@@ -971,7 +1000,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                                                 onClick={togglePickNeutral}
                                                 disabled={!selectedPhoto || isCropToolActive}
                                             >
-                                                <Icon name="target" size={14} /> {isPickToolActive ? 'Cancel picking' : 'Pick neutral spot'}
+                                                <Icon name="target" size={16} /> {isPickToolActive ? 'Cancel picking' : 'Pick neutral spot'}
                                             </button>
                                         )}
                                     </div>
@@ -1079,7 +1108,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null 
                                             onClick={resetCurrentEdits}
                                             disabled={!hasEdits(currentEdits)}
                                         >
-                                            <Icon name="refresh" size={14} /> Reset
+                                            <Icon name="refresh" size={16} /> Reset
                                         </button>
                                         {isEditingSinglePhoto && selectedPhoto.customEdits && (
                                             <button type="button" className="forma-btn" onClick={matchAllPhotos}>

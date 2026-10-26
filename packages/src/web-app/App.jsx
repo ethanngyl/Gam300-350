@@ -115,6 +115,10 @@ function App() {
     // Batch sent from Camera Capture's "Review photos first" to the Photo
     // Editor: { files, removeBackground }. Cleared on any other navigation.
     const [photosForEditor, setPhotosForEditor] = useState(null);
+    // Batch sent back from the Photo Editor's "Back to camera", so Camera
+    // Capture reopens with those photos: { files, removeBackground }.
+    // Cleared on any other navigation.
+    const [photosForCapture, setPhotosForCapture] = useState(null);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -141,6 +145,7 @@ function App() {
         setIsMenuOpen(false);
         setUploadError(null);
         setPhotosForEditor(null);
+        setPhotosForCapture(null);
         setActiveTab(tab);
     }
 
@@ -148,6 +153,12 @@ function App() {
     function reviewPhotosInEditor(files, { removeBackground = false } = {}) {
         goToTab('editor');
         setPhotosForEditor({ files, removeBackground });
+    }
+
+    // Reopens Camera Capture with the photos that were in the Photo Editor.
+    function returnPhotosToCapture(files, { removeBackground = false } = {}) {
+        goToTab('capture');
+        setPhotosForCapture({ files, removeBackground });
     }
 
     function openLibrary(subTab) {
@@ -242,7 +253,7 @@ function App() {
                     <button
                         className="btn btn-primary"
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             resetJob();
                             goToTab('capture');
                         }}
@@ -250,10 +261,10 @@ function App() {
                         New scan
                     </button>
                     <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
-                        onClick={() => playSound('click')}>
+                        onClick={() => playSound('tap')}>
                         Download .ply
                     </a>
-                    <button className="btn btn-ghost" onClick={() => { playSound('click'); backToDashboard(); }}>
+                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); backToDashboard(); }}>
                         Back to dashboard
                     </button>
                 </div>
@@ -272,7 +283,7 @@ function App() {
                     className="genesis-overlay"
                     style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, alignItems: 'center', zIndex: 10 }}
                 >
-                    <button className="btn btn-ghost" onClick={() => { playSound('click'); closeLocalModel(); }}>
+                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); closeLocalModel(); }}>
                         Back to dashboard
                     </button>
                     <span style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8 }}>{localModel.name}</span>
@@ -343,6 +354,7 @@ function App() {
                             onGenerateModel={handleBatchReady}
                             uploadError={uploadError}
                             initialPhotos={photosForEditor}
+                            onBackToCapture={returnPhotosToCapture}
                         />
                     )}
                     {activeTab === 'scene' && (
@@ -362,6 +374,7 @@ function App() {
                             onReviewPhotos={reviewPhotosInEditor}
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
+                            initialPhotos={photosForCapture}
                         />
                     )}
                     {activeTab === 'account' && (

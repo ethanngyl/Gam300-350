@@ -19,6 +19,7 @@ Pass initialValue (a string) to show the text field.
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { playSound } from '../audio/Audio.js';
 
 function ActionDialog({
     title, message, initialValue, placeholder, confirmLabel, cancelLabel = 'Cancel', danger, onConfirm, onCancel,
@@ -41,15 +42,23 @@ function ActionDialog({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Every way of closing without confirming (button, Escape, backdrop).
+    function cancelWithSound() {
+        playSound('back');
+        onCancel();
+    }
+
     function handleKeyDown(event) {
         // Stop here so window listeners (the splat viewer's C/I/U/P toggles)
         // don't react to what the user types.
         event.stopPropagation();
-        if (event.key === 'Escape' && !isBusy) onCancel();
+        if (event.key === 'Escape' && !isBusy) cancelWithSound();
     }
 
     async function handleSubmit(event) {
         event.preventDefault();
+        // Destructive actions (delete) get the "back" sound, others "confirm".
+        playSound(danger ? 'back' : 'confirm');
         setIsBusy(true);
         setError(null);
         try {
@@ -61,7 +70,7 @@ function ActionDialog({
     }
 
     return createPortal(
-        <div className="action-dialog-backdrop" onPointerDown={() => !isBusy && onCancel()}>
+        <div className="action-dialog-backdrop" onPointerDown={() => !isBusy && cancelWithSound()}>
             <form
                 className="forma-card action-dialog"
                 role="dialog"
@@ -85,7 +94,7 @@ function ActionDialog({
                 )}
                 {error && <p className="action-dialog-error">{error}</p>}
                 <div className="action-dialog-buttons">
-                    <button type="button" className="forma-btn" disabled={isBusy} onClick={onCancel}>
+                    <button type="button" className="forma-btn" disabled={isBusy} onClick={cancelWithSound}>
                         {cancelLabel}
                     </button>
                     <button
