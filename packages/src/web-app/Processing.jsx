@@ -29,6 +29,7 @@ Inner helper. Kills the server-side job, then calls onCancel().
 // ----- Headers ------------------------------------------------------- //
 import { useEffect, useRef, useState } from 'react'
 import './Processing.css'
+import { playSound } from '../audio/Audio.js'
 
 // Friendly labels for the backend's phase names.
 const PHASE_LABELS = {
@@ -150,7 +151,13 @@ export default function Processing({ jobId, onDone, onCancel }) {
                             Common causes: too few photos, not enough overlap, or blurry/reflective
                             surfaces. Try again with more, sharper, overlapping photos.
                         </p>
-                        <button className="forma-btn forma-btn-primary processing-action" onClick={onCancel}>
+                        <button
+                            className="forma-btn forma-btn-primary processing-action"
+                            onClick={() => {
+                                playSound('back')
+                                onCancel()
+                            }}
+                        >
                             Start over
                         </button>
                     </>
@@ -184,7 +191,13 @@ export default function Processing({ jobId, onDone, onCancel }) {
                             ))}
                         </ol>
 
-                        <button className="forma-btn processing-action" onClick={cancel}>
+                        <button
+                            className="forma-btn processing-action"
+                            onClick={() => {
+                                playSound('back')
+                                cancel()
+                            }}
+                        >
                             Cancel
                         </button>
                     </>

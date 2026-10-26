@@ -314,6 +314,9 @@
     .photo-editor-preview-actions .forma-btn {
         flex: 1;
         justify-content: center;
+        white-space: nowrap;
+        padding-left: 10px;
+        padding-right: 10px;
     }
 
         /* Stops the browser selecting text while the button is held down. */
@@ -415,7 +418,8 @@
             min-width: 0;
         }
 
-        .photo-editor-heading > .forma-btn {
+        .photo-editor-heading > .forma-btn,
+        .photo-editor-heading > .photo-editor-heading-actions {
             flex: none;
         }
 
@@ -456,11 +460,35 @@
         gap: 20px;
     }
 
-    /* Panel stays in view while scrolling a long photo grid. */
+    /* Panel stays in view while scrolling a long photo grid, and scrolls on
+       its own (above the sticky footer) instead of pushing the sliders off
+       the page. */
     .photo-editor-panel {
         position: sticky;
         top: 16px;
+        max-height: calc(100dvh - 60px - 32px - 76px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
     }
+
+    /* Keep the preview compact so the sliders stay close by. */
+    .photo-editor-preview-canvas {
+        max-height: 180px;
+    }
+
+    /* Same width as the side panel, so the two line up. */
+    .photo-editor-summary-actions {
+        width: 320px;
+    }
+
+        .photo-editor-summary-actions .forma-btn {
+            flex: 1;
+            justify-content: center;
+            white-space: nowrap;
+            padding-left: 10px;
+            padding-right: 10px;
+        }
 }
 
 /* ============================================================

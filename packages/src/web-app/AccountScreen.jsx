@@ -4,16 +4,17 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 08-10-2026
+\date 24-10-2026
 \brief
 Account page for the signed-in user: profile card (avatar, name, email,
-member since), a sign out button, and workspace usage stats counted from
+member since), a sign out button, sound settings (sound effects on/off and
+volume, saved in this browser), and workspace usage stats counted from
 GET /jobs (models, photos, failed builds, processing queue).
 **************************************************************************/
 
 import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
+import { playSound, setSoundMuted, setSoundVolume, useSoundSettings } from '../audio/Audio.js';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -48,6 +49,8 @@ function buildUsageStats(jobs) {
 function AccountScreen({ user, onSignOut }) {
     const [jobs, setJobs] = useState([]);
     const [statsStatus, setStatsStatus] = useState('loading');
+    const { isMuted, volume } = useSoundSettings();
+    const volumePercent = Math.round(volume * 100);
 
     useEffect(() => {
         let isCancelled = false;
@@ -92,7 +95,7 @@ function AccountScreen({ user, onSignOut }) {
                 <button
                     className="forma-btn"
                     onClick={() => {
-                        playSound('click3');
+                        playSound('back');
                         onSignOut();
                     }}
                 >
@@ -100,6 +103,47 @@ function AccountScreen({ user, onSignOut }) {
                         ? <><Icon name="user" size={14} /> Sign in</>
                         : <><Icon name="logout" size={14} /> Sign out</>}
                 </button>
+            </div>
+
+            <p className="eyebrow">Sound</p>
+            <div className="forma-card account-sound">
+                <label className="account-sound-row">
+                    <span className="account-sound-icon">
+                        <Icon name={isMuted ? 'volumeOff' : 'volume'} size={18} />
+                    </span>
+                    <span className="account-sound-text">
+                        <span className="account-sound-title">Sound effects</span>
+                        <span className="account-sound-hint">Button clicks and alerts. Saved for this browser.</span>
+                    </span>
+                    <input
+                        type="checkbox"
+                        className="forma-switch"
+                        checked={!isMuted}
+                        onChange={(event) => {
+                            const isTurningOn = event.target.checked;
+                            setSoundMuted(!isTurningOn);
+                            // Play once when turning on, so the user hears it worked.
+                            if (isTurningOn) playSound('tap');
+                        }}
+                        aria-label="Sound effects"
+                    />
+                </label>
+
+                <label className={isMuted ? 'account-sound-volume is-disabled' : 'account-sound-volume'}>
+                    <span>Volume <b>{volumePercent}%</b></span>
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={volumePercent}
+                        disabled={isMuted}
+                        onChange={(event) => setSoundVolume(Number(event.target.value) / 100)}
+                        // Preview the new level once the slider is let go.
+                        onPointerUp={() => playSound('tap')}
+                        onKeyUp={() => playSound('tap')}
+                    />
+                </label>
             </div>
 
             <p className="eyebrow">Workspace usage</p>

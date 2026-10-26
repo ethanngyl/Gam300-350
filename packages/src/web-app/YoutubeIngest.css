@@ -1,8 +1,8 @@
 /* ============================================================
    YoutubeIngest - GENESIS theme
    Uses the --forma-* variables from AppTheme.css.
-   Layout is mobile-first: one column by default, two columns
-   (link form beside status) only on wide screens.
+   Layout is mobile-first and stays one column on every screen size:
+   the link form spans the page and the status card appears under it.
    ============================================================ */
 
 .yt {
@@ -135,6 +135,24 @@
     padding: 11px 22px;
 }
 
+/* Thumbnail of the linked video, under the link field. */
+.yt-preview {
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-bg);
+}
+
+    .yt-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
 .yt .yt-hint {
     color: var(--forma-text-dim);
     font-size: 0.78rem;
@@ -148,16 +166,6 @@
 }
 
 /* ---------- Status ---------- */
-
-.yt-empty {
-    border: 1px dashed var(--forma-border-strong);
-    border-radius: 10px;
-    padding: 24px 18px;
-    text-align: center;
-    color: var(--forma-text-dim);
-    font-size: 0.84rem;
-    line-height: 1.6;
-}
 
 .yt-status {
     display: flex;
@@ -229,70 +237,29 @@
     transition: width 0.4s ease;
 }
 
-.yt-steps {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+/* Extracted frames, shown in place of the bar once the job is done. */
+.yt-frame-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
 }
 
-.yt-step {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.82rem;
-    color: var(--forma-text-dim);
-}
-
-.yt-step-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 1px solid var(--forma-border-strong);
-    flex: none;
-}
-
-.yt-step-done {
-    color: var(--forma-text-muted);
-}
-
-    .yt-step-done .yt-step-dot {
-        background: var(--forma-green);
-        border-color: var(--forma-green);
-    }
-
-.yt-step-active {
-    color: var(--forma-text);
-    font-weight: 600;
-}
-
-    .yt-step-active .yt-step-dot {
-        background: var(--forma-coral);
-        border-color: var(--forma-coral);
+    .yt-frame-grid img {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        display: block;
+        border-radius: 6px;
+        border: 1px solid var(--forma-border);
+        background: var(--forma-panel-alt);
     }
 
 .yt-download {
     align-self: stretch;
     justify-content: center;
     text-decoration: none;
-}
-
-.yt-log {
-    margin: 0;
-    max-height: 220px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    background: var(--forma-bg);
-    border: 1px solid var(--forma-border);
-    border-radius: 8px;
-    padding: 12px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.7rem;
-    line-height: 1.6;
-    color: var(--forma-text-muted);
 }
 
 /* ---------- Tablets and up ---------- */
@@ -339,14 +306,5 @@
 
     .yt-download {
         align-self: flex-start;
-    }
-}
-
-/* ---------- Wide screens: form beside status ---------- */
-
-@media (min-width: 981px) {
-    .yt-layout {
-        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-        gap: 20px;
     }
 }

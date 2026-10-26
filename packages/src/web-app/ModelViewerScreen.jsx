@@ -86,7 +86,7 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                 <button
                     className="forma-btn forma-btn-primary"
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         fileInputRef.current?.click();
                     }}
                 >
@@ -120,7 +120,7 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                         type="button"
                         className="forma-card library-item library-item-button"
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             onOpenModel(model.id);
                         }}
                     >
