@@ -59,6 +59,10 @@ declared MIME type is JPEG or PNG.
 Reads each uploaded file's bytes and checks the real type with file-type. If 
 any file isn't really a JPEG or PNG, it deletes the whole job folder and 
 returns 400. This guards against a client that lies about the MIME type.
+- ensureCover(jobId)
+Makes the job's card cover (<id>_out/cover.webp) with tools/make_cover.py
+the first time it is asked for: the object cut out of a photo with the
+job's background masks. Concurrent requests share one run.
 - shutdown(reason, exitCode)
 Runs only once. Marks every running job as error and saves it, calls 
 killChildren() to stop the COLMAP/Brush/python processes, then exits.
@@ -66,6 +70,8 @@ killChildren() to stop the COLMAP/Brush/python processes, then exits.
 
 // ----- Headers ------------------------------------------------------- //
 import fs from 'node:fs'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import multer from 'multer'
 import express from 'express'
 import crypto from 'node:crypto'
@@ -772,6 +778,10 @@ app.get('/jobs', requireUser, async (req, res) =>
         imageCount: record.imageCount,
         hasResult: job.status === 'done' && !!job.resultPath,
         thumbnail: record.thumbnail,
+        // Cut-out cover for the cards, on jobs that have background masks.
+        cover: fs.existsSync(path.join(config.jobsDir, record.id, 'masks'))
+          ? `/jobs/${record.id}/cover.webp`
+          : null,
         images: record.images,
       }
     }),
@@ -919,6 +929,75 @@ app.get('/jobs/:id/result.ply', requireJobAccess, async (req, res) =>
   }
   res.setHeader('Content-Type', 'application/octet-stream')
   res.sendFile(job.resultPath)
+})
+
+const execFileAsync = promisify(execFile)
+// Covers being made right now, by job id, so cards asking at the same
+// time share one run of make_cover.py.
+const coversInProgress = new Map()
+// Jobs whose cover couldn't be made, so it isn't retried on every visit
+// (until the next restart).
+const coversFailed = new Set()
+
+/************************************************************************/
+/*!
+  \brief
+    Make a job's cover (the object cut out of a photo with its background
+    mask) with tools/make_cover.py, unless it already exists. Kept in
+    <id>_out/cover.webp, so deleting the job removes it.
+  \return
+    Promise of the cover's path; rejects if the job has no masks or the
+    script fails
+*/
+/************************************************************************/
+function ensureCover(jobId)
+{
+  const coverPath = path.join(config.jobsDir, `${jobId}_out`, 'cover.webp')
+  if (fs.existsSync(coverPath)) return Promise.resolve(coverPath)
+  if (coversFailed.has(jobId)) return Promise.reject(new Error('cover failed earlier'))
+  if (coversInProgress.has(jobId)) return coversInProgress.get(jobId)
+
+  const jobDir = path.join(config.jobsDir, jobId)
+  const making = (async () =>
+  {
+    if (!fs.existsSync(path.join(jobDir, 'masks'))) throw new Error('job has no masks')
+    await fs.promises.mkdir(path.dirname(coverPath), { recursive: true })
+    await execFileAsync(
+      config.pythonBin,
+      [config.coverScript, path.join(jobDir, 'images'), path.join(jobDir, 'masks'), coverPath],
+      { timeout: 60_000, windowsHide: true },
+    )
+    return coverPath
+  })()
+  making.catch(() => coversFailed.add(jobId)).finally(() => coversInProgress.delete(jobId))
+  coversInProgress.set(jobId, making)
+  return making
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Serve the job's cut-out cover for the Library and Model Viewer cards,
+    making it on first request. Owner or admin only.
+  \return
+    401 if not logged in, 404 if the job isn't theirs, has no background
+    masks or the cover couldn't be made (the cards then show the first
+    photo), else the WebP image
+*/
+/************************************************************************/
+app.get('/jobs/:id/cover.webp', requireJobAccess, async (req, res) =>
+{
+  try
+  {
+    const coverPath = await ensureCover(req.params.id)
+    res.setHeader('Cache-Control', 'private, max-age=86400')
+    res.sendFile(coverPath)
+  }
+  catch (err)
+  {
+    console.warn(`[backend] no cover for ${req.params.id}: ${err.stderr?.trim() || err.message}`)
+    res.status(404).json({ error: 'no cover' })
+  }
 })
 
 const MAX_JOB_NAME_LENGTH = 80

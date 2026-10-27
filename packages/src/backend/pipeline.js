@@ -632,6 +632,7 @@ export async function runPipeline(job) {
       'exhaustive_matcher',
       '--database_path', dbPath,
       config.colmapMatchingUseGpuFlag, config.colmapUseGpu,
+      ...config.colmapStrictMatcherArgs,
     ])
 
     // --- COLMAP: sparse mapping (recovers camera poses) ---
@@ -643,6 +644,7 @@ export async function runPipeline(job) {
         '--database_path', dbPath,
         '--image_path', imagesDir,
         '--output_path', sparseDir,
+        ...config.colmapStrictMapperArgs,
       ])
     } catch (err) {
       // Cancellation and timeouts already have a clear, specific message -- only
