@@ -744,7 +744,7 @@ export async function runPipeline(job) {
     }
 
     // Timing / iteration / hardware stats for this .ply, written to
-    // <id>_out/metrics.json and <jobsDir>/metrics.jsonl. Never fails the job.
+    // <id>/metrics.json and <jobsDir>/metrics.jsonl. Never fails the job.
     await recordPlyMetrics(job, {
       rawPly,
       finalPly: job.resultPath,
