@@ -82,12 +82,11 @@ import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
-import
-{
-  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
-  findOrCreateGoogleUser, findSessionUser, findUserByEmail, getJobOwnerId,
-  listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
-  verifyPassword,
+import {
+SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
+findOrCreateGoogleUser, findSessionUser, findUserByEmail, getJobOwnerId,
+listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
+verifyPassword,
 }
     from './db.js'
 import { createLimiter } from './ratelimit.js'
@@ -677,11 +676,10 @@ const GOOGLE_STATE_PATH = '/auth/google'
     true if both are non-empty and equal
 */
 /************************************************************************/
-function safeEqual(a, b)
-{
-  const x = Buffer.from(String(a ?? ''))
-  const y = Buffer.from(String(b ?? ''))
-  return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y)
+function safeEqual(a, b) {
+    const x = Buffer.from(String(a ?? ''))
+    const y = Buffer.from(String(b ?? ''))
+    return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y)
 }
 // ----- End of Functions ----------------------------------------------------- //
 
@@ -735,39 +733,36 @@ app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxF
     401 if not logged in, else a record of every visible job's details
 */
 /************************************************************************/
-app.get('/jobs', requireUser, async (req, res) =>
-{
-  let records = await scanJobs(config.jobsDir)
-  if (req.user.role !== 'admin')
-  {
-    const owned = listOwnedJobIds(req.user.id)
-    records = records.filter((record) => owned.has(record.id))
-  }
-  res.json(
-    records.map((record) =>
-    {
-      const job = jobs.get(record.id) ?? restoreJob(record);
-      return {
-        id: record.id,
-        name: job.name ?? null,
-        status: job.status,
-        phase: job.phase,
-        progress: job.progress,
-        detail: job.detail,
-        error: job.error,
-        createdAt: record.createdAt,
-        updatedAt: job.updatedAt ?? record.updatedAt,
-        imageCount: record.imageCount,
-        hasResult: job.status === 'done' && !!job.resultPath,
-        thumbnail: record.thumbnail,
-        // Cut-out cover for the cards, on jobs that have background masks.
-        cover: fs.existsSync(path.join(config.jobsDir, record.id, 'masks'))
-          ? `/jobs/${record.id}/cover.webp`
-          : null,
-        images: record.images,
-      }
-    }),
-  )
+app.get('/jobs', requireUser, async (req, res) => {
+    let records = await scanJobs(config.jobsDir)
+    if (req.user.role !== 'admin') {
+        const owned = listOwnedJobIds(req.user.id)
+        records = records.filter((record) => owned.has(record.id))
+    }
+    res.json(
+        records.map((record) => {
+            const job = jobs.get(record.id) ?? restoreJob(record);
+            return {
+                id: record.id,
+                name: job.name ?? null,
+                status: job.status,
+                phase: job.phase,
+                progress: job.progress,
+                detail: job.detail,
+                error: job.error,
+                createdAt: record.createdAt,
+                updatedAt: job.updatedAt ?? record.updatedAt,
+                imageCount: record.imageCount,
+                hasResult: job.status === 'done' && !!job.resultPath,
+                thumbnail: record.thumbnail,
+                // Cut-out cover for the cards, on jobs that have background masks.
+                cover: fs.existsSync(path.join(config.jobsDir, record.id, 'masks'))
+                    ? `/jobs/${record.id}/cover.webp`
+                    : null,
+                images: record.images,
+            }
+        }),
+    )
 })
 
 /************************************************************************/
@@ -921,28 +916,26 @@ const coversFailed = new Set()
     script fails
 */
 /************************************************************************/
-function ensureCover(jobId)
-{
-  const coverPath = path.join(config.jobsDir, `${jobId}_out`, 'cover.webp')
-  if (fs.existsSync(coverPath)) return Promise.resolve(coverPath)
-  if (coversFailed.has(jobId)) return Promise.reject(new Error('cover failed earlier'))
-  if (coversInProgress.has(jobId)) return coversInProgress.get(jobId)
+function ensureCover(jobId) {
+    const coverPath = path.join(config.jobsDir, `${jobId}_out`, 'cover.webp')
+    if (fs.existsSync(coverPath)) return Promise.resolve(coverPath)
+    if (coversFailed.has(jobId)) return Promise.reject(new Error('cover failed earlier'))
+    if (coversInProgress.has(jobId)) return coversInProgress.get(jobId)
 
-  const jobDir = path.join(config.jobsDir, jobId)
-  const making = (async () =>
-  {
-    if (!fs.existsSync(path.join(jobDir, 'masks'))) throw new Error('job has no masks')
-    await fs.promises.mkdir(path.dirname(coverPath), { recursive: true })
-    await execFileAsync(
-      config.pythonBin,
-      [config.coverScript, path.join(jobDir, 'images'), path.join(jobDir, 'masks'), coverPath],
-      { timeout: 60_000, windowsHide: true },
-    )
-    return coverPath
-  })()
-  making.catch(() => coversFailed.add(jobId)).finally(() => coversInProgress.delete(jobId))
-  coversInProgress.set(jobId, making)
-  return making
+    const jobDir = path.join(config.jobsDir, jobId)
+    const making = (async () => {
+        if (!fs.existsSync(path.join(jobDir, 'masks'))) throw new Error('job has no masks')
+        await fs.promises.mkdir(path.dirname(coverPath), { recursive: true })
+        await execFileAsync(
+            config.pythonBin,
+            [config.coverScript, path.join(jobDir, 'images'), path.join(jobDir, 'masks'), coverPath],
+            { timeout: 60_000, windowsHide: true },
+        )
+        return coverPath
+    })()
+    making.catch(() => coversFailed.add(jobId)).finally(() => coversInProgress.delete(jobId))
+    coversInProgress.set(jobId, making)
+    return making
 }
 
 /************************************************************************/
@@ -956,19 +949,16 @@ function ensureCover(jobId)
     photo), else the WebP image
 */
 /************************************************************************/
-app.get('/jobs/:id/cover.webp', requireJobAccess, async (req, res) =>
-{
-  try
-  {
-    const coverPath = await ensureCover(req.params.id)
-    res.setHeader('Cache-Control', 'private, max-age=86400')
-    res.sendFile(coverPath)
-  }
-  catch (err)
-  {
-    console.warn(`[backend] no cover for ${req.params.id}: ${err.stderr?.trim() || err.message}`)
-    res.status(404).json({ error: 'no cover' })
-  }
+app.get('/jobs/:id/cover.webp', requireJobAccess, async (req, res) => {
+    try {
+        const coverPath = await ensureCover(req.params.id)
+        res.setHeader('Cache-Control', 'private, max-age=86400')
+        res.sendFile(coverPath)
+    }
+    catch (err) {
+        console.warn(`[backend] no cover for ${req.params.id}: ${err.stderr?.trim() || err.message}`)
+        res.status(404).json({ error: 'no cover' })
+    }
 })
 
 const MAX_JOB_NAME_LENGTH = 80
@@ -988,10 +978,9 @@ const MAX_JOB_NAME_LENGTH = 80
     name and sample filename
 */
 /************************************************************************/
-app.patch('/jobs/:id', requireJobAccess, async (req, res) =>
-{
-  const job = await getJob(req.params.id)
-  if (!job) return res.status(404).json({ error: 'job not found' })
+app.patch('/jobs/:id', requireJobAccess, async (req, res) => {
+    const job = await getJob(req.params.id)
+    if (!job) return res.status(404).json({ error: 'job not found' })
 
     const { name } = req.body || {}
     const trimmed = typeof name === 'string' ? name.trim() : ''
@@ -1034,10 +1023,9 @@ app.patch('/jobs/:id', requireJobAccess, async (req, res) =>
     once the folders are gone
 */
 /************************************************************************/
-app.delete('/jobs/:id/files', requireJobAccess, async (req, res, next) =>
-{
-  const job = await getJob(req.params.id)
-  if (!job) return res.status(404).json({ error: 'job not found' })
+app.delete('/jobs/:id/files', requireJobAccess, async (req, res, next) => {
+    const job = await getJob(req.params.id)
+    if (!job) return res.status(404).json({ error: 'job not found' })
 
     cancelJob(job) // no-op for a finished job
     jobs.delete(job.id)
@@ -1392,31 +1380,30 @@ app.post('/verify-account', requireAuthorityKey, async (req, res, next) => {
     302 to Google, or 503 if Google SSO isn't configured
 */
 /************************************************************************/
-app.get('/auth/google', (req, res) =>
-{
-  if (config.authMode !== 'authority' || !config.googleClientId)
-    return res.status(503).json({ error: 'Google sign-in is not available here.' })
+app.get('/auth/google', (req, res) => {
+    if (config.authMode !== 'authority' || !config.googleClientId)
+        return res.status(503).json({ error: 'Google sign-in is not available here.' })
 
-  const state = crypto.randomBytes(16).toString('base64url')
-  // sameSite 'lax' is still sent on Google's redirect back, because that
-  // is a normal top-level navigation.
-  res.cookie(GOOGLE_STATE_COOKIE, state, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: req.secure,
-    path: GOOGLE_STATE_PATH,
-    maxAge: 10 * 60 * 1000,
-  })
-  const params = new URLSearchParams({
-    client_id: config.googleClientId,
-    redirect_uri: config.googleRedirectUri,
-    response_type: 'code',
-    scope: 'openid email profile',
-    state,
-    // Ask for a fresh account chooser each time.
-    prompt: 'select_account',
-  })
-  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
+    const state = crypto.randomBytes(16).toString('base64url')
+    // sameSite 'lax' is still sent on Google's redirect back, because that
+    // is a normal top-level navigation.
+    res.cookie(GOOGLE_STATE_COOKIE, state, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: req.secure,
+        path: GOOGLE_STATE_PATH,
+        maxAge: 10 * 60 * 1000,
+    })
+    const params = new URLSearchParams({
+        client_id: config.googleClientId,
+        redirect_uri: config.googleRedirectUri,
+        response_type: 'code',
+        scope: 'openid email profile',
+        state,
+        // Ask for a fresh account chooser each time.
+        prompt: 'select_account',
+    })
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
 })
 
 /************************************************************************/
@@ -1431,60 +1418,56 @@ app.get('/auth/google', (req, res) =>
     302 to "/" on success (logged in), or an error page/redirect on failure
 */
 /************************************************************************/
-app.get('/auth/google/callback', async (req, res) =>
-{
-  if (config.authMode !== 'authority') return res.status(503).send('Not available here.')
-  const { code, state, error } = req.query
+app.get('/auth/google/callback', async (req, res) => {
+    if (config.authMode !== 'authority') return res.status(503).send('Not available here.')
+    const { code, state, error } = req.query
 
-  const expectedState = readCookie(req, GOOGLE_STATE_COOKIE)
-  res.clearCookie(GOOGLE_STATE_COOKIE, { path: GOOGLE_STATE_PATH })
+    const expectedState = readCookie(req, GOOGLE_STATE_COOKIE)
+    res.clearCookie(GOOGLE_STATE_COOKIE, { path: GOOGLE_STATE_PATH })
 
-  if (error) return res.redirect('/?login=google_denied')
-  if (!code || !safeEqual(state, expectedState))
-    return res.redirect('/?login=google_failed')
+    if (error) return res.redirect('/?login=google_denied')
+    if (!code || !safeEqual(state, expectedState))
+        return res.redirect('/?login=google_failed')
 
-  try
-  {
-    // 1. Exchange the code for tokens (server-to-server, uses the secret).
-    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code: String(code),
-        client_id: config.googleClientId,
-        client_secret: config.googleClientSecret,
-        redirect_uri: config.googleRedirectUri,
-        grant_type: 'authorization_code',
-      }),
-      signal: AbortSignal.timeout(8000),
-    })
-    const tokens = await tokenResp.json()
-    if (!tokenResp.ok || !tokens.id_token) return res.redirect('/?login=google_failed')
+    try {
+        // 1. Exchange the code for tokens (server-to-server, uses the secret).
+        const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                code: String(code),
+                client_id: config.googleClientId,
+                client_secret: config.googleClientSecret,
+                redirect_uri: config.googleRedirectUri,
+                grant_type: 'authorization_code',
+            }),
+            signal: AbortSignal.timeout(8000),
+        })
+        const tokens = await tokenResp.json()
+        if (!tokenResp.ok || !tokens.id_token) return res.redirect('/?login=google_failed')
 
-    // 2. The ID token is a JWT; its middle segment is the JSON claims. Google
-    //    just issued it to us over TLS from its own endpoint, so for sign-in
-    //    we read the claims directly. (A stricter check would verify Google's
-    //    signature against its public keys; acceptable to skip when the token
-    //    came straight from Google's token endpoint over HTTPS.)
-    const claims = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64url').toString())
-    if (claims.aud !== config.googleClientId || !claims.email || !claims.email_verified)
-      return res.redirect('/?login=google_failed')
+        // 2. The ID token is a JWT; its middle segment is the JSON claims. Google
+        //    just issued it to us over TLS from its own endpoint, so for sign-in
+        //    we read the claims directly. (A stricter check would verify Google's
+        //    signature against its public keys; acceptable to skip when the token
+        //    came straight from Google's token endpoint over HTTPS.)
+        const claims = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64url').toString())
+        if (claims.aud !== config.googleClientId || !claims.email || !claims.email_verified)
+            return res.redirect('/?login=google_failed')
 
-    // 3. Find or create the account, link by email, start our own session.
-    const user = findOrCreateGoogleUser({ sub: claims.sub, email: claims.email, name: claims.name })
-    if (!user)
-    {
-      console.warn(`[backend] google sign-in refused: ${claims.email} is already linked to a different Google account`)
-      return res.redirect('/?login=google_failed')
+        // 3. Find or create the account, link by email, start our own session.
+        const user = findOrCreateGoogleUser({ sub: claims.sub, email: claims.email, name: claims.name })
+        if (!user) {
+            console.warn(`[backend] google sign-in refused: ${claims.email} is already linked to a different Google account`)
+            return res.redirect('/?login=google_failed')
+        }
+        startSession(res, user.id, true)
+        res.redirect('/')
     }
-    startSession(res, user.id, true)
-    res.redirect('/')
-  }
-  catch (err)
-  {
-    console.error('[backend] google callback failed:', err)
-    res.redirect('/?login=google_failed')
-  }
+    catch (err) {
+        console.error('[backend] google callback failed:', err)
+        res.redirect('/?login=google_failed')
+    }
 })
 
 // ----- End of Routes -------------------------------------------------------- //
