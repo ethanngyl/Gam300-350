@@ -29,20 +29,22 @@ viewer that isn't a direct child of <body>.
 - scenesMatch(viewer, loaded)
 Private helper. Whether the viewer's scenes can be read right now (not
 mid-dispose or mid-rebuild).
-- updateGizmo(viewer, loaded, objects, selectedId, transformMode)
+- updateGizmo(viewer, loaded, objects, selectedId, transformMode, snap)
 Private helper. Puts the gizmo on the selected object (if it is loaded
-and visible) in the given mode, or hides it.
+and visible) in the given mode, or hides it. snap is null for free
+dragging, or { move, rotateDegrees, scale } steps to snap to.
 - applyTransforms(viewer, loaded, objects)
 Private helper. Copies each object's transform and visibility onto its
 splat scene. Each scene is first turned upright (its .ply "Vertical axis"
 to +Y), so the rotation and scale fields work in world-up terms.
-- SceneViewport({ objects, selectedId, transformMode, onObjectTransform,
-                  onModelLoadStart, onModelLoaded, onModelFailed })
+- SceneViewport({ objects, selectedId, transformMode, snap,
+                  onObjectTransform, onModelLoadStart, onModelLoaded,
+                  onModelFailed })
 React component. Keeps the viewer's scenes in step with objects: loads
 models that were added (one at a time, as the viewer allows only one load
 or removal at once), removes ones that were deleted, and updates
 transforms whenever objects change. transformMode is 'translate',
-'rotate' or 'scale'. Gizmo drags and W/A/S/D moves are reported with
+'rotate' or 'scale'; snap is as for updateGizmo. Gizmo drags and W/A/S/D moves are reported with
 onObjectTransform(id, changes, dragSession), where changes holds the new
 position (and rotation and scale for a gizmo drag).
 Reports each load with onModelLoadStart(id), then
@@ -161,9 +163,12 @@ function scenesMatch(viewer, loaded) {
         viewer.getSceneCount() >= loaded.length;
 }
 
-function updateGizmo(viewer, loaded, objects, selectedId, transformMode) {
+function updateGizmo(viewer, loaded, objects, selectedId, transformMode, snap) {
     if (!viewer || viewer.isDisposingOrDisposed()) return;
     const { controls, pivot } = viewer.gizmo;
+    controls.setTranslationSnap(snap?.move ?? null);
+    controls.setRotationSnap(snap ? snap.rotateDegrees * DEG_TO_RAD : null);
+    controls.setScaleSnap(snap?.scale ?? null);
     const object = objects.find((candidate) => candidate.id === selectedId);
     const isLoaded = loaded.some((entry) => entry.id === selectedId);
     if (!object || !isLoaded || !object.visible) {
@@ -213,6 +218,7 @@ function SceneViewport({
     objects,
     selectedId,
     transformMode,
+    snap = null,
     onObjectTransform,
     onModelLoadStart,
     onModelLoaded,
@@ -222,7 +228,7 @@ function SceneViewport({
     const viewerRef = useRef(null);
     // Latest props, read by the async sync loop and the gizmo.
     const objectsRef = useRef(objects);
-    const selectionRef = useRef({ selectedId, transformMode });
+    const selectionRef = useRef({ selectedId, transformMode, snap });
     const callbacksRef = useRef({ onObjectTransform, onModelLoadStart, onModelLoaded, onModelFailed });
     // Objects in the viewer, in scene-index order: [{ id, upright }]
     const loadedRef = useRef([]);
@@ -323,8 +329,8 @@ function SceneViewport({
             }
 
             applyTransforms(viewer, loadedRef.current, objectsRef.current);
-            const { selectedId: currentId, transformMode: currentMode } = selectionRef.current;
-            updateGizmo(viewer, loadedRef.current, objectsRef.current, currentId, currentMode);
+            const { selectedId: currentId, transformMode: currentMode, snap: currentSnap } = selectionRef.current;
+            updateGizmo(viewer, loadedRef.current, objectsRef.current, currentId, currentMode, currentSnap);
         }
 
         // Runs syncOnce, and again if objects changed while it was running.
@@ -389,12 +395,12 @@ function SceneViewport({
 
     useEffect(() => {
         objectsRef.current = objects;
-        selectionRef.current = { selectedId, transformMode };
+        selectionRef.current = { selectedId, transformMode, snap };
         // Transform edits show at once; loads and removals go through sync.
         applyTransforms(viewerRef.current, loadedRef.current, objects);
-        updateGizmo(viewerRef.current, loadedRef.current, objects, selectedId, transformMode);
+        updateGizmo(viewerRef.current, loadedRef.current, objects, selectedId, transformMode, snap);
         syncRef.current?.();
-    }, [objects, selectedId, transformMode]);
+    }, [objects, selectedId, transformMode, snap]);
 
     return <div ref={containerRef} className="scene-canvas" />;
 }
