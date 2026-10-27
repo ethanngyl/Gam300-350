@@ -10,9 +10,11 @@ Library tab with two sub-views: a searchable, sortable grid of generated
 3D models and a Photo Library that embeds ImageGallery in its compact
 variant. The 3D Models grid is built from GET /jobs: finished jobs show
 as Ready, jobs still running show as Processing, and failed or cancelled
-jobs are hidden. Viewing a model is left to the Model Viewer tab;
-right-clicking a card here renames or deletes it. The active sub-tab is
-controlled by the parent so the sidebar can open either one directly.
+jobs are hidden. Each card shows the object cut out of one of its photos,
+or its first photo (see ModelCover.jsx).
+Viewing a model is left to the Model Viewer tab; right-clicking a card
+here renames or deletes it. The active sub-tab is controlled by the parent
+so the sidebar can open either one directly.
 **************************************************************************/
 
 import { useCallback, useEffect, useState } from 'react';
@@ -21,6 +23,7 @@ import ImageGallery from './ImageGallery.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { menuPosition } from './menuPosition.js';
 import ActionDialog from './ActionDialog.jsx';
+import ModelCover from './ModelCover.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 
@@ -78,6 +81,8 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             photoCount: job.images?.length ?? 0,
             createdAt: job.createdAt,
             isReady: job.status === 'done',
+            coverUrl: job.cover ?? null,
+            photoUrl: job.images?.[0]?.url ?? null,
         }));
 
     const normalizedSearch = search.trim().toLowerCase();
@@ -224,7 +229,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                                     >
                                         {model.isReady ? 'Ready' : 'Processing'}
                                     </span>
-                                    <Icon name="layers" size={44} />
+                                    <ModelCover coverUrl={model.coverUrl} photoUrl={model.photoUrl} icon="layers" />
                                 </div>
                                 <div className="library-item-name">{model.name}</div>
                                 <div className="library-item-meta">

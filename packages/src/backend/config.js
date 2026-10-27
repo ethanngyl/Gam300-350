@@ -317,6 +317,48 @@ const colmapUseFeatureNs =
 const colmapExtractionNs = colmapUseFeatureNs ? 'FeatureExtraction' : 'SiftExtraction'
 const colmapMatchingNs = colmapUseFeatureNs ? 'FeatureMatching' : 'SiftMatching'
 
+// Newer COLMAP builds moved the two-view inlier threshold into its own
+// TwoViewGeometry namespace; older ones keep it with the matcher options.
+// Ask exhaustive_matcher which one it lists (falls back to the matcher
+// namespace if the probe can't run).
+//   new : --TwoViewGeometry.min_num_inliers
+//   old : --SiftMatching.min_num_inliers
+function colmapMinInliersFlag(exe, matchingNs) {
+  try {
+    const r = spawnSync(exe, ['exhaustive_matcher', '--help'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
+    if (/--TwoViewGeometry\.min_num_inliers/.test(help)) return '--TwoViewGeometry.min_num_inliers'
+  } catch {
+    // fall through to the older name
+  }
+  return `--${matchingNs}.min_num_inliers`
+}
+
+// Stricter COLMAP matching and camera solving. On low-texture, roughly
+// symmetric objects (e.g. a plush on a turntable) the defaults accept weak
+// matches between opposite sides, so some cameras land on the wrong side and
+// the splat shows a ghost copy of the object -- different on every run.
+// Requiring more inliers per photo pair and per added camera rejects those
+// matches. Tested on 4 photo sets (15-82 photos); COLMAP_STRICT=0 turns it off.
+const colmapStrict = process.env.COLMAP_STRICT !== '0'
+const colmapStrictMatcherArgs = colmapStrict
+  ? [
+      colmapMinInliersFlag(colmapBin, colmapMatchingNs), '50',
+      `--${colmapMatchingNs}.guided_matching`, '1',
+    ]
+  : []
+const colmapStrictMapperArgs = colmapStrict
+  ? [
+      '--Mapper.init_min_num_inliers', '200',
+      '--Mapper.abs_pose_min_num_inliers', '60',
+      '--Mapper.abs_pose_min_inlier_ratio', '0.35',
+    ]
+  : []
+
 /**
  * Central config for the reconstruction backend.
  *
@@ -351,7 +393,7 @@ export const config = {
   brushBin,
 
   // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 30000,
+  trainIters: Number(process.env.TRAIN_ITERS) || 10000,
   maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
   // Name of Brush's iteration-count flag for the installed build (see above).
   brushItersFlag: brushItersFlagName,
@@ -363,6 +405,10 @@ export const config = {
   // GPU-toggle flags for the installed COLMAP (Sift* on 3.x, Feature* on 4.x).
   colmapExtractionUseGpuFlag: `--${colmapExtractionNs}.use_gpu`,
   colmapMatchingUseGpuFlag: `--${colmapMatchingNs}.use_gpu`,
+  // Extra matcher / mapper options for stricter matching (see above); empty
+  // when COLMAP_STRICT=0.
+  colmapStrictMatcherArgs,
+  colmapStrictMapperArgs,
 
   // Upload limits.
   maxFiles: 300,
@@ -393,6 +439,9 @@ export const config = {
   maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),
   // rembg model used for the masks (see make_masks.py).
   maskModel: process.env.MASK_MODEL || 'isnet-general-use',
+  // Cuts the object out of a photo with those masks, for the Library card
+  // (GET /jobs/:id/cover.webp, see make_cover.py).
+  coverScript: process.env.COVER_SCRIPT || path.join(toolsDir, 'make_cover.py'),
   
   // --- Account authority (centralized accounts on the VM) --------------------
   // 'local' (default): accounts live in this machine's own database, as

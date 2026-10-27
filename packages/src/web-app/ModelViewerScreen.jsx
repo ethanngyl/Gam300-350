@@ -8,13 +8,16 @@
 \brief
 Model Viewer tab: picks a Gaussian splat to open in the full-page
 SplatViewer. Lists every finished model from GET /jobs as a searchable
-grid, and has an "Open .ply file" button that loads a .ply from the
+grid (each card shows a cut-out or photo of the object, see
+ModelCover.jsx), and has
+an "Open .ply file" button that loads a .ply from the
 user's computer instead. Opening is left to the parent: onOpenModel(jobId)
 for a server model, onOpenFile(file) for a local one.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
+import ModelCover from './ModelCover.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 
@@ -57,6 +60,8 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
             // Name set by Rename in the Media Library or after training.
             name: jobDisplayName(job, 'Model'),
             photoCount: job.images?.length ?? 0,
+            coverUrl: job.cover ?? null,
+            photoUrl: job.images?.[0]?.url ?? null,
         }))
         .filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(normalizedSearch));
 
@@ -126,7 +131,7 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                     >
                         <div className="library-thumb">
                             <span className="forma-badge forma-badge-ready">Ready</span>
-                            <Icon name="cube" size={44} />
+                            <ModelCover coverUrl={model.coverUrl} photoUrl={model.photoUrl} icon="cube" />
                         </div>
                         <div className="library-item-name">{model.name}</div>
                         <div className="library-item-meta">
