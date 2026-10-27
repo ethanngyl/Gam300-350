@@ -24,6 +24,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/AssetBrowserPanel.h"
 #include "ui/AudioPanel.h"
 #include "ui/ConsolePanel.h"
+#include "ui/EditCommands.h"
 #include "ui/ExportDialog.h"
 #include "ui/InspectorPanel.h"
 #include "ui/LoginDialog.h"
@@ -120,6 +121,11 @@ MainWindow::MainWindow() {
 
     m_defaultLayout = saveState(kLayoutVersion);
     restoreSettings();
+
+    // A finished gizmo drag becomes one undo step.
+    m_viewport->onTransformEdited = [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
+        m_undo.push(new MoveModelCommand(model, before, after));
+    };
 
     // The renderer only exists once the GL context does (first show).
     m_viewport->onInitialized = [this] {
@@ -235,8 +241,16 @@ void MainWindow::createActions() {
         if (!model) return;
         glm::mat4 transform = model->GetTransform();
         transform[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        model->SetTransform(transform);
+        if (transform != model->GetTransform()) {
+            m_undo.push(new MoveModelCommand(model, model->GetTransform(), transform));
+        }
     });
+
+    // Text follows the top command ("Undo Move Cube"); disabled when the stack is empty.
+    m_undoAction = m_undo.createUndoAction(this, "&Undo");
+    m_undoAction->setShortcut(QKeySequence::Undo);
+    m_redoAction = m_undo.createRedoAction(this, "&Redo");
+    m_redoAction->setShortcut(QKeySequence::Redo);
 
     m_renderModeGroup = new QActionGroup(this);
     m_renderModeGroup->setExclusive(true);
@@ -305,6 +319,9 @@ void MainWindow::createMenus() {
     fileMenu->addAction(m_exitAction);
 
     QMenu* editMenu = menuBar()->addMenu("&Edit");
+    editMenu->addAction(m_undoAction);
+    editMenu->addAction(m_redoAction);
+    editMenu->addSeparator();
     editMenu->addAction(m_renameAction);
     editMenu->addAction(m_deleteAction);
     editMenu->addAction(m_toggleVisibilityAction);
@@ -773,6 +790,7 @@ void MainWindow::deleteSelectedModel() {
     const QString name = QString::fromStdString(renderer->GetModelName(index));
 
     m_inspector->setModel(nullptr); // drop the pointer before the model is freed
+    m_undo.clear(); // commands hold model pointers; deleting is not undoable yet
     renderer->RemoveModel(index);
     refreshScenePanels();
 
