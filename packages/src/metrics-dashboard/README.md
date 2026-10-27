@@ -9,7 +9,8 @@ It never talks to the reconstruction backend.
 
 | File | Written by | Contents |
 |---|---|---|
-| `src/backend/jobs/<id>_out/metrics.json` | `recordPlyMetrics()` | One run's full record |
+| `src/backend/jobs/<id>/metrics.json` | `recordPlyMetrics()` | One run's full record |
+| `src/backend/jobs/<id>/status.json` | `saveJob()` | Fallback for runs with no metrics.json: a partial record (no phase timings or hardware) |
 | `src/backend/jobs/metrics.jsonl` | `recordPlyMetrics()` | Every run, one JSON object per line |
 
 Both are merged by `jobId`. The per-job file wins, and the `.jsonl` keeps runs

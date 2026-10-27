@@ -154,24 +154,6 @@ html {
         border-color: rgba(63, 152, 173, 0.4);
     }
 
-.forma-status {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
-    color: var(--forma-text-muted);
-    white-space: nowrap;
-}
-
-.forma-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--forma-blue);
-    flex: none;
-}
-
 .forma-account {
     position: relative;
 }
@@ -1213,14 +1195,30 @@ html {
         color: var(--forma-teal-text);
     }
 
-.scene-outliner-child {
-    padding-left: 34px;
-    cursor: default;
+    .scene-outliner-item.is-hidden .scene-outliner-name {
+        opacity: 0.45;
+    }
+
+.scene-outliner-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.scene-outliner-toggle {
-    width: 14px;
-    height: 14px;
+.scene-outliner-status {
+    font-size: 0.6rem;
+    color: var(--forma-text-dim);
+}
+
+    .scene-outliner-status.is-error {
+        color: var(--forma-red);
+    }
+
+.scene-outliner-eye {
+    width: 18px;
+    height: 18px;
     background: none;
     border: none;
     color: inherit;
@@ -1230,6 +1228,16 @@ html {
     justify-content: center;
     cursor: pointer;
     flex: none;
+}
+
+    .scene-outliner-eye[aria-pressed="true"] {
+        opacity: 0.35;
+    }
+
+.scene-outliner-note {
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
 }
 
 .scene-add-library {
@@ -1255,6 +1263,9 @@ html {
 
 .scene-viewport {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     overflow: hidden;
     background: linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-bg);
 }
@@ -1275,47 +1286,47 @@ html {
     color: var(--forma-text-dim);
 }
 
-.scene-view-cube {
-    position: absolute;
-    top: 52px;
-    right: 14px;
-    width: 62px;
-    border: 1px solid var(--forma-border-strong);
-    border-radius: 4px;
-    background: var(--forma-panel);
+/* Holds the splat viewer's canvas (SceneViewport.jsx). */
+.scene-canvas {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.scene-viewport-error {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 8px 0;
-    gap: 10px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.6rem;
-    color: var(--forma-text-dim);
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--forma-red);
 }
 
-.scene-selection {
+.scene-viewport-empty {
     position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 136px;
-    height: 136px;
-    transform: translate(-50%, -50%);
-    border: 1px solid var(--forma-blue);
+    inset: 37px 0 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: var(--forma-text-dim);
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+    pointer-events: none;
 }
 
-.scene-handle {
-    position: absolute;
-    width: 7px;
-    height: 7px;
-    background: var(--forma-blue);
-    transform: translate(-50%, -50%);
-}
+    .scene-viewport-empty button {
+        pointer-events: auto;
+    }
 
 .scene-axes {
+    pointer-events: none;
     position: absolute;
     left: 18px;
     bottom: 18px;
@@ -1348,18 +1359,156 @@ html {
     color: #5a68d4;
 }
 
-.scene-front-button {
-    position: absolute;
-    right: 14px;
-    bottom: 14px;
-    background: var(--forma-bg);
-    border: 1px solid var(--forma-border-strong);
-    color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem;
-    padding: 8px 14px;
-    border-radius: 5px;
+.scene-chip:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
+
+.scene-bar-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 0 4px;
+    background: var(--forma-border-strong);
+}
+
+.scene-chip-danger:hover {
+    border-color: var(--forma-red);
+    color: var(--forma-red);
+}
+
+/* Outliner right-click menu */
+.scene-context-menu {
+    position: fixed;
+    z-index: 60;
+    padding: 4px;
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.scene-context-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--forma-text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.74rem;
+    padding: 7px 10px;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .scene-context-item:hover,
+    .scene-context-item:focus-visible {
+        background: var(--forma-panel-alt);
+        outline: none;
+    }
+
+    .scene-context-item.is-danger:hover,
+    .scene-context-item.is-danger:focus-visible {
+        color: var(--forma-red);
+    }
+
+/* Add from Library picker */
+.scene-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(5, 12, 18, 0.6);
+}
+
+.scene-picker {
+    display: flex;
+    flex-direction: column;
+    width: min(440px, 100%);
+    max-height: min(560px, 100%);
+    background: var(--forma-sidebar);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.scene-picker-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .scene-picker-head .scene-panel-title {
+        border-bottom: none;
+    }
+
+.scene-picker-close {
+    background: none;
+    border: none;
+    color: var(--forma-text-muted);
+    font-size: 1.2rem;
+    padding: 4px 14px;
+    cursor: pointer;
+}
+
+.scene-picker .scene-outliner-search {
+    margin-top: 10px;
+}
+
+.scene-picker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 8px 10px;
+}
+
+.scene-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 5px;
+    color: var(--forma-text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.76rem;
+    padding: 9px 8px;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .scene-picker-item:hover {
+        background: var(--forma-panel-alt);
+    }
+
+.scene-picker-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.scene-picker-meta {
+    font-size: 0.66rem;
+    color: var(--forma-text-dim);
+}
+
+.scene-picker-note {
+    padding: 8px;
+    font-size: 0.74rem;
+    color: var(--forma-text-muted);
+}
+
+    .scene-picker-note.is-error {
+        color: var(--forma-red);
+    }
 
 .scene-inspector {
     border-left: 1px solid var(--forma-border);
@@ -2074,6 +2223,185 @@ html {
     }
 }
 
+/* ---------- Home: recent files and models ---------- */
+
+.home-new-model {
+    flex: none;
+    padding: 11px 20px;
+}
+
+.home-recent-v2-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+    .home-recent-v2-header .home-section-title {
+        margin-bottom: 10px !important;
+    }
+
+.home-recent-tabs {
+    display: flex;
+    gap: 20px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.home-recent-tab {
+    padding: 0 0 10px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .home-recent-tab:hover {
+        color: var(--forma-text);
+    }
+
+    .home-recent-tab.is-active {
+        color: var(--forma-text);
+        border-bottom-color: var(--forma-blue);
+    }
+
+.home-file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 14px;
+}
+
+.home-file-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .home-file-card:hover {
+        border-color: var(--forma-blue);
+    }
+
+.home-file-preview {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-panel-alt);
+    color: var(--forma-text-dim);
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .home-file-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.home-file-type {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(17, 29, 41, 0.85);
+    border: 1px solid var(--forma-border-strong);
+    color: var(--forma-teal-text);
+}
+
+.home-file-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px;
+    min-width: 0;
+}
+
+.home-file-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--forma-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-file-kind {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--forma-text-muted);
+}
+
+.home-file-time {
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+    margin-top: 6px;
+}
+
+.home-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--forma-text-muted);
+}
+
+    .home-empty svg {
+        color: var(--forma-teal-text);
+    }
+
+    .home-empty h3 {
+        font-size: 1.05rem;
+        color: var(--forma-heading);
+    }
+
+    .home-empty p {
+        max-width: 42ch;
+        font-size: 0.86rem;
+    }
+
+    .home-empty .forma-btn {
+        margin-top: 6px;
+    }
+
+@media (max-width: 760px) {
+    .home-new-model {
+        align-self: stretch;
+        justify-content: center;
+    }
+
+    .home-recent-v2-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+        .home-recent-v2-header .home-link {
+            align-self: flex-start;
+            padding: 0;
+        }
+
+    .home-file-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
 /* ============================================================
    Responsive layout: tablets (<=1100px) and phones (<=760px)
    Keep this section last in the file so its rules win.
@@ -2149,8 +2477,7 @@ html {
         padding-right: 0;
     }
 
-    .forma-logo-text,
-    .forma-status {
+    .forma-logo-text {
         display: none;
     }
 
@@ -2259,7 +2586,7 @@ html {
         font-size: 1.4rem;
     }
 
-    /* Library: subtabs and search on their own rows, sort + action share one */
+    /* Library: subtabs, search and sort each on their own row */
     .library-toolbar {
         flex-wrap: wrap;
         gap: 10px;
@@ -2280,11 +2607,6 @@ html {
 
     .library-sort {
         flex: 1;
-    }
-
-    .library-toolbar > .forma-btn {
-        flex: 1;
-        justify-content: center;
     }
 
     .library-grid,

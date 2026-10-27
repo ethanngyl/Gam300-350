@@ -15,8 +15,7 @@ valid. The status card only appears while a job exists: a simple
 progress bar while it runs, then the extracted frames and a download
 link for the resulting .ply once it is done. Also frees an in-progress
 server-side job if the user navigates away or closes the tab before it
-completes. An optional onBack prop adds a "Back to dashboard" button to
-the heading.
+completes. There is no Back button; the sidebar handles navigation.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -88,7 +87,7 @@ const PHASE_LABELS = {
     upload: 'Preparing',
 };
 
-function YoutubeIngest({ onBack }) {
+function YoutubeIngest() {
     const [url, setUrl] = useState('');
     const [fps, setFps] = useState(2);
     const [submitting, setSubmitting] = useState(false);
@@ -215,17 +214,6 @@ function YoutubeIngest({ onBack }) {
                         phone capture is needed.
                     </p>
                 </div>
-                {onBack && (
-                    <button
-                        className="forma-btn yt-back"
-                        onClick={() => {
-                            playSound('back');
-                            onBack();
-                        }}
-                    >
-                        Back to dashboard
-                    </button>
-                )}
             </div>
 
             <div className="yt-layout">

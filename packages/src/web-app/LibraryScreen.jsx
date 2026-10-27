@@ -10,8 +10,10 @@ Library tab with two sub-views: a searchable, sortable grid of generated
 3D models and a Photo Library that embeds ImageGallery in its compact
 variant. The 3D Models grid is built from GET /jobs: finished jobs show
 as Ready, jobs still running show as Processing, and failed or cancelled
-jobs are hidden. Viewing a model is left to the Model Viewer tab;
-right-clicking a card here renames or deletes it. The active sub-tab is
+jobs are hidden. Both views sort by Newest, Oldest, Last edited or Name.
+New models are started from the sidebar's "New model" button, so the
+Library has no create button of its own. Viewing a model is left to the
+Model Viewer tab; right-clicking a card here renames or deletes it. The active sub-tab is
 controlled by the parent so the sidebar can open either one directly.
 **************************************************************************/
 
@@ -28,7 +30,13 @@ import { playSound } from '../audio/Audio.js';
 // produces a model; the others are hidden from the grid.
 const FINISHED_STATUSES = ['done', 'error', 'cancelled'];
 
-function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos }) {
+// When a model was last changed, for the "Last edited" sort. Falls back to
+// when it was made if the server has no update time.
+function lastEditedTime(model) {
+    return Date.parse(model.updatedAt ?? model.createdAt) || 0;
+}
+
+function LibraryScreen({ subTab, onSubTabChange }) {
     const [search, setSearch] = useState('');
     const [sortOrder, setSortOrder] = useState('newest');
     const [jobs, setJobs] = useState([]);
@@ -77,6 +85,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             customName: job.name ?? '',
             photoCount: job.images?.length ?? 0,
             createdAt: job.createdAt,
+            updatedAt: job.updatedAt,
             isReady: job.status === 'done',
         }));
 
@@ -85,6 +94,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
         `${model.name} ${model.id}`.toLowerCase().includes(normalizedSearch)
     );
     if (sortOrder === 'oldest') visibleModels.reverse();
+    if (sortOrder === 'lastEdited') visibleModels.sort((a, b) => lastEditedTime(b) - lastEditedTime(a));
     if (sortOrder === 'name') visibleModels.sort((a, b) => a.name.localeCompare(b.name));
 
     function openModelMenu(event, model) {
@@ -170,20 +180,11 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                     <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
                         <option value="newest">Newest</option>
                         <option value="oldest">Oldest</option>
+                        <option value="lastEdited">Last edited</option>
                         <option value="name">Name</option>
                     </select>
                     <Icon name="chevron" size={13} />
                 </label>
-
-                {subTab === 'models' ? (
-                    <button className="forma-btn forma-btn-primary" onClick={() => { playSound('tap'); onGenerateModel(); }}>
-                        <Icon name="plus" size={14} /> Generate Model
-                    </button>
-                ) : (
-                    <button className="forma-btn forma-btn-primary" onClick={() => { playSound('tap'); onUploadPhotos(); }}>
-                        <Icon name="plus" size={14} /> Upload Photos
-                    </button>
-                )}
             </div>
 
             {subTab === 'models' ? (
@@ -196,7 +197,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use Generate Model to create one.'}
+                                : 'No generated models yet. Use New model in the sidebar to create one.'}
                         </p>
                     )}
 

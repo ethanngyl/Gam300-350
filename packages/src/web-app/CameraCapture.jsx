@@ -16,8 +16,10 @@ Each photo is checked in the background for blur, bad exposure and
 near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
 Taking a photo plays the camera shutter sound (quieter for auto-capture).
-Coming back from the Photo Editor ("Back to camera"), initialPhotos brings
-the batch and the Remove background choice back with it.
+If the camera can't start, the preview reads "Click to enable camera" and
+clicking it asks for the camera again. The Remove background option now
+lives in the Photo Editor; coming back from there ("Back to camera"),
+initialPhotos brings the batch and that choice back with it.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -70,6 +72,8 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
+    // Bumped by "Click to enable camera" to ask for the camera again.
+    const [cameraRequestCount, setCameraRequestCount] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [photos, setPhotos] = useState(() =>
         (initialPhotos?.files ?? []).filter((file) => file.type.startsWith('image/')).map(createBatchPhoto)
@@ -83,9 +87,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     const [isAutoCapturing, setIsAutoCapturing] = useState(false);
     const [intervalSeconds, setIntervalSeconds] = useState(2);
     const [maxCaptures, setMaxCaptures] = useState(50);
-    // Mask out the background before reconstruction. Needed for turntable
-    // captures, where the static background makes the model come out flat.
-    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Mask out the background before reconstruction. Set in the Photo
+    // Editor; kept here so the choice survives going back to the camera.
+    const [removeBackground] = useState(initialPhotos?.removeBackground ?? false);
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
@@ -128,7 +132,13 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                 streamRef.current = null;
             }
         };
-    }, []);
+    }, [cameraRequestCount]);
+
+    function retryCamera() {
+        playSound('tap');
+        setError(null);
+        setCameraRequestCount((count) => count + 1);
+    }
 
     useEffect(() => {
         photosRef.current = photos;
@@ -358,11 +368,18 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-                        {!stream && (
+                        {!stream && !error && (
                             <div className="capture-placeholder">
                                 <Icon name="camera" size={34} />
-                                <span>{error ? 'Camera not available' : 'Waiting for camera...'}</span>
+                                <span>Waiting for camera...</span>
                             </div>
+                        )}
+                        {!stream && error && (
+                            <button type="button" className="capture-placeholder capture-enable" onClick={retryCamera}>
+                                <Icon name="camera" size={34} />
+                                <span>Camera not available</span>
+                                <span className="capture-enable-hint">Click to enable camera</span>
+                            </button>
                         )}
 
                         <span className="capture-corner capture-corner-tl"></span>
@@ -370,10 +387,12 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         <span className="capture-corner capture-corner-bl"></span>
                         <span className="capture-corner capture-corner-br"></span>
 
-                        <span className={stream ? 'capture-live is-live' : 'capture-live'}>
-                            <span className="capture-live-dot"></span>
-                            {stream ? 'Live' : 'Offline'}
-                        </span>
+                        {stream && (
+                            <span className="capture-live is-live">
+                                <span className="capture-live-dot"></span>
+                                Live
+                            </span>
+                        )}
                     </div>
 
                     {error && <p className="capture-error">{error}</p>}
@@ -557,18 +576,6 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                             ))}
                         </div>
                     )}
-
-                    <label className="capture-option">
-                        <input
-                            type="checkbox"
-                            checked={removeBackground}
-                            onChange={(e) => setRemoveBackground(e.target.checked)}
-                        />
-                        <span>
-                            Remove background
-                            <small>Turn on for turntable captures (object spins, camera stays still).</small>
-                        </span>
-                    </label>
 
                     {issueSummary && (
                         <p className="capture-issues" role="status">

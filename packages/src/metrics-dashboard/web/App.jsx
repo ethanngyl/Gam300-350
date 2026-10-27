@@ -72,7 +72,7 @@ export default function App() {
   } else if (!records.length) {
     body = (
       <EmptyState title="No metrics yet">
-        <p>Each finished reconstruction writes <code>jobs/&lt;id&gt;_out/metrics.json</code>. Run a job in the main app and it will appear here.</p>
+        <p>Each finished reconstruction writes <code>jobs/&lt;id&gt;/metrics.json</code>. Run a job in the main app and it will appear here.</p>
       </EmptyState>
     )
   } else if (tab === 'metrics') body = <MetricsView records={records} selectedId={selectedId} onSelect={setSelectedId} />
