@@ -405,23 +405,11 @@
             font-size: 2rem;
         }
 
+    /* Buttons stay under the title and description, as on phones. */
     .photo-editor-heading {
-        flex-direction: row;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 24px;
+        gap: 16px;
         margin-bottom: 24px;
     }
-
-        .photo-editor-heading > div {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .photo-editor-heading > .forma-btn,
-        .photo-editor-heading > .photo-editor-heading-actions {
-            flex: none;
-        }
 
     .photo-editor-summary {
         flex-direction: row;
@@ -714,7 +702,13 @@
     cursor: crosshair;
 }
 
-/* "Use original photos" switch in the bottom bar */
+/* "Use original photos" and "Remove background" switches in the bottom bar */
+.photo-editor-footer-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+}
+
 .photo-editor-originals {
     display: flex;
     align-items: center;

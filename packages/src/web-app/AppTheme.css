@@ -154,24 +154,6 @@ html {
         border-color: rgba(63, 152, 173, 0.4);
     }
 
-.forma-status {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
-    color: var(--forma-text-muted);
-    white-space: nowrap;
-}
-
-.forma-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--forma-blue);
-    flex: none;
-}
-
 .forma-account {
     position: relative;
 }
@@ -2074,6 +2056,185 @@ html {
     }
 }
 
+/* ---------- Home: recent files and models ---------- */
+
+.home-new-model {
+    flex: none;
+    padding: 11px 20px;
+}
+
+.home-recent-v2-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+    .home-recent-v2-header .home-section-title {
+        margin-bottom: 10px !important;
+    }
+
+.home-recent-tabs {
+    display: flex;
+    gap: 20px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.home-recent-tab {
+    padding: 0 0 10px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .home-recent-tab:hover {
+        color: var(--forma-text);
+    }
+
+    .home-recent-tab.is-active {
+        color: var(--forma-text);
+        border-bottom-color: var(--forma-blue);
+    }
+
+.home-file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 14px;
+}
+
+.home-file-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .home-file-card:hover {
+        border-color: var(--forma-blue);
+    }
+
+.home-file-preview {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-panel-alt);
+    color: var(--forma-text-dim);
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .home-file-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.home-file-type {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(17, 29, 41, 0.85);
+    border: 1px solid var(--forma-border-strong);
+    color: var(--forma-teal-text);
+}
+
+.home-file-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px;
+    min-width: 0;
+}
+
+.home-file-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--forma-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-file-kind {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--forma-text-muted);
+}
+
+.home-file-time {
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+    margin-top: 6px;
+}
+
+.home-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--forma-text-muted);
+}
+
+    .home-empty svg {
+        color: var(--forma-teal-text);
+    }
+
+    .home-empty h3 {
+        font-size: 1.05rem;
+        color: var(--forma-heading);
+    }
+
+    .home-empty p {
+        max-width: 42ch;
+        font-size: 0.86rem;
+    }
+
+    .home-empty .forma-btn {
+        margin-top: 6px;
+    }
+
+@media (max-width: 760px) {
+    .home-new-model {
+        align-self: stretch;
+        justify-content: center;
+    }
+
+    .home-recent-v2-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+        .home-recent-v2-header .home-link {
+            align-self: flex-start;
+            padding: 0;
+        }
+
+    .home-file-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
 /* ============================================================
    Responsive layout: tablets (<=1100px) and phones (<=760px)
    Keep this section last in the file so its rules win.
@@ -2149,8 +2310,7 @@ html {
         padding-right: 0;
     }
 
-    .forma-logo-text,
-    .forma-status {
+    .forma-logo-text {
         display: none;
     }
 
@@ -2259,7 +2419,7 @@ html {
         font-size: 1.4rem;
     }
 
-    /* Library: subtabs and search on their own rows, sort + action share one */
+    /* Library: subtabs, search and sort each on their own row */
     .library-toolbar {
         flex-wrap: wrap;
         gap: 10px;
@@ -2280,11 +2440,6 @@ html {
 
     .library-sort {
         flex: 1;
-    }
-
-    .library-toolbar > .forma-btn {
-        flex: 1;
-        justify-content: center;
     }
 
     .library-grid,
