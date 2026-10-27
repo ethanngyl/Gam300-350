@@ -16,10 +16,11 @@ struct SplatTrimmerParam
     int minPerVoxel = 5;    //Drop splats whose voxel holds fewer than this
 };
 
-//User-facing trim values. These are scale independent, so they suit any scan;
-//ToTrimmerParam converts them to world units for a particular set of splats.
-//The default-constructed values are the factory defaults. MainWindow holds one as the global
-//default for new imports and each SplatModel holds the one it was last trimmed with.
+//User-facing trim values
+//These are scale independent, so they suit any scan
+//ToTrimmerParam converts them to world units for a particular set of splats
+//The default-constructed values are the factory defaults. MainWindow holds one as the global 
+//default for new imports and each SplatModel holds the one it was last trimmed with
 struct TrimData
 {
     float minAlpha = 0.005f;      //Drop splats with alpha below this (0 = off)

@@ -29,7 +29,7 @@ public:
     const std::vector<SplatVertex>& splats() const { return m_splats; }
     size_t GetCount() const { return m_splats.size(); }
 
-    //Untrimmed data, kept so the model can be re-trimmed with different settings.
+    //Untrimmed orginal data, kept so the model can be re-trimmed
     //Empty until the model is first trimmed; SourceSplats() falls back to the current data.
     void SetOriginal(std::vector<SplatVertex>&& original) { m_original = std::move(original); }
     void KeepOriginal() { if (m_original.empty()) m_original = m_splats; }
