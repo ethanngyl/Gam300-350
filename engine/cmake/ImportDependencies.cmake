@@ -70,7 +70,16 @@ macro(import_imgui)
             GIT_SHALLOW TRUE
         )
         FetchContent_Populate(imgui)
-        
+
+        # ImGuizmo: the translate/rotate/scale gizmo drawn over the viewport.
+        # It is built into the imgui target because it needs imgui_internal.h.
+        FetchContent_Declare(
+            imguizmo
+            GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
+            GIT_TAG 105e4fde45e4e74aae8973d98750820ef7aca7e2
+        )
+        FetchContent_Populate(imguizmo)
+
         # ImGui source files
         set(IMGUI_SOURCES
             ${imgui_SOURCE_DIR}/imgui.cpp
@@ -79,13 +88,15 @@ macro(import_imgui)
             ${imgui_SOURCE_DIR}/imgui_tables.cpp
             ${imgui_SOURCE_DIR}/imgui_widgets.cpp
             ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+            ${imguizmo_SOURCE_DIR}/src/ImGuizmo.cpp
         )
-        
+
         # Create ImGui library
         add_library(imgui STATIC ${IMGUI_SOURCES})
-        target_include_directories(imgui PUBLIC 
+        target_include_directories(imgui PUBLIC
             ${imgui_SOURCE_DIR}
             ${imgui_SOURCE_DIR}/backends
+            ${imguizmo_SOURCE_DIR}/src
         )
         
         # ImGui's OpenGL backend needs GLEW; the Qt platform backend lives in
