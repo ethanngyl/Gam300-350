@@ -9,7 +9,8 @@
 \brief
 The screen shown while the backend reconstructs a job (builds the .ply).
 It polls the server for the job's phase and progress and hands off to the
-viewer once the splat is ready. Leaving the screen in any way (Cancel,
+viewer once the splat is ready. Sounds: a tick each time a step finishes,
+success when the model is ready, error if it fails. Leaving the screen in any way (Cancel,
 closing the tab, refreshing, Back) tells the server to kill the job so
 COLMAP/Brush don't keep running on the GPU for nobody.
 Layout (GENESIS theme): on wider screens, the live status (current step,
@@ -84,6 +85,8 @@ export default function Processing({ jobId, onDone, onCancel }) {
     const [photoCount, setPhotoCount] = useState(null)
     const [elapsedSeconds, setElapsedSeconds] = useState(0)
     const doneRef = useRef(false)
+    // Last phase seen, so the tick sound plays once per finished step.
+    const lastPhaseRef = useRef(null)
 
     useEffect(() => {
         let stopped = false
@@ -96,18 +99,28 @@ export default function Processing({ jobId, onDone, onCancel }) {
                 const data = await res.json()
                 if (stopped) return
                 setJob(data)
+                // A new phase means the previous step finished (not on the first poll).
+                if (data.status === 'running' && lastPhaseRef.current && data.phase !== lastPhaseRef.current) {
+                    playSound('tick')
+                }
+                lastPhaseRef.current = data.phase
                 if (data.status === 'done' && !doneRef.current) {
                     doneRef.current = true
+                    playSound('success')
                     onDone()
                     return
                 }
                 if (data.status === 'error') {
+                    playSound('error')
                     setFailed(data.error || 'Reconstruction failed')
                     return
                 }
                 if (data.status === 'cancelled') return // cancel() already navigated away
             } catch (err) {
-                if (!stopped) setFailed(err.message)
+                if (!stopped) {
+                    playSound('error')
+                    setFailed(err.message)
+                }
                 return
             }
             timer = setTimeout(poll, 1500)

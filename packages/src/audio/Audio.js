@@ -16,23 +16,28 @@ useSoundSettings() gives components the current values and re-renders
 them on any change, so the Account page and the account menu stay in step.
 Each sound also has its own volume in SOUND_VOLUMES, so the mix is set
 in code and the original files stay untouched.
+Sounds: tap (buttons), confirm (start a build), back (leave / cancel),
+camera (shutter), success (model ready), error (build failed), tick (a
+build step finished).
 **************************************************************************/
 
 import { useSyncExternalStore } from 'react';
 import tapSound from './Tap.wav';
 import confirmSound from './Confirm.wav';
 import backSound from './Back.wav';
-// import success from './Success.wav';
-// import error from './Error.wav';
 import cameraSound from './Camera.wav';
+import successSound from './Success.wav';
+import errorSound from './Error.wav';
+import tickSound from './Tick.wav';
 
 const SOUND_SOURCES = {
     tap: tapSound,
     confirm: confirmSound,
     back: backSound,
     camera: cameraSound,
-    // success: success,
-    // error: error,
+    success: successSound,
+    error: errorSound,
+    tick: tickSound,
 };
 
 // Per-sound volume (0-1), so every sound plays at about Tap's loudness.
@@ -41,6 +46,12 @@ const SOUND_VOLUMES = {
     confirm: 0.45,
     back: 0.4,
     camera: 0.2,
+    // Close to Tap's loudness already.
+    success: 1.0,
+    // About 7 dB louder than Tap, so turned well down.
+    error: 0.4,
+    // Already much quieter than Tap; it repeats every step, so it stays soft.
+    tick: 1.0,
 };
 
 const DEFAULT_VOLUME = 1.0;

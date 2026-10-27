@@ -20,7 +20,9 @@ current step, iteration counter, progress bar, elapsed time, the video's
 thumbnail with a scanning line, the step tracker, and a Cancel button that
 stops the job on the server (DELETE /jobs/:id) and frees the GPU. When it
 ends, a result card shows the extracted frames and a download link for
-the .ply (or why it failed / that it was cancelled). Also frees an in-progress
+the .ply (or why it failed / that it was cancelled). Sounds: a tick each
+time a step finishes, success when the model is ready, error if it fails
+(none on cancel, since Cancel already plays Back). Also frees an in-progress
 server-side job if the user navigates away or closes the tab before it
 completes. There is no Back button; the sidebar handles navigation.
 **************************************************************************/
@@ -138,6 +140,8 @@ function YoutubeIngest() {
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const jobRef = useRef(null);
     const pollRef = useRef(null);
+    // Last phase seen, so the tick sound plays once per finished step.
+    const lastPhaseRef = useRef(null);
 
     useEffect(() => {
         jobRef.current = job;
@@ -181,20 +185,29 @@ function YoutubeIngest() {
     const pollJob = useCallback(
         (id) => {
             stopPolling();
+            lastPhaseRef.current = null;
             pollRef.current = setInterval(async () => {
                 try {
                     const res = await fetch(`/jobs/${id}`);
                     if (!res.ok) throw new Error(`Status ${res.status}`);
                     const data = await parseJson(res);
                     setJob(data);
+                    // A new phase means the previous step finished (not on the first poll).
+                    if (data.status === 'running' && lastPhaseRef.current && data.phase !== lastPhaseRef.current) {
+                        playSound('tick');
+                    }
+                    lastPhaseRef.current = data.phase;
                     if (FINISHED.includes(data.status)) {
                         stopPolling();
                         if (data.status === 'done') {
+                            playSound('success');
                             setNamePromptJobId(id);
                             loadExtractedFrames(id);
                         }
+                        if (data.status === 'error') playSound('error');
                     }
                 } catch (err) {
+                    playSound('error');
                     setError(`Lost contact with the server: ${err.message}`);
                     stopPolling();
                 }
