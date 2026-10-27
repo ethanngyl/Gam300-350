@@ -12,7 +12,8 @@ the camera capture page; "Add photos", which opens the file picker and
 hands the chosen photos to the capture page; the workspace pages (Home,
 Media Library, Photo Editor, Scene Builder, YouTube Extractor, Model
 Viewer); and the signed-in user at the bottom, whose menu links to the
-account page and signs out (or in, for guests). The item for the current
+account page, mutes / unmutes sound effects, and signs out (or in, for
+guests). The item for the current
 page is highlighted. Collapsed (wider screens), only icons show. On phones
 it becomes a slide-in drawer: isOpen shows it, and every item calls
 onClose so the drawer shuts after a choice is made.
@@ -20,7 +21,7 @@ onClose so the drawer shuts after a choice is made.
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
+import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 
 const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', icon: 'home' },
@@ -47,6 +48,7 @@ function Sidebar({
     const fileInputRef = useRef(null);
     const profileRef = useRef(null);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+    const { isMuted } = useSoundSettings();
     const isCapturePage = activeTab === 'capture';
 
     // Close the profile menu when the user clicks anywhere outside it.
@@ -170,6 +172,17 @@ function Sidebar({
                             </div>
                         </div>
                         <div className="genesis-profile-divider" />
+                        <button
+                            className="forma-account-menu-item"
+                            onClick={() => {
+                                setSoundMuted(!isMuted);
+                                // Muting stays silent; unmuting plays once to confirm.
+                                if (isMuted) playSound('tap');
+                            }}
+                        >
+                            <Icon name={isMuted ? 'volume' : 'volumeOff'} size={14} />
+                            {isMuted ? ' Unmute sounds' : ' Mute sounds'}
+                        </button>
                         <button
                             className="forma-account-menu-item"
                             onClick={() => {

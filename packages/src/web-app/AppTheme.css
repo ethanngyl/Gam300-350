@@ -124,6 +124,31 @@ html {
     letter-spacing: 0.16em;
 }
 
+/* The top nav's logo is a button that goes to Home. On wider screens it
+   is as wide as the open sidebar (240px, minus the nav's 20px padding),
+   so the tabs start where the page content does. No divider line. */
+.forma-logo-home {
+    box-sizing: border-box;
+    width: 220px;
+    flex: none;
+    align-self: stretch;
+    background: transparent;
+    border: none;
+    padding-left: 0;
+    color: inherit;
+    cursor: pointer;
+}
+
+    .forma-logo-home:hover .forma-logo-icon {
+        border-color: var(--forma-blue);
+    }
+
+    .forma-logo-home:focus-visible {
+        outline: 2px solid var(--forma-blue);
+        outline-offset: 4px;
+        border-radius: 6px;
+    }
+
 .forma-logo-icon {
     width: 30px;
     height: 30px;
@@ -2714,6 +2739,7 @@ html {
     }
 
     .forma-logo {
+        width: auto;
         border-right: none;
         padding-right: 0;
     }

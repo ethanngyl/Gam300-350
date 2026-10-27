@@ -223,7 +223,7 @@
 
     .scene-builder-marker.is-selected {
         border-color: var(--forma-teal-text);
-        box-shadow: 0 0 0 3px rgba(108, 198, 214, 0.25);
+        box-shadow: 0 0 0 3px rgba(var(--forma-accent-light-rgb), 0.25);
         z-index: 1;
     }
 
@@ -719,8 +719,20 @@
 /* ---------- Wider screens ---------- */
 
 @media (min-width: 761px) {
+    /* Same page padding and title size as the Photo Editor and YouTube
+       Extractor, so the headings line up across pages. */
     .scene-builder {
-        padding: 20px 24px;
+        padding: 32px 40px 24px;
+        gap: 16px;
+    }
+
+    .scene-builder-name-input {
+        font-size: 2rem;
+        width: 18ch;
+    }
+
+    .scene-builder-heading {
+        margin-bottom: 8px;
     }
 
     .scene-builder-dialog-backdrop {
