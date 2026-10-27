@@ -84,24 +84,24 @@ const siblingToolsDir = path.join(repoRoot, '..', 'gsplat-tools')
 */
 /************************************************************************/
 function findExe(roots, re, fallback) {
-  for (const root of roots) {
-    const stack = [root]
-    while (stack.length) {
-      const current = stack.pop()
-      let entries
-      try {
-        entries = fs.readdirSync(current, { withFileTypes: true })
-      } catch {
-        continue
-      }
-      for (const e of entries) {
-        const full = path.join(current, e.name)
-        if (e.isDirectory()) stack.push(full)
-        else if (re.test(e.name)) return full
-      }
+    for (const root of roots) {
+        const stack = [root]
+        while (stack.length) {
+            const current = stack.pop()
+            let entries
+            try {
+                entries = fs.readdirSync(current, { withFileTypes: true })
+            } catch {
+                continue
+            }
+            for (const e of entries) {
+                const full = path.join(current, e.name)
+                if (e.isDirectory()) stack.push(full)
+                else if (re.test(e.name)) return full
+            }
+        }
     }
-  }
-  return fallback
+    return fallback
 }
 
 /************************************************************************/
@@ -117,12 +117,12 @@ function findExe(roots, re, fallback) {
 */
 /************************************************************************/
 function findOnPath(name) {
-  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
-    if (!dir) continue
-    const full = path.join(dir, name)
-    if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
-  }
-  return null
+    for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+        if (!dir) continue
+        const full = path.join(dir, name)
+        if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
+    }
+    return null
 }
 
 /************************************************************************/
@@ -140,13 +140,13 @@ function findOnPath(name) {
 */
 /************************************************************************/
 function findPython() {
-  if (!isWindows) return 'python3'
-  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
-    if (!dir || /[\\/]Microsoft[\\/]WindowsApps[\\/]?$/i.test(dir)) continue
-    const full = path.join(dir, 'python.exe')
-    if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
-  }
-  return 'python'
+    if (!isWindows) return 'python3'
+    for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+        if (!dir || /[\\/]Microsoft[\\/]WindowsApps[\\/]?$/i.test(dir)) continue
+        const full = path.join(dir, 'python.exe')
+        if (fs.existsSync(full) && fs.statSync(full).isFile()) return full
+    }
+    return 'python'
 }
 
 // Windows builds ship .exe files; the macOS / Linux builds have no extension
@@ -158,30 +158,30 @@ const exeSuffix = isWindows ? '.exe' : ''
 // get-tools.ps1 / get-tools.sh) > sibling ../gsplat-tools > PATH. More specific
 // roots are listed first so a release build wins over a debug build.
 const colmapBin =
-  process.env.COLMAP_BIN ||
-  findExe(
-    [
-      path.join(toolsDir, 'colmap'),
-      path.join(siblingToolsDir, 'bin'),
-      siblingToolsDir,
-    ],
-    isWindows ? /^colmap\.exe$/i : /^colmap$/,
-    findOnPath(`colmap${exeSuffix}`) ||
-      path.join(toolsDir, 'colmap', 'bin', `colmap${exeSuffix}`),
-  )
+    process.env.COLMAP_BIN ||
+    findExe(
+        [
+            path.join(toolsDir, 'colmap'),
+            path.join(siblingToolsDir, 'bin'),
+            siblingToolsDir,
+        ],
+        isWindows ? /^colmap\.exe$/i : /^colmap$/,
+        findOnPath(`colmap${exeSuffix}`) ||
+        path.join(toolsDir, 'colmap', 'bin', `colmap${exeSuffix}`),
+    )
 
 const brushBin =
-  process.env.BRUSH_BIN ||
-  findExe(
-    [
-      path.join(toolsDir, 'brush'),
-      path.join(siblingToolsDir, 'brush', 'target', 'release'),
-      siblingToolsDir,
-    ],
-    isWindows ? /^brush.*\.exe$/i : /^brush[\w-]*$/i,
-    findOnPath(`brush_app${exeSuffix}`) ||
-      path.join(toolsDir, 'brush', `brush${exeSuffix}`),
-  )
+    process.env.BRUSH_BIN ||
+    findExe(
+        [
+            path.join(toolsDir, 'brush'),
+            path.join(siblingToolsDir, 'brush', 'target', 'release'),
+            siblingToolsDir,
+        ],
+        isWindows ? /^brush.*\.exe$/i : /^brush[\w-]*$/i,
+        findOnPath(`brush_app${exeSuffix}`) ||
+        path.join(toolsDir, 'brush', `brush${exeSuffix}`),
+    )
 
 /************************************************************************/
 /*!
@@ -197,36 +197,36 @@ const brushBin =
 */
 /************************************************************************/
 function colmapHasCuda(exe) {
-  try {
-    const r = spawnSync(exe, ['-h'], {
-      encoding: 'utf8',
-      timeout: 10_000,
-      windowsHide: true,
-    })
-    return /with CUDA/i.test(`${r.stdout ?? ''}${r.stderr ?? ''}`)
-  } catch {
-    return false
-  }
+    try {
+        const r = spawnSync(exe, ['-h'], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            windowsHide: true,
+        })
+        return /with CUDA/i.test(`${r.stdout ?? ''}${r.stderr ?? ''}`)
+    } catch {
+        return false
+    }
 }
 // A CUDA build still says "with CUDA" on an AMD / Intel machine, and use_gpu=1
 // then fails at feature extraction, so also require an NVIDIA driver.
 // nvidia-smi ships with the driver on Windows and Linux; if it's missing or
 // lists no GPUs, COLMAP runs on the CPU (the CUDA build handles that fine).
 function hasNvidiaGpu() {
-  try {
-    const r = spawnSync('nvidia-smi', ['-L'], {
-      encoding: 'utf8',
-      timeout: 10_000,
-      windowsHide: true,
-    })
-    return r.status === 0 && /^GPU \d+:/m.test(r.stdout ?? '')
-  } catch {
-    return false
-  }
+    try {
+        const r = spawnSync('nvidia-smi', ['-L'], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            windowsHide: true,
+        })
+        return r.status === 0 && /^GPU \d+:/m.test(r.stdout ?? '')
+    } catch {
+        return false
+    }
 }
 const colmapUseGpu =
-  process.env.COLMAP_USE_GPU ??
-  (colmapHasCuda(colmapBin) && hasNvidiaGpu() ? '1' : '0')
+    process.env.COLMAP_USE_GPU ??
+    (colmapHasCuda(colmapBin) && hasNvidiaGpu() ? '1' : '0')
 
 /************************************************************************/
 /*!
@@ -244,18 +244,18 @@ const colmapUseGpu =
 */
 /************************************************************************/
 function brushItersFlag(exe) {
-  try {
-    const r = spawnSync(exe, ['--help'], {
-      encoding: 'utf8',
-      timeout: 10_000,
-      windowsHide: true,
-    })
-    const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
-    if (/--total-steps\b/.test(help)) return '--total-steps'
-  } catch {
-    // Fall through to the source-build name.
-  }
-  return '--total-train-iters'
+    try {
+        const r = spawnSync(exe, ['--help'], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            windowsHide: true,
+        })
+        const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
+        if (/--total-steps\b/.test(help)) return '--total-steps'
+    } catch {
+        // Fall through to the source-build name.
+    }
+    return '--total-train-iters'
 }
 const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushBin)
 
@@ -269,28 +269,28 @@ const brushItersFlagName = process.env.BRUSH_ITERS_FLAG || brushItersFlag(brushB
 //   3.x : --SiftExtraction.use_gpu    / --SiftMatching.use_gpu
 //   4.x : --FeatureExtraction.use_gpu / --FeatureMatching.use_gpu
 function colmapUsesFeatureNamespace(exe) {
-  try {
-    const r = spawnSync(exe, ['feature_extractor', '--help'], {
-      encoding: 'utf8',
-      timeout: 10_000,
-      windowsHide: true,
-    })
-    // spawnSync reports a missing/unrunnable binary via r.error (it does not
-    // throw), so guard on that before reading the help text.
-    if (r.error) return true // can't run COLMAP yet -> default to newer names
-    const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
-    if (/--FeatureExtraction\.use_gpu/.test(help)) return true // 4.x
-    if (/--SiftExtraction\.use_gpu/.test(help)) return false // 3.x
-    return true // help didn't mention either -> default to newer names
-  } catch {
-    return true // default to the newer names the pipeline was written for
-  }
+    try {
+        const r = spawnSync(exe, ['feature_extractor', '--help'], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            windowsHide: true,
+        })
+        // spawnSync reports a missing/unrunnable binary via r.error (it does not
+        // throw), so guard on that before reading the help text.
+        if (r.error) return true // can't run COLMAP yet -> default to newer names
+        const help = `${r.stdout ?? ''}${r.stderr ?? ''}`
+        if (/--FeatureExtraction\.use_gpu/.test(help)) return true // 4.x
+        if (/--SiftExtraction\.use_gpu/.test(help)) return false // 3.x
+        return true // help didn't mention either -> default to newer names
+    } catch {
+        return true // default to the newer names the pipeline was written for
+    }
 }
 const colmapLegacyFlags = process.env.COLMAP_LEGACY_FLAGS
 const colmapUseFeatureNs =
-  colmapLegacyFlags === '1' ? false
-  : colmapLegacyFlags === '0' ? true
-  : colmapUsesFeatureNamespace(colmapBin)
+    colmapLegacyFlags === '1' ? false
+        : colmapLegacyFlags === '0' ? true
+            : colmapUsesFeatureNamespace(colmapBin)
 const colmapExtractionNs = colmapUseFeatureNs ? 'FeatureExtraction' : 'SiftExtraction'
 const colmapMatchingNs = colmapUseFeatureNs ? 'FeatureMatching' : 'SiftMatching'
 
@@ -304,90 +304,93 @@ const colmapMatchingNs = colmapUseFeatureNs ? 'FeatureMatching' : 'SiftMatching'
 // A typo here must not quietly fall back to another mode (see authMode below).
 const AUTH_MODES = ['local', 'client', 'authority']
 const authMode = (process.env.AUTH_MODE || 'local').trim().toLowerCase()
-if (!AUTH_MODES.includes(authMode))
-{
-  console.error(`[backend] AUTH_MODE="${process.env.AUTH_MODE}" is not one of: ${AUTH_MODES.join(', ')}`)
-  process.exit(1)
+if (!AUTH_MODES.includes(authMode)) {
+    console.error(`[backend] AUTH_MODE="${process.env.AUTH_MODE}" is not one of: ${AUTH_MODES.join(', ')}`)
+    process.exit(1)
 }
 
 export const config = {
-  // HTTP port the API listens on (Vite proxies /api here in dev).
-  port: Number(process.env.PORT) || 5005,
+    // HTTP port the API listens on (Vite proxies /api here in dev).
+    port: Number(process.env.PORT) || 5005,
 
-  // Where per-job working directories live (uploads, COLMAP db, splat output).
-  jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
+    // Where per-job working directories live (uploads, COLMAP db, splat output).
+    jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
 
-  // Every finished job's result.ply is also copied here (see runPipeline), so
-  // it shows up in the native engine's samples browser (engine/src/main.cpp)
-  // without a manual copy step.
-  engineSamplesDir:
-    process.env.ENGINE_SAMPLES_DIR || path.join(repoRoot, 'engine', 'assets', 'samples'),
+    // Every finished job's result.ply is also copied here (see runPipeline), so
+    // it shows up in the native engine's samples browser (engine/src/main.cpp)
+    // without a manual copy step.
+    engineSamplesDir:
+        process.env.ENGINE_SAMPLES_DIR || path.join(repoRoot, 'engine', 'assets', 'samples'),
 
-  // External tool executables (see resolution above).
-  colmapBin,
-  brushBin,
+    // External tool executables (see resolution above).
+    colmapBin,
+    brushBin,
 
-  // Training knobs. Fewer iterations = faster demo, lower quality.
-  trainIters: Number(process.env.TRAIN_ITERS) || 7000,
-  maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
-  // Name of Brush's iteration-count flag for the installed build (see above).
-  brushItersFlag: brushItersFlagName,
+    // Training knobs. Fewer iterations = faster demo, lower quality.
+    trainIters: Number(process.env.TRAIN_ITERS) || 7000,
+    // Bounds for a per-job iteration cap sent by the site (Fast / Normal /
+    // Detailed). Values outside are clamped.
+    minTrainIters: 1000,
+    maxTrainIters: 30000,
+    maxResolution: Number(process.env.MAX_RESOLUTION) || 1024,
+    // Name of Brush's iteration-count flag for the installed build (see above).
+    brushItersFlag: brushItersFlagName,
 
-  // Use the GPU for COLMAP SIFT (requires the CUDA build of COLMAP).
-  colmapUseGpu,
-  // GPU-toggle flags for the installed COLMAP (Sift* on 3.x, Feature* on 4.x).
-  colmapExtractionUseGpuFlag: `--${colmapExtractionNs}.use_gpu`,
-  colmapMatchingUseGpuFlag: `--${colmapMatchingNs}.use_gpu`,
+    // Use the GPU for COLMAP SIFT (requires the CUDA build of COLMAP).
+    colmapUseGpu,
+    // GPU-toggle flags for the installed COLMAP (Sift* on 3.x, Feature* on 4.x).
+    colmapExtractionUseGpuFlag: `--${colmapExtractionNs}.use_gpu`,
+    colmapMatchingUseGpuFlag: `--${colmapMatchingNs}.use_gpu`,
 
-  // Upload limits.
-  maxFiles: 300,
-  maxFileSizeMB: 30,
+    // Upload limits.
+    maxFiles: 300,
+    maxFileSizeMB: 30,
 
-  // --- Python post-processing / ingest scripts (repo tools/ dir) -------------
-  // Interpreter used to run them. Needs `pip install -r tools/requirements.txt`
-  // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
-  // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
-  // to its virtualenv's interpreter).
-  pythonBin: process.env.PYTHON_BIN || findPython(),
-  // Extracts evenly spaced frames from a YouTube video into a job's images/.
-  ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
-  // Default extraction rate (frames per second) and cap on frames pulled.
-  ytFps: Number(process.env.YT_FPS) || 2,
-  ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
-  // Upper bound on the requested extraction rate.
-  ytMaxFps: 30,
-  // Videos longer than this are refused before anything is downloaded.
-  ytMaxDurationSec: Number(process.env.YT_MAX_DURATION) || 20 * 60,
-  // Kill the download + extraction if it runs longer than this.
-  ytTimeoutMin: Number(process.env.YT_TIMEOUT_MIN) || 30,
-  // Recenters/rescales the trained splat into the viewer's frame.
-  normalizeScript:
-    process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
-  // Optional background removal: writes per-photo foreground masks that
-  // COLMAP and Brush use to ignore the background (turntable captures).
-  maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),
-  // rembg model used for the masks (see make_masks.py).
-  maskModel: process.env.MASK_MODEL || 'isnet-general-use',
-  
-  // --- Account authority (centralized accounts on the VM) --------------------
-  // 'local' (default): accounts live in this machine's own database, as
-  //   before the VM existed. Safe default: 'client' deletes local accounts.
-  // 'authority': this instance owns the accounts DB (only the VM). It serves
-  //   /register and /verify-account, and its /auth/* routes use db.js directly.
-  // 'client': this instance forwards signup/login to the authority.
-  authMode,
-  // Where the authority lives (only used in 'client' mode). No trailing slash.
-  // Must be https:// (passwords are sent to it) unless allowInsecureAuth.
-  vmAuthUrl: (process.env.VM_AUTH_URL || 'https://51-79-240-131.sslip.io').replace(/\/+$/, ''),
-  // Shared secret between clients and the authority. MUST be set (same value)
-  // on the VM and every client via AUTH_API_KEY. Empty means signup/login
-  // refuse to run rather than silently accepting anything.
-  authApiKey: process.env.AUTH_API_KEY || '',
-  // AUTH_ALLOW_HTTP=1 lets a client send credentials to a plain http://
-  // authority. Only for testing before HTTPS is set up on the VM.
-  allowInsecureAuth: process.env.AUTH_ALLOW_HTTP === '1',
-  // Express "trust proxy" setting. Set TRUST_PROXY=loopback on the VM, where
-  // Caddy forwards from the same machine, so req.ip is the real client
-  // address (for rate limits) and req.secure reflects HTTPS (for cookies).
-  trustProxy: process.env.TRUST_PROXY || null,
+    // --- Python post-processing / ingest scripts (repo tools/ dir) -------------
+    // Interpreter used to run them. Needs `pip install -r tools/requirements.txt`
+    // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
+    // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
+    // to its virtualenv's interpreter).
+    pythonBin: process.env.PYTHON_BIN || findPython(),
+    // Extracts evenly spaced frames from a YouTube video into a job's images/.
+    ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
+    // Default extraction rate (frames per second) and cap on frames pulled.
+    ytFps: Number(process.env.YT_FPS) || 2,
+    ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
+    // Upper bound on the requested extraction rate.
+    ytMaxFps: 30,
+    // Videos longer than this are refused before anything is downloaded.
+    ytMaxDurationSec: Number(process.env.YT_MAX_DURATION) || 20 * 60,
+    // Kill the download + extraction if it runs longer than this.
+    ytTimeoutMin: Number(process.env.YT_TIMEOUT_MIN) || 30,
+    // Recenters/rescales the trained splat into the viewer's frame.
+    normalizeScript:
+        process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
+    // Optional background removal: writes per-photo foreground masks that
+    // COLMAP and Brush use to ignore the background (turntable captures).
+    maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),
+    // rembg model used for the masks (see make_masks.py).
+    maskModel: process.env.MASK_MODEL || 'isnet-general-use',
+
+    // --- Account authority (centralized accounts on the VM) --------------------
+    // 'local' (default): accounts live in this machine's own database, as
+    //   before the VM existed. Safe default: 'client' deletes local accounts.
+    // 'authority': this instance owns the accounts DB (only the VM). It serves
+    //   /register and /verify-account, and its /auth/* routes use db.js directly.
+    // 'client': this instance forwards signup/login to the authority.
+    authMode,
+    // Where the authority lives (only used in 'client' mode). No trailing slash.
+    // Must be https:// (passwords are sent to it) unless allowInsecureAuth.
+    vmAuthUrl: (process.env.VM_AUTH_URL || 'https://51-79-240-131.sslip.io').replace(/\/+$/, ''),
+    // Shared secret between clients and the authority. MUST be set (same value)
+    // on the VM and every client via AUTH_API_KEY. Empty means signup/login
+    // refuse to run rather than silently accepting anything.
+    authApiKey: process.env.AUTH_API_KEY || '',
+    // AUTH_ALLOW_HTTP=1 lets a client send credentials to a plain http://
+    // authority. Only for testing before HTTPS is set up on the VM.
+    allowInsecureAuth: process.env.AUTH_ALLOW_HTTP === '1',
+    // Express "trust proxy" setting. Set TRUST_PROXY=loopback on the VM, where
+    // Caddy forwards from the same machine, so req.ip is the real client
+    // address (for rate limits) and req.secure reflects HTTPS (for cookies).
+    trustProxy: process.env.TRUST_PROXY || null,
 }

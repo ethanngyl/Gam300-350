@@ -58,7 +58,7 @@ function createBatchPhoto(file) {
     };
 }
 
-// initialPhotos: { files, removeBackground } handed back from the Photo
+// initialPhotos: { files, removeBackground, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
 function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, initialPhotos = null }) {
     const videoRef = useRef(null);
@@ -90,6 +90,8 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     // Mask out the background before reconstruction. Set in the Photo
     // Editor; kept here so the choice survives going back to the camera.
     const [removeBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Model detail (training iteration cap), also set in the Photo Editor.
+    const [trainIters] = useState(initialPhotos?.trainIters ?? null);
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
@@ -326,14 +328,14 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     // this page and releases the thumbnails; the File objects stay valid.
     function handleReview() {
         setIsAutoCapturing(false);
-        onReviewPhotos(photos.map((p) => p.file), { removeBackground });
+        onReviewPhotos(photos.map((p) => p.file), { removeBackground, trainIters });
     }
 
     // "Train model" is the only trigger that starts the reconstruction.
     function handleTrain() {
         const files = photos.map((p) => p.file);
         if (onBatchReady) {
-            onBatchReady(files, { removeBackground });
+            onBatchReady(files, { removeBackground, trainIters });
         }
 
         setIsBatchSent(true);

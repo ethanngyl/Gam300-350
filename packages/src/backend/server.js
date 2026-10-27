@@ -76,28 +76,25 @@ import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
-import
-{
-  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
-  findSessionUser, findUserByEmail, getJobOwnerId,
-  listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
-  verifyPassword,
+import {
+SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
+findSessionUser, findUserByEmail, getJobOwnerId,
+listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
+verifyPassword,
 }
-from './db.js'
+    from './db.js'
 import { createLimiter } from './ratelimit.js'
-import
-{ 
-  IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
-  scanJobs
-} 
-from './scan.js'
-import 
-{ 
-  cancelJob, canonicalYoutubeUrl, jobs,
-  killChildren, makeJob, pickSampleFileName, restoreJob,
-  runPipeline, runYoutubePipeline, sampleFileName,
+import {
+IMAGE_EXT_RE, JOB_ID_RE, scanJob,
+scanJobs
 }
-from './pipeline.js'
+    from './scan.js'
+import {
+cancelJob, canonicalYoutubeUrl, jobs,
+killChildren, makeJob, pickSampleFileName, restoreJob,
+runPipeline, runYoutubePipeline, sampleFileName,
+}
+    from './pipeline.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -112,36 +109,31 @@ const restored = await scanJobs(config.jobsDir)
 // os.homedir() rather than $HOME: Windows doesn't set HOME.
 const WIKI_DIR = path.join(os.homedir(), 'wiki')
 
-for (const record of restored) 
-{
-  if (!jobs.has(record.id)) 
-  {
-      restoreJob(record)
-  }
+for (const record of restored) {
+    if (!jobs.has(record.id)) {
+        restoreJob(record)
+    }
 }
 
 console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
 
 // A machine that sends accounts to the VM can't keep its own: their ids and
 // emails would clash with the VM's. Only the first client-mode start finds any.
-if (config.authMode === 'client')
-{
-  const { removed, backupPath } = retireLocalAccounts()
-  if (removed > 0)
-  {
-    console.log(`[backend] client mode: removed ${removed} local account(s); their uploads are now admin-only.`)
-    console.log(`[backend] database backup before that: ${backupPath}`)
-  }
+if (config.authMode === 'client') {
+    const { removed, backupPath } = retireLocalAccounts()
+    if (removed > 0) {
+        console.log(`[backend] client mode: removed ${removed} local account(s); their uploads are now admin-only.`)
+        console.log(`[backend] database backup before that: ${backupPath}`)
+    }
 }
 
 const app = express()
 
 // Behind a reverse proxy (Caddy on the VM) req.ip / req.secure would describe
 // the proxy, not the browser. TRUST_PROXY tells Express which hop to believe.
-if (config.trustProxy)
-{
-  const value = config.trustProxy
-  app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value)
+if (config.trustProxy) {
+    const value = config.trustProxy
+    app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value)
 }
 
 // Parse JSON bodies (used by /jobs/from-youtube). Only applies to
@@ -168,16 +160,15 @@ app.use(loadUser)
   returns the job from the jobs map, null if job doesn't exist.
 */
 /************************************************************************/
-async function getJob(id) 
-{
-  const live = jobs.get(id)
+async function getJob(id) {
+    const live = jobs.get(id)
 
-  if (live) 
-    return live
+    if (live)
+        return live
 
-  const record = await scanJob(id)
+    const record = await scanJob(id)
 
-  return record ? (jobs.get(id) ?? restoreJob(record)) : null
+    return record ? (jobs.get(id) ?? restoreJob(record)) : null
 }
 
 // --- Accounts and access ----------------------------------------------------
@@ -197,24 +188,20 @@ const SESSION_COOKIE = 'genesis_session'
     The cookie's value, or null if it isn't set
 */
 /************************************************************************/
-function readCookie(req, name)
-{
-  for (const part of (req.headers.cookie ?? '').split(';'))
-  {
-    const eq = part.indexOf('=')
-    if (eq !== -1 && part.slice(0, eq).trim() === name)
-    {
-      try
-      {
-        return decodeURIComponent(part.slice(eq + 1).trim())
-      }
-      catch
-      {
-        return null
-      }
+function readCookie(req, name) {
+    for (const part of (req.headers.cookie ?? '').split(';')) {
+        const eq = part.indexOf('=')
+        if (eq !== -1 && part.slice(0, eq).trim() === name) {
+            try {
+                return decodeURIComponent(part.slice(eq + 1).trim())
+            }
+            catch
+            {
+                return null
+            }
+        }
     }
-  }
-  return null
+    return null
 }
 
 /************************************************************************/
@@ -236,13 +223,12 @@ function readCookie(req, name)
     SHORT_SESSION_TTL_MS in case the browser stays open or restores it.
 */
 /************************************************************************/
-function startSession(res, userId, remember)
-{
-  // secure: over HTTPS (e.g. behind Caddy) the browser never sends the
-  // cookie over plain HTTP. Stays off for http://localhost development.
-  const options = { httpOnly: true, sameSite: 'lax', path: '/', secure: res.req.secure }
-  if (remember) options.maxAge = SESSION_TTL_MS
-  res.cookie(SESSION_COOKIE, createSession(userId, remember ? SESSION_TTL_MS : SHORT_SESSION_TTL_MS), options)
+function startSession(res, userId, remember) {
+    // secure: over HTTPS (e.g. behind Caddy) the browser never sends the
+    // cookie over plain HTTP. Stays off for http://localhost development.
+    const options = { httpOnly: true, sameSite: 'lax', path: '/', secure: res.req.secure }
+    if (remember) options.maxAge = SESSION_TTL_MS
+    res.cookie(SESSION_COOKIE, createSession(userId, remember ? SESSION_TTL_MS : SHORT_SESSION_TTL_MS), options)
 }
 
 /************************************************************************/
@@ -258,10 +244,9 @@ function startSession(res, userId, remember)
     moving on
 */
 /************************************************************************/
-function loadUser(req, _res, next)
-{
-  req.user = findSessionUser(readCookie(req, SESSION_COOKIE))
-  next()
+function loadUser(req, _res, next) {
+    req.user = findSessionUser(readCookie(req, SESSION_COOKIE))
+    next()
 }
 
 /************************************************************************/
@@ -272,10 +257,9 @@ function loadUser(req, _res, next)
     401 if not logged in
 */
 /************************************************************************/
-function requireUser(req, res, next)
-{
-  if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
-  next()
+function requireUser(req, res, next) {
+    if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+    next()
 }
 
 /************************************************************************/
@@ -293,11 +277,10 @@ function requireUser(req, res, next)
     bool
 */
 /************************************************************************/
-function canAccessJob(user, jobId)
-{
-  if (!user) return false
-  if (user.role === 'admin') return true
-  return getJobOwnerId(jobId) === user.id
+function canAccessJob(user, jobId) {
+    if (!user) return false
+    if (user.role === 'admin') return true
+    return getJobOwnerId(jobId) === user.id
 }
 
 /************************************************************************/
@@ -310,11 +293,10 @@ function canAccessJob(user, jobId)
     401 if not logged in, 404 if the job isn't theirs
 */
 /************************************************************************/
-function requireJobAccess(req, res, next)
-{
-  if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
-  if (!canAccessJob(req.user, req.params.id)) return res.status(404).json({ error: 'job not found' })
-  next()
+function requireJobAccess(req, res, next) {
+    if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+    if (!canAccessJob(req.user, req.params.id)) return res.status(404).json({ error: 'job not found' })
+    next()
 }
 
 // --- Upload handling --------------------------------------------------------
@@ -334,12 +316,11 @@ function requireJobAccess(req, res, next)
     ensures the file in the request goes into the same job folder
 */
 /************************************************************************/
-function assignJobId(req, _res, next) 
-{
-  req.jobId = crypto.randomUUID()
-  req._fileIdx = 0
-  fs.mkdirSync(path.join(config.jobsDir, req.jobId, 'images'), { recursive: true })
-  next()
+function assignJobId(req, _res, next) {
+    req.jobId = crypto.randomUUID()
+    req._fileIdx = 0
+    fs.mkdirSync(path.join(config.jobsDir, req.jobId, 'images'), { recursive: true })
+    next()
 }
 
 /************************************************************************/
@@ -351,14 +332,13 @@ function assignJobId(req, _res, next)
 */
 /************************************************************************/
 const storage = multer.diskStorage({
-  destination: (req, _file, cb) => cb(null, path.join(config.jobsDir, req.jobId, 'images')),
+    destination: (req, _file, cb) => cb(null, path.join(config.jobsDir, req.jobId, 'images')),
 
-  filename: (req, file, cb) => 
-  {
-    // Stable ordered names -- COLMAP doesn't care about the original name.
-    const ext = (path.extname(file.originalname) || '.jpg').toLowerCase()
-    cb(null, `${String(req._fileIdx++).padStart(4, '0')}${ext}`)
-  },
+    filename: (req, file, cb) => {
+        // Stable ordered names -- COLMAP doesn't care about the original name.
+        const ext = (path.extname(file.originalname) || '.jpg').toLowerCase()
+        cb(null, `${String(req._fileIdx++).padStart(4, '0')}${ext}`)
+    },
 })
 
 /************************************************************************/
@@ -370,9 +350,9 @@ const storage = multer.diskStorage({
 */
 /************************************************************************/
 const upload = multer({
-  storage,
-  limits: { fileSize: config.maxFileSizeMB * 1024 * 1024, files: config.maxFiles },
-  fileFilter: (_req, file, cb) => cb(null, /^image\/(jpe?g|png)$/i.test(file.mimetype))
+    storage,
+    limits: { fileSize: config.maxFileSizeMB * 1024 * 1024, files: config.maxFiles },
+    fileFilter: (_req, file, cb) => cb(null, /^image\/(jpe?g|png)$/i.test(file.mimetype))
 })
 
 /************************************************************************/
@@ -392,36 +372,31 @@ const upload = multer({
     400 if file isn't jpeg or png and deletes job folder.
 */
 /************************************************************************/
-async function onlyImages(req, res, next)
-{
-  const files = req.files || []
-  if (files.length === 0) return next()
+async function onlyImages(req, res, next) {
+    const files = req.files || []
+    if (files.length === 0) return next()
 
-  try 
-  {
-    const { fileTypeFromFile } = await import('file-type')
-    const legalMimes = ['image/jpeg', 'image/png']
+    try {
+        const { fileTypeFromFile } = await import('file-type')
+        const legalMimes = ['image/jpeg', 'image/png']
 
-    for (const file of files) 
-    {
-      const type = await fileTypeFromFile(file.path)      
+        for (const file of files) {
+            const type = await fileTypeFromFile(file.path)
 
-      if (!type || !legalMimes.includes(type.mime)) 
-      {
-        // Reject the batch: remove the job folder created up front by assignJobId.
-        await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
-        return res.status(400).json({
-          error: 'Invalid file content -- only real JPEG or PNG images are accepted.',
-          detected: type ? type.mime : 'unknown',
-        })
-      }
+            if (!type || !legalMimes.includes(type.mime)) {
+                // Reject the batch: remove the job folder created up front by assignJobId.
+                await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+                return res.status(400).json({
+                    error: 'Invalid file content -- only real JPEG or PNG images are accepted.',
+                    detected: type ? type.mime : 'unknown',
+                })
+            }
+        }
+
+        next()
+    } catch (err) {
+        next(err)
     }
-
-    next()
-  } catch (err) 
-  {
-    next(err)
-  }
 }
 
 // --- Shutdown -----------------------------------------------------------------
@@ -444,22 +419,19 @@ let shuttingDown = false
     Exits the website
 */
 /************************************************************************/
-function shutdown(reason, exitCode = 0) 
-{
-  if (shuttingDown) return
-  shuttingDown = true
-  console.log(`[backend] ${reason} -- stopping running tool processes`)
-  for (const job of jobs.values()) 
-  {
-    if (job.status === 'running') 
-    {
-      job.status = 'error'
-      job.error = 'Server shut down during processing.'
-      saveJob(job)
+function shutdown(reason, exitCode = 0) {
+    if (shuttingDown) return
+    shuttingDown = true
+    console.log(`[backend] ${reason} -- stopping running tool processes`)
+    for (const job of jobs.values()) {
+        if (job.status === 'running') {
+            job.status = 'error'
+            job.error = 'Server shut down during processing.'
+            saveJob(job)
+        }
     }
-  }
-  killChildren()
-  process.exit(exitCode)
+    killChildren()
+    process.exit(exitCode)
 }
 
 /************************************************************************/
@@ -473,18 +445,17 @@ function shutdown(reason, exitCode = 0)
 */
 /************************************************************************/
 
-function requireAuthorityKey(req, res, next)
-{
-  if (config.authMode !== 'authority')
-    return res.status(503).json({ error: 'This server is not the account authority.' })
-  const key = Buffer.from(req.get('X-Auth-Key') ?? '')
-  // constant-time compare so the key can't be guessed by timing. Byte
-  // lengths must match first or timingSafeEqual throws.
-  const expected = Buffer.from(config.authApiKey)
-  if (expected.length === 0 || key.length !== expected.length ||
-      !crypto.timingSafeEqual(key, expected))
-    return res.status(401).json({ error: 'Unauthorized.' })
-  next()
+function requireAuthorityKey(req, res, next) {
+    if (config.authMode !== 'authority')
+        return res.status(503).json({ error: 'This server is not the account authority.' })
+    const key = Buffer.from(req.get('X-Auth-Key') ?? '')
+    // constant-time compare so the key can't be guessed by timing. Byte
+    // lengths must match first or timingSafeEqual throws.
+    const expected = Buffer.from(config.authApiKey)
+    if (expected.length === 0 || key.length !== expected.length ||
+        !crypto.timingSafeEqual(key, expected))
+        return res.status(401).json({ error: 'Unauthorized.' })
+    next()
 }
 
 
@@ -500,16 +471,15 @@ function requireAuthorityKey(req, res, next)
   \return          { status, data }
 */
 /************************************************************************/
-async function callAuthority(endpoint, body)
-{
-  const resp = await fetch(`${config.vmAuthUrl}${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Auth-Key': config.authApiKey },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(8000),
-  })
-  const data = await resp.json().catch(() => ({}))
-  return { status: resp.status, data }
+async function callAuthority(endpoint, body) {
+    const resp = await fetch(`${config.vmAuthUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Auth-Key': config.authApiKey },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
+    })
+    const data = await resp.json().catch(() => ({}))
+    return { status: resp.status, data }
 }
 
 /************************************************************************/
@@ -521,24 +491,22 @@ async function callAuthority(endpoint, body)
     string describing the problem, or null
 */
 /************************************************************************/
-function clientAuthProblem()
-{
-  if (!config.authApiKey)
-    return 'AUTH_API_KEY is not set (see packages/src/backend/.env.example).'
-  let url
-  try
-  {
-    url = new URL(config.vmAuthUrl)
-  }
-  catch
-  {
-    return `VM_AUTH_URL "${config.vmAuthUrl}" is not a valid URL.`
-  }
-  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-  if (url.protocol !== 'https:' && !isLocal && !config.allowInsecureAuth)
-    return `VM_AUTH_URL must be https:// (passwords are sent to it). ` +
-      `Set AUTH_ALLOW_HTTP=1 only for temporary testing.`
-  return null
+function clientAuthProblem() {
+    if (!config.authApiKey)
+        return 'AUTH_API_KEY is not set (see packages/src/backend/.env.example).'
+    let url
+    try {
+        url = new URL(config.vmAuthUrl)
+    }
+    catch
+    {
+        return `VM_AUTH_URL "${config.vmAuthUrl}" is not a valid URL.`
+    }
+    const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    if (url.protocol !== 'https:' && !isLocal && !config.allowInsecureAuth)
+        return `VM_AUTH_URL must be https:// (passwords are sent to it). ` +
+            `Set AUTH_ALLOW_HTTP=1 only for temporary testing.`
+    return null
 }
 
 /************************************************************************/
@@ -554,13 +522,12 @@ function clientAuthProblem()
     The VM's JSON reply
 */
 /************************************************************************/
-function logAuthorityFailure(endpoint, status, data)
-{
-  const cause =
-    status === 401 ? 'the VM rejected this machine\'s AUTH_API_KEY (keys must match exactly)' :
-    status === 503 ? 'the VM is not running with AUTH_MODE=authority' :
-    `unexpected reply ${status}: ${JSON.stringify(data)}`
-  console.error(`[backend] account authority ${endpoint} failed -- ${cause}`)
+function logAuthorityFailure(endpoint, status, data) {
+    const cause =
+        status === 401 ? 'the VM rejected this machine\'s AUTH_API_KEY (keys must match exactly)' :
+            status === 503 ? 'the VM is not running with AUTH_MODE=authority' :
+                `unexpected reply ${status}: ${JSON.stringify(data)}`
+    console.error(`[backend] account authority ${endpoint} failed -- ${cause}`)
 }
 
 // --- Rate limits -------------------------------------------------------------
@@ -582,10 +549,9 @@ const failedLoginLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 10 })
     string
 */
 /************************************************************************/
-function tooManyAttempts(retryAfterSec)
-{
-  const minutes = Math.max(1, Math.ceil(retryAfterSec / 60))
-  return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+function tooManyAttempts(retryAfterSec) {
+    const minutes = Math.max(1, Math.ceil(retryAfterSec / 60))
+    return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`
 }
 
 /************************************************************************/
@@ -599,15 +565,13 @@ function tooManyAttempts(retryAfterSec)
     Express middleware
 */
 /************************************************************************/
-function limitByIp(limiter)
-{
-  return (req, res, next) =>
-  {
-    const { allowed, retryAfterSec } = limiter.hit(req.ip)
-    if (allowed) return next()
-    res.set('Retry-After', String(retryAfterSec))
-    res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
-  }
+function limitByIp(limiter) {
+    return (req, res, next) => {
+        const { allowed, retryAfterSec } = limiter.hit(req.ip)
+        if (allowed) return next()
+        res.set('Retry-After', String(retryAfterSec))
+        res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
+    }
 }
 
 /************************************************************************/
@@ -622,16 +586,15 @@ function limitByIp(limiter)
     email trimmed
 */
 /************************************************************************/
-function validateSignup(body)
-{
-  const { name, email, password } = body || {}
-  const trimmedEmail = typeof email === 'string' ? email.trim() : ''
-  const trimmedName = typeof name === 'string' ? name.trim() : ''
-  if (!EMAIL_RE.test(trimmedEmail)) return { error: 'Enter a valid email address.' }
-  if (typeof password !== 'string' || password.length < 6)
-    return { error: 'Password must be at least 6 characters.' }
-  if (!trimmedName) return { error: 'Enter your name.' }
-  return { name: trimmedName, email: trimmedEmail, password }
+function validateSignup(body) {
+    const { name, email, password } = body || {}
+    const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+    const trimmedName = typeof name === 'string' ? name.trim() : ''
+    if (!EMAIL_RE.test(trimmedEmail)) return { error: 'Enter a valid email address.' }
+    if (typeof password !== 'string' || password.length < 6)
+        return { error: 'Password must be at least 6 characters.' }
+    if (!trimmedName) return { error: 'Enter your name.' }
+    return { name: trimmedName, email: trimmedEmail, password }
 }
 
 /************************************************************************/
@@ -651,20 +614,38 @@ function validateSignup(body)
     { status: 'locked', retryAfterSec }
 */
 /************************************************************************/
-async function checkCredentials(email, password)
-{
-  const key = email.trim().toLowerCase()
-  const lock = failedLoginLimiter.check(key)
-  if (!lock.allowed) return { status: 'locked', retryAfterSec: lock.retryAfterSec }
+async function checkCredentials(email, password) {
+    const key = email.trim().toLowerCase()
+    const lock = failedLoginLimiter.check(key)
+    if (!lock.allowed) return { status: 'locked', retryAfterSec: lock.retryAfterSec }
 
-  const user = findUserByEmail(email.trim())
-  if (!user || !(await verifyPassword(password, user.password_hash)))
-  {
-    failedLoginLimiter.hit(key)
-    return { status: 'invalid' }
-  }
-  failedLoginLimiter.reset(key)
-  return { status: 'ok', user }
+    const user = findUserByEmail(email.trim())
+    if (!user || !(await verifyPassword(password, user.password_hash))) {
+        failedLoginLimiter.hit(key)
+        return { status: 'invalid' }
+    }
+    failedLoginLimiter.reset(key)
+    return { status: 'ok', user }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Read the optional training iteration cap the site sends with a new job
+    (Fast / Normal / Detailed). Rounded to a whole number and clamped to
+    config.minTrainIters..config.maxTrainIters.
+  \param value
+    The raw field value: a string from a multipart form, or a number from
+    JSON.
+  \return
+    The iteration cap, or null (missing or not a positive number) to use
+    config.trainIters.
+*/
+/************************************************************************/
+function parseTrainIters(value) {
+    const iters = Math.round(Number(value))
+    if (!Number.isFinite(iters) || iters <= 0) return null
+    return Math.min(Math.max(iters, config.minTrainIters), config.maxTrainIters)
 }
 
 
@@ -683,28 +664,28 @@ async function checkCredentials(email, password)
     401 if not logged in, 400 if less than 8 photos given, 202 if successful
 */
 /************************************************************************/
-app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) =>
-{
-  const files = req.files || []
-  if (files.length < 8)
-  {
-    // Reject cleanly: remove the job folder assignJobId created up front so a
-    // too-small batch doesn't leave an orphan folder behind (same as onlyImages).
-    fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
-    return res.status(400).json({
-      error: `Need at least 8 photos (got ${files.length}). More overlapping photos = better reconstruction.`,
-    })
-  }
-  setJobOwner(req.jobId, req.user.id)
-  const job = makeJob(req.jobId)
-  job.imageCount = files.length
-  job.source = 'upload'
-  // Optional multipart text field: mask out the background before COLMAP
-  // (needed for turntable captures, see generateMasks in pipeline.js).
-  job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
-  saveJob(job) // gives upload-only jobs a status record from the start
-  runPipeline(job) // fire-and-forget; do not await
-  res.status(202).json({ id: job.id, imageCount: files.length })
+app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => {
+    const files = req.files || []
+    if (files.length < 8) {
+        // Reject cleanly: remove the job folder assignJobId created up front so a
+        // too-small batch doesn't leave an orphan folder behind (same as onlyImages).
+        fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+        return res.status(400).json({
+            error: `Need at least 8 photos (got ${files.length}). More overlapping photos = better reconstruction.`,
+        })
+    }
+    setJobOwner(req.jobId, req.user.id)
+    const job = makeJob(req.jobId)
+    job.imageCount = files.length
+    job.source = 'upload'
+    // Optional multipart text field: mask out the background before COLMAP
+    // (needed for turntable captures, see generateMasks in pipeline.js).
+    job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
+    // Optional multipart text field: training iteration cap (Fast / Normal / Detailed).
+    job.trainIters = parseTrainIters(req.body?.trainIters)
+    saveJob(job) // gives upload-only jobs a status record from the start
+    runPipeline(job) // fire-and-forget; do not await
+    res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
 /************************************************************************/
@@ -720,35 +701,32 @@ app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxF
     401 if not logged in, else a record of every visible job's details
 */
 /************************************************************************/
-app.get('/jobs', requireUser, async (req, res) =>
-{
-  let records = await scanJobs(config.jobsDir)
-  if (req.user.role !== 'admin')
-  {
-    const owned = listOwnedJobIds(req.user.id)
-    records = records.filter((record) => owned.has(record.id))
-  }
-  res.json(
-    records.map((record) =>
-    {
-      const job = jobs.get(record.id) ?? restoreJob(record);
-      return {
-        id: record.id,
-        name: job.name ?? null,
-        status: job.status,
-        phase: job.phase,
-        progress: job.progress,
-        detail: job.detail,
-        error: job.error,
-        createdAt: record.createdAt,
-        updatedAt: job.updatedAt ?? record.updatedAt,
-        imageCount: record.imageCount,
-        hasResult: job.status === 'done' && !!job.resultPath,
-        thumbnail: record.thumbnail,
-        images: record.images,
-      }
-    }),
-  )
+app.get('/jobs', requireUser, async (req, res) => {
+    let records = await scanJobs(config.jobsDir)
+    if (req.user.role !== 'admin') {
+        const owned = listOwnedJobIds(req.user.id)
+        records = records.filter((record) => owned.has(record.id))
+    }
+    res.json(
+        records.map((record) => {
+            const job = jobs.get(record.id) ?? restoreJob(record);
+            return {
+                id: record.id,
+                name: job.name ?? null,
+                status: job.status,
+                phase: job.phase,
+                progress: job.progress,
+                detail: job.detail,
+                error: job.error,
+                createdAt: record.createdAt,
+                updatedAt: job.updatedAt ?? record.updatedAt,
+                imageCount: record.imageCount,
+                hasResult: job.status === 'done' && !!job.resultPath,
+                thumbnail: record.thumbnail,
+                images: record.images,
+            }
+        }),
+    )
 })
 
 /************************************************************************/
@@ -762,17 +740,14 @@ app.get('/jobs', requireUser, async (req, res) =>
     the image itself
 */
 /************************************************************************/
-app.get('/jobs/:id/images/:name', requireJobAccess, (req, res) =>
-{
-  const { id, name } = req.params
-  if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
-  {
-    return res.status(404).json({ error: 'image not found' })
-  }
-  res.sendFile(path.join(config.jobsDir, id, 'images', name), (err) => 
-  {
-    if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
-  })
+app.get('/jobs/:id/images/:name', requireJobAccess, (req, res) => {
+    const { id, name } = req.params
+    if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) {
+        return res.status(404).json({ error: 'image not found' })
+    }
+    res.sendFile(path.join(config.jobsDir, id, 'images', name), (err) => {
+        if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
+    })
 })
 
 /************************************************************************/
@@ -781,43 +756,40 @@ app.get('/jobs/:id/images/:name', requireJobAccess, (req, res) =>
     Create a reconstruction job from a YouTube link. Frames are extracted 
     server side (tools/youtube_frames.py) into the job's images/ folder, 
     then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?:
-    number, maxFrames?: number }. The job is owned by the logged-in user.
+    number, maxFrames?: number, trainIters?: number }. The job is owned by the logged-in user.
   \return
     401 if not logged in, 400 if url doesn't work, else 202 and starts a
     job and runs youtube pipeline
 */
 /************************************************************************/
-app.post('/jobs/from-youtube', requireUser, (req, res) =>
-{
-  const { url, fps, maxFrames } = req.body || {}
-  // Only single YouTube videos; the canonical form drops any playlist params.
-  const videoUrl = canonicalYoutubeUrl(url)
-  if (!videoUrl) 
-  {
-    return res.status(400).json({
-      error: 'Please use a link to a single YouTube video (youtube.com/watch?v=…, youtu.be/…, or youtube.com/shorts/…).',
-    })
-  }
+app.post('/jobs/from-youtube', requireUser, (req, res) => {
+    const { url, fps, maxFrames, trainIters } = req.body || {}
+    // Only single YouTube videos; the canonical form drops any playlist params.
+    const videoUrl = canonicalYoutubeUrl(url)
+    if (!videoUrl) {
+        return res.status(400).json({
+            error: 'Please use a link to a single YouTube video (youtube.com/watch?v=…, youtu.be/…, or youtube.com/shorts/…).',
+        })
+    }
 
-  const jobId = crypto.randomUUID()
-  fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
-  setJobOwner(jobId, req.user.id)
-  const job = makeJob(jobId)
-  job.source = 'youtube'
-  saveJob(job)
+    const jobId = crypto.randomUUID()
+    fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
+    setJobOwner(jobId, req.user.id)
+    const job = makeJob(jobId)
+    job.source = 'youtube'
+    job.trainIters = parseTrainIters(trainIters)
+    saveJob(job)
 
-  const opts = {}
-  if (Number.isFinite(Number(fps)) && Number(fps) > 0) 
-  {
-    opts.fps = Math.min(Number(fps), config.ytMaxFps)
-  }
-  if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) 
-  {
-    opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
-  }
+    const opts = {}
+    if (Number.isFinite(Number(fps)) && Number(fps) > 0) {
+        opts.fps = Math.min(Number(fps), config.ytMaxFps)
+    }
+    if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
+        opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
+    }
 
-  runYoutubePipeline(job, videoUrl, opts) // fire-and-forget; the frontend polls /jobs/:id
-  res.status(202).json({ id: job.id })
+    runYoutubePipeline(job, videoUrl, opts) // fire-and-forget; the frontend polls /jobs/:id
+    res.status(202).json({ id: job.id })
 })
 
 /************************************************************************/
@@ -830,24 +802,23 @@ app.post('/jobs/from-youtube', requireUser, (req, res) =>
     else status, phase, progress, error and the last 40 log lines
 */
 /************************************************************************/
-app.get('/jobs/:id', requireJobAccess, async (req, res) =>
-{
-  const job = await getJob(req.params.id)
-  if (!job) 
-    return res.status(404).json({ error: 'job not found' })
-  res.json({
-    id: job.id,
-    status: job.status,
-    phase: job.phase,
-    progress: job.progress,
-    detail: job.detail,
-    error: job.error,
-    updatedAt: job.updatedAt ?? null,
-    imageCount: job.imageCount ?? null,
-    removeBackground: !!job.removeBackground,
-    hasResult: job.status === 'done' && !!job.resultPath,
-    logTail: job.log.slice(-40),
-  })
+app.get('/jobs/:id', requireJobAccess, async (req, res) => {
+    const job = await getJob(req.params.id)
+    if (!job)
+        return res.status(404).json({ error: 'job not found' })
+    res.json({
+        id: job.id,
+        status: job.status,
+        phase: job.phase,
+        progress: job.progress,
+        detail: job.detail,
+        error: job.error,
+        updatedAt: job.updatedAt ?? null,
+        imageCount: job.imageCount ?? null,
+        removeBackground: !!job.removeBackground,
+        hasResult: job.status === 'done' && !!job.resultPath,
+        logTail: job.log.slice(-40),
+    })
 })
 
 /************************************************************************/
@@ -863,16 +834,14 @@ app.get('/jobs/:id', requireJobAccess, async (req, res) =>
     kills processes and frees GPU
 */
 /************************************************************************/
-app.delete('/jobs/:id', requireJobAccess, async (req, res) =>
-{
-  const job = await getJob(req.params.id)
-  if (!job) return res.status(404).json({ error: 'job not found' })
-  if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
-  if (!cancelJob(job)) 
-  {
-    return res.status(409).json({ error: `job already ${job.status}` })
-  }
-  res.json({ id: job.id, status: job.status })
+app.delete('/jobs/:id', requireJobAccess, async (req, res) => {
+    const job = await getJob(req.params.id)
+    if (!job) return res.status(404).json({ error: 'job not found' })
+    if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
+    if (!cancelJob(job)) {
+        return res.status(409).json({ error: `job already ${job.status}` })
+    }
+    res.json({ id: job.id, status: job.status })
 })
 
 /************************************************************************/
@@ -883,15 +852,13 @@ app.delete('/jobs/:id', requireJobAccess, async (req, res) =>
     401 if not logged in, 404 if result is not ready or isn't theirs
 */
 /************************************************************************/
-app.get('/jobs/:id/result.ply', requireJobAccess, async (req, res) =>
-{
-  const job = await getJob(req.params.id)
-  if (!job || job.status !== 'done' || !job.resultPath) 
-  {
-    return res.status(404).json({ error: 'result not ready' })
-  }
-  res.setHeader('Content-Type', 'application/octet-stream')
-  res.sendFile(job.resultPath)
+app.get('/jobs/:id/result.ply', requireJobAccess, async (req, res) => {
+    const job = await getJob(req.params.id)
+    if (!job || job.status !== 'done' || !job.resultPath) {
+        return res.status(404).json({ error: 'result not ready' })
+    }
+    res.setHeader('Content-Type', 'application/octet-stream')
+    res.sendFile(job.resultPath)
 })
 
 const MAX_JOB_NAME_LENGTH = 80
@@ -910,41 +877,37 @@ const MAX_JOB_NAME_LENGTH = 80
     name and sample filename
 */
 /************************************************************************/
-app.patch('/jobs/:id', async (req, res) =>
-{
-  const job = await getJob(req.params.id)
-  if (!job) return res.status(404).json({ error: 'job not found' })
+app.patch('/jobs/:id', async (req, res) => {
+    const job = await getJob(req.params.id)
+    if (!job) return res.status(404).json({ error: 'job not found' })
 
-  const { name } = req.body || {}
-  const trimmed = typeof name === 'string' ? name.trim() : ''
-  if (trimmed.length > MAX_JOB_NAME_LENGTH)
-    return res.status(400).json({ error: `Name must be at most ${MAX_JOB_NAME_LENGTH} characters.` })
+    const { name } = req.body || {}
+    const trimmed = typeof name === 'string' ? name.trim() : ''
+    if (trimmed.length > MAX_JOB_NAME_LENGTH)
+        return res.status(400).json({ error: `Name must be at most ${MAX_JOB_NAME_LENGTH} characters.` })
 
-  const newName = trimmed || null
-  const oldFile = sampleFileName(job)
-  const newFile = pickSampleFileName(job, newName)
-  if (newFile !== oldFile)
-  {
-    try
-    {
-      await fs.promises.rename(
-        path.join(config.engineSamplesDir, oldFile),
-        path.join(config.engineSamplesDir, newFile),
-      )
+    const newName = trimmed || null
+    const oldFile = sampleFileName(job)
+    const newFile = pickSampleFileName(job, newName)
+    if (newFile !== oldFile) {
+        try {
+            await fs.promises.rename(
+                path.join(config.engineSamplesDir, oldFile),
+                path.join(config.engineSamplesDir, newFile),
+            )
+        }
+        catch (err) {
+            // No copy yet (still processing, or trained before copies existed):
+            // the new filename is still recorded, so the pipeline copies under it.
+            if (err.code !== 'ENOENT')
+                return res.status(409).json({ error: `Couldn't rename ${oldFile} in the engine samples folder (${err.code}). Close any program using it and try again.` })
+        }
     }
-    catch (err)
-    {
-      // No copy yet (still processing, or trained before copies existed):
-      // the new filename is still recorded, so the pipeline copies under it.
-      if (err.code !== 'ENOENT')
-        return res.status(409).json({ error: `Couldn't rename ${oldFile} in the engine samples folder (${err.code}). Close any program using it and try again.` })
-    }
-  }
 
-  job.name = newName
-  job.sampleFile = newFile
-  saveJob(job)
-  res.json({ id: job.id, name: job.name, sampleFile: newFile })
+    job.name = newName
+    job.sampleFile = newFile
+    saveJob(job)
+    res.json({ id: job.id, name: job.name, sampleFile: newFile })
 })
 
 /************************************************************************/
@@ -957,27 +920,24 @@ app.patch('/jobs/:id', async (req, res) =>
     404 if job not found, else 200 once the folders are gone
 */
 /************************************************************************/
-app.delete('/jobs/:id/files', async (req, res, next) =>
-{
-  const job = await getJob(req.params.id)
-  if (!job) return res.status(404).json({ error: 'job not found' })
+app.delete('/jobs/:id/files', async (req, res, next) => {
+    const job = await getJob(req.params.id)
+    if (!job) return res.status(404).json({ error: 'job not found' })
 
-  cancelJob(job) // no-op for a finished job
-  jobs.delete(job.id)
+    cancelJob(job) // no-op for a finished job
+    jobs.delete(job.id)
 
-  try
-  {
-    // Retries cover Windows briefly locking files of a tool that was just killed.
-    const rmOpts = { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }
-    await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
-    await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
-    await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
-    res.json({ id: job.id, deleted: true })
-  }
-  catch (err)
-  {
-    next(err)
-  }
+    try {
+        // Retries cover Windows briefly locking files of a tool that was just killed.
+        const rmOpts = { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }
+        await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
+        await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
+        await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
+        res.json({ id: job.id, deleted: true })
+    }
+    catch (err) {
+        next(err)
+    }
 })
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/
@@ -993,16 +953,15 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/
     { name, email, role, memberSince }
 */
 /************************************************************************/
-function publicUser(user)
-{
-  // SQLite datetime('now') is UTC without a zone marker.
-  const created = new Date(`${(user.createdAt ?? user.created_at).replace(' ', 'T')}Z`)
-  return {
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    memberSince: created.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
-  }
+function publicUser(user) {
+    // SQLite datetime('now') is UTC without a zone marker.
+    const created = new Date(`${(user.createdAt ?? user.created_at).replace(' ', 'T')}Z`)
+    return {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        memberSince: created.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
+    }
 }
 
 /************************************************************************/
@@ -1046,58 +1005,50 @@ app.post('/auth/signup', async (req, res, next) =>
 })*/
 
 
-app.post('/auth/signup', limitByIp(signupIpLimiter), async (req, res, next) =>
-{
-  const { remember } = req.body || {}
+app.post('/auth/signup', limitByIp(signupIpLimiter), async (req, res, next) => {
+    const { remember } = req.body || {}
 
-  // Authority (VM) or local: the account lives in this machine's database.
-  if (config.authMode !== 'client')
-  {
-    const input = validateSignup(req.body)
-    if (input.error) return res.status(400).json({ error: input.error })
-    try
-    {
-      const user = await createUser(input)
-      startSession(res, user.id, remember === true)
-      return res.status(201).json(publicUser(user))
+    // Authority (VM) or local: the account lives in this machine's database.
+    if (config.authMode !== 'client') {
+        const input = validateSignup(req.body)
+        if (input.error) return res.status(400).json({ error: input.error })
+        try {
+            const user = await createUser(input)
+            startSession(res, user.id, remember === true)
+            return res.status(201).json(publicUser(user))
+        }
+        catch (err) {
+            if (err.code === 'EMAIL_TAKEN')
+                return res.status(409).json({ error: 'An account with that email already exists.' })
+            return next(err)
+        }
     }
-    catch (err)
-    {
-      if (err.code === 'EMAIL_TAKEN')
-        return res.status(409).json({ error: 'An account with that email already exists.' })
-      return next(err)
-    }
-  }
 
-  // Client: forward to the VM, mirror the returned user, then start a local session.
-  const problem = clientAuthProblem()
-  if (problem)
-  {
-    console.error(`[backend] signup refused -- ${problem}`)
-    return res.status(503).json({ error: 'Account service is not configured on this machine.' })
-  }
-  try
-  {
-    const { name, email, password } = req.body || {}
-    const { status, data } = await callAuthority('/register', { name, email, password })
-    if (status === 201)
-    {
-      upsertLocalUser(data)                 // mirror VM id -> local users
-      startSession(res, data.id, remember === true)
-      // The mirrored row, so memberSince comes from a real stored date.
-      return res.status(201).json(publicUser(findUserByEmail(data.email)))
+    // Client: forward to the VM, mirror the returned user, then start a local session.
+    const problem = clientAuthProblem()
+    if (problem) {
+        console.error(`[backend] signup refused -- ${problem}`)
+        return res.status(503).json({ error: 'Account service is not configured on this machine.' })
     }
-    // The user's own mistakes (bad input, email taken, too many tries) pass through.
-    if (status === 400 || status === 409 || status === 429)
-      return res.status(status).json({ error: data.error || 'Signup failed.' })
-    logAuthorityFailure('/register', status, data)
-    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
-  }
-  catch (err)
-  {
-    console.error('[backend] account authority call failed:', err)
-    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
-  }
+    try {
+        const { name, email, password } = req.body || {}
+        const { status, data } = await callAuthority('/register', { name, email, password })
+        if (status === 201) {
+            upsertLocalUser(data)                 // mirror VM id -> local users
+            startSession(res, data.id, remember === true)
+            // The mirrored row, so memberSince comes from a real stored date.
+            return res.status(201).json(publicUser(findUserByEmail(data.email)))
+        }
+        // The user's own mistakes (bad input, email taken, too many tries) pass through.
+        if (status === 400 || status === 409 || status === 429)
+            return res.status(status).json({ error: data.error || 'Signup failed.' })
+        logAuthorityFailure('/register', status, data)
+        res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+    }
+    catch (err) {
+        console.error('[backend] account authority call failed:', err)
+        res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+    }
 })
 
 
@@ -1134,60 +1085,52 @@ app.post('/auth/login', async (req, res, next) =>
 })*/
 
 
-app.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) =>
-{
-  const { email, password, remember } = req.body || {}
-  if (typeof email !== 'string' || typeof password !== 'string')
-    return res.status(400).json({ error: 'Enter your email and password.' })
+app.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) => {
+    const { email, password, remember } = req.body || {}
+    if (typeof email !== 'string' || typeof password !== 'string')
+        return res.status(400).json({ error: 'Enter your email and password.' })
 
-  // Authority (VM) or local: check this machine's database.
-  if (config.authMode !== 'client')
-  {
-    try
-    {
-      const result = await checkCredentials(email, password)
-      if (result.status === 'locked')
-      {
-        res.set('Retry-After', String(result.retryAfterSec))
-        return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
-      }
-      if (result.status === 'invalid')
-        return res.status(401).json({ error: 'Incorrect email or password.' })
-      startSession(res, result.user.id, remember === true)
-      return res.json(publicUser(result.user))
+    // Authority (VM) or local: check this machine's database.
+    if (config.authMode !== 'client') {
+        try {
+            const result = await checkCredentials(email, password)
+            if (result.status === 'locked') {
+                res.set('Retry-After', String(result.retryAfterSec))
+                return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+            }
+            if (result.status === 'invalid')
+                return res.status(401).json({ error: 'Incorrect email or password.' })
+            startSession(res, result.user.id, remember === true)
+            return res.json(publicUser(result.user))
+        }
+        catch (err) { return next(err) }
     }
-    catch (err) { return next(err) }
-  }
 
-  // Client: verify against the VM, mirror the user, start a local session.
-  const problem = clientAuthProblem()
-  if (problem)
-  {
-    console.error(`[backend] login refused -- ${problem}`)
-    return res.status(503).json({ error: 'Account service is not configured on this machine.' })
-  }
-  try
-  {
-    const { status, data } = await callAuthority('/verify-account', { email, password })
-    if (status === 200 && data.valid)
-    {
-      upsertLocalUser(data)
-      startSession(res, data.id, remember === true)
-      // The mirrored row, so memberSince comes from a real stored date.
-      return res.json(publicUser(findUserByEmail(data.email)))
+    // Client: verify against the VM, mirror the user, start a local session.
+    const problem = clientAuthProblem()
+    if (problem) {
+        console.error(`[backend] login refused -- ${problem}`)
+        return res.status(503).json({ error: 'Account service is not configured on this machine.' })
     }
-    if (status === 200)
-      return res.status(401).json({ error: 'Incorrect email or password.' })
-    if (status === 429)
-      return res.status(429).json({ error: data.error || tooManyAttempts(0) })
-    logAuthorityFailure('/verify-account', status, data)
-    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
-  }
-  catch (err)
-  {
-    console.error('[backend] account authority call failed:', err)
-    res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
-  }
+    try {
+        const { status, data } = await callAuthority('/verify-account', { email, password })
+        if (status === 200 && data.valid) {
+            upsertLocalUser(data)
+            startSession(res, data.id, remember === true)
+            // The mirrored row, so memberSince comes from a real stored date.
+            return res.json(publicUser(findUserByEmail(data.email)))
+        }
+        if (status === 200)
+            return res.status(401).json({ error: 'Incorrect email or password.' })
+        if (status === 429)
+            return res.status(429).json({ error: data.error || tooManyAttempts(0) })
+        logAuthorityFailure('/verify-account', status, data)
+        res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+    }
+    catch (err) {
+        console.error('[backend] account authority call failed:', err)
+        res.status(503).json({ error: 'Account service is unavailable. Try again shortly.' })
+    }
 })
 
 
@@ -1200,9 +1143,8 @@ app.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) =>
     401 if not logged in, else the user
 */
 /************************************************************************/
-app.get('/auth/me', requireUser, (req, res) =>
-{
-  res.json(publicUser(req.user))
+app.get('/auth/me', requireUser, (req, res) => {
+    res.json(publicUser(req.user))
 })
 
 /************************************************************************/
@@ -1214,11 +1156,10 @@ app.get('/auth/me', requireUser, (req, res) =>
     204
 */
 /************************************************************************/
-app.post('/auth/logout', (req, res) =>
-{
-  deleteSession(readCookie(req, SESSION_COOKIE))
-  res.clearCookie(SESSION_COOKIE, { path: '/' })
-  res.status(204).end()
+app.post('/auth/logout', (req, res) => {
+    deleteSession(readCookie(req, SESSION_COOKIE))
+    res.clearCookie(SESSION_COOKIE, { path: '/' })
+    res.status(204).end()
 })
 
 // /wiki with no page → show Home
@@ -1229,25 +1170,25 @@ app.get('/wiki/:page', (req, res) => serveWikiPage(req.params.page, res))
 
 // shared helper
 function serveWikiPage(rawPage, res) {
-  // CHANGE 1 — convert spaces to hyphens BEFORE stripping,
-  // so "Technical Requirements" → "Technical-Requirements" (matches the .md filename)
-  const page = rawPage
-    .replace(/\s+/g, '-')             // spaces → hyphens
-    .replace(/[^a-zA-Z0-9_-]/g, '')   // then strip anything else (blocks ../ etc.)
+    // CHANGE 1 — convert spaces to hyphens BEFORE stripping,
+    // so "Technical Requirements" → "Technical-Requirements" (matches the .md filename)
+    const page = rawPage
+        .replace(/\s+/g, '-')             // spaces → hyphens
+        .replace(/[^a-zA-Z0-9_-]/g, '')   // then strip anything else (blocks ../ etc.)
 
-  const filePath = path.join(WIKI_DIR, `${page}.md`)
+    const filePath = path.join(WIKI_DIR, `${page}.md`)
 
-  fs.readFile(filePath, 'utf8', (err, markdown) => {
-    if (err) return res.status(404).send('Wiki page not found')
+    fs.readFile(filePath, 'utf8', (err, markdown) => {
+        if (err) return res.status(404).send('Wiki page not found')
 
-    // CHANGE 2 — note: 'let' not 'const', because we modify html next
-    let html = marked(markdown)
+        // CHANGE 2 — note: 'let' not 'const', because we modify html next
+        let html = marked(markdown)
 
-    // Rewrite bare wiki links (href="Architecture") → href="/wiki/Architecture".
-    // Leaves external (http://), absolute (/), and anchor (#) links untouched.
-    html = html.replace(/href="(?!https?:\/\/|\/|#)([^"]+)"/g, 'href="/wiki/$1"')
+        // Rewrite bare wiki links (href="Architecture") → href="/wiki/Architecture".
+        // Leaves external (http://), absolute (/), and anchor (#) links untouched.
+        html = html.replace(/href="(?!https?:\/\/|\/|#)([^"]+)"/g, 'href="/wiki/$1"')
 
-    res.send(`
+        res.send(`
       <!DOCTYPE html>
       <html>
         <head>
@@ -1265,7 +1206,7 @@ function serveWikiPage(rawPage, res) {
         <body>${html}</body>
       </html>
     `)
-  })
+    })
 }
 
 /************************************************************************/
@@ -1279,21 +1220,18 @@ function serveWikiPage(rawPage, res) {
 */
 /************************************************************************/
 
-app.post('/register', requireAuthorityKey, async (req, res, next) =>
-{
-  const input = validateSignup(req.body)
-  if (input.error) return res.status(400).json({ error: input.error })
-  try
-  {
-    const user = await createUser(input)
-    res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role })
-  }
-  catch (err)
-  {
-    if (err.code === 'EMAIL_TAKEN')
-      return res.status(409).json({ error: 'An account with that email already exists.' })
-    next(err)
-  }
+app.post('/register', requireAuthorityKey, async (req, res, next) => {
+    const input = validateSignup(req.body)
+    if (input.error) return res.status(400).json({ error: input.error })
+    try {
+        const user = await createUser(input)
+        res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role })
+    }
+    catch (err) {
+        if (err.code === 'EMAIL_TAKEN')
+            return res.status(409).json({ error: 'An account with that email already exists.' })
+        next(err)
+    }
 })
 
 
@@ -1310,25 +1248,22 @@ app.post('/register', requireAuthorityKey, async (req, res, next) =>
 */
 /************************************************************************/
 
-app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
-{
-  const { email, password } = req.body || {}
-  if (typeof email !== 'string' || typeof password !== 'string')
-    return res.status(400).json({ error: 'Email and password required.' })
-  try
-  {
-    const result = await checkCredentials(email, password)
-    if (result.status === 'locked')
-      return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
-    if (result.status === 'invalid')
-      return res.json({ valid: false })
-    const { user } = result
-    res.json({ valid: true, id: user.id, email: user.email, name: user.name, role: user.role })
-  }
-  catch (err)
-  {
-    next(err)
-  }
+app.post('/verify-account', requireAuthorityKey, async (req, res, next) => {
+    const { email, password } = req.body || {}
+    if (typeof email !== 'string' || typeof password !== 'string')
+        return res.status(400).json({ error: 'Email and password required.' })
+    try {
+        const result = await checkCredentials(email, password)
+        if (result.status === 'locked')
+            return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+        if (result.status === 'invalid')
+            return res.json({ valid: false })
+        const { user } = result
+        res.json({ valid: true, id: user.id, email: user.email, name: user.name, role: user.role })
+    }
+    catch (err) {
+        next(err)
+    }
 })
 
 
@@ -1359,92 +1294,85 @@ app.post('/verify-account', requireAuthorityKey, async (req, res, next) =>
 */
 /************************************************************************/
 app.use((err, req, res, _next) => {
-  // A partial reply is already on the wire -- let Express finish/abort it.
-  if (res.headersSent) return _next(err)
+    // A partial reply is already on the wire -- let Express finish/abort it.
+    if (res.headersSent) return _next(err)
 
-  // Clean up the empty job folder assignJobId made before multer ran, so a
-  // rejected upload doesn't leave a stray folder that scanJobs would skip
-  // anyway (no images) but that still clutters jobs/. Best-effort.
-  if (req.jobId) {
-    try {
-      fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
-    } catch {
-      // Nothing to clean up, or it's already gone.
+    // Clean up the empty job folder assignJobId made before multer ran, so a
+    // rejected upload doesn't leave a stray folder that scanJobs would skip
+    // anyway (no images) but that still clutters jobs/. Best-effort.
+    if (req.jobId) {
+        try {
+            fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+        } catch {
+            // Nothing to clean up, or it's already gone.
+        }
     }
-  }
 
-  if (err instanceof multer.MulterError) {
-    // The limits come from config (maxFileSizeMB, maxFiles); keep the messages
-    // in sync with those so they stay true if the limits change.
-    switch (err.code) {
-      case 'LIMIT_FILE_SIZE':
-        return res.status(413).json({
-          error: `That file is too large -- each photo must be under ${config.maxFileSizeMB} MB.`,
-        })
-      case 'LIMIT_FILE_COUNT':
-      case 'LIMIT_PART_COUNT':
-      case 'LIMIT_UNEXPECTED_FILE':
-        return res.status(400).json({
-          error: `Too many files -- upload at most ${config.maxFiles} photos at once.`,
-        })
-      default:
-        return res.status(400).json({ error: `Upload rejected: ${err.message}.` })
+    if (err instanceof multer.MulterError) {
+        // The limits come from config (maxFileSizeMB, maxFiles); keep the messages
+        // in sync with those so they stay true if the limits change.
+        switch (err.code) {
+            case 'LIMIT_FILE_SIZE':
+                return res.status(413).json({
+                    error: `That file is too large -- each photo must be under ${config.maxFileSizeMB} MB.`,
+                })
+            case 'LIMIT_FILE_COUNT':
+            case 'LIMIT_PART_COUNT':
+            case 'LIMIT_UNEXPECTED_FILE':
+                return res.status(400).json({
+                    error: `Too many files -- upload at most ${config.maxFiles} photos at once.`,
+                })
+            default:
+                return res.status(400).json({ error: `Upload rejected: ${err.message}.` })
+        }
     }
-  }
 
-  // Anything else (e.g. onlyImages' fs failure) is a real server-side fault.
-  console.error('[backend] request error:', err)
-  res.status(500).json({ error: 'Something went wrong on the server. Please try again.' })
+    // Anything else (e.g. onlyImages' fs failure) is a real server-side fault.
+    console.error('[backend] request error:', err)
+    res.status(500).json({ error: 'Something went wrong on the server. Please try again.' })
 })
 
 // SIGINT: Ctrl+C. SIGTERM: nodemon / task manager / kill. SIGBREAK: Ctrl+Break
 // on Windows. SIGHUP: the console window was closed (Windows maps
 // CTRL_CLOSE_EVENT to it and gives the process a few seconds to react).
-for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP']) 
-{
-  process.on(sig, () => shutdown(`received ${sig}`))
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP']) {
+    process.on(sig, () => shutdown(`received ${sig}`))
 }
-process.on('uncaughtException', (err) => 
-{
-  console.error('[backend] uncaught exception:', err)
-  shutdown('crashed', 1)
+process.on('uncaughtException', (err) => {
+    console.error('[backend] uncaught exception:', err)
+    shutdown('crashed', 1)
 })
-process.on('unhandledRejection', (err) => 
-{
-  console.error('[backend] unhandled rejection:', err)
-  shutdown('crashed', 1)
+process.on('unhandledRejection', (err) => {
+    console.error('[backend] unhandled rejection:', err)
+    shutdown('crashed', 1)
 })
 // Last resort for exit paths that bypass the handlers above (e.g. an explicit
 // process.exit elsewhere). killChildren() is synchronous, so it works here.
 process.on('exit', () => killChildren())
 
-app.listen(config.port, () =>
-{
-  console.log(`[backend] http://localhost:${config.port}`)
-  console.log(`[backend] COLMAP: ${config.colmapBin}`)
-  console.log(`[backend] Brush:  ${config.brushBin}`)
-  console.log(`[backend] Python: ${config.pythonBin}`)
-  console.log(`[backend] jobs:   ${config.jobsDir}`)
-  // Which account mode this machine is in, and whether it can work.
-  if (config.authMode === 'authority')
-  {
-    console.log('[backend] accounts: authority (this machine holds the account database)')
-    if (!config.authApiKey)
-      console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
-  }
-  else if (config.authMode === 'client')
-  {
-    console.log(`[backend] accounts: client -> ${config.vmAuthUrl}`)
-    const problem = clientAuthProblem()
-    if (problem) console.warn(`[backend] *** sign up / log in will not work: ${problem} ***`)
-    else if (config.allowInsecureAuth && new URL(config.vmAuthUrl).protocol !== 'https:')
-      console.warn('[backend] *** AUTH_ALLOW_HTTP=1: passwords are sent to the VM unencrypted. Testing only. ***')
-  }
-  else
-  {
-    console.log('[backend] accounts: local (this machine\'s own database)')
-  }
-  // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
-  getHardwareInfo().then((hw) =>
-    console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))
+app.listen(config.port, () => {
+    console.log(`[backend] http://localhost:${config.port}`)
+    console.log(`[backend] COLMAP: ${config.colmapBin}`)
+    console.log(`[backend] Brush:  ${config.brushBin}`)
+    console.log(`[backend] Python: ${config.pythonBin}`)
+    console.log(`[backend] jobs:   ${config.jobsDir}`)
+    // Which account mode this machine is in, and whether it can work.
+    if (config.authMode === 'authority') {
+        console.log('[backend] accounts: authority (this machine holds the account database)')
+        if (!config.authApiKey)
+            console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
+    }
+    else if (config.authMode === 'client') {
+        console.log(`[backend] accounts: client -> ${config.vmAuthUrl}`)
+        const problem = clientAuthProblem()
+        if (problem) console.warn(`[backend] *** sign up / log in will not work: ${problem} ***`)
+        else if (config.allowInsecureAuth && new URL(config.vmAuthUrl).protocol !== 'https:')
+            console.warn('[backend] *** AUTH_ALLOW_HTTP=1: passwords are sent to the VM unencrypted. Testing only. ***')
+    }
+    else {
+        console.log('[backend] accounts: local (this machine\'s own database)')
+    }
+    // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
+    getHardwareInfo().then((hw) =>
+        console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))
 })

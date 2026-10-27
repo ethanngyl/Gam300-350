@@ -113,10 +113,11 @@ function App() {
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
     // Batch sent from Camera Capture's "Review photos first" to the Photo
-    // Editor: { files, removeBackground }. Cleared on any other navigation.
+    // Editor: { files, removeBackground, trainIters }. Cleared on any other
+    // navigation.
     const [photosForEditor, setPhotosForEditor] = useState(null);
     // Batch sent back from the Photo Editor's "Back to camera", so Camera
-    // Capture reopens with those photos: { files, removeBackground }.
+    // Capture reopens with those photos: { files, removeBackground, trainIters }.
     // Cleared on any other navigation.
     const [photosForCapture, setPhotosForCapture] = useState(null);
     // Whether the sidebar drawer is open (phones only).
@@ -150,15 +151,15 @@ function App() {
     }
 
     // Opens the Photo Editor with the photos from Camera Capture loaded.
-    function reviewPhotosInEditor(files, { removeBackground = false } = {}) {
+    function reviewPhotosInEditor(files, { removeBackground = false, trainIters = null } = {}) {
         goToTab('editor');
-        setPhotosForEditor({ files, removeBackground });
+        setPhotosForEditor({ files, removeBackground, trainIters });
     }
 
     // Reopens Camera Capture with the photos that were in the Photo Editor.
-    function returnPhotosToCapture(files, { removeBackground = false } = {}) {
+    function returnPhotosToCapture(files, { removeBackground = false, trainIters = null } = {}) {
         goToTab('capture');
-        setPhotosForCapture({ files, removeBackground });
+        setPhotosForCapture({ files, removeBackground, trainIters });
     }
 
     function openLibrary(subTab) {
@@ -167,12 +168,15 @@ function App() {
     }
 
     // Uploads the real batch to the backend and starts reconstruction.
-    async function handleBatchReady(files, { removeBackground = false } = {}) {
+    // trainIters is the training iteration cap (Fast / Normal / Detailed);
+    // left out, the server uses its default.
+    async function handleBatchReady(files, { removeBackground = false, trainIters = null } = {}) {
         setUploadError(null);
         try {
             const form = new FormData();
             // Text fields go before the files so the server has them as the upload streams in.
             form.append('removeBackground', String(removeBackground));
+            if (trainIters) form.append('trainIters', String(trainIters));
             for (const file of files) form.append('images', file);
             const res = await fetch('/upload', { method: 'POST', body: form });
             const data = await res.json();

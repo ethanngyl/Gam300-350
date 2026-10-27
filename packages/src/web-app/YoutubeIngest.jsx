@@ -8,8 +8,9 @@
 \par Software Engineering Project 5
 \date 08-10-2026
 \brief
-Lets the user submit a YouTube video link and frame-extraction rate to
-the backend, then polls job status until reconstruction
+Lets the user submit a YouTube video link, frame-extraction rate and
+model detail (training iteration cap, via TrainingQualitySlider) to the
+backend, then polls job status until reconstruction
 finishes. A thumbnail of the video shows under the link once it is
 valid. The status card only appears while a job exists: a simple
 progress bar while it runs, then the extracted frames and a download
@@ -21,6 +22,8 @@ completes. There is no Back button; the sidebar handles navigation.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSound } from '../audio/Audio.js';
 import NameModelPrompt from './NameModelPrompt.jsx';
+import TrainingQualitySlider from './TrainingQualitySlider.jsx';
+import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import './YoutubeIngest.css';
 
 const YT_HOSTS = new Set([
@@ -90,6 +93,8 @@ const PHASE_LABELS = {
 function YoutubeIngest() {
     const [url, setUrl] = useState('');
     const [fps, setFps] = useState(2);
+    // Training iteration cap from the "Model detail" slider.
+    const [trainIters, setTrainIters] = useState(DEFAULT_TRAINING_ITERATIONS);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
     const [job, setJob] = useState(null);
@@ -182,7 +187,7 @@ function YoutubeIngest() {
             const res = await fetch('/jobs/from-youtube', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: trimmed, fps: Number(fps) || undefined }),
+                body: JSON.stringify({ url: trimmed, fps: Number(fps) || undefined, trainIters }),
             });
             const data = await parseJson(res);
             if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -246,6 +251,8 @@ function YoutubeIngest() {
                                 />
                             </div>
                         )}
+
+                        <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} disabled={busy} />
 
                         <div className="yt-row">
                             <label className="yt-fps">

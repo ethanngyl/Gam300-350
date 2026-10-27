@@ -2235,6 +2235,66 @@ html {
     }
 }
 
+/* ---------- Model detail slider (TrainingQualitySlider) ---------- */
+
+.training-quality {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 220px;
+}
+
+    .training-quality.is-disabled {
+        opacity: 0.6;
+    }
+
+.training-quality-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.82rem;
+    color: var(--forma-text);
+}
+
+.training-quality-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--forma-teal-text);
+    white-space: nowrap;
+}
+
+.training-quality-range {
+    width: 100%;
+    margin: 0;
+    accent-color: var(--forma-blue);
+    cursor: pointer;
+}
+
+.training-quality-stops {
+    display: flex;
+    justify-content: space-between;
+}
+
+.training-quality-stop {
+    padding: 0;
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.72rem;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .training-quality-stop.is-active {
+        color: var(--forma-text);
+        font-weight: 600;
+    }
+
+    .training-quality-stop:disabled {
+        cursor: default;
+    }
+
 /* ============================================================
    Responsive layout: tablets (<=1100px) and phones (<=760px)
    Keep this section last in the file so its rules win.

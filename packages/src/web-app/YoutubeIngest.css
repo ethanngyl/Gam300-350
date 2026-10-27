@@ -144,6 +144,11 @@
         display: block;
     }
 
+/* Model detail slider: same width as the thumbnail, not the whole card. */
+.yt-form .training-quality {
+    max-width: 360px;
+}
+
 .yt .yt-hint {
     color: var(--forma-text-dim);
     font-size: 0.78rem;
