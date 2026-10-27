@@ -109,7 +109,8 @@ html {
     gap: 20px;
     padding: 0 20px;
     background: var(--forma-sidebar);
-    border-bottom: 1px solid var(--forma-border);
+    /* No line under the top bar: it and the sidebar share one colour, so
+       they read as a single frame around the page. */
 }
 
 .forma-logo {
@@ -131,6 +132,8 @@ html {
     box-sizing: border-box;
     width: 220px;
     flex: none;
+    /* Same speed as the sidebar opening / closing. */
+    transition: width 0.18s ease;
     align-self: stretch;
     background: transparent;
     border: none;
@@ -139,15 +142,24 @@ html {
     cursor: pointer;
 }
 
-    .forma-logo-home:hover .forma-logo-icon {
-        border-color: var(--forma-blue);
+/* Sidebar collapsed (wider screens; phones use a drawer): shrink to
+       just fit the logo and word, so the tabs sit next to it instead of
+       leaving a gap. */
+@media (min-width: 761px) {
+    .genesis-shell.is-sidebar-collapsed .forma-logo-home {
+        width: 132px;
     }
+}
 
-    .forma-logo-home:focus-visible {
-        outline: 2px solid var(--forma-blue);
-        outline-offset: 4px;
-        border-radius: 6px;
-    }
+.forma-logo-home:hover .forma-logo-icon {
+    border-color: var(--forma-blue);
+}
+
+.forma-logo-home:focus-visible {
+    outline: 2px solid var(--forma-blue);
+    outline-offset: 4px;
+    border-radius: 6px;
+}
 
 .forma-logo-icon {
     width: 30px;
