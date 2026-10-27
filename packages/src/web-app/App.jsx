@@ -33,6 +33,7 @@ import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
+import { useUndoableState } from './useUndoableState.js';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
@@ -115,6 +116,9 @@ function App() {
     const [uploadError, setUploadError] = useState(null);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    // Models placed in the Scene Builder, with their undo history. Kept here
+    // so the scene survives switching tabs (each page remounts when its tab opens).
+    const scene = useUndoableState([]);
 
     function handleLogin(user) {
         saveUser(user);
@@ -130,6 +134,7 @@ function App() {
         setCurrentUser(null);
         setScreen(null);
         setIsMenuOpen(false);
+        scene.reset([]);
         setActiveTab('home');
     }
 
@@ -332,7 +337,12 @@ function App() {
                         <PhotoEditorScreen onGenerateModel={handleBatchReady} uploadError={uploadError} />
                     )}
                     {activeTab === 'scene' && (
-                        <SceneBuilderScreen onAddFromLibrary={() => openLibrary('models')} />
+                        <SceneBuilderScreen
+                            objects={scene.value}
+                            onObjectsChange={scene.set}
+                            onUndo={scene.undo}
+                            canUndo={scene.canUndo}
+                        />
                     )}
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
