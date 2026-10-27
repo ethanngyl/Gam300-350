@@ -75,7 +75,7 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
-    // Draws the translate gizmo on the selected model and writes drags back to it.
+    //Draws the translate gizmo on the selected model and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
     Camera m_camera;
