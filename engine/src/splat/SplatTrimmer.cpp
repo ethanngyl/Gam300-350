@@ -107,16 +107,16 @@ std::vector<SplatVertex> ApplyKeepMask(const std::vector<SplatVertex>& splats, c
     return result;
 }
 
-SplatTrimmerParam MakeDefaultTrimmerParams(const std::vector<SplatVertex>& splats)
+SplatTrimmerParam ToTrimmerParam(const TrimData& settings, const std::vector<SplatVertex>& splats)
 {
     SplatTrimmerParam params;
-    params.minAlpha = 0.02f;
-    params.cropLowPct = 0.5f;
-    params.cropHighPct = 99.5f;
-    params.minPerVoxel = 5;
+    params.minAlpha = settings.minAlpha;
+    params.cropLowPct = settings.cropPct;
+    params.cropHighPct = 100.0f - settings.cropPct;
+    params.minPerVoxel = settings.minPerVoxel;
 
     //Size the density cells from the extent of the cropped scene so it works at any scale
-    if (!splats.empty()) {
+    if (settings.voxelDivisions > 0 && !splats.empty()) {
         std::vector<uint8_t> all(splats.size(), 1);
         glm::vec3 lo, hi;
         for (int axis = 0; axis < 3; ++axis) {
@@ -124,12 +124,14 @@ SplatTrimmerParam MakeDefaultTrimmerParams(const std::vector<SplatVertex>& splat
             hi[axis] = AxisPercentile(splats, all, axis, params.cropHighPct);
         }
         const float diagonal = glm::length(hi - lo);
-        if (std::isfinite(diagonal) && diagonal > 0.0f) params.voxelSize = diagonal / 200.0f;
+        if (std::isfinite(diagonal) && diagonal > 0.0f) {
+            params.voxelSize = diagonal / static_cast<float>(settings.voxelDivisions);
+        }
     }
     return params;
 }
 
-std::vector<SplatVertex> TrimSplats(const std::vector<SplatVertex>& splats)
+std::vector<SplatVertex> TrimSplats(const std::vector<SplatVertex>& splats, const TrimData& settings)
 {
-    return ApplyKeepMask(splats, ComputeKeepMask(splats, MakeDefaultTrimmerParams(splats)));
+    return ApplyKeepMask(splats, ComputeKeepMask(splats, ToTrimmerParam(settings, splats)));
 }

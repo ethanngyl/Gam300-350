@@ -607,164 +607,46 @@ export async function runPipeline(job) {
     const dbPath = path.join(jobDir, 'database.db')
     const sparseDir = path.join(jobDir, 'sparse')
 
+  try {
+    if (job.cancelled) return
+    job.status = 'running'
+
+    // --- Optional: mask out the background (turntable captures) ---
+    const maskArgs = job.removeBackground
+      ? ['--ImageReader.mask_path', await generateMasks(job, imagesDir, jobDir)]
+      : []
+
+    // --- COLMAP: feature extraction ---
+    setPhase(job, 'colmap-features', 0.05)
+    await run(job, config.colmapBin, [
+      'feature_extractor',
+      '--database_path', dbPath,
+      '--image_path', imagesDir,
+      '--ImageReader.single_camera', '1',
+      ...maskArgs,
+      config.colmapExtractionUseGpuFlag, config.colmapUseGpu,
+    ])
+
+    // --- COLMAP: exhaustive matching ---
+    setPhase(job, 'colmap-matching', 0.2)
+    await run(job, config.colmapBin, [
+      'exhaustive_matcher',
+      '--database_path', dbPath,
+      config.colmapMatchingUseGpuFlag, config.colmapUseGpu,
+      ...config.colmapStrictMatcherArgs,
+    ])
+
+    // --- COLMAP: sparse mapping (recovers camera poses) ---
+    setPhase(job, 'colmap-mapping', 0.35)
+    await fsp.mkdir(sparseDir, { recursive: true })
     try {
-        if (job.cancelled) return
-        job.status = 'running'
-
-        // --- Optional: mask out the background (turntable captures) ---
-        const maskArgs = job.removeBackground
-            ? ['--ImageReader.mask_path', await generateMasks(job, imagesDir, jobDir)]
-            : []
-
-        // --- COLMAP: feature extraction ---
-        setPhase(job, 'colmap-features', 0.05)
-        await run(job, config.colmapBin, [
-            'feature_extractor',
-            '--database_path', dbPath,
-            '--image_path', imagesDir,
-            '--ImageReader.single_camera', '1',
-            ...maskArgs,
-            config.colmapExtractionUseGpuFlag, config.colmapUseGpu,
-        ])
-
-        // --- COLMAP: exhaustive matching ---
-        setPhase(job, 'colmap-matching', 0.2)
-        await run(job, config.colmapBin, [
-            'exhaustive_matcher',
-            '--database_path', dbPath,
-            config.colmapMatchingUseGpuFlag, config.colmapUseGpu,
-        ])
-
-        // --- COLMAP: sparse mapping (recovers camera poses) ---
-        setPhase(job, 'colmap-mapping', 0.35)
-        await fsp.mkdir(sparseDir, { recursive: true })
-        try {
-            await run(job, config.colmapBin, [
-                'mapper',
-                '--database_path', dbPath,
-                '--image_path', imagesDir,
-                '--output_path', sparseDir,
-            ])
-        } catch (err) {
-            // Cancellation and timeouts already have a clear, specific message -- only
-            // COLMAP's own failure (e.g. "no good initial image pair") gets replaced.
-            // The raw COLMAP output is still in the job's log / logTail for debugging.
-            if (job.cancelled || /timed out/.test(err.message)) throw err
-            throw new Error(NO_MODEL_MESSAGE, { cause: err })
-        }
-
-        // Mapper writes sparse/0 (sometimes 1,2.. if it splits). Require at least one.
-        const models = fs.existsSync(sparseDir)
-            ? (await fsp.readdir(sparseDir)).filter((d) => /^\d+$/.test(d))
-            : []
-        if (models.length === 0) {
-            throw new Error(NO_MODEL_MESSAGE)
-        }
-        job.metrics.sparseModels = models.length
-
-        // --- Brush: train the gaussian splat ---
-        setPhase(job, 'training', 0.45)
-        const outDirName = `${job.id}_out`
-        const total = job.trainIters ?? config.trainIters
-        // Brush (brush-cli 1.0.0) renders its progress as an interactive bar that is
-        // suppressed when stdout is a pipe, so with default logging it prints NOTHING
-        // for us to parse. Setting RUST_LOG=info makes it emit structured log lines,
-        // several of which carry the current step, e.g.
-        //   brush_train::train] screen_size iter=200 n=176 ...
-        //   brush_cli] Refine iter 401, 243 splats.
-        // These appear roughly every 200 steps -- frequent enough for a live counter.
-        const iterRe = /\biter[= ](\d[\d,]*)/i
-        // Samples VRAM / utilisation for the metrics record (NVIDIA only).
-        const stopGpuSampler = startGpuSampler(job)
-        try {
-            await run(
-                job,
-                config.brushBin,
-                [
-                    job.id, // dataset dir name, relative to cwd (jobsDir)
-                    '--max-resolution', String(config.maxResolution),
-                    config.brushItersFlag, String(total),
-                    '--export-path', `./${outDirName}/`,
-                    '--export-name', 'splat_{iter}.ply',
-                    '--export-every', String(total),
-                ],
-                {
-                    cwd: config.jobsDir,
-                    env: { RUST_LOG: 'info' },
-                    onData: (line) => {
-                        const m = line.match(iterRe)
-                        if (m) {
-                            const cur = Number(m[1].replace(/,/g, ''))
-                            if (cur >= 0 && cur <= total) {
-                                job.metrics.lastIteration = Math.max(job.metrics.lastIteration ?? 0, cur)
-                                // Map training [0..1] onto the 0.45..0.98 band.
-                                job.progress = 0.45 + 0.53 * (cur / total)
-                                // Surfaced by the frontend as a live iteration counter.
-                                job.detail = `Iteration ${cur.toLocaleString()} / ${total.toLocaleString()}`
-                                saveJob(job, { throttle: true })
-                            }
-                        }
-                    },
-                },
-            )
-        } finally {
-            stopGpuSampler()
-        }
-        // Training done -- drop the iteration counter so later phases don't show it.
-        job.detail = null
-
-        // --- Locate the exported .ply (highest iteration) ---
-        const outDir = path.join(config.jobsDir, outDirName)
-        const rawPly = await highestRawPly(outDir)
-        if (!rawPly) {
-            throw new Error('Training finished but no .ply was exported.')
-        }
-
-        // --- Normalize into the viewer's frame ---
-        // COLMAP reconstructs in an arbitrary world frame (object far from the
-        // origin, arbitrary scale), which loads but can render off-screen in the
-        // viewer. Recenter + rescale into result.ply. The PLY header, including
-        // Brush's "Vertical axis" comment the viewer reads, is preserved verbatim.
-        setPhase(job, 'normalize', 0.99)
-        const finalPly = path.join(outDir, 'result.ply')
-        let normalized = false
-        try {
-            await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
-            job.resultPath = finalPly
-            normalized = true
-        } catch (err) {
-            // Best-effort: if normalization fails, still hand back the raw export.
-            appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
-            job.resultPath = rawPly
-        }
-
-        // Timing / iteration / hardware stats for this .ply, written to
-        // <id>_out/metrics.json and <jobsDir>/metrics.jsonl. Never fails the job.
-        await recordPlyMetrics(job, {
-            rawPly,
-            finalPly: job.resultPath,
-            normalized,
-            log: (line) => appendLog(job, line),
-        })
-
-        // Best-effort copy into the engine's samples folder, so a finished scan can
-        // be opened straight from the native viewer's file browser (main.cpp scans
-        // assets/samples/ for *.ply on launch). Never fails the job -- the result is
-        // still servable from resultPath/the Download button either way.
-        try {
-            fs.mkdirSync(config.engineSamplesDir, { recursive: true })
-            const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
-            fs.copyFileSync(job.resultPath, enginePath)
-            appendLog(job, `Copied to engine samples: ${enginePath}`)
-        } catch (err) {
-            appendLog(job, `Could not copy to engine samples (${err.message}); use Download .ply instead.`)
-        }
-
-        job.phase = 'done'
-        job.progress = 1
-        job.status = 'done'
-        appendLog(job, `\nDone. Result: ${job.resultPath}`)
-        saveJob(job)
+      await run(job, config.colmapBin, [
+        'mapper',
+        '--database_path', dbPath,
+        '--image_path', imagesDir,
+        '--output_path', sparseDir,
+        ...config.colmapStrictMapperArgs,
+      ])
     } catch (err) {
         if (job.cancelled) return // cancelJob already set status/error
         job.status = 'error'
@@ -772,6 +654,132 @@ export async function runPipeline(job) {
         appendLog(job, `\nERROR: ${err.message}`)
         saveJob(job)
     }
+
+    // Mapper writes sparse/0 (sometimes 1,2.. if it splits). Require at least one.
+    const models = fs.existsSync(sparseDir)
+      ? (await fsp.readdir(sparseDir)).filter((d) => /^\d+$/.test(d))
+      : []
+    if (models.length === 0) {
+      throw new Error(NO_MODEL_MESSAGE)
+    }
+    job.metrics.sparseModels = models.length
+
+    // --- Brush: train the gaussian splat ---
+    setPhase(job, 'training', 0.45)
+    const outDirName = `${job.id}_out`
+    const total = config.trainIters
+    // Brush (brush-cli 1.0.0) renders its progress as an interactive bar that is
+    // suppressed when stdout is a pipe, so with default logging it prints NOTHING
+    // for us to parse. Setting RUST_LOG=info makes it emit structured log lines,
+    // several of which carry the current step, e.g.
+    //   brush_train::train] screen_size iter=200 n=176 ...
+    //   brush_cli] Refine iter 401, 243 splats.
+    // These appear roughly every 200 steps -- frequent enough for a live counter.
+    const iterRe = /\biter[= ](\d[\d,]*)/i
+    // Samples VRAM / utilisation for the metrics record (NVIDIA only).
+    const stopGpuSampler = startGpuSampler(job)
+    // With masks, train the background as empty space so the masked-out
+    // surroundings don't leave a haze of splats around the object.
+    const alphaArgs = job.removeBackground && config.brushHasAlphaMode
+      ? ['--alpha-mode', 'transparent']
+      : []
+    try {
+      await run(
+        job,
+        config.brushBin,
+        [
+          job.id, // dataset dir name, relative to cwd (jobsDir)
+          '--max-resolution', String(config.maxResolution),
+          config.brushItersFlag, String(total),
+          '--export-path', `./${outDirName}/`,
+          '--export-name', 'splat_{iter}.ply',
+          '--export-every', String(total),
+          ...alphaArgs,
+        ],
+        {
+          cwd: config.jobsDir,
+          env: { RUST_LOG: 'info' },
+          onData: (line) => {
+            const m = line.match(iterRe)
+            if (m) {
+              const cur = Number(m[1].replace(/,/g, ''))
+              if (cur >= 0 && cur <= total) {
+                job.metrics.lastIteration = Math.max(job.metrics.lastIteration ?? 0, cur)
+                // Map training [0..1] onto the 0.45..0.98 band.
+                job.progress = 0.45 + 0.53 * (cur / total)
+                // Surfaced by the frontend as a live iteration counter.
+                job.detail = `Iteration ${cur.toLocaleString()} / ${total.toLocaleString()}`
+                saveJob(job, { throttle: true })
+              }
+            }
+          },
+        },
+      )
+    } finally {
+      stopGpuSampler()
+    }
+    // Training done -- drop the iteration counter so later phases don't show it.
+    job.detail = null
+
+    // --- Locate the exported .ply (highest iteration) ---
+    const outDir = path.join(config.jobsDir, outDirName)
+    const rawPly = await highestRawPly(outDir)
+    if (!rawPly) {
+      throw new Error('Training finished but no .ply was exported.')
+    }
+
+    // --- Normalize into the viewer's frame ---
+    // COLMAP reconstructs in an arbitrary world frame (object far from the
+    // origin, arbitrary scale), which loads but can render off-screen in the
+    // viewer. Recenter + rescale into result.ply. The PLY header, including
+    // Brush's "Vertical axis" comment the viewer reads, is preserved verbatim.
+    setPhase(job, 'normalize', 0.99)
+    const finalPly = path.join(outDir, 'result.ply')
+    let normalized = false
+    try {
+      await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
+      job.resultPath = finalPly
+      normalized = true
+    } catch (err) {
+      // Best-effort: if normalization fails, still hand back the raw export.
+      appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
+      job.resultPath = rawPly
+    }
+
+    // Timing / iteration / hardware stats for this .ply, written to
+    // <id>_out/metrics.json and <jobsDir>/metrics.jsonl. Never fails the job.
+    await recordPlyMetrics(job, {
+      rawPly,
+      finalPly: job.resultPath,
+      normalized,
+      log: (line) => appendLog(job, line),
+    })
+
+    // Best-effort copy into the engine's samples folder, so a finished scan can
+    // be opened straight from the native viewer's file browser (main.cpp scans
+    // assets/samples/ for *.ply on launch). Never fails the job -- the result is
+    // still servable from resultPath/the Download button either way.
+    try {
+      fs.mkdirSync(config.engineSamplesDir, { recursive: true })
+      const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
+      fs.copyFileSync(job.resultPath, enginePath)
+      appendLog(job, `Copied to engine samples: ${enginePath}`)
+    } catch (err) {
+      appendLog(job, `Could not copy to engine samples (${err.message}); use Download .ply instead.`)
+    }
+
+    job.phase = 'done'
+    job.progress = 1
+    job.status = 'done'
+    appendLog(job, `\nDone. Result: ${job.resultPath}`)
+    saveJob(job)
+  } catch (err) {
+    if (job.cancelled) return // cancelJob already set status/error
+    job.status = 'error'
+    job.error = err.message
+    appendLog(job, `\nERROR: ${err.message}`)
+    saveJob(job)
+  }
 }
 
 // Names Windows won't accept as a filename, with or without an extension.

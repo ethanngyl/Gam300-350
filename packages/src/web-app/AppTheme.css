@@ -746,10 +746,27 @@ html {
     justify-content: center;
 }
 
+/* Picture on a model card (ModelCover.jsx): a photo cropped to fill the
+   card, or a transparent cut-out of the object shown whole. */
+.library-thumb-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+    .library-thumb-image.is-cutout {
+        box-sizing: border-box;
+        padding: 10px;
+        object-fit: contain;
+    }
+
     .library-thumb .forma-badge {
         position: absolute;
         top: 10px;
         right: 10px;
+        z-index: 1; /* above the cover photo */
     }
 
 .library-item-name {
@@ -1195,14 +1212,30 @@ html {
         color: var(--forma-teal-text);
     }
 
-.scene-outliner-child {
-    padding-left: 34px;
-    cursor: default;
+    .scene-outliner-item.is-hidden .scene-outliner-name {
+        opacity: 0.45;
+    }
+
+.scene-outliner-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.scene-outliner-toggle {
-    width: 14px;
-    height: 14px;
+.scene-outliner-status {
+    font-size: 0.6rem;
+    color: var(--forma-text-dim);
+}
+
+    .scene-outliner-status.is-error {
+        color: var(--forma-red);
+    }
+
+.scene-outliner-eye {
+    width: 18px;
+    height: 18px;
     background: none;
     border: none;
     color: inherit;
@@ -1212,6 +1245,16 @@ html {
     justify-content: center;
     cursor: pointer;
     flex: none;
+}
+
+    .scene-outliner-eye[aria-pressed="true"] {
+        opacity: 0.35;
+    }
+
+.scene-outliner-note {
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
 }
 
 .scene-add-library {
@@ -1237,6 +1280,9 @@ html {
 
 .scene-viewport {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     overflow: hidden;
     background: linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-bg);
 }
@@ -1257,47 +1303,47 @@ html {
     color: var(--forma-text-dim);
 }
 
-.scene-view-cube {
-    position: absolute;
-    top: 52px;
-    right: 14px;
-    width: 62px;
-    border: 1px solid var(--forma-border-strong);
-    border-radius: 4px;
-    background: var(--forma-panel);
+/* Holds the splat viewer's canvas (SceneViewport.jsx). */
+.scene-canvas {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.scene-viewport-error {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 8px 0;
-    gap: 10px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.6rem;
-    color: var(--forma-text-dim);
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--forma-red);
 }
 
-.scene-selection {
+.scene-viewport-empty {
     position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 136px;
-    height: 136px;
-    transform: translate(-50%, -50%);
-    border: 1px solid var(--forma-blue);
+    inset: 37px 0 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: var(--forma-text-dim);
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+    pointer-events: none;
 }
 
-.scene-handle {
-    position: absolute;
-    width: 7px;
-    height: 7px;
-    background: var(--forma-blue);
-    transform: translate(-50%, -50%);
-}
+    .scene-viewport-empty button {
+        pointer-events: auto;
+    }
 
 .scene-axes {
+    pointer-events: none;
     position: absolute;
     left: 18px;
     bottom: 18px;
@@ -1330,18 +1376,156 @@ html {
     color: #5a68d4;
 }
 
-.scene-front-button {
-    position: absolute;
-    right: 14px;
-    bottom: 14px;
-    background: var(--forma-bg);
-    border: 1px solid var(--forma-border-strong);
-    color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem;
-    padding: 8px 14px;
-    border-radius: 5px;
+.scene-chip:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
+
+.scene-bar-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 0 4px;
+    background: var(--forma-border-strong);
+}
+
+.scene-chip-danger:hover {
+    border-color: var(--forma-red);
+    color: var(--forma-red);
+}
+
+/* Outliner right-click menu */
+.scene-context-menu {
+    position: fixed;
+    z-index: 60;
+    padding: 4px;
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.scene-context-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--forma-text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.74rem;
+    padding: 7px 10px;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .scene-context-item:hover,
+    .scene-context-item:focus-visible {
+        background: var(--forma-panel-alt);
+        outline: none;
+    }
+
+    .scene-context-item.is-danger:hover,
+    .scene-context-item.is-danger:focus-visible {
+        color: var(--forma-red);
+    }
+
+/* Add from Library picker */
+.scene-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(5, 12, 18, 0.6);
+}
+
+.scene-picker {
+    display: flex;
+    flex-direction: column;
+    width: min(440px, 100%);
+    max-height: min(560px, 100%);
+    background: var(--forma-sidebar);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.scene-picker-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .scene-picker-head .scene-panel-title {
+        border-bottom: none;
+    }
+
+.scene-picker-close {
+    background: none;
+    border: none;
+    color: var(--forma-text-muted);
+    font-size: 1.2rem;
+    padding: 4px 14px;
+    cursor: pointer;
+}
+
+.scene-picker .scene-outliner-search {
+    margin-top: 10px;
+}
+
+.scene-picker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 8px 10px;
+}
+
+.scene-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 5px;
+    color: var(--forma-text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.76rem;
+    padding: 9px 8px;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .scene-picker-item:hover {
+        background: var(--forma-panel-alt);
+    }
+
+.scene-picker-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.scene-picker-meta {
+    font-size: 0.66rem;
+    color: var(--forma-text-dim);
+}
+
+.scene-picker-note {
+    padding: 8px;
+    font-size: 0.74rem;
+    color: var(--forma-text-muted);
+}
+
+    .scene-picker-note.is-error {
+        color: var(--forma-red);
+    }
 
 .scene-inspector {
     border-left: 1px solid var(--forma-border);

@@ -21,6 +21,8 @@ through renderer().
 #include "gfx/Camera.h"
 #include "Manager/InputManager.h"
 
+#include <glm/glm.hpp>
+
 #include <QElapsedTimer>
 #include <QOpenGLWidget>
 #include <QPointF>
@@ -73,6 +75,8 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
+    // Draws the translate gizmo on the selected model and writes drags back to it.
+    void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
     Camera m_camera;
     InputManager m_input;

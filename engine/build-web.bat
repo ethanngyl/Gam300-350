@@ -19,7 +19,7 @@ echo.
 cd /d "%~dp0"
 
 :: Download the Emscripten SDK on first run into Library\emsdk (gitignored).
-:: (Not named EMSDK_*: emsdk activate clears those.) Keep CF_EMSDK_VERSION in sync with the emscripten/emsdk image in the Dockerfile.
+:: (Not named EMSDK_*: emsdk activate clears those.) Keep CF_EMSDK_VERSION in sync with the emscripten/emsdk image in docker/Dockerfile.
 set "CF_EMSDK_VERSION=4.0.10"
 set "CF_EMSDK_DIR=Library\emsdk"
 if not exist "%CF_EMSDK_DIR%\emsdk.bat" (

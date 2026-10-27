@@ -21,6 +21,7 @@
 
 #include <glm/glm.hpp>
 
+#include <future>
 #include <memory>
 #include <vector>
 
@@ -51,6 +52,8 @@ public:
     SplatModel* GetModel(int index);
     //Updates a model
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
+    //Shows or hides a model without removing it; out-of-range indices are ignored
+    void SetModelHidden(int index, bool hidden);
     //Moves model
     void TranslateModel(SplatModel* model, const glm::vec3& delta);
     //View and projection are passed separately because Gaussian mode needs the view-space
@@ -85,20 +88,39 @@ private:
     void DrawGaussian(const glm::mat4& view, const glm::mat4& proj, float viewportWidthPixels, float viewportHeightPixels);
     //Fills the element buffer with splat indices ordered far -> near (only re-sorts if needed)
     void SortSplatsBackToFront(const glm::mat4& view);
+    //Computes the depth order into m_pendingOrder from the m_pending* snapshot, no GL (worker thread safe)
+    void BuildSortOrder();
+    //Publishes m_pendingOrder to the GPU and records the snapshot as the last sort, main thread only
+    void ApplyPendingSort();
 
     RenderMode m_renderMode = RenderMode::PointCloud;
 
     //Gaussian sort cache, lets us skip the sort while nothing moved
     bool m_sortDirty = true;
-    glm::mat4 m_lastSortView = glm::mat4(1.0f);
+    glm::vec3 m_lastSortPos = glm::vec3(0.0f);                //Camera position at the last sort
+    glm::vec3 m_lastSortForward = glm::vec3(0.0f, 0.0f, -1.0f); //Camera forward at the last sort
+    float m_lastSortRange = 1.0f;                             //Depth range (max - min) at the last sort
     std::vector<glm::mat4> m_lastSortTransforms;
     std::vector<float> m_sortKeys;          //View-space depth per splat
     std::vector<unsigned int> m_sortOrder;  //Splat indices, far to near
+    std::vector<unsigned int> m_sortBucketCounts; //Counting sort scratch
+
+    //Background sort: the snapshot the worker sorts for and the result it writes.
+    //The worker only touches these, m_sortKeys and m_sortBucketCounts (and reads m_combined).
+    std::future<void> m_sortFuture;
+    std::vector<unsigned int> m_pendingOrder;
+    glm::mat4 m_pendingView = glm::mat4(1.0f);
+    std::vector<glm::mat4> m_pendingTransforms;
+    glm::vec3 m_pendingPos = glm::vec3(0.0f);
+    glm::vec3 m_pendingForward = glm::vec3(0.0f, 0.0f, -1.0f);
+    float m_pendingRange = 1.0f;
 
     //Sorting Vars
     static constexpr float kSortBudgetMs = 4.0f; //Alloclated sorting time
     static constexpr int kDisableAfterFrames = 3; //How many frames overbudget to disable
     static constexpr int kReEnableAfterFrames = 120; //How many frames to reenable sorting
+    static constexpr float kSortRotationCos = 0.9998f; //Re-sort once the camera turns more than ~1 degree
+    static constexpr float kSortMoveFraction = 0.01f;  //Re-sort once the camera moves 1% of the scene depth
     bool m_sortEnabled = false;
     int m_framesOverBudget = 0;
     int m_framesUnderBudget = 0;
@@ -116,7 +138,6 @@ private:
     unsigned int m_quadVbo = 0;      //The 4 corners of the unit quad
     unsigned int m_orderVbo = 0;     //Per-instance splat index, far -> near
     unsigned int m_splatTexture = 0; //RGBA32F copy of m_combined
-    std::vector<unsigned int> m_sortBucketCounts; //Counting sort scratch
 #endif
 
     size_t m_totalSplatCount = 0; //Number of models

@@ -40,13 +40,13 @@ Application Installations:
 
 ## Run with Docker
 Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
-- Open a terminal in the repo root
-- Start: `docker compose up -d --build`, then open http://localhost:5005
-- Logs: `docker compose logs -f app`
-- Public link for teammates: `docker compose --profile tunnel up -d`, the trycloudflare.com URL is printed in `docker compose logs tunnel`
-- Stop: `docker compose down` (uploaded jobs and results are kept in a Docker volume)
-- NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
-- Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker-compose.yml for quick tests
+- Docker files live in the `docker/` folder. Open a terminal in the repo root
+- Start: `docker compose -f docker/docker-compose.yml up -d --build`, then open http://localhost:5005
+- Logs: `docker compose -f docker/docker-compose.yml logs -f app`
+- Public link for teammates: `docker compose -f docker/docker-compose.yml --profile tunnel up -d`, the trycloudflare.com URL is printed in `docker compose -f docker/docker-compose.yml logs tunnel`
+- Stop: `docker compose -f docker/docker-compose.yml down` (uploaded jobs and results are kept in a Docker volume)
+- NVIDIA GPU: `docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up -d --build`
+- Without an NVIDIA GPU (e.g. AMD cards) everything runs on the CPU and Brush training is very slow. Lower `TRAIN_ITERS` in docker/docker-compose.yml for quick tests
 - The engine's desktop editor is not included (build it natively as below), but its renderer is: the image compiles it to WebAssembly for the web app's viewer
 
 ## How to Run Engine
@@ -76,17 +76,35 @@ The web app's 3D viewer can render with the engine's own splat renderer (`engine
 - Web-specific code: `engine/web/` (entry point + CMake), and the `CODEFINE_GLES` blocks in `SplatRenderer.cpp` / `Shader.cpp` (WebGL2 has no geometry shaders, so Gaussian mode draws instanced quads there)
 
 ## How to use Engine
-The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), and **Assets / Console / Audio** tabs (bottom). Panels can be dragged, tabbed, floated or hidden from the Window menu; the layout is remembered between runs (Window > Reset Layout restores the default).
+The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), and **Assets / My Models / Console / Audio** tabs (bottom). Panels can be dragged, tabbed, floated or hidden from the Window menu; the layout is remembered between runs (Window > Reset Layout restores the default).
 - Import a splat: double-click a .ply in the **Assets** panel, use File > Import Splat (Ctrl+O), drag .ply files onto the window, or pass them on the command line (`Codefine.exe model.ply`). Large files load in the background.
 - Select a model in the **Scene** panel; edit its name and position in the **Inspector**. F2 renames, Delete removes it from the scene (the file is untouched).
 - Camera: right-drag to orbit, left-drag to pan, scroll to zoom, Home to recenter. With the viewport focused, WASD/Arrow keys nudge the selected model and Esc deselects.
 - Switch between Point Cloud and Gaussian Splat rendering from the toolbar (Ctrl+1 / Ctrl+2).
+- Export: File > Export (Ctrl+E), or right-click a model in the **Scene** panel, converts the selected model (or the whole scene) to another format. Trimming and position changes are included.
+  - .glb (glTF), .obj, .ply: points, or a mesh with one coloured ellipsoid per splat, for Blender, Unity, Unreal, MeshLab, etc.
+  - .stl: mesh without colour, for 3D printing / CAD
+  - Gaussian splat .ply or .splat: stays a splat, for Codefine and other splat viewers (view-dependent colour is not kept)
+  - Mesh exports get large: raise "Min opacity" to drop faint haze splats, and use Low mesh detail for big scans
 - Engine output (`std::cout`/`std::cerr` and Qt messages) appears in the **Console** panel. Help > Controls lists every shortcut.
+
+## Signing in to the Engine
+The engine uses the same accounts as the web app, so models made through the web app can be opened in the desktop editor.
+- Start the backend first (`start.bat` / `start.sh` / Docker), then in the engine go to Account > Sign In, or click Sign In in the **My Models** tab
+- Server is the web app's address, `http://localhost:5005` by default. Point it at the machine that processed the models: with `AUTH_MODE=client`, accounts are on the VM but each machine keeps its own models
+- Signing in to another machine over plain `http://` sends your password unencrypted, so the engine asks before doing it. Use an `https://` address where there is one
+- **My Models** lists your models; double-click a finished one (or select it and click Import) to download it and load it into the scene. Unchanged models load from a local copy instead of downloading again
+- A normal account only sees the models it uploaded. An **admin** account sees every user's models, including old ones with no recorded owner. The backend enforces this, not the engine
+- "Remember me" keeps you signed in for 7 days. Only the session is saved (in the engine's settings), never the password
+- Sign Out deletes that account's downloaded models from the PC (`%APPDATA%/CoDefine/Codefine Engine/remote-models`), so the next person can't open them
+- Local files are not affected: the **Assets** panel and File > Import still open any .ply on disk. Note the backend also copies every finished model into `engine/assets/samples`, so on the machine running the backend, the Assets panel shows every user's models
+- Code: `engine/src/net/BackendClient` (sign-in, model list, downloads), `engine/src/ui/LoginDialog` and `engine/src/ui/RemoteModelsPanel`. The engine signs in with the same session cookie as the browser, so it needs no engine-specific backend routes
 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
 - Capable of generating a downloadable .ply file from uploaded images
 - Youtube frame image extractor, images per frame can be modified
+- Accounts shared by the web app and the desktop engine: users only see, rename and delete their own models; admins can access all of them
 
 ## Current Issues
 -  The model used for training is taxing and requires a strong GPU, the model training is reliant on a CUDA GPU meaning the host system will always need to remain online, other options are being explored at the moment.

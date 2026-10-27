@@ -35,6 +35,8 @@ import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
+import { useUndoableState } from './useUndoableState.js';
+import { NEW_SCENE_INFO } from './SceneStorage.js';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
@@ -122,6 +124,11 @@ function App() {
     const [photosForCapture, setPhotosForCapture] = useState(null);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    // Models placed in the Scene Builder, with their undo history, and the
+    // scene's id, name and settings. Kept here so the scene survives
+    // switching tabs (each page remounts when its tab opens).
+    const scene = useUndoableState([]);
+    const [sceneInfo, setSceneInfo] = useState(NEW_SCENE_INFO);
 
     function handleLogin(user) {
         saveUser(user);
@@ -137,6 +144,8 @@ function App() {
         setCurrentUser(null);
         setScreen(null);
         setIsMenuOpen(false);
+        scene.reset([]);
+        setSceneInfo(NEW_SCENE_INFO);
         setActiveTab('home');
     }
 
@@ -358,7 +367,17 @@ function App() {
                         />
                     )}
                     {activeTab === 'scene' && (
-                        <SceneBuilderScreen />
+                        <SceneBuilderScreen
+                            objects={scene.value}
+                            onObjectsChange={scene.set}
+                            onObjectsReset={scene.reset}
+                            onUndo={scene.undo}
+                            onRedo={scene.redo}
+                            canUndo={scene.canUndo}
+                            canRedo={scene.canRedo}
+                            sceneInfo={sceneInfo}
+                            onSceneInfoChange={setSceneInfo}
+                        />
                     )}
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
