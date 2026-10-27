@@ -122,7 +122,7 @@ MainWindow::MainWindow() {
     m_defaultLayout = saveState(kLayoutVersion);
     restoreSettings();
 
-    // A finished gizmo drag becomes one undo step.
+    //A finished gizmo drag is one undo step
     m_viewport->onTransformEdited = [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after));
     };
@@ -790,7 +790,7 @@ void MainWindow::deleteSelectedModel() {
     const QString name = QString::fromStdString(renderer->GetModelName(index));
 
     m_inspector->setModel(nullptr); // drop the pointer before the model is freed
-    m_undo.clear(); // commands hold model pointers; deleting is not undoable yet
+    m_undo.clear(); //For now clear stack if delete
     renderer->RemoveModel(index);
     refreshScenePanels();
 

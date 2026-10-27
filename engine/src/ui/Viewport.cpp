@@ -166,9 +166,10 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
 
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
     if (!model || model->GetIsHidden()) {
-        //Nothing to drag, so forget any drag that was in progress
+        //Nothing dragged, reset drag vars
         m_gizmoWasUsing = false;
         m_dragModel = nullptr;
+        m_dragBefore = glm::mat4(1.0f);
         return;
     }
 
@@ -183,6 +184,7 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     glm::mat4 transform = original;
 
     //ImGUIzmo method to move(translate) the transform values around
+    //ImGUIzmo method to move(translate) the transform values around
     //view, projection, operation type (translate), local/world, transform value
     if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE,
                              ImGuizmo::WORLD, glm::value_ptr(transform))) 
@@ -191,7 +193,7 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         model->SetTransform(transform);
     }
 
-    //A whole drag is one undo step: remember where it started and report it once it ends.
+    //A whole drag is one undo ste,: remember where it started and report it once it ends
     //The model is moved live during the drag, only the finished drag goes to the undo stack.
     const bool isUsing = ImGuizmo::IsUsing();
     if (isUsing && !m_gizmoWasUsing) {

@@ -96,8 +96,10 @@ private:
     bool m_rightHeld = false;
     QPointF m_lastMousePos;
 
-    // Gizmo drag in progress: the model and where it started, for onTransformEdited.
+    //Gizmo drag in progressthe model and where it started, for onTransformEdited.
     bool m_gizmoWasUsing = false;
+    //Model being dragged
     SplatModel* m_dragModel = nullptr;
+    //Orginal location of dragged model
     glm::mat4 m_dragBefore = glm::mat4(1.0f);
 };
