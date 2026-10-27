@@ -73,7 +73,7 @@
     }
 
 .scene-builder-unsaved {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     color: var(--forma-coral);
 }
@@ -123,8 +123,8 @@
 
     .scene-builder-tool.is-active {
         color: var(--forma-teal-text);
-        background: rgba(63, 152, 173, 0.18);
-        border-color: rgba(63, 152, 173, 0.45);
+        background: rgba(var(--forma-accent-rgb), 0.18);
+        border-color: rgba(var(--forma-accent-rgb), 0.45);
     }
 
     .scene-builder-tool:disabled {
@@ -200,7 +200,7 @@
         right: 0;
         top: 50%;
         height: 1px;
-        background: rgba(240, 111, 96, 0.55);
+        background: rgba(var(--forma-red-rgb), 0.55);
     }
 
     .scene-builder-map-axis.is-z {
@@ -208,7 +208,7 @@
         bottom: 0;
         left: 50%;
         width: 1px;
-        background: rgba(63, 152, 173, 0.6);
+        background: rgba(var(--forma-accent-rgb), 0.6);
     }
 
 .scene-builder-marker {
@@ -317,7 +317,7 @@
 }
 
     .scene-builder-outliner-item.is-selected {
-        background: rgba(63, 152, 173, 0.18);
+        background: rgba(var(--forma-accent-rgb), 0.18);
     }
 
 .scene-builder-outliner-name {
@@ -400,7 +400,7 @@
 }
 
     .scene-builder-axis-field span {
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.66rem;
         color: var(--forma-text-dim);
     }
@@ -513,7 +513,7 @@
 
         .scene-builder-segmented button.is-active {
             background: var(--forma-blue);
-            color: #f4fbfd;
+            color: var(--forma-on-accent);
         }
 
 .scene-builder-note {
@@ -530,7 +530,7 @@
     inset: 0;
     z-index: 50;
     display: flex;
-    background: rgba(5, 12, 20, 0.7);
+    background: rgba(var(--forma-backdrop-rgb), 0.7);
 }
 
 .scene-builder-dialog {

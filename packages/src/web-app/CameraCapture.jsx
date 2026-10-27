@@ -58,9 +58,20 @@ function createBatchPhoto(file) {
     };
 }
 
+// addedFiles: photos chosen with the sidebar's Add photos button before
+// this page opened; they start in the batch. While the page is open,
+// onRegisterAddFiles(handler) hands App a function that adds more.
 // initialPhotos: { files, removeBackground, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
-function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, initialPhotos = null }) {
+function CameraCapture({
+    onBatchReady,
+    onReviewPhotos,
+    onBack,
+    uploadError,
+    initialPhotos = null,
+    addedFiles = null,
+    onRegisterAddFiles = null,
+}) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -76,7 +87,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     const [cameraRequestCount, setCameraRequestCount] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [photos, setPhotos] = useState(() =>
-        (initialPhotos?.files ?? []).filter((file) => file.type.startsWith('image/')).map(createBatchPhoto)
+        [...(initialPhotos?.files ?? []), ...(addedFiles ?? [])]
+            .filter((file) => file.type.startsWith('image/'))
+            .map(createBatchPhoto)
     );
 
     const [captureFeedback, setCaptureFeedback] = useState(null);
@@ -201,6 +214,20 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
 
         return newPhotos.length;
     }, []);
+
+    // While this page is open, the sidebar's Add photos button adds to
+    // this batch through the handler registered here.
+    useEffect(() => {
+        if (!onRegisterAddFiles) return;
+        onRegisterAddFiles((files) => {
+            const addedCount = addFiles(files);
+            if (addedCount > 0) {
+                setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
+                setTimeout(() => setUploadFeedback(null), 2000);
+            }
+        });
+        return () => onRegisterAddFiles(null);
+    }, [onRegisterAddFiles, addFiles]);
 
     const capturePhoto = useCallback((showFeedback = true) => {
         const video = videoRef.current;

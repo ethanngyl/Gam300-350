@@ -8,18 +8,20 @@
 \brief
 Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
-dashboard (top nav + sidebar) with these pages inside it: Home, Library,
-Photo Editor, Scene Builder, Model Viewer, YouTube Extractor, Capture and
-Account. YouTube Extractor is in the top nav and sidebar; Capture opens
-from the sidebar's New model button, and its "Review photos first" hands
-the batch to the Photo Editor.
+dashboard (top nav + a collapsible sidebar, laid out like the Genesis
+wireframe) with these pages inside it: Home, Library, Photo Editor, Scene
+Builder, Model Viewer, YouTube Extractor, Capture and Account. Capture
+opens from the sidebar's New model button, or from Add photos with the
+chosen photos already in the batch; its "Review photos first" hands the
+batch to the Photo Editor. The sidebar's collapsed state is remembered in
+localStorage.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
 batch to the backend to kick off reconstruction.
 **************************************************************************/
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
 import SplatViewer from './SplatViewer.jsx';
@@ -42,6 +44,16 @@ import './AppTheme.css';
 import './App.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
+const SIDEBAR_COLLAPSED_KEY = 'genesis-sidebar-collapsed';
+
+// Whether the sidebar was left collapsed last time (wider screens only).
+function loadSidebarCollapsed() {
+    try {
+        return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
 
 // Reads the saved session once on first render. Storage can be blocked
 // (private windows, site data off), so every access is wrapped.
@@ -122,8 +134,30 @@ function App() {
     // Capture reopens with those photos: { files, removeBackground, trainIters }.
     // Cleared on any other navigation.
     const [photosForCapture, setPhotosForCapture] = useState(null);
+    // Photos chosen with the sidebar's Add photos button, handed to the
+    // capture page when it opens. Cleared on any other navigation.
+    const [photosToAdd, setPhotosToAdd] = useState(null);
+    // While the capture page is open, its function for adding more photos
+    // to the batch (see CameraCapture's onRegisterAddFiles).
+    const addToCaptureBatchRef = useRef(null);
+    const registerCaptureAddFiles = useCallback((addFilesToBatch) => {
+        addToCaptureBatchRef.current = addFilesToBatch;
+    }, []);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    // Whether the sidebar shows icons only (wider screens only).
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(loadSidebarCollapsed);
+
+    function toggleSidebarCollapsed() {
+        setIsSidebarCollapsed((wasCollapsed) => {
+            try {
+                window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(!wasCollapsed));
+            } catch {
+                // Storage unavailable: the choice just isn't remembered.
+            }
+            return !wasCollapsed;
+        });
+    }
     // Models placed in the Scene Builder, with their undo history, and the
     // scene's id, name and settings. Kept here so the scene survives
     // switching tabs (each page remounts when its tab opens).
@@ -156,7 +190,19 @@ function App() {
         setUploadError(null);
         setPhotosForEditor(null);
         setPhotosForCapture(null);
+        setPhotosToAdd(null);
         setActiveTab(tab);
+    }
+
+    // Adds the photos chosen with the sidebar's Add photos button to the
+    // capture page's batch, opening the page first if needed.
+    function addPhotosToCapture(files) {
+        if (activeTab === 'capture' && addToCaptureBatchRef.current) {
+            addToCaptureBatchRef.current(files);
+            return;
+        }
+        goToTab('capture');
+        setPhotosToAdd(files);
     }
 
     // Opens the Photo Editor with the photos from Camera Capture loaded.
@@ -310,7 +356,7 @@ function App() {
     }
 
     return (
-        <div className="forma-app genesis-shell">
+        <div className={isSidebarCollapsed ? 'forma-app genesis-shell is-sidebar-collapsed' : 'forma-app genesis-shell'}>
             <TopNav
                 activeTab={activeTab}
                 onTabChange={goToTab}
@@ -333,10 +379,14 @@ function App() {
 
                 <Sidebar
                     activeTab={activeTab}
-                    librarySubTab={librarySubTab}
                     onNavigate={goToTab}
-                    onOpenLibrary={openLibrary}
                     onNewModel={() => goToTab('capture')}
+                    onAddPhotos={addPhotosToCapture}
+                    user={currentUser}
+                    onOpenAccount={() => goToTab('account')}
+                    onSignOut={handleSignOut}
+                    isCollapsed={isSidebarCollapsed}
+                    onToggleCollapsed={toggleSidebarCollapsed}
                     isOpen={isMenuOpen}
                     onClose={() => setIsMenuOpen(false)}
                 />
@@ -394,6 +444,8 @@ function App() {
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
                             initialPhotos={photosForCapture}
+                            addedFiles={photosToAdd}
+                            onRegisterAddFiles={registerCaptureAddFiles}
                         />
                     )}
                     {activeTab === 'account' && (
