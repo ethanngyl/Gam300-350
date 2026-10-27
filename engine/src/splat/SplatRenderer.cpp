@@ -475,6 +475,10 @@ SplatRenderer::SplatRenderer() {
 }
 
 SplatRenderer::~SplatRenderer() {
+#ifndef CODEFINE_GLES
+    //The worker thread reads our members, wait for it before anything is torn down
+    if (m_sortFuture.valid()) m_sortFuture.get();
+#endif
     m_models.clear(); //Removed unique ptrs
 #ifdef CODEFINE_GLES
     //The web build can tear a viewer down and create another in the same context
@@ -523,6 +527,14 @@ SplatModel* SplatRenderer::GetModel(int index) {
 void SplatRenderer::UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats) {
     model->SetSplat(splats);
     m_modified = true;
+}
+
+void SplatRenderer::SetModelHidden(int index, bool hidden) {
+    SplatModel* model = GetModel(index);
+    if (!model || model->GetIsHidden() == hidden)
+        return;
+    model->SetHidden(hidden);
+    m_modified = true; //Hidden models are left out of the combined buffer
 }
 
 void SplatRenderer::TranslateModel(SplatModel* model, const glm::vec3& delta) {
@@ -592,19 +604,57 @@ void SplatRenderer::DrawGaussian(const glm::mat4& view, const glm::mat4& proj,
 }
 
 void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
+#ifndef CODEFINE_GLES
+    //Pick up a finished background sort. While one is still running keep drawing the old order.
+    if (m_sortFuture.valid()) {
+        if (m_sortFuture.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        m_sortFuture.get();
+        ApplyPendingSort();
+    }
+#endif
+
     std::vector<glm::mat4> transforms;
     transforms.reserve(m_models.size());
     for (const auto& model : m_models) transforms.push_back(model->GetTransform());
 
-    //The order only depends on the view the model transforms and the splat set
-    if (!m_sortDirty && view == m_lastSortView && transforms == m_lastSortTransforms) return;
+    //The order only depends on the camera, the model transforms and the splat set
+    //Small camera changes barely alter order, so only re-sort past a certain threshold
+    const glm::mat4 invView = glm::inverse(view);
+    const glm::vec3 camPos = glm::vec3(invView[3]);
+    const glm::vec3 camForward = -glm::vec3(invView[2]);
+    if (!m_sortDirty && transforms == m_lastSortTransforms) {
+        const bool rotated = glm::dot(camForward, m_lastSortForward) < kSortRotationCos;
+        const bool moved = glm::length(camPos - m_lastSortPos) > kSortMoveFraction * m_lastSortRange;
+        if (!rotated && !moved) return;
+    }
 
+    //Snapshot the inputs so the sort never reads state the main thread is changing
+    m_pendingView = view;
+    m_pendingTransforms = std::move(transforms);
+    m_pendingPos = camPos;
+    m_pendingForward = camForward;
+
+#ifndef CODEFINE_GLES
+    //Normally sort on a worker thread. The first sort after the splat set changed runs
+    //right now, otherwise the draw would use an index buffer for the old splat set.
+    if (!m_sortDirty) {
+        m_sortFuture = std::async(std::launch::async, [this] { BuildSortOrder(); });
+        return;
+    }
+#endif
+    BuildSortOrder();
+    ApplyPendingSort();
+}
+
+//CPU only (no GL calls), safe to run on a worker thread.
+//Reads m_combined and the m_pending* snapshot, writes m_pendingOrder and m_pendingRange.
+void SplatRenderer::BuildSortOrder() {
     //View-space z of a splat = row 2 of (view * model) dot (position, 1).
     //Computed once per model, then it is a single dot product per splat.
     std::vector<glm::vec4> depthRows;
-    depthRows.reserve(transforms.size());
-    for (const glm::mat4& m : transforms) {
-        glm::mat4 mv = view * m;
+    depthRows.reserve(m_pendingTransforms.size());
+    for (const glm::mat4& m : m_pendingTransforms) {
+        glm::mat4 mv = m_pendingView * m;
         depthRows.emplace_back(mv[0][2], mv[1][2], mv[2][2], mv[3][2]);
     }
 
@@ -615,46 +665,77 @@ void SplatRenderer::SortSplatsBackToFront(const glm::mat4& view) {
     }
 
     //Camera looks down -z, so farther = more negative z = comes first
-    m_sortOrder.resize(m_totalSplatCount);
-#ifdef CODEFINE_GLES
-    //Single-threaded WebAssembly is too slow for a comparison sort of millions of splats
-    //every time the camera moves, so use a linear-time counting sort on 16-bit depth buckets.
-    //Splats closer together than 1/65536 of the scene depth may blend in either order.
+    m_pendingOrder.resize(m_totalSplatCount);
+
+    //Comparison sort too slow for this many splats
+    //Instead it has 3 passes O(n + 65536 + n) = O (n) instead of std::sort O(n logn)
+    //1st Pass (Count): Modulo each depth by 65536 (16 bits), place it into a bucket based onthe result
+    //2nd Pass (Prefix): Alloclate space for each bucket slot in array, e.g.
+    // Bucket 0 has 2 items, it gets slots 0 - 1
+    // Bucket 1 has 5 items, it gets slots 2 - 6
+    // etc.
+    //3rd Pass (Scatter): Iterate through the splat list and place each splat into an empty space alloclated to the bucket, e.g.
+    //  Splat 5 & 77 belongs to bucket 0, Splat 6, 11 & 33 belong to bucket 1
+    // m_sortOrder = [5, 77, 6, 11, 33, ...]
+
+    m_pendingRange = 1.0f;
+
+    //Skip if no splats somehow
     if (m_totalSplatCount > 0) {
+        //Returns min and max values
         auto [minIt, maxIt] = std::minmax_element(m_sortKeys.begin(), m_sortKeys.end());
+        //Min value
         const float minKey = *minIt;
+        //Range of min to max value
         const float range = *maxIt - minKey;
+        m_pendingRange = range;
+        //Number of buckets (1u bitshifted 16 = 16bits = 65536)
         constexpr unsigned int kBuckets = 1u << 16;
+        //Scale factor, convert depth into nunmber, if range is 0, move to bucket 1 (do not divide by 0)
         const float toBucket = range > 0.0f ? (kBuckets - 1) / range : 0.0f;
 
+        //Pass 1: Count
         m_sortBucketCounts.assign(kBuckets + 1, 0u);
+        //Interation 1, compute bucket sizes
         for (float key : m_sortKeys)
             ++m_sortBucketCounts[static_cast<unsigned int>((key - minKey) * toBucket) + 1];
-        for (unsigned int b = 1; b <= kBuckets; ++b)
-            m_sortBucketCounts[b] += m_sortBucketCounts[b - 1]; //counts[b] = first slot of bucket b
+
+        //Pass 2: Prefix
+        //Shift by +1, each slot is the sum of the slost behind and itself
+        //(Alloclating space for each bucket slot)
+        for (unsigned int bSlot = 1; bSlot <= kBuckets; ++bSlot)
+            m_sortBucketCounts[bSlot] += m_sortBucketCounts[bSlot - 1]; //counts[bSlot] = first slot of bucket bSlot
+
+        //Pass 3: Scatter
+        //Put each splat into their next open bucket slot sequentalldept
         for (size_t i = 0; i < m_totalSplatCount; ++i) {
-            unsigned int bucket = static_cast<unsigned int>((m_sortKeys[i] - minKey) * toBucket);
-            m_sortOrder[m_sortBucketCounts[bucket]++] = static_cast<unsigned int>(i);
+            unsigned int bucket = static_cast<unsigned int>((m_sortKeys[i] - minKey) * toBucket); //Calculate bucket
+            m_pendingOrder[m_sortBucketCounts[bucket]++] = static_cast<unsigned int>(i); //Add into bucket slot
         }
     }
+}
 
+//Main thread only (makes GL calls). Publishes the finished sort and records what it was for.
+void SplatRenderer::ApplyPendingSort() {
+    m_sortOrder.swap(m_pendingOrder);
+
+#ifdef CODEFINE_GLES
     //Per-instance splat index buffer read by the quad VAO
     glBindBuffer(GL_ARRAY_BUFFER, m_orderVbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
         static_cast<GLsizeiptr>(m_sortOrder.size() * sizeof(unsigned int)), m_sortOrder.data());
 #else
-    std::iota(m_sortOrder.begin(), m_sortOrder.end(), 0u);
-    std::sort(m_sortOrder.begin(), m_sortOrder.end(),
-        [this](unsigned int a, unsigned int b) { return m_sortKeys[a] < m_sortKeys[b]; });
-
     //The VAO is bound by caller, this updates its element buffer
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
         static_cast<GLsizeiptr>(m_sortOrder.size() * sizeof(unsigned int)), m_sortOrder.data());
 #endif
 
-    m_lastSortView = view;
-    m_lastSortTransforms = std::move(transforms);
+    //Set sorted values
+    m_lastSortPos = m_pendingPos;
+    m_lastSortForward = m_pendingForward;
+    m_lastSortRange = m_pendingRange;
+    m_lastSortTransforms = m_pendingTransforms;
     m_sortDirty = false;
 }
 
@@ -797,9 +878,15 @@ void SplatRenderer::NudgeSplatRight(InputManager& /*manager*/, InputManager::INP
 
 void SplatRenderer::RebuildCombinedBuffer()
 {
+#ifndef CODEFINE_GLES
+    //A background sort reads m_combined, let it finish and drop its result (the splat set is changing)
+    if (m_sortFuture.valid()) m_sortFuture.get();
+#endif
     m_combined.clear();
 
     for (size_t modelIdx = 0; modelIdx < m_models.size(); ++modelIdx) {
+        //Skipped, but modelIdx stays the model's slot in the transform array
+        if (m_models[modelIdx]->GetIsHidden()) continue;
         const auto& splats = m_models[modelIdx]->splats();
         //Copy, about to mutate modelId
         for (SplatVertex v : splats) { 

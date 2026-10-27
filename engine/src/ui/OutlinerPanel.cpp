@@ -26,6 +26,7 @@ namespace {
 
     // Role under which each row stashes its renderer model index.
     constexpr int kIndexRole = Qt::UserRole;
+    constexpr int kHiddenRole = Qt::UserRole + 1;
 }
 
 OutlinerPanel::OutlinerPanel(QWidget* parent)
@@ -86,8 +87,12 @@ OutlinerPanel::OutlinerPanel(QWidget* parent)
         m_tree->setCurrentItem(item);
         const int index = item->data(kNameColumn, kIndexRole).toInt();
 
+        const bool hidden = item->data(kNameColumn, kHiddenRole).toBool();
+
         QMenu menu(this);
         menu.addAction("Rename", this, [this] { editSelectedName(); });
+        menu.addAction(hidden ? "Show" : "Hide", this, [this, index] { emit toggleHiddenRequested(index); });
+        menu.addAction("Export...", this, [this, index] { emit exportRequested(index); });
         menu.addSeparator();
         menu.addAction("Delete", this, [this, index] { emit deleteRequested(index); });
         menu.exec(m_tree->viewport()->mapToGlobal(pos));
@@ -107,6 +112,20 @@ void OutlinerPanel::rebuild(SplatRenderer& renderer) {
         item->setText(kSplatsColumn, locale.toString(static_cast<qulonglong>(renderer.GetSplatCount(i))));
         item->setTextAlignment(kSplatsColumn, Qt::AlignRight | Qt::AlignVCenter);
         item->setFlags(item->flags() | Qt::ItemIsEditable);
+
+        // Hidden models stay listed, drawn greyed out and in italics.
+        const SplatModel* model = renderer.GetModel(i);
+        const bool hidden = model && model->GetIsHidden();
+        item->setData(kNameColumn, kHiddenRole, hidden);
+        if (hidden) {
+            QFont font = item->font(kNameColumn);
+            font.setItalic(true);
+            for (int column : { int(kNameColumn), int(kSplatsColumn) }) {
+                item->setFont(column, font);
+                item->setForeground(column, palette().color(QPalette::Disabled, QPalette::Text));
+            }
+            item->setToolTip(kNameColumn, "Hidden - right-click > Show, or press Ctrl+H");
+        }
         if (renderer.GetSelectedModel() == i) {
             item->setSelected(true);
             m_tree->setCurrentItem(item);

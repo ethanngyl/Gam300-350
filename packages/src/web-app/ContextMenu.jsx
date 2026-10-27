@@ -19,6 +19,7 @@ items: [{ label, icon, danger, onSelect }]
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icons.jsx';
+import { playSound } from '../audio/Audio.js';
 
 const EDGE_GAP = 8;
 
@@ -73,6 +74,7 @@ function ContextMenu({ x, y, items, onClose }) {
                     role="menuitem"
                     className={item.danger ? 'context-menu-item is-danger' : 'context-menu-item'}
                     onClick={() => {
+                        playSound('tap');
                         onClose();
                         item.onSelect();
                     }}

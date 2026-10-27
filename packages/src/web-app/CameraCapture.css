@@ -196,14 +196,32 @@
     background: var(--forma-coral);
     border-color: var(--forma-coral);
     color: #3a1c16;
-    padding: 11px 22px;
 }
 
-    .capture-page .capture-btn:hover:not(:disabled) {
-        background: var(--forma-coral);
-        border-color: var(--forma-coral);
-        filter: brightness(1.08);
+    /* While auto-capture runs, the button turns into an outlined Stop. */
+    .capture-page .capture-btn.is-capturing {
+        background: transparent;
+        color: var(--forma-coral);
     }
+
+/* Keyboard hint on the capture button (shown from tablet width up). */
+.capture-key {
+    display: none;
+    margin-left: 4px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.64rem;
+    font-weight: 500;
+    opacity: 0.7;
+}
+
+.capture-page .capture-btn:hover:not(:disabled) {
+    background: var(--forma-coral);
+    border-color: var(--forma-coral);
+    filter: brightness(1.08);
+}
 
 .capture-auto-controls {
     display: flex;
@@ -449,9 +467,14 @@
         padding: 7px 16px;
     }
 
+    .capture-page .capture-btn,
     .capture-auto-controls > .forma-btn,
     .capture-auto-status {
         flex: none;
+    }
+
+    .capture-key {
+        display: inline;
     }
 
     .capture-batch {
@@ -476,3 +499,47 @@
 .capture-batch .capture-library-btn {
     justify-content: center;
 }
+/* ---------- Photo checks and Review photos first ---------- */
+
+.capture-thumb.has-issue {
+    outline: 2px solid var(--forma-coral);
+    outline-offset: -2px;
+}
+
+.capture-issues {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--forma-text);
+    background: rgba(244, 145, 123, 0.12);
+    border: 1px solid rgba(244, 145, 123, 0.4);
+}
+
+    .capture-issues svg {
+        flex: none;
+        margin-top: 2px;
+        color: var(--forma-coral);
+    }
+
+.capture-checking {
+    margin: 0 0 10px;
+    font-size: 0.78rem;
+    color: var(--forma-text-muted);
+}
+
+.capture-batch .batch-review-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 11px;
+    margin-bottom: 8px;
+}
+
+    .capture-batch .batch-review-btn.is-suggested {
+        border-color: var(--forma-coral);
+        color: var(--forma-heading);
+    }

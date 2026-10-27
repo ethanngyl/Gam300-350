@@ -9,20 +9,27 @@
 Implements MainWindow, the editor shell: builds the menus, toolbar, status
 bar and dock panels around the Viewport; routes scene commands (import,
 select, rename, delete, render mode) to the SplatRenderer and keeps the
-panels in sync with it; loads .ply files on a worker thread so the UI stays
+panels in sync with it; wires the Account menu and My Models panel to
+the backend; loads .ply files on a worker thread so the UI stays
 responsive; and saves/restores the layout and preferences via QSettings.
 **************************************************************************/
 #include "ui/Viewport.h"
 #include "ui/MainWindow.h"
 
+#include "net/BackendClient.h"
+#include "splat/SplatExporter.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
 #include "splat/SplatTrimmer.h"
 #include "ui/AssetBrowserPanel.h"
 #include "ui/AudioPanel.h"
 #include "ui/ConsolePanel.h"
+#include "ui/ExportDialog.h"
 #include "ui/InspectorPanel.h"
+#include "ui/LoginDialog.h"
 #include "ui/OutlinerPanel.h"
+#include "ui/RemoteModelsPanel.h"
+#include "ui/TrimDialog.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -62,7 +69,7 @@ namespace {
 
     // Bump when docks are added/removed/renamed so a stale saved layout is
     // ignored instead of restoring a broken arrangement.
-    constexpr int kLayoutVersion = 1;
+    constexpr int kLayoutVersion = 2;
 
     const QString kAppTitle = QStringLiteral("Codefine Engine");
 
@@ -75,6 +82,11 @@ namespace {
     const QString kRenderModeKey = QStringLiteral("view/renderMode");
     const QString kStatsOverlayKey = QStringLiteral("view/statsOverlay");
     const QString kTrimOnImportKey = QStringLiteral("files/trimOnImport");
+    const QString kTrimAlphaKey = QStringLiteral("trim/minAlpha");
+    const QString kTrimCropKey = QStringLiteral("trim/cropPct");
+    const QString kTrimDivisionsKey = QStringLiteral("trim/voxelDivisions");
+    const QString kTrimMinPerVoxelKey = QStringLiteral("trim/minPerVoxel");
+    const QString kExportFolderKey = QStringLiteral("files/exportFolder");
 
     bool IsPlyFile(const QString& path) {
         return path.endsWith(".ply", Qt::CaseInsensitive);
@@ -94,6 +106,8 @@ MainWindow::MainWindow() {
 
     // The console goes first so it captures output from everything built after it.
     m_console = new ConsolePanel(this);
+
+    m_backend = new BackendClient(this);
 
     m_viewport = new Viewport(this);
     setCentralWidget(m_viewport);
@@ -135,14 +149,21 @@ MainWindow::MainWindow() {
                                   .arg(QLocale().toString(static_cast<qulonglong>(splatCount))));
     };
 
+    // Resume a remembered web app session (quietly does nothing without one).
+    connect(m_backend, &BackendClient::sessionChanged, this, [this] { updateAccountActions(); });
+    updateAccountActions();
+    m_backend->restoreSession();
+
     m_viewport->setFocus();
 }
 
 MainWindow::~MainWindow() {
-    // Never destroy a running QThread: wait for an in-flight import to finish.
-    if (m_loadThread) {
-        m_loadThread->wait();
-        delete m_loadThread.data();
+    // Never destroy a running QThread: wait for an in-flight import or export to finish.
+    for (QThread* thread : { m_loadThread.data(), m_exportThread.data() }) {
+        if (thread) {
+            thread->wait();
+            delete thread;
+        }
     }
 }
 
@@ -165,6 +186,12 @@ void MainWindow::createActions() {
         }
     });
 
+    m_exportAction = new QAction(s->standardIcon(QStyle::SP_DialogSaveButton), "&Export...", this);
+    m_exportAction->setShortcut(QKeySequence("Ctrl+E"));
+    m_exportAction->setStatusTip("Convert the selected model or the whole scene to .glb, .obj, .ply, .stl or .splat");
+    m_exportAction->setEnabled(false); // until a model is loaded
+    connect(m_exportAction, &QAction::triggered, this, [this] { exportModels(); });
+
     m_exitAction = new QAction("E&xit", this);
     m_exitAction->setShortcut(QKeySequence("Ctrl+Q"));
     connect(m_exitAction, &QAction::triggered, this, &QWidget::close);
@@ -183,6 +210,15 @@ void MainWindow::createActions() {
     m_deleteAction->setShortcut(QKeySequence::Delete);
     m_deleteAction->setStatusTip("Remove the selected model from the scene (the file is not touched)");
     connect(m_deleteAction, &QAction::triggered, this, [this] { deleteSelectedModel(); });
+
+    m_toggleVisibilityAction = new QAction("Hide/Show &Model", this);
+    m_toggleVisibilityAction->setShortcut(QKeySequence("Ctrl+H"));
+    m_toggleVisibilityAction->setStatusTip("Hide or show the selected model without removing it");
+    connect(m_toggleVisibilityAction, &QAction::triggered, this, [this] {
+        if (SplatRenderer* renderer = m_viewport->renderer()) {
+            toggleModelHidden(renderer->GetSelectedModel());
+        }
+    });
 
     // Esc and Home act on the viewport only, so they never steal keys from
     // text fields or lists in the panels.
@@ -237,6 +273,21 @@ void MainWindow::createActions() {
     m_trimOnImportAction->setStatusTip("Remove faint, stray and out-of-range splats when importing. "
                                        "Uncheck to import the original data untouched.");
 
+    m_accountInfoAction = new QAction(this);
+    m_accountInfoAction->setEnabled(false); // a label, not a command
+
+    m_signInAction = new QAction("Sign &In...", this);
+    m_signInAction->setStatusTip("Sign in with your web app account to open the models you uploaded");
+    connect(m_signInAction, &QAction::triggered, this, [this] { showSignIn(); });
+
+    m_signOutAction = new QAction("Sign &Out", this);
+    m_signOutAction->setStatusTip("Sign out and delete this account's downloaded models from this PC");
+    connect(m_signOutAction, &QAction::triggered, this, [this] { m_backend->signOut(); });
+
+    m_trimSettingsAction = new QAction("Trim &Settings...", this);
+    m_trimSettingsAction->setStatusTip("Edit the default splat trim values used for new imports");
+    connect(m_trimSettingsAction, &QAction::triggered, this, [this] { showTrimDialog(); });
+
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
@@ -249,14 +300,19 @@ void MainWindow::createMenus() {
     fileMenu->addAction(m_trimOnImportAction);
     m_recentMenu = fileMenu->addMenu("Open &Recent");
     fileMenu->addSeparator();
+    fileMenu->addAction(m_exportAction);
+    fileMenu->addSeparator();
     fileMenu->addAction(m_exitAction);
 
     QMenu* editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(m_renameAction);
     editMenu->addAction(m_deleteAction);
+    editMenu->addAction(m_toggleVisibilityAction);
     editMenu->addSeparator();
     editMenu->addAction(m_resetPositionAction);
     editMenu->addAction(m_deselectAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_trimSettingsAction);
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
     QMenu* renderModeMenu = viewMenu->addMenu("Render &Mode");
@@ -265,6 +321,12 @@ void MainWindow::createMenus() {
     viewMenu->addSeparator();
     viewMenu->addAction(m_recenterCameraAction);
     viewMenu->addAction(m_statsOverlayAction);
+
+    QMenu* accountMenu = menuBar()->addMenu("&Account");
+    accountMenu->addAction(m_accountInfoAction);
+    accountMenu->addSeparator();
+    accountMenu->addAction(m_signInAction);
+    accountMenu->addAction(m_signOutAction);
 
     // Filled in createDocks() once the docks exist.
     m_windowMenu = menuBar()->addMenu("&Window");
@@ -283,6 +345,7 @@ void MainWindow::createToolBar() {
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
     m_toolBar->addAction(m_importAction);
+    m_toolBar->addAction(m_exportAction);
     m_toolBar->addSeparator();
 
     auto* modeLabel = new QLabel("  Render: ", m_toolBar);
@@ -324,12 +387,16 @@ void MainWindow::createDocks() {
     m_assets = new AssetBrowserPanel(this);
     QDockWidget* assetsDock = addPanelDock("Assets", "AssetsDock", m_assets, Qt::BottomDockWidgetArea);
 
+    m_remoteModels = new RemoteModelsPanel(m_backend, this);
+    QDockWidget* modelsDock = addPanelDock("My Models", "MyModelsDock", m_remoteModels, Qt::BottomDockWidgetArea);
+
     QDockWidget* consoleDock = addPanelDock("Console", "ConsoleDock", m_console, Qt::BottomDockWidgetArea);
 
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
-    tabifyDockWidget(assetsDock, consoleDock);
+    tabifyDockWidget(assetsDock, modelsDock);
+    tabifyDockWidget(modelsDock, consoleDock);
     tabifyDockWidget(consoleDock, audioDock);
     assetsDock->raise();
 
@@ -347,12 +414,21 @@ void MainWindow::createDocks() {
 
     // Panel -> scene commands.
     connect(m_assets, &AssetBrowserPanel::importRequested, this, &MainWindow::importSplat);
+    connect(m_remoteModels, &RemoteModelsPanel::importRequested, this, &MainWindow::importSplat);
+    connect(m_remoteModels, &RemoteModelsPanel::signInRequested, this, [this] { showSignIn(); });
     connect(m_outliner, &OutlinerPanel::selectionChanged, this, &MainWindow::selectModel);
     connect(m_outliner, &OutlinerPanel::renameRequested, this, &MainWindow::renameModel);
     connect(m_outliner, &OutlinerPanel::deleteRequested, this, [this](int index) {
         selectModel(index);
         deleteSelectedModel();
     });
+    connect(m_outliner, &OutlinerPanel::toggleHiddenRequested, this, &MainWindow::toggleModelHidden);
+    connect(m_outliner, &OutlinerPanel::exportRequested, this, [this](int index) {
+        selectModel(index);
+        exportModels();
+    });
+    connect(m_inspector, &InspectorPanel::trimApplyRequested, this, &MainWindow::applyModelTrim);
+    connect(m_inspector, &InspectorPanel::untrimRequested, this, &MainWindow::untrimModel);
     connect(m_inspector, &InspectorPanel::nameChanged, this, [this](const QString& name) {
         if (SplatRenderer* renderer = m_viewport->renderer()) {
             renameModel(renderer->GetSelectedModel(), name);
@@ -399,6 +475,11 @@ void MainWindow::restoreSettings() {
     (gaussian ? m_gaussianAction : m_pointCloudAction)->setChecked(true);
     m_statsOverlayAction->setChecked(settings.value(kStatsOverlayKey, true).toBool());
     m_trimOnImportAction->setChecked(settings.value(kTrimOnImportKey, true).toBool());
+    m_trimSettings.minAlpha = settings.value(kTrimAlphaKey, m_trimSettings.minAlpha).toFloat();
+    m_trimSettings.cropPct = settings.value(kTrimCropKey, m_trimSettings.cropPct).toFloat();
+    m_trimSettings.voxelDivisions = settings.value(kTrimDivisionsKey, m_trimSettings.voxelDivisions).toInt();
+    m_trimSettings.minPerVoxel = settings.value(kTrimMinPerVoxelKey, m_trimSettings.minPerVoxel).toInt();
+    m_inspector->setDefaultTrim(m_trimSettings);
 
     m_recentFiles = settings.value(kRecentFilesKey).toStringList();
     rebuildRecentMenu();
@@ -415,6 +496,10 @@ void MainWindow::saveSettings() const {
                                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
     settings.setValue(kStatsOverlayKey, m_statsOverlayAction->isChecked());
     settings.setValue(kTrimOnImportKey, m_trimOnImportAction->isChecked());
+    settings.setValue(kTrimAlphaKey, m_trimSettings.minAlpha);
+    settings.setValue(kTrimCropKey, m_trimSettings.cropPct);
+    settings.setValue(kTrimDivisionsKey, m_trimSettings.voxelDivisions);
+    settings.setValue(kTrimMinPerVoxelKey, m_trimSettings.minPerVoxel);
     settings.setValue(kRecentFilesKey, m_recentFiles);
 }
 
@@ -503,28 +588,30 @@ void MainWindow::startNextImport() {
     // the editor. The renderer is only touched back on the GUI thread.
     auto splats = std::make_shared<std::vector<SplatVertex>>();
     const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
-    auto originalCount = std::make_shared<size_t>(0);
+    auto original = std::make_shared<std::vector<SplatVertex>>(); // filled only when trimmed
     const bool trim = m_trimOnImportAction->isChecked();
-    m_loadThread = QThread::create([splats, originalCount, nativePath, trim] {
+    const TrimData trimSettings = m_trimSettings;
+    m_loadThread = QThread::create([splats, original, nativePath, trim, trimSettings] {
         *splats = LoadSplatPly(nativePath);
-        *originalCount = splats->size();
         if (trim && !splats->empty()) {
-            std::vector<SplatVertex> trimmed = TrimSplats(*splats);
-            if (!trimmed.empty()) { // never trim a scene down to nothing
+            std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
+            if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
+                *original = std::move(*splats);
                 *splats = std::move(trimmed);
             }
         }
     });
-    connect(m_loadThread, &QThread::finished, this, [this, splats, originalCount, path] {
+    connect(m_loadThread, &QThread::finished, this, [this, splats, original, path, trimSettings] {
         m_loadThread->deleteLater();
         m_loadThread = nullptr;
-        finishImport(path, *splats, *originalCount);
+        finishImport(path, *splats, *original, trimSettings);
         startNextImport();
     });
     m_loadThread->start();
 }
 
-void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& splats, size_t originalCount) {
+void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& splats,
+                              std::vector<SplatVertex>& original, const TrimData& trimData) {
     setImportBusy(m_pendingImports.isEmpty() ? QString() : QFileInfo(m_pendingImports.front()).fileName());
 
     const QString fileName = QFileInfo(path).fileName();
@@ -541,7 +628,18 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     }
 
     const size_t count = splats.size();
+    const size_t originalCount = original.empty() ? count : original.size();
     renderer->SetSplats(splats, fileName.toStdString());
+    // Downloaded models are deleted on sign-out, so they don't belong in Recent.
+    if (!BackendClient::IsCachedModel(path)) {
+        addRecentFile(path);
+    }
+    SplatModel* imported = renderer->GetModel(static_cast<int>(renderer->ModelCount()) - 1);
+    const bool wasTrimmed = !original.empty();
+    if (wasTrimmed) {
+        imported->SetOriginal(std::move(original));
+    }
+    imported->SetTrimData(trimData, wasTrimmed);
     addRecentFile(path);
 
     selectModel(static_cast<int>(renderer->ModelCount()) - 1);
@@ -558,6 +656,71 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     statusBar()->showMessage(QString("Imported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
 }
 
+void MainWindow::showTrimDialog() {
+    auto* dialog = new TrimDialog(m_trimSettings, [this](const TrimData& d) { applyDefaultTrim(d); }, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
+}
+
+void MainWindow::applyDefaultTrim(const TrimData& trim) {
+    m_trimSettings = trim;
+    m_inspector->setDefaultTrim(trim);
+    statusBar()->showMessage("Default trim settings saved. They apply to new imports.", kStatusMessageMs);
+}
+
+void MainWindow::applyModelTrim(const TrimData& settings) {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+    if (!model) {
+        return;
+    }
+
+    // Always trim from the untrimmed data so loosening the values brings detail back.
+    model->KeepOriginal();
+    const std::vector<SplatVertex>& source = model->SourceSplats();
+    std::vector<SplatVertex> trimmed = TrimSplats(source, settings);
+    if (trimmed.empty()) {
+        QMessageBox::warning(this, "Trim Settings",
+                             "These values would remove every splat, so the model was left unchanged.");
+        return;
+    }
+
+    const size_t total = source.size();
+    const size_t kept = trimmed.size();
+    renderer->UpdateModel(model, trimmed);
+    model->SetTrimData(settings, kept < total);
+    refreshScenePanels();
+    m_inspector->refreshTrim();
+
+    const QString message = QString("Trimmed %1: kept %2 of %3 splats")
+                                .arg(QString::fromStdString(model->GetName()),
+                                     QLocale().toString(static_cast<qulonglong>(kept)),
+                                     QLocale().toString(static_cast<qulonglong>(total)));
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
+}
+
+void MainWindow::untrimModel() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+    if (!model || !model->IsTrimmed()) {
+        return;
+    }
+
+    // The untrimmed data is kept on the model, so Apply can trim it again later.
+    const size_t total = model->SourceSplats().size();
+    renderer->UpdateModel(model, model->SourceSplats());
+    model->SetTrimData(model->GetTrimData(), false);
+    refreshScenePanels();
+    m_inspector->refreshTrim();
+
+    const QString message = QString("Restored %1: %2 splats")
+                                .arg(QString::fromStdString(model->GetName()),
+                                     QLocale().toString(static_cast<qulonglong>(total)));
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
+}
+
 void MainWindow::selectModel(int index) {
     SplatRenderer* renderer = m_viewport->renderer();
     if (!renderer) {
@@ -569,6 +732,7 @@ void MainWindow::selectModel(int index) {
     const bool hasSelection = renderer->GetSelectedModel() >= 0;
     m_renameAction->setEnabled(hasSelection);
     m_deleteAction->setEnabled(hasSelection);
+    m_toggleVisibilityAction->setEnabled(hasSelection);
     m_resetPositionAction->setEnabled(hasSelection);
     m_deselectAction->setEnabled(hasSelection);
 }
@@ -582,6 +746,22 @@ void MainWindow::renameModel(int index, const QString& name) {
     // Deferred: this can be reached from the outliner's own edit commit,
     // and rebuilding the tree in the middle of that is unsafe.
     QTimer::singleShot(0, this, [this] { refreshScenePanels(); });
+}
+
+void MainWindow::toggleModelHidden(int index) {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(index) : nullptr;
+    if (!model) {
+        return;
+    }
+    renderer->SetModelHidden(index, !model->GetIsHidden());
+    // Deferred: this can be reached from the outliner's context menu, and
+    // rebuilding the tree in the middle of that is unsafe.
+    QTimer::singleShot(0, this, [this] { refreshScenePanels(); });
+
+    statusBar()->showMessage(QString("%1 %2").arg(QString::fromStdString(model->GetName()),
+                                                  model->GetIsHidden() ? "hidden" : "shown"),
+                             kStatusMessageMs);
 }
 
 void MainWindow::deleteSelectedModel() {
@@ -610,6 +790,89 @@ void MainWindow::setRenderMode(int mode) {
     }
 }
 
+void MainWindow::exportModels() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer || renderer->ModelCount() == 0 || m_exportThread) {
+        return;
+    }
+
+    const int selected = renderer->GetSelectedModel();
+    const QString selectedName = selected >= 0 ? QString::fromStdString(renderer->GetModelName(selected)) : QString();
+    ExportDialog dialog(selectedName, selected >= 0 ? renderer->GetSplatCount(selected) : 0,
+                        renderer->TotalSplatCount(), this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const ExportOptions options = dialog.options();
+    const bool wholeScene = dialog.wholeScene();
+
+    // Suggest "<model name>.<ext>" (or "scene.<ext>") in the last export folder.
+    const QString extension = ExportFormatExtension(options.format);
+    QString baseName = wholeScene ? QStringLiteral("scene") : QFileInfo(selectedName).completeBaseName();
+    if (baseName.isEmpty()) baseName = QStringLiteral("model");
+    QSettings settings;
+    const QString folder = settings.value(kExportFolderKey, m_assets->folder()).toString();
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export", QDir(folder).filePath(baseName + extension),
+        QString("%1 (*%2)").arg(ExportFormatName(options.format), extension));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (!path.endsWith(extension, Qt::CaseInsensitive)) {
+        path += extension;
+    }
+    settings.setValue(kExportFolderKey, QFileInfo(path).absolutePath());
+
+    // Snapshot the splats: the user can delete or move models while the export runs.
+    auto splatData = std::make_shared<std::vector<std::vector<SplatVertex>>>();
+    auto transforms = std::make_shared<std::vector<glm::mat4>>();
+    for (int i = 0; i < static_cast<int>(renderer->ModelCount()); ++i) {
+        if (!wholeScene && i != selected) continue;
+        const SplatModel* model = renderer->GetModel(i);
+        splatData->push_back(model->splats());
+        transforms->push_back(model->GetTransform());
+    }
+
+    const QString fileName = QFileInfo(path).fileName();
+    qInfo("Exporting %s...", qPrintable(QDir::toNativeSeparators(path)));
+    m_exportAction->setEnabled(false);
+    statusBar()->showMessage(QString("Exporting %1...").arg(fileName));
+
+    auto result = std::make_shared<ExportResult>();
+    const std::filesystem::path nativePath = path.toStdWString();
+    m_exportThread = QThread::create([splatData, transforms, result, nativePath, options] {
+        std::vector<ExportSource> sources;
+        for (size_t i = 0; i < splatData->size(); ++i) {
+            sources.push_back({ &(*splatData)[i], (*transforms)[i] });
+        }
+        *result = ExportSplats(sources, nativePath, options);
+    });
+    connect(m_exportThread, &QThread::finished, this, [this, result, path, fileName] {
+        m_exportThread->deleteLater();
+        m_exportThread = nullptr;
+        refreshScenePanels(); // re-enables the export action
+
+        if (!result->ok) {
+            qWarning("Export of %s failed: %s", qPrintable(fileName), result->error.c_str());
+            statusBar()->showMessage(QString("Export of %1 failed").arg(fileName), kStatusMessageMs);
+            QMessageBox::warning(this, "Export Failed",
+                                 QString("%1 could not be exported.\n\n%2")
+                                     .arg(fileName, QString::fromStdString(result->error)));
+            return;
+        }
+
+        const QLocale locale;
+        QString summary = QString("%1 splats").arg(locale.toString(static_cast<qulonglong>(result->splatCount)));
+        if (result->triangleCount > 0) {
+            summary += QString(", %1 triangles").arg(locale.toString(static_cast<qulonglong>(result->triangleCount)));
+        }
+        summary += QString(", %1").arg(locale.formattedDataSize(QFileInfo(path).size()));
+        qInfo("Exported %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
+        statusBar()->showMessage(QString("Exported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
+    });
+    m_exportThread->start();
+}
+
 void MainWindow::refreshScenePanels() {
     SplatRenderer* renderer = m_viewport->renderer();
     if (!renderer) {
@@ -617,6 +880,7 @@ void MainWindow::refreshScenePanels() {
     }
     m_outliner->rebuild(*renderer);
     selectModel(renderer->GetSelectedModel());
+    m_exportAction->setEnabled(renderer->ModelCount() > 0 && !m_exportThread);
 }
 
 void MainWindow::setImportBusy(const QString& fileName) {
@@ -661,6 +925,34 @@ void MainWindow::rebuildRecentMenu() {
 }
 
 // ===========================================================================
+// Account
+// ===========================================================================
+
+void MainWindow::showSignIn() {
+    if (m_backend->isSignedIn()) {
+        return;
+    }
+    LoginDialog dialog(m_backend, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        // Bring the user's models into view.
+        if (QDockWidget* dock = qobject_cast<QDockWidget*>(m_remoteModels->parentWidget())) {
+            dock->show();
+            dock->raise();
+        }
+        statusBar()->showMessage(QString("Signed in as %1").arg(m_backend->user().email), kStatusMessageMs);
+    }
+}
+
+void MainWindow::updateAccountActions() {
+    const bool signedIn = m_backend->isSignedIn();
+    const RemoteUser& user = m_backend->user();
+    m_accountInfoAction->setText(signedIn ? QString("Signed in as %1%2").arg(user.email, user.isAdmin() ? " (admin)" : "")
+                                          : QString("Not signed in"));
+    m_signInAction->setEnabled(!signedIn);
+    m_signOutAction->setEnabled(signedIn);
+}
+
+// ===========================================================================
 // Help
 // ===========================================================================
 
@@ -681,9 +973,12 @@ void MainWindow::showControls() {
         "<tr><td>Esc</td><td>Deselect</td></tr>"
         "<tr><td colspan='2'><br><b>Editor</b></td></tr>"
         "<tr><td>Ctrl+O</td><td>Import splat (.ply)</td></tr>"
+        "<tr><td>Ctrl+E</td><td>Export to .glb / .obj / .ply / .stl / .splat</td></tr>"
         "<tr><td>F2 / Delete</td><td>Rename / remove selected model</td></tr>"
         "<tr><td>Ctrl+1 / Ctrl+2</td><td>Point Cloud / Gaussian Splat</td></tr>"
         "<tr><td>Drag &amp; drop</td><td>Drop .ply files onto the window to import</td></tr>"
+        "<tr><td colspan='2'><br><b>Account</b></td></tr>"
+        "<tr><td>Account &gt; Sign In</td><td>Open the models you uploaded through the web app</td></tr>"
         "</table>");
     box.exec();
 }

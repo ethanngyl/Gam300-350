@@ -29,9 +29,17 @@ Renders one job's heading and download-on-click thumbnail grid.
 // ----- Headers ------------------------------------------------------- //
 import { useEffect, useState } from 'react';
 import { jobDisplayName } from './mediaApi.js';
+import { playSound } from '../audio/Audio.js';
 import './ImageGallery.css';
 
 const PREVIEW_COUNT = 4;
+
+// Same badge wording and colours as the 3D Models cards.
+function getBatchBadge(status) {
+    if (status === 'done') return { label: 'Ready', className: 'forma-badge-ready' };
+    if (status === 'error' || status === 'cancelled') return { label: 'Failed', className: 'forma-badge-processing' };
+    return { label: 'Processing', className: 'forma-badge-processing' };
+}
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -133,7 +141,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         if (openJob) {
             return (
                 <div className="gallery gallery-compact">
-                    <button className="forma-btn gallery-compact-back" onClick={() => setOpenJobId(null)}>
+                    <button className="forma-btn gallery-compact-back" onClick={() => { playSound('back'); setOpenJobId(null); }}>
                         All batches
                     </button>
                     {renderJobSection(openJob)}
@@ -162,13 +170,17 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                     {visibleJobs.map((job) => {
                         const previewImages = job.images.slice(0, PREVIEW_COUNT);
                         const overflowCount = job.images.length - PREVIEW_COUNT;
+                        const badge = getBatchBadge(job.status);
 
                         return (
                             <button
                                 key={job.id}
                                 type="button"
                                 className="forma-card library-photo-card"
-                                onClick={() => setOpenJobId(job.id)}
+                                onClick={() => {
+                                    playSound('tap');
+                                    setOpenJobId(job.id);
+                                }}
                             >
                                 <div className="library-photo-thumbgrid">
                                     {previewImages.map((img, index) => (
@@ -179,18 +191,16 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                                             )}
                                         </div>
                                     ))}
-                                    <span
-                                        className={`forma-badge library-photo-badge ${job.status === 'done' ? 'forma-badge-ready' : 'forma-badge-processing'
-                                            }`}
-                                    >
-                                        {job.status}
+                                    <span className={`forma-badge library-photo-badge ${badge.className}`}>
+                                        {badge.label}
                                     </span>
                                 </div>
-                                <div className="library-photo-name">{jobDisplayName(job, 'Batch')}</div>
-                                {/* The /jobs data has no created-at date or upload-vs-YouTube
-                                    origin yet, so the design's date and UPLOAD/YOUTUBE badge
-                                    show the job status instead. Swap in when the backend adds them. */}
-                                <div className="library-photo-count">{job.images.length} images</div>
+                                {/* Same name and meta rows as the 3D Models cards, so both tabs line up. */}
+                                <div className="library-item-name">{jobDisplayName(job, 'Batch')}</div>
+                                <div className="library-item-meta">
+                                    <span>{job.images.length} photos</span>
+                                    <span>{job.createdAt ? new Date(job.createdAt).toLocaleDateString() : ''}</span>
+                                </div>
                             </button>
                         );
                     })}
@@ -203,7 +213,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         <div className="gallery">
             <div className="gallery-head">
                 {onBack && (
-                    <button className="btn btn-ghost" onClick={onBack}>Back</button>
+                    <button className="btn btn-ghost" onClick={() => { playSound('back'); onBack(); }}>Back</button>
                 )}
                 <h2>Uploaded images</h2>
             </div>

@@ -8,14 +8,16 @@
 \brief
 Top navigation bar: a menu button (phones only) that opens the sidebar
 drawer, GENESIS logo, Home / Library / Photo Editor / Scene Builder /
-YouTube Extractor / Model Viewer tabs (with click sound), a workspace status indicator, and the signed-in
+YouTube Extractor tabs (with click sound), a workspace status indicator, and the signed-in
 user's avatar. Clicking the avatar opens a small account menu with links
-to the account page and sign out.
+to the account page, a quick mute / unmute for sound effects, and sign
+out.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
+import genesisLogo from './GenesisLogo.svg';
+import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 
 const TABS = [
     { id: 'home', label: 'Home', icon: 'home' },
@@ -25,9 +27,10 @@ const TABS = [
     { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
 ];
 
-function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, onOpenAccount, onSignOut, onToggleMenu }) {
+function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuContainerRef = useRef(null);
+    const { isMuted } = useSoundSettings();
 
     // Close the account menu when the user clicks anywhere outside it.
     useEffect(() => {
@@ -49,7 +52,7 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
             <button
                 className="forma-menu-btn"
                 onClick={() => {
-                    playSound('click');
+                    playSound('tap');
                     onToggleMenu();
                 }}
                 aria-label="Open menu"
@@ -58,7 +61,7 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
             </button>
 
             <div className="forma-logo">
-                <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
+                <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
                 <span className="forma-logo-text">GENESIS</span>
             </div>
 
@@ -66,16 +69,12 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
                 {TABS.map((tab) => (
                     <button
                         key={tab.id}
-                        className={activeTab === tab.id && !(tab.id === 'library' && openedFromYourWork)
+                        className={activeTab === tab.id
                             ? 'forma-tab is-active'
                             : 'forma-tab'}
                         onClick={() => {
-                            playSound('click');
-                            if (tab.id === 'youtube') {
-                                onYoutube();
-                            } else {
-                                onTabChange(tab.id);
-                            }
+                            playSound('tap');
+                            onTabChange(tab.id);
                         }}
                         aria-label={tab.label}
                     >
@@ -94,7 +93,7 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
                 <button
                     className="forma-avatar"
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         setIsMenuOpen((wasOpen) => !wasOpen);
                     }}
                     aria-label="Open account menu"
@@ -109,7 +108,7 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
                         <button
                             className="forma-account-menu-item"
                             onClick={() => {
-                                playSound('click');
+                                playSound('tap');
                                 setIsMenuOpen(false);
                                 onOpenAccount();
                             }}
@@ -119,7 +118,19 @@ function TopNav({ activeTab, openedFromYourWork, onTabChange, onYoutube, user, o
                         <button
                             className="forma-account-menu-item"
                             onClick={() => {
-                                playSound('click3');
+                                setSoundMuted(!isMuted);
+                                // Muting stays silent; unmuting plays once to confirm.
+                                if (isMuted) playSound('tap');
+                                setIsMenuOpen(false);
+                            }}
+                        >
+                            <Icon name={isMuted ? 'volume' : 'volumeOff'} size={14} />
+                            {isMuted ? ' Unmute sounds' : ' Mute sounds'}
+                        </button>
+                        <button
+                            className="forma-account-menu-item"
+                            onClick={() => {
+                                playSound('back');
                                 setIsMenuOpen(false);
                                 onSignOut();
                             }}

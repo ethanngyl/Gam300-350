@@ -37,6 +37,8 @@ signals:
     void selectionChanged(int modelIndex); // -1 = nothing selected
     void renameRequested(int modelIndex, const QString& name);
     void deleteRequested(int modelIndex);
+    void toggleHiddenRequested(int modelIndex);
+    void exportRequested(int modelIndex);
 
 private:
     int selectedIndex() const;

@@ -10,7 +10,9 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (top nav + sidebar) with these pages inside it: Home, Library,
 Photo Editor, Scene Builder, Model Viewer, YouTube Extractor, Capture and
-Account. YouTube Extractor and Capture are opened from the sidebar.
+Account. YouTube Extractor is in the top nav and sidebar; Capture opens
+from the sidebar's New model button, and its "Review photos first" hands
+the batch to the Photo Editor.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -34,6 +36,7 @@ import AccountScreen from './AccountScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
 import { useUndoableState } from './useUndoableState.js';
+import { NEW_SCENE_INFO } from './SceneStorage.js';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
@@ -100,9 +103,6 @@ function App() {
     const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState('models');
-    // True when the Library was opened from a "Your work" shortcut, so the
-    // sidebar highlights that shortcut instead of "Media Library".
-    const [openedFromYourWork, setOpenedFromYourWork] = useState(false);
 
     // Full-page screens that replace the whole shell. null shows the shell;
     // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
@@ -114,11 +114,20 @@ function App() {
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
+    // Batch sent from Camera Capture's "Review photos first" to the Photo
+    // Editor: { files, removeBackground }. Cleared on any other navigation.
+    const [photosForEditor, setPhotosForEditor] = useState(null);
+    // Batch sent back from the Photo Editor's "Back to camera", so Camera
+    // Capture reopens with those photos: { files, removeBackground }.
+    // Cleared on any other navigation.
+    const [photosForCapture, setPhotosForCapture] = useState(null);
     // Whether the sidebar drawer is open (phones only).
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    // Models placed in the Scene Builder, with their undo history. Kept here
-    // so the scene survives switching tabs (each page remounts when its tab opens).
+    // Models placed in the Scene Builder, with their undo history, and the
+    // scene's id, name and settings. Kept here so the scene survives
+    // switching tabs (each page remounts when its tab opens).
     const scene = useUndoableState([]);
+    const [sceneInfo, setSceneInfo] = useState(NEW_SCENE_INFO);
 
     function handleLogin(user) {
         saveUser(user);
@@ -135,6 +144,7 @@ function App() {
         setScreen(null);
         setIsMenuOpen(false);
         scene.reset([]);
+        setSceneInfo(NEW_SCENE_INFO);
         setActiveTab('home');
     }
 
@@ -143,7 +153,21 @@ function App() {
     function goToTab(tab) {
         setIsMenuOpen(false);
         setUploadError(null);
+        setPhotosForEditor(null);
+        setPhotosForCapture(null);
         setActiveTab(tab);
+    }
+
+    // Opens the Photo Editor with the photos from Camera Capture loaded.
+    function reviewPhotosInEditor(files, { removeBackground = false } = {}) {
+        goToTab('editor');
+        setPhotosForEditor({ files, removeBackground });
+    }
+
+    // Reopens Camera Capture with the photos that were in the Photo Editor.
+    function returnPhotosToCapture(files, { removeBackground = false } = {}) {
+        goToTab('capture');
+        setPhotosForCapture({ files, removeBackground });
     }
 
     function openLibrary(subTab) {
@@ -191,9 +215,6 @@ function App() {
         setScreen('result');
     }
 
-    if (isCheckingSession) {
-        return <div className="genesis-page" />;
-    }
     function openLocalModel(file) {
         setLocalModel({ url: URL.createObjectURL(file), name: file.name });
         setScreen('local-model');
@@ -204,6 +225,10 @@ function App() {
         URL.revokeObjectURL(localModel.url);
         setLocalModel(null);
         setScreen(null);
+    }
+
+    if (isCheckingSession) {
+        return <div className="genesis-page" />;
     }
 
     if (!currentUser) {
@@ -237,7 +262,7 @@ function App() {
                     <button
                         className="btn btn-primary"
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             resetJob();
                             goToTab('capture');
                         }}
@@ -245,10 +270,10 @@ function App() {
                         New scan
                     </button>
                     <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
-                        onClick={() => playSound('click')}>
+                        onClick={() => playSound('tap')}>
                         Download .ply
                     </a>
-                    <button className="btn btn-ghost" onClick={() => { playSound('click'); backToDashboard(); }}>
+                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); backToDashboard(); }}>
                         Back to dashboard
                     </button>
                 </div>
@@ -267,7 +292,7 @@ function App() {
                     className="genesis-overlay"
                     style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, alignItems: 'center', zIndex: 10 }}
                 >
-                    <button className="btn btn-ghost" onClick={() => { playSound('click'); closeLocalModel(); }}>
+                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); closeLocalModel(); }}>
                         Back to dashboard
                     </button>
                     <span style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8 }}>{localModel.name}</span>
@@ -334,14 +359,24 @@ function App() {
                         />
                     )}
                     {activeTab === 'editor' && (
-                        <PhotoEditorScreen onGenerateModel={handleBatchReady} uploadError={uploadError} />
+                        <PhotoEditorScreen
+                            onGenerateModel={handleBatchReady}
+                            uploadError={uploadError}
+                            initialPhotos={photosForEditor}
+                            onBackToCapture={returnPhotosToCapture}
+                        />
                     )}
                     {activeTab === 'scene' && (
                         <SceneBuilderScreen
                             objects={scene.value}
                             onObjectsChange={scene.set}
+                            onObjectsReset={scene.reset}
                             onUndo={scene.undo}
+                            onRedo={scene.redo}
                             canUndo={scene.canUndo}
+                            canRedo={scene.canRedo}
+                            sceneInfo={sceneInfo}
+                            onSceneInfoChange={setSceneInfo}
                         />
                     )}
                     {activeTab === 'viewer' && (
@@ -355,8 +390,10 @@ function App() {
                         // CameraCapture plays the click sound itself, so none here.
                         <CameraCapture
                             onBatchReady={handleBatchReady}
+                            onReviewPhotos={reviewPhotosInEditor}
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
+                            initialPhotos={photosForCapture}
                         />
                     )}
                     {activeTab === 'account' && (

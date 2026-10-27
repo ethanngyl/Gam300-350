@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "metrics:dev": "vite --config vite.metrics.config.js",
+    "metrics:build": "vite build --config vite.metrics.config.js",
+    "metrics:server": "node src/metrics-dashboard/server.js",
+    "metrics:start": "npm run metrics:build && npm run metrics:server"
   },
   "dependencies": {
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",

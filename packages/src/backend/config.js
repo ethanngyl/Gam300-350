@@ -415,4 +415,12 @@ export const config = {
   // Caddy forwards from the same machine, so req.ip is the real client
   // address (for rate limits) and req.secure reflects HTTPS (for cookies).
   trustProxy: process.env.TRUST_PROXY || null,
+  // --- Google SSO (authority only) -------------------------------------------
+  // From the Google Cloud Console OAuth client (step 6). Secrets: put them in
+  // .env, never commit them. Empty = Google sign-in is disabled.
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  // Must EXACTLY match an Authorized redirect URI registered in the console.
+  googleRedirectUri:
+    process.env.GOOGLE_REDIRECT_URI || 'https://51-79-240-131.sslip.io/auth/google/callback',
 }

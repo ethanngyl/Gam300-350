@@ -48,6 +48,8 @@ const ICON_PATHS = {
     menu: <path d="M4 6h16M4 12h16M4 18h16" />,
     trash: (<><path d="M4 7h16M10 7V4h4v3" /><path d="M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></>),
     check: <path d="m5 12 5 5 9-10" />,
+    volume: (<><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></>),
+    volumeOff: (<><path d="M11 5 6 9H3v6h3l5 4z" /><path d="m16 9 6 6M22 9l-6 6" /></>),
 };
 
 function Icon({ name, size = 16 }) {

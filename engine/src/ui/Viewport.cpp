@@ -17,10 +17,14 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 #include "ui/ImGuiQtBackend.h"
 #include "splat/SplatRenderer.h"
 
+#include "splat/SplatModel.h"
+
 #include <imgui.h>
+#include <ImGuizmo.h>
 #include <imgui_impl_opengl3.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -135,12 +139,14 @@ void Viewport::paintGL() {
     glClearColor(0.05f, 0.05f, 0.08f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    m_renderer->Draw(m_camera.getView(), m_camera.getProjection(aspect),
-                     static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
+    const glm::mat4 view = m_camera.getView();
+    const glm::mat4 proj = m_camera.getProjection(aspect);
+    m_renderer->Draw(view, proj, static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGuiQtBackend::NewFrame(*this, deltaTime);
     ImGui::NewFrame();
+    DrawGizmo(view, proj);
     DrawImGui(fps);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -151,6 +157,27 @@ void Viewport::paintGL() {
 
     // Schedule the next frame; swaps are vsync paced.
     update();
+}
+
+void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
+    // BeginFrame must run every frame so ImGuizmo's hover/active state stays current.
+    ImGuizmo::BeginFrame();
+
+    SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
+    if (!model || model->GetIsHidden()) {
+        return;
+    }
+
+    // io.DisplaySize is in widget (logical) pixels, the same space as the mouse.
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::SetRect(0.0f, 0.0f, displaySize.x, displaySize.y);
+
+    glm::mat4 transform = model->GetTransform();
+    if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE,
+                             ImGuizmo::WORLD, glm::value_ptr(transform))) {
+        model->SetTransform(transform);
+    }
 }
 
 void Viewport::DrawImGui(float fps) {
@@ -187,6 +214,8 @@ void Viewport::mousePressEvent(QMouseEvent* event) {
     ImGuiQtBackend::ProcessMouseButton(*event, true);
     m_lastMousePos = event->position();
     if (ImGui::GetIO().WantCaptureMouse) return;
+    // The gizmo was hovered on the last frame: this click grabs an arrow, not the camera.
+    if (event->button() == Qt::LeftButton && (ImGuizmo::IsOver() || ImGuizmo::IsUsing())) return;
 
     m_input.CallbackMouseClick(event->button(), InputManager::PRESS, 0.0, 0.0);
     if (event->button() == Qt::LeftButton) m_leftHeld = true;

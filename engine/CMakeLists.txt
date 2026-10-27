@@ -90,6 +90,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets
+    Qt6::Network
 )
 
 # Run Qt's moc on Q_OBJECT classes automatically
@@ -107,6 +108,12 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>
             $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/platforms
+        # TLS backend, so the account sign-in can reach an https:// server.
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/tls
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:Qt6::QSchannelBackendPlugin>
+            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/tls
         COMMAND_EXPAND_LISTS
         COMMENT "Copying Qt runtime next to ${CMAKE_PROJECT_NAME}"
     )
@@ -219,7 +226,7 @@ endif()
 # importDependencies() finds Qt inside a function, so the variables Qt's deploy
 # API relies on (e.g. QT6_IS_SHARED_LIBS_BUILD) never reach this scope. Find it
 # again here; it reuses the cached Qt6_DIR.
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Network)
 qt_generate_deploy_app_script(
     TARGET ${CMAKE_PROJECT_NAME}
     OUTPUT_SCRIPT CODEFINE_DEPLOY_SCRIPT
@@ -276,9 +283,11 @@ if(CODEFINE_MAKENSIS)
     set(CPACK_NSIS_INSTALLED_ICON_NAME "Codefine.exe")
     set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Codefine.exe")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    # Backslashes are escaped twice: once for this file, once for the
+    # CPackConfig.cmake that CPack generates from it.
     set(CPACK_NSIS_CREATE_ICONS_EXTRA
-        "CreateShortCut '$DESKTOP\\Codefine Engine.lnk' '$INSTDIR\\Codefine.exe'")
-    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\Codefine Engine.lnk'")
+        "CreateShortCut '$DESKTOP\\\\Codefine Engine.lnk' '$INSTDIR\\\\Codefine.exe'")
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\Codefine Engine.lnk'")
 endif()
 
 include(CPack)
