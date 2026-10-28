@@ -22,6 +22,7 @@ drag-and-drop, and persists layout and preferences with QSettings.
 #include <QMainWindow>
 #include <QPointer>
 #include <QStringList>
+#include <QUndoStack>
 
 #include <vector>
 
@@ -117,6 +118,13 @@ private:
     void showAbout();
 
     Viewport* m_viewport = nullptr;
+
+    // Undo history. Edits are pushed as QUndoCommands (see EditCommands.h);
+    // the stack is cleared whenever a model is removed so no command can
+    // hold a dangling model pointer.
+    QUndoStack m_undo;
+    QAction* m_undoAction = nullptr;
+    QAction* m_redoAction = nullptr;
 
     // Panels (owned by their docks).
     OutlinerPanel* m_outliner = nullptr;
