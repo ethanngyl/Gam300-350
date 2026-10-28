@@ -393,7 +393,7 @@ export const config = {
     brushBin,
 
     // Training knobs. Fewer iterations = faster demo, lower quality.
-    trainIters: Number(process.env.TRAIN_ITERS) || 10000,
+    trainIters: Number(process.env.TRAIN_ITERS) || 30000,
     // Bounds for a per-job iteration cap sent by the site (Fast / Normal /
     // Detailed). Values outside are clamped.
     minTrainIters: 1000,
