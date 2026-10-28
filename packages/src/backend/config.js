@@ -447,6 +447,18 @@ export const config = {
     // (GET /jobs/:id/cover.webp, see make_cover.py).
     coverScript: process.env.COVER_SCRIPT || path.join(toolsDir, 'make_cover.py'),
 
+    // --- Shared library on the VM ----------------------------------------------
+    // Client machines send each finished job (photos + result.ply) to the VM,
+    // and every machine's Library lists the user's jobs from there.
+    // This machine's name, stored with each job it sends (the job's "origin").
+    machineName: process.env.MACHINE_NAME || os.hostname(),
+    // The VM refuses new jobs when its disk has less free space than this.
+    minFreeDiskGB: Number(process.env.MIN_FREE_DISK_GB) || 2,
+    // How often a client retries sending finished jobs the VM hasn't got yet.
+    syncIntervalMin: Number(process.env.SYNC_INTERVAL_MIN) || 5,
+    // Largest result.ply the VM accepts from a client.
+    maxResultSizeMB: 500,
+
     // --- Account authority (centralized accounts on the VM) --------------------
     // 'local' (default): accounts live in this machine's own database, as
     //   before the VM existed. Safe default: 'client' deletes local accounts.
