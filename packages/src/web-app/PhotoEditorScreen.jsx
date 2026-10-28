@@ -16,7 +16,8 @@ settings, lost highlight/shadow detail, large crops and mixed crops all
 show warnings. "Use original photos" bypasses every edit, and "Remove
 background" (moved here from Camera Capture, so it covers both captured
 and uploaded batches) masks out the background when the model is
-built. Edits are only
+built, and the "Model detail" slider (Fast / Normal / Detailed) sets how
+many training iterations the build runs. Edits are only
 settings until upload, so the originals are never changed. Phones get a
 simpler, batch-only set of tools. "Review photos first" in Camera Capture
 opens the editor with that batch already loaded (initialPhotos); its
@@ -51,6 +52,8 @@ import {
     renderEditedCanvas,
     sampleColor,
 } from './PhotoEdits.js';
+import TrainingQualitySlider from './TrainingQualitySlider.jsx';
+import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import './PhotoEditor.css';
 
 // Fewest kept photos allowed before building a model (matches capture).
@@ -230,9 +233,10 @@ function CropOverlay({ crop, onChange }) {
     );
 }
 
-// initialPhotos: { files, removeBackground } handed over from Camera Capture,
-// or null when the editor is opened on its own. onBackToCapture(files,
-// { removeBackground }) sends the photos to Camera Capture.
+// initialPhotos: { files, removeBackground, trainIters } handed over from
+// Camera Capture, or null when the editor is opened on its own.
+// onBackToCapture(files, { removeBackground, trainIters }) sends the photos
+// to Camera Capture.
 function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null, onBackToCapture }) {
     const isPhone = useIsPhone();
     const fileInputRef = useRef(null);
@@ -249,6 +253,8 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // captures, where the static background makes the model come out flat.
     // Starts with the choice carried over from Camera Capture, if any.
     const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Training iteration cap from the "Model detail" slider.
+    const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     // Opened from Camera Capture, so it can send the photos back there.
     // Fixed when the editor opens, so re-clicking the tab doesn't hide it.
     const [isFromCapture] = useState(() => initialPhotos !== null && Boolean(onBackToCapture));
@@ -413,7 +419,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // out" choices only live in the editor, so they reset.
     function backToCapture() {
         playSound(isFromCapture ? 'back' : 'tap');
-        onBackToCapture(photos.map((photo) => photo.file), { removeBackground });
+        onBackToCapture(photos.map((photo) => photo.file), { removeBackground, trainIters });
     }
 
     function openFilePicker() {
@@ -653,7 +659,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
             }
             // On success App switches to the processing screen; on failure it
             // sets uploadError, which is shown in the bottom bar.
-            await onGenerateModel(filesToUpload, { removeBackground });
+            await onGenerateModel(filesToUpload, { removeBackground, trainIters });
         } finally {
             setPreparedCount(null);
         }
@@ -1155,6 +1161,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                 Remove background
                             </label>
                         </div>
+                        <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} disabled={isPreparing} />
                         <div className="photo-editor-footer-text">{renderFooterMessage()}</div>
                         <button
                             className="forma-btn forma-btn-primary"

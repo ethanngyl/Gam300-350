@@ -1,24 +1,33 @@
+/* ============================================================
+   Processing - the screen shown while the .ply is being built.
+   Also used inside a card (.processing-embedded) by the YouTube
+   Extractor, so both progress views look the same.
+   Uses the --forma-* variables from AppTheme.css. Mobile-first:
+   one column (preview banner, status, steps, full-width Cancel);
+   from 900px the status sits beside the preview and step tracker.
+   ============================================================ */
+
 .processing-page {
     position: fixed;
     inset: 0;
     display: flex;
-    padding: 24px;
+    padding: 16px;
     overflow-y: auto;
     background: var(--forma-bg);
     color: var(--forma-text);
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--forma-font);
 }
 
-    /* App.css still styles bare h1 and p with the old theme, so reset them here. */
-    .processing-page :is(h1, p) {
-        font-family: inherit;
-        max-width: none;
-        margin: 0;
-    }
+/* App.css still styles bare h1 and p with the old theme, so reset them here. */
+:is(.processing-page, .processing-embedded) :is(h1, h2, p) {
+    font-family: inherit;
+    max-width: none;
+    margin: 0;
+}
 
 .processing-card {
     width: 100%;
-    max-width: 480px;
+    max-width: 980px;
     margin: auto; /* centres the card without clipping it on short screens */
     display: flex;
     flex-direction: column;
@@ -27,97 +36,272 @@
 
 /* Two classes so this wins over .forma-card's padding whichever file loads last. */
 .processing-page .processing-card {
-    padding: 32px;
+    padding: 20px;
 }
 
-.processing-page .processing-title {
-    font-size: 1.6rem;
+/* Below 900px the two columns dissolve into one list, ordered:
+   preview banner, title and status, steps, then Cancel. */
+.processing-main,
+.processing-side {
+    display: contents;
+}
+
+.processing-preview {
+    order: 0;
+}
+
+.processing-main > * {
+    order: 1;
+}
+
+.processing-steps {
+    order: 2;
+}
+
+:is(.processing-page, .processing-embedded) .processing-cancel {
+    order: 3;
+}
+
+:is(.processing-page, .processing-embedded) .processing-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--forma-heading);
+}
+
+:is(.processing-page, .processing-embedded) .processing-hint {
+    color: var(--forma-text-muted);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+/* ---------- Live status: step, iteration counter, bar ---------- */
+
+.processing-status {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border);
+}
+
+.processing-status-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.processing-phase {
+    font-size: 1.05rem;
     font-weight: 600;
     color: var(--forma-heading);
 }
 
-.processing-page .processing-hint {
-    color: var(--forma-text-muted);
-    font-size: 0.86rem;
-    line-height: 1.6;
+.processing-pct {
+    font-family: var(--forma-font-mono);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--forma-teal-text);
 }
 
-.processing-page .processing-error {
-    color: var(--forma-red);
-    font-size: 0.9rem;
-    line-height: 1.5;
-}
-
-.processing-page .processing-eyebrow-error {
-    color: var(--forma-red);
-}
-
-/* ---------- Progress ---------- */
-
-.processing-phase {
-    margin-top: 6px;
-    font-size: 0.92rem;
-    color: var(--forma-text);
-}
-
+/* e.g. "Iteration 3,000 / 7,000" while training. */
 .processing-detail {
-    margin-left: 8px;
-    font-size: 0.8rem;
+    font-family: var(--forma-font-mono);
+    font-size: 0.78rem;
     color: var(--forma-text-muted);
-}
-
-.processing-progress {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
 }
 
 .processing-bar {
     height: 8px;
-    background: var(--forma-panel-alt);
+    background: var(--forma-bg);
     border-radius: 999px;
     overflow: hidden;
 }
 
 .processing-bar-fill {
     height: 100%;
-    background: var(--forma-blue);
     border-radius: 999px;
+    background: linear-gradient(90deg, var(--forma-blue), var(--forma-teal-text));
     transition: width 0.4s ease;
 }
 
-.processing-pct {
-    text-align: right;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.74rem;
-    color: var(--forma-teal-text);
+.processing-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--forma-font-mono);
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+}
+
+/* ---------- Preview: first photo with a scanning line ---------- */
+
+.processing-preview {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-bg);
+    border: 1px solid var(--forma-border-strong);
+}
+
+    .processing-preview img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.55;
+        filter: saturate(0.7);
+    }
+
+.processing-preview-icon {
+    color: var(--forma-text-dim);
+}
+
+/* A glowing line that sweeps down the photo while the model is built. */
+.processing-scan {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 30%;
+    background: linear-gradient(180deg, transparent, rgba(var(--forma-accent-rgb), 0.28) 85%, rgba(var(--forma-accent-light-rgb), 0.9));
+    border-bottom: 2px solid var(--forma-teal-text);
+    animation: processing-scan 2.6s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes processing-scan {
+    0% {
+        transform: translateY(-100%);
+    }
+
+    100% {
+        transform: translateY(340%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .processing-scan {
+        animation: none;
+        display: none;
+    }
+}
+
+.processing-corner {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--forma-blue);
+    pointer-events: none;
+}
+
+.processing-corner-tl {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+}
+
+.processing-corner-tr {
+    top: 10px;
+    right: 10px;
+    border-left: none;
+    border-bottom: none;
+}
+
+.processing-corner-bl {
+    bottom: 10px;
+    left: 10px;
+    border-right: none;
+    border-top: none;
+}
+
+.processing-corner-br {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+}
+
+.processing-chip {
+    position: absolute;
+    left: 36px;
+    bottom: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(var(--forma-bg-rgb), 0.85);
+    border: 1px solid var(--forma-border-strong);
+    font-family: var(--forma-font-mono);
+    font-size: 0.68rem;
+    color: var(--forma-text-muted);
 }
 
 /* ---------- Step tracker ---------- */
 
 .processing-steps {
     list-style: none;
-    margin: 4px 0 0;
+    margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
 }
 
 .processing-step {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 0.82rem;
+    gap: 12px;
+    padding: 7px 0;
+    font-size: 0.86rem;
     color: var(--forma-text-dim);
 }
 
+    /* Line joining each dot to the next. */
+    .processing-step:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 8px;
+        top: calc(50% + 10px);
+        height: calc(100% - 20px);
+        width: 2px;
+        background: var(--forma-border-strong);
+    }
+
 .processing-step-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 1px solid var(--forma-border-strong);
+    width: 18px;
+    height: 18px;
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 2px solid var(--forma-border-strong);
+    background: var(--forma-panel);
+    color: var(--forma-bg);
+}
+
+.processing-step-label {
+    flex: 1;
+    min-width: 0;
+}
+
+.processing-step-state {
+    font-family: var(--forma-font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 .processing-step-done {
@@ -129,31 +313,149 @@
         border-color: var(--forma-green);
     }
 
+    .processing-step-done:not(:last-child)::after {
+        background: var(--forma-green);
+    }
+
 .processing-step-active {
-    color: var(--forma-text);
+    color: var(--forma-heading);
     font-weight: 600;
 }
 
     .processing-step-active .processing-step-dot {
-        background: var(--forma-coral);
-        border-color: var(--forma-coral);
+        border-color: var(--forma-blue);
+        background: var(--forma-bg);
+        box-shadow: 0 0 0 4px rgba(var(--forma-accent-rgb), 0.25);
+        animation: processing-pulse 1.4s ease-in-out infinite;
     }
 
-.processing-page .processing-action {
-    align-self: flex-start;
-    margin-top: 6px;
+    .processing-step-active .processing-step-state {
+        color: var(--forma-teal-text);
+        font-weight: 500;
+    }
+
+@keyframes processing-pulse {
+    50% {
+        box-shadow: 0 0 0 7px rgba(var(--forma-accent-rgb), 0.08);
+    }
 }
 
-@media (max-width: 760px) {
+@media (prefers-reduced-motion: reduce) {
+    .processing-step-active .processing-step-dot {
+        animation: none;
+    }
+}
+
+/* Reminder that leaving the page cancels the job. */
+:is(.processing-page, .processing-embedded) .processing-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--forma-text-dim);
+}
+
+.processing-note svg {
+    flex: none;
+}
+
+/* ---------- Buttons ---------- */
+
+:is(.processing-page, .processing-embedded) .processing-action {
+    justify-content: center;
+    padding: 12px 22px;
+}
+
+/* Phones: Cancel stretches across the card. */
+:is(.processing-page, .processing-embedded) .processing-cancel {
+    margin-top: 4px;
+    width: 100%;
+}
+
+    :is(.processing-page, .processing-embedded) .processing-cancel:hover {
+        border-color: var(--forma-red);
+        color: var(--forma-red-text);
+    }
+
+/* ---------- Failed ---------- */
+
+.processing-card-failed {
+    max-width: 520px;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.processing-failed-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(var(--forma-red-rgb), 0.14);
+    border: 1px solid rgba(var(--forma-red-rgb), 0.4);
+    color: var(--forma-red-text);
+}
+
+:is(.processing-page, .processing-embedded) .processing-error {
+    color: var(--forma-red-text);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+:is(.processing-page, .processing-embedded) .processing-eyebrow-error {
+    color: var(--forma-red);
+}
+
+/* ---------- Tablets and up ---------- */
+
+@media (min-width: 761px) {
     .processing-page {
-        padding: 16px;
+        padding: 32px;
     }
 
         .processing-page .processing-card {
-            padding: 22px;
+            padding: 32px;
         }
 
-        .processing-page .processing-title {
-            font-size: 1.35rem;
-        }
+    :is(.processing-page, .processing-embedded) .processing-title {
+        font-size: 2rem;
+    }
+
+    :is(.processing-page, .processing-embedded) .processing-cancel {
+        width: auto;
+        align-self: flex-start;
+    }
+}
+
+/* ---------- Wide screens: status beside preview + steps ---------- */
+
+@media (min-width: 900px) {
+    .processing-card:not(.processing-card-failed) {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        gap: 36px;
+        align-items: start;
+    }
+
+    .processing-main,
+    .processing-side {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-width: 0;
+    }
+
+    .processing-preview {
+        aspect-ratio: 4 / 3;
+    }
+}
+
+/* ---------- Inside a card (YouTube Extractor) ---------- */
+
+/* The card around it already has padding and width. */
+.processing-embedded .processing-card {
+    max-width: none;
+    margin: 0;
+    padding: 0;
 }

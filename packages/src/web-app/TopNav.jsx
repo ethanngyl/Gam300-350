@@ -7,8 +7,8 @@
 \date 09-10-2026
 \brief
 Top navigation bar: a menu button (phones only) that opens the sidebar
-drawer, GENESIS logo, Home / Library / Photo Editor / Scene Builder /
-YouTube Extractor tabs (with click sound), and the signed-in user's
+drawer, the GENESIS logo (click it to go to Home), Library / Photo Editor /
+Scene Builder / YouTube Extractor tabs (with click sound), and the signed-in user's
 avatar. (The "Workspace ready" indicator was removed.) Clicking the avatar opens a small account menu with links
 to the account page, a quick mute / unmute for sound effects, and sign
 out.
@@ -20,7 +20,6 @@ import genesisLogo from './GenesisLogo.svg';
 import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 
 const TABS = [
-    { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
     { id: 'scene', label: 'Scene Builder', icon: 'shield' },
@@ -60,10 +59,19 @@ function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onTogg
                 <Icon name="menu" size={20} />
             </button>
 
-            <div className="forma-logo">
+            {/* The logo is the way back to Home (Home also stays in the sidebar). */}
+            <button
+                className="forma-logo forma-logo-home"
+                onClick={() => {
+                    playSound('tap');
+                    onTabChange('home');
+                }}
+                aria-label="Go to Home"
+                title="Home"
+            >
                 <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
                 <span className="forma-logo-text">GENESIS</span>
-            </div>
+            </button>
 
             <div className="forma-tabs">
                 {TABS.map((tab) => (

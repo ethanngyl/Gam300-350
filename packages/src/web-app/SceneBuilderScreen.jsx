@@ -728,7 +728,7 @@ function SceneBuilderScreen({
     const sceneHeading = (
         <div className="scene-builder-heading">
             <div className="scene-builder-title">
-                <p className="eyebrow">Scene Builder</p>
+                <p className="eyebrow eyebrow-accent">Scene Builder</p>
                 <input
                     className="scene-builder-name-input"
                     value={sceneInfo.name}

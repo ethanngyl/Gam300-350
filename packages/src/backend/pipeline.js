@@ -97,22 +97,23 @@ export const jobs = new Map()
 */
 /************************************************************************/
 function makeJob(id) {
-  const job = {
-    id,
-    status: 'queued',
-    phase: 'upload',
-    progress: 0, // 0..1, best-effort
-    log: [],
-    error: null,
-    createdAt: Date.now(),
-    resultPath: null,
-    detail: null, // short human-readable sub-status, e.g. "Downloading video… 40%"
-    cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
-    child: null, // the tool process currently running for this job, if any
-    removeBackground: false, // mask out the background before COLMAP (turntables)
-  }
-  jobs.set(id, job)
-  return job
+    const job = {
+        id,
+        status: 'queued',
+        phase: 'upload',
+        progress: 0, // 0..1, best-effort
+        log: [],
+        error: null,
+        createdAt: Date.now(),
+        resultPath: null,
+        detail: null, // short human-readable sub-status, e.g. "Downloading video… 40%"
+        cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
+        child: null, // the tool process currently running for this job, if any
+        removeBackground: false, // mask out the background before COLMAP (turntables)
+        trainIters: null, // iteration cap for Brush chosen by the user; null = config.trainIters
+    }
+    jobs.set(id, job)
+    return job
 }
 
 /************************************************************************/
@@ -131,11 +132,11 @@ function makeJob(id) {
 */
 /************************************************************************/
 function appendLog(job, line) {
-  const trimmed = String(line).replace(/\s+$/, '')
-  if (!trimmed) return
-  job.log.push(trimmed)
-  // Keep the log bounded so long runs don't grow unbounded in memory.
-  if (job.log.length > 400) job.log.splice(0, job.log.length - 400)
+    const trimmed = String(line).replace(/\s+$/, '')
+    if (!trimmed) return
+    job.log.push(trimmed)
+    // Keep the log bounded so long runs don't grow unbounded in memory.
+    if (job.log.length > 400) job.log.splice(0, job.log.length - 400)
 }
 
 /************************************************************************/
@@ -156,10 +157,10 @@ function appendLog(job, line) {
 */
 /************************************************************************/
 function setPhase(job, phase, progress) {
-  startPhase(job, phase)
-  job.phase = phase
-  job.progress = progress
-  saveJob(job)
+    startPhase(job, phase)
+    job.phase = phase
+    job.progress = progress
+    saveJob(job)
 }
 
 /************************************************************************/
@@ -186,7 +187,7 @@ const liveChildren = new Set()
 */
 /************************************************************************/
 export function killChildren() {
-  for (const child of liveChildren) killChild(child)
+    for (const child of liveChildren) killChild(child)
 }
 
 /************************************************************************/
@@ -202,28 +203,28 @@ export function killChildren() {
 */
 /************************************************************************/
 function killChild(child) {
-  liveChildren.delete(child)
-  if (child.exitCode !== null || child.signalCode !== null) return
-  try {
-    if (process.platform === 'win32') {
-      // child.kill() only hits the direct child; taskkill /T takes the tree.
-      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: 'ignore',
-        timeout: 5000,
-      })
-    } else {
-      // Children are spawned detached (own process group) so killing the
-      // negative pid takes the whole group, e.g. python + yt-dlp + ffmpeg.
-      try {
-        process.kill(-child.pid, 'SIGKILL')
-      } catch {
-        child.kill('SIGKILL')
-      }
+    liveChildren.delete(child)
+    if (child.exitCode !== null || child.signalCode !== null) return
+    try {
+        if (process.platform === 'win32') {
+            // child.kill() only hits the direct child; taskkill /T takes the tree.
+            spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+                windowsHide: true,
+                stdio: 'ignore',
+                timeout: 5000,
+            })
+        } else {
+            // Children are spawned detached (own process group) so killing the
+            // negative pid takes the whole group, e.g. python + yt-dlp + ffmpeg.
+            try {
+                process.kill(-child.pid, 'SIGKILL')
+            } catch {
+                child.kill('SIGKILL')
+            }
+        }
+    } catch {
+        // Best-effort: the process may already be gone.
     }
-  } catch {
-    // Best-effort: the process may already be gone.
-  }
 }
 
 /************************************************************************/
@@ -240,16 +241,16 @@ function killChild(child) {
 */
 /************************************************************************/
 export function cancelJob(job) {
-  if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
-    return false
-  }
-  job.cancelled = true
-  job.status = 'cancelled'
-  job.error = 'Cancelled by user'
-  appendLog(job, '\nCancelled by user.')
-  saveJob(job)
-  if (job.child) killChild(job.child)
-  return true
+    if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
+        return false
+    }
+    job.cancelled = true
+    job.status = 'cancelled'
+    job.error = 'Cancelled by user'
+    appendLog(job, '\nCancelled by user.')
+    saveJob(job)
+    if (job.child) killChild(job.child)
+    return true
 }
 
 /************************************************************************/
@@ -282,74 +283,74 @@ export function cancelJob(job) {
 */
 /************************************************************************/
 function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
-  return new Promise((resolve, reject) => {
-    // Cancelled between stages: don't start the next tool.
-    if (job.cancelled) return reject(new Error('Cancelled by user'))
-    appendLog(job, `\n$ ${path.basename(bin)} ${args.join(' ')}`)
-    // windowsHide: no console window per tool on Windows. detached (macOS /
-    // Linux only): put the tool in its own process group so killChildren can
-    // take down its subprocesses too; stdio stays piped so it doesn't outlive
-    // us unnoticed. env (when given) is merged over the inherited environment.
-    const child = spawn(bin, args, {
-      cwd,
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-      env: env ? { ...process.env, ...env } : undefined,
-    })
-    liveChildren.add(child)
-    job.child = child
+    return new Promise((resolve, reject) => {
+        // Cancelled between stages: don't start the next tool.
+        if (job.cancelled) return reject(new Error('Cancelled by user'))
+        appendLog(job, `\n$ ${path.basename(bin)} ${args.join(' ')}`)
+        // windowsHide: no console window per tool on Windows. detached (macOS /
+        // Linux only): put the tool in its own process group so killChildren can
+        // take down its subprocesses too; stdio stays piped so it doesn't outlive
+        // us unnoticed. env (when given) is merged over the inherited environment.
+        const child = spawn(bin, args, {
+            cwd,
+            windowsHide: true,
+            detached: process.platform !== 'win32',
+            env: env ? { ...process.env, ...env } : undefined,
+        })
+        liveChildren.add(child)
+        job.child = child
 
-    // Optional watchdog: kill the tool if it runs longer than timeoutMs (used
-    // for the YouTube download/extract). timedOut is read by the close handler
-    // below to reject with a clear "timed out" message; the log line surfaces
-    // the same in the job log. clearTimeout is a no-op when timer is null.
-    let timedOut = false
-    const timer = timeoutMs
-      ? setTimeout(() => {
-          timedOut = true
-          killChild(child)
-        }, timeoutMs)
-      : null
+        // Optional watchdog: kill the tool if it runs longer than timeoutMs (used
+        // for the YouTube download/extract). timedOut is read by the close handler
+        // below to reject with a clear "timed out" message; the log line surfaces
+        // the same in the job log. clearTimeout is a no-op when timer is null.
+        let timedOut = false
+        const timer = timeoutMs
+            ? setTimeout(() => {
+                timedOut = true
+                killChild(child)
+            }, timeoutMs)
+            : null
 
-    const handle = (buf) => {
-      const text = buf.toString()
-      for (const line of text.split(/\r?\n/)) {
-        appendLog(job, line)
-        if (onData) onData(line)
-      }
-    }
-    child.stdout.on('data', handle)
-    child.stderr.on('data', handle)
+        const handle = (buf) => {
+            const text = buf.toString()
+            for (const line of text.split(/\r?\n/)) {
+                appendLog(job, line)
+                if (onData) onData(line)
+            }
+        }
+        child.stdout.on('data', handle)
+        child.stderr.on('data', handle)
 
-    child.on('error', (err) => {
-      clearTimeout(timer)
-      liveChildren.delete(child)
-      if (job.child === child) job.child = null
-      reject(new Error(`Failed to start ${bin}: ${err.message}`))
+        child.on('error', (err) => {
+            clearTimeout(timer)
+            liveChildren.delete(child)
+            if (job.child === child) job.child = null
+            reject(new Error(`Failed to start ${bin}: ${err.message}`))
+        })
+        child.on('close', (code, signal) => {
+            clearTimeout(timer)
+            liveChildren.delete(child)
+            if (job.child === child) job.child = null
+            if (job.cancelled) reject(new Error('Cancelled by user'))
+            else if (timedOut)
+                reject(new Error(`${path.basename(bin)} timed out after ${+(timeoutMs / 60000).toFixed(1)} min`))
+            else if (code === 0) resolve()
+            else if (code === null)
+                reject(new Error(`${path.basename(bin)} was killed (${signal ?? 'terminated'})`))
+            else reject(new Error(`${path.basename(bin)} exited with code ${code}`))
+        })
     })
-    child.on('close', (code, signal) => {
-      clearTimeout(timer)
-      liveChildren.delete(child)
-      if (job.child === child) job.child = null
-      if (job.cancelled) reject(new Error('Cancelled by user'))
-      else if (timedOut)
-        reject(new Error(`${path.basename(bin)} timed out after ${+(timeoutMs / 60000).toFixed(1)} min`))
-      else if (code === 0) resolve()
-      else if (code === null)
-        reject(new Error(`${path.basename(bin)} was killed (${signal ?? 'terminated'})`))
-      else reject(new Error(`${path.basename(bin)} exited with code ${code}`))
-    })
-  })
 }
 
 const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/
 const YT_HOSTS = new Set([
-  'youtube.com',
-  'www.youtube.com',
-  'm.youtube.com',
-  'music.youtube.com',
-  'youtube-nocookie.com',
-  'www.youtube-nocookie.com',
+    'youtube.com',
+    'www.youtube.com',
+    'm.youtube.com',
+    'music.youtube.com',
+    'youtube-nocookie.com',
+    'www.youtube-nocookie.com',
 ])
 
 /************************************************************************/
@@ -367,22 +368,22 @@ const YT_HOSTS = new Set([
 */
 /************************************************************************/
 export function canonicalYoutubeUrl(input) {
-  let u
-  try {
-    u = new URL(String(input).trim())
-  } catch {
-    return null
-  }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
-  if (u.username || u.password || u.port) return null
-  const host = u.hostname.toLowerCase()
-  let id = null
-  if (host === 'youtu.be') id = u.pathname.split('/')[1]
-  else if (YT_HOSTS.has(host)) {
-    if (u.pathname === '/watch') id = u.searchParams.get('v')
-    else id = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/]+)/)?.[1]
-  }
-  return id && YT_ID_RE.test(id) ? `https://www.youtube.com/watch?v=${id}` : null
+    let u
+    try {
+        u = new URL(String(input).trim())
+    } catch {
+        return null
+    }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+    if (u.username || u.password || u.port) return null
+    const host = u.hostname.toLowerCase()
+    let id = null
+    if (host === 'youtu.be') id = u.pathname.split('/')[1]
+    else if (YT_HOSTS.has(host)) {
+        if (u.pathname === '/watch') id = u.searchParams.get('v')
+        else id = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/]+)/)?.[1]
+    }
+    return id && YT_ID_RE.test(id) ? `https://www.youtube.com/watch?v=${id}` : null
 }
 
 /************************************************************************/
@@ -409,68 +410,68 @@ export function canonicalYoutubeUrl(input) {
 */
 /************************************************************************/
 export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
-  const jobDir = path.join(config.jobsDir, job.id)
-  const imagesDir = path.join(jobDir, 'images')
-  await fsp.mkdir(imagesDir, { recursive: true })
+    const jobDir = path.join(config.jobsDir, job.id)
+    const imagesDir = path.join(jobDir, 'images')
+    await fsp.mkdir(imagesDir, { recursive: true })
 
-  job.status = 'running'
-  startPhase(job, 'extract')
-  job.metrics.ytFps = fps ?? config.ytFps
-  job.metrics.ytMaxFrames = maxFrames ?? config.ytMaxFrames
-  job.phase = 'extract'
-  job.progress = 0
-  job.detail = 'Fetching video info…'
-  saveJob(job)
+    job.status = 'running'
+    startPhase(job, 'extract')
+    job.metrics.ytFps = fps ?? config.ytFps
+    job.metrics.ytMaxFrames = maxFrames ?? config.ytMaxFrames
+    job.phase = 'extract'
+    job.progress = 0
+    job.detail = 'Fetching video info…'
+    saveJob(job)
 
-  // Extraction owns the 0..0.05 slice of the bar (COLMAP starts at 0.05);
-  // job.detail carries the finer-grained per-stage percentage.
-  let scriptError = null
-  const onData = (line) => {
-    const p = line.match(/^PROGRESS (download|extract) ([\d.]+)/)
-    if (p) {
-      const frac = Number(p[2])
-      const pct = Math.round(frac * 100)
-      if (p[1] === 'download') {
-        job.progress = 0.03 * frac
-        job.detail = `Downloading video… ${pct}%`
-      } else {
-        job.progress = 0.03 + 0.02 * frac
-        job.detail = `Extracting frames… ${pct}%`
-      }
-      saveJob(job, { throttle: true })
-      return
+    // Extraction owns the 0..0.05 slice of the bar (COLMAP starts at 0.05);
+    // job.detail carries the finer-grained per-stage percentage.
+    let scriptError = null
+    const onData = (line) => {
+        const p = line.match(/^PROGRESS (download|extract) ([\d.]+)/)
+        if (p) {
+            const frac = Number(p[2])
+            const pct = Math.round(frac * 100)
+            if (p[1] === 'download') {
+                job.progress = 0.03 * frac
+                job.detail = `Downloading video… ${pct}%`
+            } else {
+                job.progress = 0.03 + 0.02 * frac
+                job.detail = `Extracting frames… ${pct}%`
+            }
+            saveJob(job, { throttle: true })
+            return
+        }
+        const e = line.match(/^ERROR:\s*(.+)/)
+        if (e) scriptError = e[1]
     }
-    const e = line.match(/^ERROR:\s*(.+)/)
-    if (e) scriptError = e[1]
-  }
 
-  try {
-    await run(
-      job,
-      config.pythonBin,
-      [
-        config.ytScript,
-        url,
-        '--output', imagesDir,
-        '--fps', String(fps ?? config.ytFps),
-        '--max-frames', String(maxFrames ?? config.ytMaxFrames),
-        '--max-duration', String(config.ytMaxDurationSec),
-        // Lets yt-dlp use this very Node binary as its JavaScript runtime.
-        '--node-path', process.execPath,
-      ],
-      { onData, timeoutMs: config.ytTimeoutMin * 60_000 },
+    try {
+        await run(
+            job,
+            config.pythonBin,
+            [
+                config.ytScript,
+                url,
+                '--output', imagesDir,
+                '--fps', String(fps ?? config.ytFps),
+                '--max-frames', String(maxFrames ?? config.ytMaxFrames),
+                '--max-duration', String(config.ytMaxDurationSec),
+                // Lets yt-dlp use this very Node binary as its JavaScript runtime.
+                '--node-path', process.execPath,
+            ],
+            { onData, timeoutMs: config.ytTimeoutMin * 60_000 },
+        )
+    } catch (err) {
+        if (scriptError && !job.cancelled) throw new Error(scriptError, { cause: err })
+        throw err
+    } finally {
+        job.detail = null
+    }
+
+    const frames = (await fsp.readdir(imagesDir)).filter((f) =>
+        IMAGE_EXT_RE.test(f),
     )
-  } catch (err) {
-    if (scriptError && !job.cancelled) throw new Error(scriptError, { cause: err })
-    throw err
-  } finally {
-    job.detail = null
-  }
-
-  const frames = (await fsp.readdir(imagesDir)).filter((f) =>
-    IMAGE_EXT_RE.test(f),
-  )
-  return frames.length
+    return frames.length
 }
 
 /************************************************************************/
@@ -493,26 +494,26 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
 */
 /************************************************************************/
 export async function runYoutubePipeline(job, url, opts = {}) {
-  try {
-    const count = await extractYoutubeFrames(job, url, opts)
-    job.imageCount = count
-    saveJob(job)
-    if (count < 8) {
-      throw new Error(
-        `Extracted only ${count} frame(s). Need at least 8 for a reconstruction — ` +
-          'try a longer clip or a higher fps.',
-      )
+    try {
+        const count = await extractYoutubeFrames(job, url, opts)
+        job.imageCount = count
+        saveJob(job)
+        if (count < 8) {
+            throw new Error(
+                `Extracted only ${count} frame(s). Need at least 8 for a reconstruction — ` +
+                'try a longer clip or a higher fps.',
+            )
+        }
+    } catch (err) {
+        if (!job.cancelled) {
+            job.status = 'error'
+            job.error = err.message
+            appendLog(job, `\nERROR: ${err.message}`)
+            saveJob(job)
+        }
+        return
     }
-  } catch (err) {
-    if (!job.cancelled) {
-      job.status = 'error'
-      job.error = err.message
-      appendLog(job, `\nERROR: ${err.message}`)
-      saveJob(job)
-    }
-    return
-  }
-  await runPipeline(job)
+    await runPipeline(job)
 }
 
 /************************************************************************/
@@ -539,54 +540,54 @@ export async function runYoutubePipeline(job, url, opts = {}) {
 */
 /************************************************************************/
 async function generateMasks(job, imagesDir, jobDir) {
-  const colmapMaskDir = path.join(jobDir, 'colmap_stencils')
-  // Masking owns whatever is left of the bar before COLMAP's 0.05.
-  const base = Math.min(job.progress ?? 0, 0.05)
-  setPhase(job, 'masking', base)
-  job.detail = 'Loading background-removal model…'
-  saveJob(job)
+    const colmapMaskDir = path.join(jobDir, 'colmap_stencils')
+    // Masking owns whatever is left of the bar before COLMAP's 0.05.
+    const base = Math.min(job.progress ?? 0, 0.05)
+    setPhase(job, 'masking', base)
+    job.detail = 'Loading background-removal model…'
+    saveJob(job)
 
-  let scriptError = null
-  const onData = (line) => {
-    const p = line.match(/^PROGRESS mask ([\d.]+)/)
-    if (p) {
-      const frac = Number(p[1])
-      job.progress = base + (0.05 - base) * frac
-      job.detail = `Removing backgrounds… ${Math.round(frac * 100)}%`
-      saveJob(job, { throttle: true })
-      return
+    let scriptError = null
+    const onData = (line) => {
+        const p = line.match(/^PROGRESS mask ([\d.]+)/)
+        if (p) {
+            const frac = Number(p[1])
+            job.progress = base + (0.05 - base) * frac
+            job.detail = `Removing backgrounds… ${Math.round(frac * 100)}%`
+            saveJob(job, { throttle: true })
+            return
+        }
+        const e = line.match(/^ERROR:\s*(.+)/)
+        if (e) scriptError = e[1]
     }
-    const e = line.match(/^ERROR:\s*(.+)/)
-    if (e) scriptError = e[1]
-  }
 
-  try {
-    await run(
-      job,
-      config.pythonBin,
-      [
-        config.maskScript,
-        imagesDir,
-        '--colmap-out', colmapMaskDir,
-        '--brush-out', path.join(jobDir, 'masks'),
-        '--model', config.maskModel,
-      ],
-      { onData },
-    )
-  } catch (err) {
-    if (scriptError && !job.cancelled) throw new Error(scriptError, { cause: err })
-    throw err
-  } finally {
-    job.detail = null
-  }
-  return colmapMaskDir
+    try {
+        await run(
+            job,
+            config.pythonBin,
+            [
+                config.maskScript,
+                imagesDir,
+                '--colmap-out', colmapMaskDir,
+                '--brush-out', path.join(jobDir, 'masks'),
+                '--model', config.maskModel,
+            ],
+            { onData },
+        )
+    } catch (err) {
+        if (scriptError && !job.cancelled) throw new Error(scriptError, { cause: err })
+        throw err
+    } finally {
+        job.detail = null
+    }
+    return colmapMaskDir
 }
 
 // Shown for any flavor of "mapper couldn't build a model from these photos":
 // it exiting non-zero (e.g. no good initial image pair) and it exiting 0 but
 // writing no sparse model both mean the same thing to the user.
 const NO_MODEL_MESSAGE =
-  'COLMAP could not reconstruct a model from these photos. Try more photos with more overlap and texture.'
+    'COLMAP could not reconstruct a model from these photos. Try more photos with more overlap and texture.'
 
 /************************************************************************/
 /*!
@@ -607,149 +608,149 @@ const NO_MODEL_MESSAGE =
 */
 /************************************************************************/
 export async function runPipeline(job) {
-  const jobDir = path.join(config.jobsDir, job.id)
-  const imagesDir = path.join(jobDir, 'images')
-  const dbPath = path.join(jobDir, 'database.db')
-  const sparseDir = path.join(jobDir, 'sparse')
+    const jobDir = path.join(config.jobsDir, job.id)
+    const imagesDir = path.join(jobDir, 'images')
+    const dbPath = path.join(jobDir, 'database.db')
+    const sparseDir = path.join(jobDir, 'sparse')
 
-  try {
-    if (job.cancelled) return
-    job.status = 'running'
-
-    // --- Optional: mask out the background (turntable captures) ---
-    const maskArgs = job.removeBackground
-      ? ['--ImageReader.mask_path', await generateMasks(job, imagesDir, jobDir)]
-      : []
-
-    // --- COLMAP: feature extraction ---
-    setPhase(job, 'colmap-features', 0.05)
-    await run(job, config.colmapBin, [
-      'feature_extractor',
-      '--database_path', dbPath,
-      '--image_path', imagesDir,
-      '--ImageReader.single_camera', '1',
-      ...maskArgs,
-      config.colmapExtractionUseGpuFlag, config.colmapUseGpu,
-    ])
-
-    // --- COLMAP: exhaustive matching ---
-    setPhase(job, 'colmap-matching', 0.2)
-    await run(job, config.colmapBin, [
-      'exhaustive_matcher',
-      '--database_path', dbPath,
-      config.colmapMatchingUseGpuFlag, config.colmapUseGpu,
-      ...config.colmapStrictMatcherArgs,
-    ])
-
-    // --- COLMAP: sparse mapping (recovers camera poses) ---
-    setPhase(job, 'colmap-mapping', 0.35)
-    await fsp.mkdir(sparseDir, { recursive: true })
     try {
-      await run(job, config.colmapBin, [
-        'mapper',
-        '--database_path', dbPath,
-        '--image_path', imagesDir,
-        '--output_path', sparseDir,
-        ...config.colmapStrictMapperArgs,
-      ])
-    } catch (err) {
-      // Cancellation and timeouts already have a clear, specific message -- only
-      // COLMAP's own failure (e.g. "no good initial image pair") gets replaced.
-      // The raw COLMAP output is still in the job's log / logTail for debugging.
-      if (job.cancelled || /timed out/.test(err.message)) throw err
-      throw new Error(NO_MODEL_MESSAGE, { cause: err })
-    }
+        if (job.cancelled) return
+        job.status = 'running'
 
-    // Mapper writes sparse/0 (sometimes 1,2.. if it splits). Require at least one.
-    const models = fs.existsSync(sparseDir)
-      ? (await fsp.readdir(sparseDir)).filter((d) => /^\d+$/.test(d))
-      : []
-    if (models.length === 0) {
-      throw new Error(NO_MODEL_MESSAGE)
-    }
-    job.metrics.sparseModels = models.length
+        // --- Optional: mask out the background (turntable captures) ---
+        const maskArgs = job.removeBackground
+            ? ['--ImageReader.mask_path', await generateMasks(job, imagesDir, jobDir)]
+            : []
 
-    // --- Brush: train the gaussian splat ---
-    setPhase(job, 'training', 0.45)
-    const outDirName = `${job.id}_out`
-    const total = config.trainIters
-    // Brush (brush-cli 1.0.0) renders its progress as an interactive bar that is
-    // suppressed when stdout is a pipe, so with default logging it prints NOTHING
-    // for us to parse. Setting RUST_LOG=info makes it emit structured log lines,
-    // several of which carry the current step, e.g.
-    //   brush_train::train] screen_size iter=200 n=176 ...
-    //   brush_cli] Refine iter 401, 243 splats.
-    // These appear roughly every 200 steps -- frequent enough for a live counter.
-    const iterRe = /\biter[= ](\d[\d,]*)/i
-    // Samples VRAM / utilisation for the metrics record (NVIDIA only).
-    const stopGpuSampler = startGpuSampler(job)
-    // With masks, train the background as empty space so the masked-out
-    // surroundings don't leave a haze of splats around the object.
-    const alphaArgs = job.removeBackground && config.brushHasAlphaMode
-      ? ['--alpha-mode', 'transparent']
-      : []
-    try {
-      await run(
-        job,
-        config.brushBin,
-        [
-          job.id, // dataset dir name, relative to cwd (jobsDir)
-          '--max-resolution', String(config.maxResolution),
-          config.brushItersFlag, String(total),
-          '--export-path', `./${outDirName}/`,
-          '--export-name', 'splat_{iter}.ply',
-          '--export-every', String(total),
-          ...alphaArgs,
-        ],
-        {
-          cwd: config.jobsDir,
-          env: { RUST_LOG: 'info' },
-          onData: (line) => {
-            const m = line.match(iterRe)
-            if (m) {
-              const cur = Number(m[1].replace(/,/g, ''))
-              if (cur >= 0 && cur <= total) {
-                job.metrics.lastIteration = Math.max(job.metrics.lastIteration ?? 0, cur)
-                // Map training [0..1] onto the 0.45..0.98 band.
-                job.progress = 0.45 + 0.53 * (cur / total)
-                // Surfaced by the frontend as a live iteration counter.
-                job.detail = `Iteration ${cur.toLocaleString()} / ${total.toLocaleString()}`
-                saveJob(job, { throttle: true })
-              }
-            }
-          },
-        },
-      )
-    } finally {
-      stopGpuSampler()
-    }
-    // Training done -- drop the iteration counter so later phases don't show it.
-    job.detail = null
+        // --- COLMAP: feature extraction ---
+        setPhase(job, 'colmap-features', 0.05)
+        await run(job, config.colmapBin, [
+            'feature_extractor',
+            '--database_path', dbPath,
+            '--image_path', imagesDir,
+            '--ImageReader.single_camera', '1',
+            ...maskArgs,
+            config.colmapExtractionUseGpuFlag, config.colmapUseGpu,
+        ])
 
-    // --- Locate the exported .ply (highest iteration) ---
-    const outDir = path.join(config.jobsDir, outDirName)
-    const rawPly = await highestRawPly(outDir)
-    if (!rawPly) {
-      throw new Error('Training finished but no .ply was exported.')
-    }
+        // --- COLMAP: exhaustive matching ---
+        setPhase(job, 'colmap-matching', 0.2)
+        await run(job, config.colmapBin, [
+            'exhaustive_matcher',
+            '--database_path', dbPath,
+            config.colmapMatchingUseGpuFlag, config.colmapUseGpu,
+            ...config.colmapStrictMatcherArgs,
+        ])
 
-    // --- Normalize into the viewer's frame ---
-    // COLMAP reconstructs in an arbitrary world frame (object far from the
-    // origin, arbitrary scale), which loads but can render off-screen in the
-    // viewer. Recenter + rescale into result.ply. The PLY header, including
-    // Brush's "Vertical axis" comment the viewer reads, is preserved verbatim.
-    setPhase(job, 'normalize', 0.99)
-    const finalPly = path.join(outDir, 'result.ply')
-    let normalized = false
-    try {
-      await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
-      job.resultPath = finalPly
-      normalized = true
-    } catch (err) {
-      // Best-effort: if normalization fails, still hand back the raw export.
-      appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
-      job.resultPath = rawPly
-    }
+        // --- COLMAP: sparse mapping (recovers camera poses) ---
+        setPhase(job, 'colmap-mapping', 0.35)
+        await fsp.mkdir(sparseDir, { recursive: true })
+        try {
+            await run(job, config.colmapBin, [
+                'mapper',
+                '--database_path', dbPath,
+                '--image_path', imagesDir,
+                '--output_path', sparseDir,
+                ...config.colmapStrictMapperArgs,
+            ])
+        } catch (err) {
+            // Cancellation and timeouts already have a clear, specific message -- only
+            // COLMAP's own failure (e.g. "no good initial image pair") gets replaced.
+            // The raw COLMAP output is still in the job's log / logTail for debugging.
+            if (job.cancelled || /timed out/.test(err.message)) throw err
+            throw new Error(NO_MODEL_MESSAGE, { cause: err })
+        }
+
+        // Mapper writes sparse/0 (sometimes 1,2.. if it splits). Require at least one.
+        const models = fs.existsSync(sparseDir)
+            ? (await fsp.readdir(sparseDir)).filter((d) => /^\d+$/.test(d))
+            : []
+        if (models.length === 0) {
+            throw new Error(NO_MODEL_MESSAGE)
+        }
+        job.metrics.sparseModels = models.length
+
+        // --- Brush: train the gaussian splat ---
+        setPhase(job, 'training', 0.45)
+        const outDirName = `${job.id}_out`
+        const total = job.trainIters ?? config.trainIters
+        // Brush (brush-cli 1.0.0) renders its progress as an interactive bar that is
+        // suppressed when stdout is a pipe, so with default logging it prints NOTHING
+        // for us to parse. Setting RUST_LOG=info makes it emit structured log lines,
+        // several of which carry the current step, e.g.
+        //   brush_train::train] screen_size iter=200 n=176 ...
+        //   brush_cli] Refine iter 401, 243 splats.
+        // These appear roughly every 200 steps -- frequent enough for a live counter.
+        const iterRe = /\biter[= ](\d[\d,]*)/i
+        // Samples VRAM / utilisation for the metrics record (NVIDIA only).
+        const stopGpuSampler = startGpuSampler(job)
+        // With masks, train the background as empty space so the masked-out
+        // surroundings don't leave a haze of splats around the object.
+        const alphaArgs = job.removeBackground && config.brushHasAlphaMode
+            ? ['--alpha-mode', 'transparent']
+            : []
+        try {
+            await run(
+                job,
+                config.brushBin,
+                [
+                    job.id, // dataset dir name, relative to cwd (jobsDir)
+                    '--max-resolution', String(config.maxResolution),
+                    config.brushItersFlag, String(total),
+                    '--export-path', `./${outDirName}/`,
+                    '--export-name', 'splat_{iter}.ply',
+                    '--export-every', String(total),
+                    ...alphaArgs,
+                ],
+                {
+                    cwd: config.jobsDir,
+                    env: { RUST_LOG: 'info' },
+                    onData: (line) => {
+                        const m = line.match(iterRe)
+                        if (m) {
+                            const cur = Number(m[1].replace(/,/g, ''))
+                            if (cur >= 0 && cur <= total) {
+                                job.metrics.lastIteration = Math.max(job.metrics.lastIteration ?? 0, cur)
+                                // Map training [0..1] onto the 0.45..0.98 band.
+                                job.progress = 0.45 + 0.53 * (cur / total)
+                                // Surfaced by the frontend as a live iteration counter.
+                                job.detail = `Iteration ${cur.toLocaleString()} / ${total.toLocaleString()}`
+                                saveJob(job, { throttle: true })
+                            }
+                        }
+                    },
+                },
+            )
+        } finally {
+            stopGpuSampler()
+        }
+        // Training done -- drop the iteration counter so later phases don't show it.
+        job.detail = null
+
+        // --- Locate the exported .ply (highest iteration) ---
+        const outDir = path.join(config.jobsDir, outDirName)
+        const rawPly = await highestRawPly(outDir)
+        if (!rawPly) {
+            throw new Error('Training finished but no .ply was exported.')
+        }
+
+        // --- Normalize into the viewer's frame ---
+        // COLMAP reconstructs in an arbitrary world frame (object far from the
+        // origin, arbitrary scale), which loads but can render off-screen in the
+        // viewer. Recenter + rescale into result.ply. The PLY header, including
+        // Brush's "Vertical axis" comment the viewer reads, is preserved verbatim.
+        setPhase(job, 'normalize', 0.99)
+        const finalPly = path.join(outDir, 'result.ply')
+        let normalized = false
+        try {
+            await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
+            job.resultPath = finalPly
+            normalized = true
+        } catch (err) {
+            // Best-effort: if normalization fails, still hand back the raw export.
+            appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
+            job.resultPath = rawPly
+        }
 
     // Timing / iteration / hardware stats for this .ply, written to
     // <id>/metrics.json and <jobsDir>/metrics.jsonl. Never fails the job.
@@ -760,18 +761,18 @@ export async function runPipeline(job) {
       log: (line) => appendLog(job, line),
     })
 
-    // Best-effort copy into the engine's samples folder, so a finished scan can
-    // be opened straight from the native viewer's file browser (main.cpp scans
-    // assets/samples/ for *.ply on launch). Never fails the job -- the result is
-    // still servable from resultPath/the Download button either way.
-    try {
-      fs.mkdirSync(config.engineSamplesDir, { recursive: true })
-      const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
-      fs.copyFileSync(job.resultPath, enginePath)
-      appendLog(job, `Copied to engine samples: ${enginePath}`)
-    } catch (err) {
-      appendLog(job, `Could not copy to engine samples (${err.message}); use Download .ply instead.`)
-    }
+        // Best-effort copy into the engine's samples folder, so a finished scan can
+        // be opened straight from the native viewer's file browser (main.cpp scans
+        // assets/samples/ for *.ply on launch). Never fails the job -- the result is
+        // still servable from resultPath/the Download button either way.
+        try {
+            fs.mkdirSync(config.engineSamplesDir, { recursive: true })
+            const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
+            fs.copyFileSync(job.resultPath, enginePath)
+            appendLog(job, `Copied to engine samples: ${enginePath}`)
+        } catch (err) {
+            appendLog(job, `Could not copy to engine samples (${err.message}); use Download .ply instead.`)
+        }
 
     job.phase = 'done'
     job.progress = 1
@@ -812,7 +813,7 @@ const MAX_SAMPLE_BASE_LENGTH = 60
 */
 /************************************************************************/
 export function sampleFileName(job) {
-  return job.sampleFile ?? `${job.id.slice(0, 8)}.ply`
+    return job.sampleFile ?? `${job.id.slice(0, 8)}.ply`
 }
 
 /************************************************************************/
@@ -831,19 +832,19 @@ export function sampleFileName(job) {
 */
 /************************************************************************/
 export function pickSampleFileName(job, name) {
-  const shortId = job.id.slice(0, 8)
-  const base = (name ?? '')
-    .replace(/[^\w-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, MAX_SAMPLE_BASE_LENGTH)
-  if (!base) return `${shortId}.ply`
-  if (RESERVED_FILE_RE.test(base)) return `${base}_${shortId}.ply`
+    const shortId = job.id.slice(0, 8)
+    const base = (name ?? '')
+        .replace(/[^\w-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, MAX_SAMPLE_BASE_LENGTH)
+    if (!base) return `${shortId}.ply`
+    if (RESERVED_FILE_RE.test(base)) return `${base}_${shortId}.ply`
 
-  const preferred = `${base}.ply`
-  // Case-insensitive: Windows treats Chair.ply and chair.ply as one file.
-  const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
-  if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
-  return `${base}_${shortId}.ply`
+    const preferred = `${base}.ply`
+    // Case-insensitive: Windows treats Chair.ply and chair.ply as one file.
+    const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
+    if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
+    return `${base}_${shortId}.ply`
 }
 
 // Called with each job that finishes successfully (set by setOnJobDone).
@@ -910,24 +911,24 @@ export async function pruneJob(job) {
 */
 /************************************************************************/
 export function restoreJob(record) {
-  const job = makeJob(record.id)
-  Object.assign(job, {
-    status: record.status,
-    phase: record.phase,
-    progress: record.progress,
-    error: record.error,
-    createdAt: record.createdAt,
-    resultPath: record.resultPath,
-    imageCount: record.imageCount,
-    source: record.source,
-    name: record.name,
-    sampleFile: record.sampleFile,
-    updatedAt: record.updatedAt,
-    log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
-  })
-  // Backfill a missing record, or persist a reconciled state (e.g. running -> interrupted).
-  if (record.needsWrite) saveJob(job)
-  return job
+    const job = makeJob(record.id)
+    Object.assign(job, {
+        status: record.status,
+        phase: record.phase,
+        progress: record.progress,
+        error: record.error,
+        createdAt: record.createdAt,
+        resultPath: record.resultPath,
+        imageCount: record.imageCount,
+        source: record.source,
+        name: record.name,
+        sampleFile: record.sampleFile,
+        updatedAt: record.updatedAt,
+        log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
+    })
+    // Backfill a missing record, or persist a reconciled state (e.g. running -> interrupted).
+    if (record.needsWrite) saveJob(job)
+    return job
 }
 
 // ----- End of Functions ----------------------------------------------------- //

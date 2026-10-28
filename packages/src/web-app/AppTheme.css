@@ -1,27 +1,49 @@
 /* ============================================================
-   GENESIS theme - dark blue-slate with teal accent and coral highlight
+   GENESIS theme - neutral charcoal with blue accent and amber highlight
    ============================================================ */
 
 :root {
-    --forma-bg: #111d29;
-    --forma-sidebar: #162636;
-    --forma-panel: #1b2f42;
-    --forma-panel-alt: #223a50;
-    --forma-panel-raised: #2a4660;
-    --forma-border: rgba(140, 190, 215, 0.14);
-    --forma-border-strong: rgba(140, 190, 215, 0.28);
-    --forma-text: #e6edf2;
-    --forma-heading: #f7e4d2;
-    --forma-text-muted: #8fa5b8;
-    --forma-text-dim: #5f7a90;
-    --forma-blue: #3f98ad;
-    --forma-blue-hover: #4aa9bf;
-    --forma-teal-text: #6cc6d6;
+    /* ----- Fonts (loaded in index.html) ----- */
+    --forma-font: 'Inter', system-ui, sans-serif;
+    --forma-font-mono: 'JetBrains Mono', monospace;
+    /* ----- Surfaces, darkest to lightest ----- */
+    --forma-bg: #0d0d0f;
+    --forma-sidebar: #121214;
+    --forma-panel: #18181b;
+    --forma-panel-alt: #202024;
+    --forma-panel-raised: #2a2a2f;
+    --forma-border: #242428;
+    --forma-border-strong: #34343a;
+    /* ----- Text ----- */
+    --forma-text: #f4f4f5;
+    --forma-text-soft: #d4d4d8;
+    --forma-heading: #fafafa;
+    --forma-text-muted: #a1a1aa;
+    --forma-text-dim: #8b8b94;
+    /* Text on top of an accent or coral fill */
+    --forma-on-accent: #ffffff;
+    --forma-on-coral: #1a1204;
+    /* ----- Accents ----- */
+    --forma-blue: #3b82f6;
+    --forma-blue-hover: #4f8df7;
+    --forma-teal-text: #73a7ff;
+    --forma-coral: #f59e0b;
     --forma-green: #4fc4a6;
     --forma-red: #f06f60;
-    --forma-coral: #f4917b;
+    --forma-red-text: var(--forma-red-text);
     --forma-purple: #a78bfa;
     --forma-orange: #f97316;
+    /* ----- Same colours as R, G, B for see-through tints:
+             rgba(var(--forma-accent-rgb), 0.16) ----- */
+    --forma-accent-rgb: 59, 130, 246;
+    --forma-accent-light-rgb: 115, 167, 255;
+    --forma-coral-rgb: 245, 158, 11;
+    --forma-red-rgb: 240, 111, 96;
+    --forma-green-rgb: 79, 196, 166;
+    --forma-purple-rgb: 167, 139, 250;
+    --forma-orange-rgb: 249, 115, 22;
+    --forma-bg-rgb: 13, 13, 15;
+    --forma-backdrop-rgb: 5, 5, 7;
 }
 
 html {
@@ -33,7 +55,7 @@ html {
 .genesis-page {
     background: var(--forma-bg);
     color: var(--forma-text);
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--forma-font);
 }
 
     /* App.css (old theme) styles bare h1/h2/h3/p; neutralise that inside the new screens. */
@@ -45,7 +67,7 @@ html {
     }
 
 .eyebrow {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -87,7 +109,8 @@ html {
     gap: 20px;
     padding: 0 20px;
     background: var(--forma-sidebar);
-    border-bottom: 1px solid var(--forma-border);
+    /* No line under the top bar: it and the sidebar share one colour, so
+       they read as a single frame around the page. */
 }
 
 .forma-logo {
@@ -96,10 +119,46 @@ html {
     gap: 10px;
     padding-right: 20px;
     border-right: 1px solid var(--forma-border);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-weight: 700;
     font-size: 0.78rem;
     letter-spacing: 0.16em;
+}
+
+/* The top nav's logo is a button that goes to Home. On wider screens it
+   is as wide as the open sidebar (240px, minus the nav's 20px padding),
+   so the tabs start where the page content does. No divider line. */
+.forma-logo-home {
+    box-sizing: border-box;
+    width: 220px;
+    flex: none;
+    /* Same speed as the sidebar opening / closing. */
+    transition: width 0.18s ease;
+    align-self: stretch;
+    background: transparent;
+    border: none;
+    padding-left: 0;
+    color: inherit;
+    cursor: pointer;
+}
+
+/* Sidebar collapsed (wider screens; phones use a drawer): shrink to
+       just fit the logo and word, so the tabs sit next to it instead of
+       leaving a gap. */
+@media (min-width: 761px) {
+    .genesis-shell.is-sidebar-collapsed .forma-logo-home {
+        width: 132px;
+    }
+}
+
+.forma-logo-home:hover .forma-logo-icon {
+    border-color: var(--forma-blue);
+}
+
+.forma-logo-home:focus-visible {
+    outline: 2px solid var(--forma-blue);
+    outline-offset: 4px;
+    border-radius: 6px;
 }
 
 .forma-logo-icon {
@@ -149,9 +208,9 @@ html {
     }
 
     .forma-tab.is-active {
-        color: #e3f4f7;
-        background: rgba(63, 152, 173, 0.16);
-        border-color: rgba(63, 152, 173, 0.4);
+        color: var(--forma-text);
+        background: rgba(var(--forma-accent-rgb), 0.16);
+        border-color: rgba(var(--forma-accent-rgb), 0.4);
     }
 
 .forma-account {
@@ -243,7 +302,7 @@ html {
     }
 
 .genesis-side-label {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.64rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -273,8 +332,8 @@ html {
     }
 
     .genesis-side-item.is-active {
-        background: rgba(63, 152, 173, 0.16);
-        border-color: rgba(63, 152, 173, 0.28);
+        background: rgba(var(--forma-accent-rgb), 0.16);
+        border-color: rgba(var(--forma-accent-rgb), 0.28);
         border-left-color: var(--forma-blue);
         color: #fff;
     }
@@ -319,7 +378,7 @@ html {
 .forma-btn-primary {
     background: var(--forma-blue);
     border-color: var(--forma-blue);
-    color: #f4fbfd;
+    color: var(--forma-on-accent);
 }
 
     .forma-btn-primary:hover {
@@ -328,7 +387,7 @@ html {
     }
 
 .forma-badge {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.64rem;
     letter-spacing: 0.06em;
     padding: 3px 8px;
@@ -339,14 +398,14 @@ html {
 
 .forma-badge-ready {
     color: var(--forma-teal-text);
-    background: rgba(63, 152, 173, 0.16);
-    border-color: rgba(63, 152, 173, 0.4);
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    border-color: rgba(var(--forma-accent-rgb), 0.4);
 }
 
 .forma-badge-processing {
-    color: #ff8c7c;
-    background: rgba(240, 111, 96, 0.14);
-    border-color: rgba(240, 111, 96, 0.4);
+    color: var(--forma-red-text);
+    background: rgba(var(--forma-red-rgb), 0.14);
+    border-color: rgba(var(--forma-red-rgb), 0.4);
 }
 
 .forma-card {
@@ -458,7 +517,7 @@ html {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.66rem;
     }
 
@@ -468,7 +527,7 @@ html {
     border-radius: 14px;
     border: none;
     background: var(--forma-coral);
-    color: #3a1c16;
+    color: var(--forma-on-coral);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -525,22 +584,22 @@ html {
 
 .home-tool-icon-library {
     color: var(--forma-teal-text);
-    background: rgba(63, 152, 173, 0.14);
+    background: rgba(var(--forma-accent-rgb), 0.14);
 }
 
 .home-tool-icon-editor {
     color: var(--forma-purple);
-    background: rgba(167, 139, 250, 0.12);
+    background: rgba(var(--forma-purple-rgb), 0.12);
 }
 
 .home-tool-icon-scene {
     color: var(--forma-green);
-    background: rgba(79, 196, 166, 0.12);
+    background: rgba(var(--forma-green-rgb), 0.12);
 }
 
 .home-tool-icon-youtube {
     color: var(--forma-orange);
-    background: rgba(249, 115, 22, 0.12);
+    background: rgba(var(--forma-orange-rgb), 0.12);
 }
 
 .home-tool-arrow {
@@ -565,7 +624,7 @@ html {
 
 .home-tool-footer {
     margin-top: 8px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-teal-text);
 }
@@ -608,7 +667,7 @@ html {
 }
 
 .home-recent-poly {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
     margin-top: 3px;
@@ -762,12 +821,12 @@ html {
         object-fit: contain;
     }
 
-    .library-thumb .forma-badge {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 1; /* above the cover photo */
-    }
+.library-thumb .forma-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1; /* above the cover photo */
+}
 
 .library-item-name {
     padding: 14px 14px 4px;
@@ -779,7 +838,7 @@ html {
     display: flex;
     justify-content: space-between;
     padding: 0 14px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
 }
@@ -866,7 +925,7 @@ html {
     align-items: center;
     justify-content: center;
     padding: 16px;
-    background: rgba(8, 14, 20, 0.6);
+    background: rgba(var(--forma-backdrop-rgb), 0.6);
 }
 
 .action-dialog {
@@ -1005,7 +1064,7 @@ html {
 .library-photo-overflow {
     position: absolute;
     inset: 0;
-    background: rgba(17, 29, 41, 0.7);
+    background: rgba(var(--forma-bg-rgb), 0.7);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1020,7 +1079,7 @@ html {
 
 /* Solid backing so the badge stays readable on top of photos. */
 .library-photo-thumbgrid .library-photo-badge {
-    background-color: rgba(17, 29, 41, 0.9);
+    background-color: rgba(var(--forma-bg-rgb), 0.9);
 }
 
 .library-photo-name {
@@ -1031,7 +1090,7 @@ html {
 
 .library-photo-count {
     padding: 0 14px 12px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
 }
@@ -1052,7 +1111,7 @@ html {
 }
 
     .gallery-compact .gallery-job h3 span {
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.7rem;
         color: var(--forma-text-muted);
     }
@@ -1122,7 +1181,7 @@ html {
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border-strong);
     color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     padding: 5px 12px;
     border-radius: 5px;
@@ -1130,14 +1189,14 @@ html {
 }
 
     .scene-chip.is-active {
-        background: rgba(63, 152, 173, 0.22);
+        background: rgba(var(--forma-accent-rgb), 0.22);
         border-color: var(--forma-blue);
-        color: #e3f4f7;
+        color: var(--forma-text);
     }
 
 .scene-color-space {
     margin-left: auto;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     color: var(--forma-text-dim);
 }
@@ -1159,7 +1218,7 @@ html {
 
 .scene-panel-title {
     padding: 10px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.78rem;
     font-weight: 700;
     border-bottom: 1px solid var(--forma-border);
@@ -1179,7 +1238,7 @@ html {
     border: 1px solid var(--forma-border-strong);
     border-radius: 5px;
     color: var(--forma-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.72rem;
     padding: 6px 8px;
     outline: none;
@@ -1197,7 +1256,7 @@ html {
     gap: 6px;
     padding: 5px 8px;
     border-radius: 4px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     color: var(--forma-text-muted);
     cursor: pointer;
@@ -1208,7 +1267,7 @@ html {
     }
 
     .scene-outliner-item.is-active {
-        background: rgba(63, 152, 173, 0.18);
+        background: rgba(var(--forma-accent-rgb), 0.18);
         color: var(--forma-teal-text);
     }
 
@@ -1262,7 +1321,7 @@ html {
     background: transparent;
     border: 1px dashed var(--forma-border-strong);
     color: var(--forma-text-muted);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     padding: 9px;
     border-radius: 6px;
@@ -1299,7 +1358,7 @@ html {
 
 .scene-viewport-label {
     margin-left: auto;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     color: var(--forma-text-dim);
 }
 
@@ -1350,7 +1409,7 @@ html {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.62rem;
 }
 
@@ -1413,7 +1472,7 @@ html {
     border: none;
     border-radius: 4px;
     color: var(--forma-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     padding: 7px 10px;
     text-align: left;
@@ -1440,7 +1499,7 @@ html {
     align-items: center;
     justify-content: center;
     padding: 16px;
-    background: rgba(5, 12, 18, 0.6);
+    background: rgba(var(--forma-backdrop-rgb), 0.6);
 }
 
 .scene-picker {
@@ -1493,7 +1552,7 @@ html {
     border: none;
     border-radius: 5px;
     color: var(--forma-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.76rem;
     padding: 9px 8px;
     text-align: left;
@@ -1571,7 +1630,7 @@ html {
     border: none;
     border-top: 1px solid var(--forma-border);
     color: var(--forma-teal-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     padding: 9px 14px;
     cursor: pointer;
@@ -1583,7 +1642,7 @@ html {
     align-items: center;
     justify-content: space-between;
     padding: 4px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-muted);
 }
@@ -1594,7 +1653,7 @@ html {
         border: 1px solid var(--forma-border);
         border-radius: 3px;
         color: var(--forma-teal-text);
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.7rem;
         padding: 3px 6px;
         text-align: right;
@@ -1606,7 +1665,7 @@ html {
     flex-direction: column;
     gap: 6px;
     padding: 8px 14px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-muted);
 }
@@ -1648,14 +1707,14 @@ html {
     border: none;
     border-right: 1px solid var(--forma-border);
     color: var(--forma-text-dim);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.62rem;
     padding: 5px 0;
     cursor: pointer;
 }
 
     .scene-frame.is-active {
-        background: rgba(63, 152, 173, 0.35);
+        background: rgba(var(--forma-accent-rgb), 0.35);
         color: #fff;
     }
 
@@ -1681,7 +1740,7 @@ html {
 
 .scene-frame-count {
     margin-left: auto;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-dim);
 }
@@ -1873,7 +1932,7 @@ html {
 }
 
 .account-since {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     color: var(--forma-text-dim);
     margin-top: 8px;
@@ -1915,7 +1974,7 @@ html {
     }
 
     .forma-switch:checked {
-        background: rgba(63, 152, 173, 0.45);
+        background: rgba(var(--forma-accent-rgb), 0.45);
         border-color: var(--forma-blue);
     }
 
@@ -2022,7 +2081,7 @@ html {
 
 .home-stat-note {
     color: var(--forma-teal-text);
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     margin-top: 8px;
 }
@@ -2046,7 +2105,7 @@ html {
     .genesis-overlay .btn-primary {
         background: var(--forma-blue);
         border-color: var(--forma-blue);
-        color: #f4fbfd;
+        color: var(--forma-on-accent);
     }
 
         .genesis-page .btn-primary:hover,
@@ -2109,8 +2168,9 @@ html {
 
 .home-file-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 14px;
+    /* 4 cards a row with the sidebar open on a laptop, 5 when collapsed. */
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 18px;
 }
 
 .home-file-card {
@@ -2154,7 +2214,7 @@ html {
     width: 24px;
     height: 24px;
     border-radius: 6px;
-    background: rgba(17, 29, 41, 0.85);
+    background: rgba(var(--forma-bg-rgb), 0.85);
     border: 1px solid var(--forma-border-strong);
     color: var(--forma-teal-text);
 }
@@ -2162,13 +2222,13 @@ html {
 .home-file-copy {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 12px;
+    gap: 4px;
+    padding: 14px 16px 16px;
     min-width: 0;
 }
 
 .home-file-name {
-    font-size: 0.86rem;
+    font-size: 0.95rem;
     font-weight: 600;
     color: var(--forma-text);
     overflow: hidden;
@@ -2177,7 +2237,7 @@ html {
 }
 
 .home-file-kind {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -2240,183 +2300,384 @@ html {
     }
 }
 
-/* ---------- Home: recent files and models ---------- */
+/* Home, wireframe layout: bigger welcome with a subtitle, an outlined
+   "View all" button, and New model only on phones (it is in the sidebar). */
+.home-heading-row h1 {
+    font-size: 2.6rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
 
-.home-new-model {
+.home-heading-row .home-subtitle {
+    margin-top: 12px !important;
+    font-size: 1rem;
+    color: var(--forma-text-soft);
+}
+
+.home-screen .eyebrow-accent {
+    margin-bottom: 10px !important;
+}
+
+.home-view-all {
     flex: none;
-    padding: 11px 20px;
+    padding: 9px 16px;
+    background: var(--forma-panel);
 }
 
-.home-recent-v2-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 18px;
-}
-
-    .home-recent-v2-header .home-section-title {
-        margin-bottom: 10px !important;
+@media (min-width: 761px) {
+    .home-new-model {
+        display: none;
     }
 
-.home-recent-tabs {
-    display: flex;
-    gap: 20px;
-    border-bottom: 1px solid var(--forma-border);
+    .home-heading-row {
+        margin-bottom: 40px;
+    }
 }
 
-.home-recent-tab {
-    padding: 0 0 10px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    background: transparent;
-    color: var(--forma-text-muted);
-    font-family: inherit;
-    font-size: 0.84rem;
+/* ---------- Model detail slider (TrainingQualitySlider) ---------- */
+
+.training-quality {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 220px;
+}
+
+    .training-quality.is-disabled {
+        opacity: 0.6;
+    }
+
+.training-quality-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.82rem;
+    color: var(--forma-text);
+}
+
+.training-quality-value {
+    font-family: var(--forma-font-mono);
+    font-size: 0.7rem;
+    color: var(--forma-teal-text);
+    white-space: nowrap;
+}
+
+.training-quality-range {
+    width: 100%;
+    margin: 0;
+    accent-color: var(--forma-blue);
     cursor: pointer;
 }
 
-    .home-recent-tab:hover {
-        color: var(--forma-text);
-    }
-
-    .home-recent-tab.is-active {
-        color: var(--forma-text);
-        border-bottom-color: var(--forma-blue);
-    }
-
-.home-file-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 14px;
+.training-quality-stops {
+    display: flex;
+    justify-content: space-between;
 }
 
-.home-file-card {
-    display: flex;
-    flex-direction: column;
+.training-quality-stop {
     padding: 0;
-    overflow: hidden;
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.72rem;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .training-quality-stop.is-active {
+        color: var(--forma-text);
+        font-weight: 600;
+    }
+
+    .training-quality-stop:disabled {
+        cursor: default;
+    }
+
+/* ---------- Sidebar: Genesis wireframe layout ----------
+   Collapse button, New model + Add photos, workspace pages, and the
+   signed-in user at the bottom. Collapses to icons only on wider screens
+   (.is-sidebar-collapsed on the shell, .is-collapsed on the sidebar). */
+
+.genesis-body {
+    grid-template-columns: 240px minmax(0, 1fr);
+    transition: grid-template-columns 0.18s ease;
+}
+
+.genesis-shell.is-sidebar-collapsed .genesis-body {
+    grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.genesis-sidebar {
+    padding: 16px 14px 14px;
+}
+
+.genesis-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    width: 36px;
+    height: 36px;
+    flex: none;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel);
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .genesis-collapse-btn:hover {
+        color: var(--forma-text);
+        background: var(--forma-panel-alt);
+    }
+
+    /* The chevron icon points down; turn it to point left while expanded. */
+    .genesis-collapse-btn svg {
+        transform: rotate(90deg);
+    }
+
+.genesis-new-model,
+.genesis-add-photos {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+}
+
+.genesis-new-model {
+    margin-bottom: 8px;
+}
+
+.genesis-add-photos {
+    margin-bottom: 10px;
+    background: var(--forma-panel);
+}
+
+    .genesis-side-item span,
+    .genesis-new-model span,
+    .genesis-add-photos span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+.genesis-side-item {
+    gap: 12px;
+    padding: 10px 12px;
+    color: var(--forma-text-soft);
+    font-size: 0.88rem;
+}
+
+    .genesis-side-item.is-active {
+        color: var(--forma-text);
+    }
+
+/* ---------- Signed-in user at the bottom of the sidebar ---------- */
+
+.genesis-profile {
+    position: relative;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--forma-border);
+}
+
+.genesis-profile-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text);
+    font-family: inherit;
     text-align: left;
     cursor: pointer;
 }
 
-    .home-file-card:hover {
-        border-color: var(--forma-blue);
+    .genesis-profile-btn:hover,
+    .genesis-profile-btn.is-active {
+        background: var(--forma-panel-alt);
     }
 
-.home-file-preview {
-    position: relative;
-    aspect-ratio: 4 / 3;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--forma-panel-alt);
-    color: var(--forma-text-dim);
-    border-bottom: 1px solid var(--forma-border);
-}
-
-    .home-file-preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
+    /* Chevron points up, toward the menu that opens above. */
+    .genesis-profile-btn > svg {
+        flex: none;
+        color: var(--forma-text-dim);
+        transform: rotate(180deg);
     }
 
-.home-file-type {
-    position: absolute;
-    left: 10px;
-    bottom: 10px;
+.genesis-profile-avatar {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: rgba(17, 29, 41, 0.85);
-    border: 1px solid var(--forma-border-strong);
+    flex: none;
+    width: 36px;
+    height: 36px;
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    border-color: rgba(var(--forma-accent-rgb), 0.5);
     color: var(--forma-teal-text);
 }
 
-.home-file-copy {
+.genesis-profile-text {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 12px;
     min-width: 0;
+    flex: 1;
 }
 
-.home-file-name {
-    font-size: 0.86rem;
-    font-weight: 600;
-    color: var(--forma-text);
+.genesis-profile-name,
+.genesis-profile-email {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.home-file-kind {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--forma-text-muted);
+.genesis-profile-name {
+    font-size: 0.86rem;
+    font-weight: 600;
 }
 
-.home-file-time {
-    font-size: 0.72rem;
+.genesis-profile-email {
+    font-family: var(--forma-font-mono);
+    font-size: 0.68rem;
     color: var(--forma-text-dim);
-    margin-top: 6px;
 }
 
-.home-empty {
+.genesis-profile-menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 8px);
+    padding: 14px;
+    border-radius: 12px;
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border-strong);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    z-index: 50;
+}
+
+.genesis-profile-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.genesis-profile-avatar-large {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 48px;
+    height: 48px;
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    border-color: rgba(var(--forma-accent-rgb), 0.5);
+    color: var(--forma-teal-text);
+    cursor: default;
+}
+
+.genesis-profile-identity {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding: 40px 24px;
-    text-align: center;
-    color: var(--forma-text-muted);
+    gap: 2px;
+    min-width: 0;
 }
 
-    .home-empty svg {
-        color: var(--forma-teal-text);
-    }
-
-    .home-empty h3 {
-        font-size: 1.05rem;
+    .genesis-profile-identity strong {
+        font-size: 0.92rem;
         color: var(--forma-heading);
     }
 
-    .home-empty p {
-        max-width: 42ch;
-        font-size: 0.86rem;
+    .genesis-profile-identity span {
+        font-size: 0.76rem;
+        color: var(--forma-text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
-    .home-empty .forma-btn {
-        margin-top: 6px;
+.genesis-profile-link {
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.78rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.genesis-profile-divider {
+    height: 1px;
+    margin: 12px 0 8px;
+    background: var(--forma-border);
+}
+
+/* ---------- Collapsed sidebar: icons only (wider screens) ---------- */
+
+@media (min-width: 761px) {
+    .genesis-sidebar.is-collapsed {
+        padding-left: 12px;
+        padding-right: 12px;
+        align-items: center;
     }
 
-@media (max-width: 760px) {
-    .home-new-model {
-        align-self: stretch;
-        justify-content: center;
-    }
-
-    .home-recent-v2-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-        .home-recent-v2-header .home-link {
-            align-self: flex-start;
-            padding: 0;
+        .genesis-sidebar.is-collapsed .genesis-collapse-btn {
+            align-self: center;
         }
 
-    .home-file-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
+        .genesis-sidebar.is-collapsed .genesis-side-label,
+        .genesis-sidebar.is-collapsed .genesis-side-item span,
+        .genesis-sidebar.is-collapsed .genesis-new-model span,
+        .genesis-sidebar.is-collapsed .genesis-add-photos span,
+        .genesis-sidebar.is-collapsed .genesis-profile-text,
+        .genesis-sidebar.is-collapsed .genesis-profile-btn > svg {
+            display: none;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-collapse-btn svg {
+            transform: rotate(-90deg);
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-new-model,
+        .genesis-sidebar.is-collapsed .genesis-add-photos,
+        .genesis-sidebar.is-collapsed .genesis-side-item,
+        .genesis-sidebar.is-collapsed .genesis-profile-btn {
+            width: 46px;
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        /* A gap where the Workspace label was. */
+        .genesis-sidebar.is-collapsed .genesis-add-photos {
+            margin-bottom: 18px;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-profile {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+    /* The collapsed sidebar is too narrow for the account menu, so let
+           it open past the sidebar's edge, over the page. */
+    .genesis-sidebar.is-collapsed {
+        overflow: visible;
+        position: relative;
+        z-index: 20;
     }
+
+        .genesis-sidebar.is-collapsed .genesis-profile-menu {
+            left: 0;
+            right: auto;
+            width: 260px;
+        }
 }
 
 /* ============================================================
@@ -2490,6 +2751,7 @@ html {
     }
 
     .forma-logo {
+        width: auto;
         border-right: none;
         padding-right: 0;
     }
@@ -2510,9 +2772,14 @@ html {
             display: none;
         }
 
-    /* Sidebar becomes a slide-in drawer */
-    .genesis-body {
+    /* Sidebar becomes a slide-in drawer, so it never collapses */
+    .genesis-body,
+    .genesis-shell.is-sidebar-collapsed .genesis-body {
         grid-template-columns: 1fr;
+    }
+
+    .genesis-collapse-btn {
+        display: none;
     }
 
     .genesis-sidebar {
@@ -2537,7 +2804,7 @@ html {
         inset: 0;
         z-index: 55;
         border: none;
-        background: rgba(8, 14, 20, 0.6);
+        background: rgba(var(--forma-backdrop-rgb), 0.6);
     }
 
     /* iPhone Safari zooms in on focused fields with text under 16px. */
@@ -2780,7 +3047,7 @@ html {
     gap: 32px;
     padding: 48px 64px;
     border-right: 1px solid var(--forma-border);
-    background: radial-gradient(circle at 15% 85%, rgba(63, 152, 173, 0.18), transparent 45%), radial-gradient(circle at 80% 15%, rgba(244, 145, 123, 0.1), transparent 40%), linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-sidebar);
+    background: radial-gradient(circle at 15% 85%, rgba(var(--forma-accent-rgb), 0.18), transparent 45%), radial-gradient(circle at 80% 15%, rgba(var(--forma-coral-rgb), 0.1), transparent 40%), linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-sidebar);
 }
 
 .login-hero-logo {
@@ -2826,13 +3093,13 @@ html {
         padding: 9px 14px;
         border-radius: 8px;
         border: 1px solid var(--forma-border-strong);
-        background: rgba(17, 29, 41, 0.6);
+        background: rgba(var(--forma-bg-rgb), 0.6);
         font-size: 0.8rem;
         color: var(--forma-text);
     }
 
 .genesis-login .login-hero-footer {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.66rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
