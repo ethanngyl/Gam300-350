@@ -17,8 +17,8 @@ near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
 Taking a photo plays the camera shutter sound (quieter for auto-capture).
 If the camera can't start, the preview reads "Click to enable camera" and
-clicking it asks for the camera again. The Remove background option now
-lives in the Photo Editor; coming back from there ("Back to camera"),
+clicking it asks for the camera again. The Remove background option is
+here and in the Photo Editor; coming back from there ("Back to camera"),
 initialPhotos brings the batch and that choice back with it.
 **************************************************************************/
 
@@ -100,9 +100,10 @@ function CameraCapture({
     const [isAutoCapturing, setIsAutoCapturing] = useState(false);
     const [intervalSeconds, setIntervalSeconds] = useState(2);
     const [maxCaptures, setMaxCaptures] = useState(50);
-    // Mask out the background before reconstruction. Set in the Photo
-    // Editor; kept here so the choice survives going back to the camera.
-    const [removeBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Mask out the background before reconstruction. Needed for turntable
+    // captures, where the static background makes the model come out flat.
+    // Also set in the Photo Editor, and kept when coming back from it.
+    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
     // Model detail (training iteration cap), also set in the Photo Editor.
     const [trainIters] = useState(initialPhotos?.trainIters ?? null);
 
@@ -605,6 +606,21 @@ function CameraCapture({
                             ))}
                         </div>
                     )}
+
+                    <label className="capture-option">
+                        <input
+                            type="checkbox"
+                            checked={removeBackground}
+                            onChange={(e) => {
+                                playSound('tap');
+                                setRemoveBackground(e.target.checked);
+                            }}
+                        />
+                        <span>
+                            Remove background
+                            <small>Turn on for turntable captures (object spins, camera stays still).</small>
+                        </span>
+                    </label>
 
                     {issueSummary && (
                         <p className="capture-issues" role="status">

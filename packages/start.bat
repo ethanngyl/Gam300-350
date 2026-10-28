@@ -81,12 +81,14 @@ if errorlevel 1 (
     set "SKIP_COLMAP=-SkipColmap"
 )
 
-node -e "import('./src/backend/config.js').then(m=>import('node:fs').then(fs=>process.exit(fs.existsSync(m.config.brushBin)?0:1)))"
+REM Brush must also be 1.0.0 (the version get-tools.ps1 builds), so an older
+REM 0.3.0 install gets replaced. A BRUSH_BIN set by hand is trusted as is.
+node -e "import('./src/backend/config.js').then(m=>Promise.all([import('node:fs'),import('node:child_process')]).then(([fs,cp])=>{const b=m.config.brushBin;const ok=fs.existsSync(b)&&(!!process.env.BRUSH_BIN||/ 1\.0\.0\b/.test(cp.spawnSync(b,['--version'],{encoding:'utf8'}).stdout||''));process.exit(ok?0:1)}))"
 if errorlevel 1 (
-    echo     Brush not found - will download it - about 160 MB.
+    echo     Brush 1.0.0 not found - will build it from source - about 10-15 minutes.
     set "NEED_TOOLS=1"
 ) else (
-    echo     Brush found.
+    echo     Brush 1.0.0 found.
     set "SKIP_BRUSH=-SkipBrush"
 )
 
@@ -104,7 +106,7 @@ if "%NEED_TOOLS%"=="1" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%TOOLS%\get-tools.ps1" %SKIP_COLMAP% %SKIP_BRUSH% %NO_CUDA%
     if errorlevel 1 (
         echo.
-        echo *** Could not download COLMAP / Brush. Check your internet connection, then
+        echo *** Could not install COLMAP / Brush. Check your internet connection, then
         echo *** run tools\get-tools.ps1 by hand to see the full error.
         pause
         exit /b 1
