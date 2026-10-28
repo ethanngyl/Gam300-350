@@ -43,6 +43,7 @@ status.js.
 // ----- Headers ------------------------------------------------------- //
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -464,6 +465,18 @@ export const config = {
   // Caddy forwards from the same machine, so req.ip is the real client
   // address (for rate limits) and req.secure reflects HTTPS (for cookies).
   trustProxy: process.env.TRUST_PROXY || null,
+
+  // --- Shared library on the VM ----------------------------------------------
+  // Client machines send each finished job (photos + result.ply) to the VM,
+  // and every machine's Library lists the user's jobs from there.
+  // This machine's name, stored with each job it sends (the job's "origin").
+  machineName: process.env.MACHINE_NAME || os.hostname(),
+  // The VM refuses new jobs when its disk has less free space than this.
+  minFreeDiskGB: Number(process.env.MIN_FREE_DISK_GB) || 2,
+  // How often a client retries sending finished jobs the VM hasn't got yet.
+  syncIntervalMin: Number(process.env.SYNC_INTERVAL_MIN) || 5,
+  // Largest result.ply the VM accepts from a client.
+  maxResultSizeMB: 500,
   // --- Google SSO (authority only) -------------------------------------------
   // From the Google Cloud Console OAuth client (step 6). Secrets: put them in
   // .env, never commit them. Empty = Google sign-in is disabled.

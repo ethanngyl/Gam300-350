@@ -44,6 +44,15 @@ Shared signup rules, and the password check with a per-email limit of 10
 wrong passwords per 15 minutes.
 - limitByIp(limiter) / tooManyAttempts(retryAfterSec)
 Per-IP request limits for /auth/login and /auth/signup (429 when passed).
+- isRemoteJob(id) / actAsUser (middleware)
+Shared library. On a client machine, a job id with no folder here is in the
+VM's library, so the /jobs routes pass the request to the VM (library.js).
+On the VM, the same routes also answer under /library/... for client
+machines (shared key required), acting as the user they name -- with the
+role from the VM's own database.
+- requireFreeDisk / prepareStore / storeUpload / PUT /library/jobs/:id
+On the VM: receive a finished job from a client machine (photos, result.ply,
+metrics.json), check it, and store it in jobs/ like a VM-made job.
 - assigneJobId(req, res, next)
 Runs before multer. Generates a UUID job ID, resets a file counter on req, 
 and creates jobs/<id>/images/, so every file in the request goes into the same 
@@ -76,7 +85,7 @@ import multer from 'multer'
 import express from 'express'
 import crypto from 'node:crypto'
 import { config } from './config.js'
-import { saveJob } from './status.js'
+import { STATUS_FILE, STATUS_VERSION, saveJob } from './status.js'
 import { getHardwareInfo } from './metrics.js'
 import path from 'node:path'
 import os from 'node:os'
@@ -85,12 +94,18 @@ import { marked } from 'marked'
 import
 {
   SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
-  findOrCreateGoogleUser, findSessionUser, findUserByEmail, getJobOwnerId,
-  listOwnedJobIds, retireLocalAccounts, setJobOwner, upsertLocalUser,
+  findOrCreateGoogleUser, findSessionUser, findUserByEmail, findUserById,
+  getJobOwnerId, isJobSynced, listOwnedJobIds, recordStoredJob,
+  retireLocalAccounts, setJobOwner, unmarkJobSynced, upsertLocalUser,
   verifyPassword,
 }
 from './db.js'
 import { createLimiter } from './ratelimit.js'
+import
+{
+  fetchRemoteJobs, forwardToVm, proxyToVm, startLibrarySync, syncPendingJobs,
+}
+from './library.js'
 import
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
@@ -101,7 +116,7 @@ import
 { 
   cancelJob, canonicalYoutubeUrl, jobs,
   killChildren, makeJob, pickSampleFileName, restoreJob,
-  runPipeline, runYoutubePipeline, sampleFileName,
+  runPipeline, runYoutubePipeline, sampleFileName, setOnJobDone,
 }
 from './pipeline.js'
 
@@ -127,6 +142,14 @@ for (const record of restored)
 }
 
 console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
+
+// Staging folders left by shared-library uploads cut off mid-way (crash or
+// restart during a PUT /library/jobs/:id). Their jobs are re-sent later.
+for (const entry of fs.readdirSync(config.jobsDir))
+{
+  if (entry.startsWith('.incoming-'))
+    fs.rmSync(path.join(config.jobsDir, entry), { recursive: true, force: true })
+}
 
 // A machine that sends accounts to the VM can't keep its own: their ids and
 // emails would clash with the VM's. Only the first client-mode start finds any.
@@ -159,6 +182,11 @@ app.use(express.static(path.join(__dirname, '../web-app/dist')))
 
 // Work out who is calling (from the session cookie) before any route runs.
 app.use(loadUser)
+
+// Shared library (VM only): client machines reach the same job routes under
+// /library/..., with the shared key instead of a cookie, acting as the user
+// they name. 503 on any machine that isn't the account authority.
+app.use('/library', requireAuthorityKey, actAsUser)
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -319,7 +347,57 @@ function canAccessJob(user, jobId)
 function requireJobAccess(req, res, next)
 {
   if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+  // On a client machine, a job that isn't here may be in the VM's shared
+  // library: the route passes the request on, and the VM applies the same
+  // owner / admin rule (see isRemoteJob).
+  if (isRemoteJob(req.params.id))
+  {
+    req.remoteJob = true
+    return next()
+  }
   if (!canAccessJob(req.user, req.params.id)) return res.status(404).json({ error: 'job not found' })
+  next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    On a client machine with a working VM connection: true when a job id
+    has no folder here, so the job can only be in the VM's shared library.
+    Always false on the VM and in local mode.
+  \param id
+  string
+    The job id from the URL
+  \return
+    bool
+*/
+/************************************************************************/
+function isRemoteJob(id)
+{
+  return config.authMode === 'client' && !clientAuthProblem() &&
+    JOB_ID_RE.test(id) && !fs.existsSync(path.join(config.jobsDir, id))
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware for the VM's /library routes (after requireAuthorityKey):
+    sets req.user to the user named in the X-Act-As-User header, looked up
+    in the VM's own database -- so the role comes from the VM, never from
+    the client machine. No header (e.g. storing a job) means no user.
+  \param req
+    The request from the client machine
+  \param _res
+    The response
+  \param next
+    moving on
+*/
+/************************************************************************/
+function actAsUser(req, _res, next)
+{
+  const raw = req.get('X-Act-As-User')
+  const id = Number(raw)
+  req.user = raw && Number.isInteger(id) ? findUserById(id) : null
   next()
 }
 
@@ -748,12 +826,14 @@ app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxF
     before a restart -- or dropped in by hand -- show up. A job that is 
     live in memory keeps its live status: the disk can't tell "running"
     from "interrupted". Admins get every job; other users only the jobs
-    they created.
+    they created. On a client machine the user's jobs in the VM's shared
+    library are added (a local copy wins; if the VM can't be reached, only
+    local jobs are listed). Also served on the VM as /library/jobs.
   \return
     401 if not logged in, else a record of every visible job's details
 */
 /************************************************************************/
-app.get('/jobs', requireUser, async (req, res) =>
+app.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
 {
   let records = await scanJobs(config.jobsDir)
   if (req.user.role !== 'admin')
@@ -761,31 +841,37 @@ app.get('/jobs', requireUser, async (req, res) =>
     const owned = listOwnedJobIds(req.user.id)
     records = records.filter((record) => owned.has(record.id))
   }
-  res.json(
-    records.map((record) =>
+  const list = records.map((record) =>
+  {
+    const job = jobs.get(record.id) ?? restoreJob(record);
+    return {
+      id: record.id,
+      name: job.name ?? null,
+      status: job.status,
+      phase: job.phase,
+      progress: job.progress,
+      detail: job.detail,
+      error: job.error,
+      createdAt: record.createdAt,
+      updatedAt: job.updatedAt ?? record.updatedAt,
+      imageCount: record.imageCount,
+      hasResult: job.status === 'done' && !!job.resultPath,
+      thumbnail: record.thumbnail,
+      images: record.images,
+    }
+  })
+
+  if (config.authMode === 'client' && !clientAuthProblem())
+  {
+    const remote = await fetchRemoteJobs(req.user)
+    if (remote)
     {
-      const job = jobs.get(record.id) ?? restoreJob(record);
-      return {
-        id: record.id,
-        name: job.name ?? null,
-        status: job.status,
-        phase: job.phase,
-        progress: job.progress,
-        detail: job.detail,
-        error: job.error,
-        createdAt: record.createdAt,
-        updatedAt: job.updatedAt ?? record.updatedAt,
-        imageCount: record.imageCount,
-        hasResult: job.status === 'done' && !!job.resultPath,
-        thumbnail: record.thumbnail,
-        // Cut-out cover for the cards, on jobs that have background masks.
-        cover: fs.existsSync(path.join(config.jobsDir, record.id, 'masks'))
-          ? `/jobs/${record.id}/cover.webp`
-          : null,
-        images: record.images,
-      }
-    }),
-  )
+      const localIds = new Set(list.map((job) => job.id))
+      list.push(...remote.filter((job) => !localIds.has(job.id)))
+      list.sort((a, b) => b.createdAt - a.createdAt)
+    }
+  }
+  res.json(list)
 })
 
 /************************************************************************/
@@ -793,14 +879,16 @@ app.get('/jobs', requireUser, async (req, res) =>
   \brief
     Serve a single uploaded image. id/name are whitelisted to plain filename
     characters so a request can't use `..` or slashes to escape the jobs
-    folder. Only the job's owner or an admin can load it.
+    folder. Only the job's owner or an admin can load it. A job only in
+    the VM's shared library is fetched from there.
   \return
     401 if not logged in, 404 if image doesn't exist or isn't theirs, else
     the image itself
 */
 /************************************************************************/
-app.get('/jobs/:id/images/:name', requireJobAccess, (req, res) =>
+app.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJobAccess, (req, res) =>
 {
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const { id, name } = req.params
   if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
   {
@@ -867,8 +955,9 @@ app.post('/jobs/from-youtube', requireUser, (req, res) =>
     else status, phase, progress, error and the last 40 log lines
 */
 /************************************************************************/
-app.get('/jobs/:id', requireJobAccess, async (req, res) =>
+app.get(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) =>
 {
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
   if (!job) 
     return res.status(404).json({ error: 'job not found' })
@@ -900,8 +989,9 @@ app.get('/jobs/:id', requireJobAccess, async (req, res) =>
     kills processes and frees GPU
 */
 /************************************************************************/
-app.delete('/jobs/:id', requireJobAccess, async (req, res) =>
+app.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) =>
 {
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
   if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
@@ -920,8 +1010,9 @@ app.delete('/jobs/:id', requireJobAccess, async (req, res) =>
     401 if not logged in, 404 if result is not ready or isn't theirs
 */
 /************************************************************************/
-app.get('/jobs/:id/result.ply', requireJobAccess, async (req, res) =>
+app.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobAccess, async (req, res) =>
 {
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
   if (!job || job.status !== 'done' || !job.resultPath) 
   {
@@ -1010,15 +1101,18 @@ const MAX_JOB_NAME_LENGTH = 80
     display name is saved in status.json, and the model's copy in the
     engine's samples folder is renamed to match (see pickSampleFileName).
     The job folders keep their id. Only the job's owner or an admin can
-    rename it.
+    rename it. On a client machine, a job only in the VM's shared library
+    is renamed there; a local job already sent to the VM is renamed in
+    both places.
   \return
     401 if not logged in, 404 if job not found or isn't theirs, 400 if the name is too long, 409 if the sample
     file can't be renamed (e.g. open in another program), else the new
     name and sample filename
 */
 /************************************************************************/
-app.patch('/jobs/:id', requireJobAccess, async (req, res) =>
+app.patch(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) =>
 {
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
 
@@ -1051,6 +1145,15 @@ app.patch('/jobs/:id', requireJobAccess, async (req, res) =>
   job.name = newName
   job.sampleFile = newFile
   saveJob(job)
+
+  // Keep the shared library's copy in step. Best-effort: the local rename
+  // already happened, so a VM that is down only leaves its old name.
+  if (config.authMode === 'client' && isJobSynced(job.id))
+  {
+    const { status } = await forwardToVm('PATCH', `/library/jobs/${job.id}`, req.user, { name: newName ?? '' })
+    if (status !== 200)
+      console.warn(`[backend] library: renamed job ${job.id} here, but not on the VM (${status || 'unreachable'})`)
+  }
   res.json({ id: job.id, name: job.name, sampleFile: newFile })
 })
 
@@ -1060,16 +1163,28 @@ app.patch('/jobs/:id', requireJobAccess, async (req, res) =>
     Permanently delete a job: its photos, COLMAP files, splat output and
     the copy in the engine's samples folder. A job still processing is
     cancelled first so its tools stop writing into the folders. Only the
-    job's owner or an admin can delete it.
+    job's owner or an admin can delete it. On a client machine, a job only
+    in the VM's shared library is deleted there; a local job already sent
+    to the VM is deleted from the VM first (otherwise it would come back
+    in the Library from the VM's copy).
   \return
-    401 if not logged in, 404 if job not found or isn't theirs, else 200
-    once the folders are gone
+    401 if not logged in, 404 if job not found or isn't theirs, 502 if the
+    VM's copy couldn't be deleted, else 200 once the folders are gone
 */
 /************************************************************************/
-app.delete('/jobs/:id/files', requireJobAccess, async (req, res, next) =>
+app.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, async (req, res, next) =>
 {
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
+
+  if (config.authMode === 'client' && isJobSynced(job.id))
+  {
+    const { status } = await forwardToVm('DELETE', `/library/jobs/${job.id}/files`, req.user)
+    if (status !== 200 && status !== 404)
+      return res.status(502).json({ error: 'Couldn\'t delete it from the shared library. Try again shortly.' })
+    unmarkJobSynced(job.id)
+  }
 
   cancelJob(job) // no-op for a finished job
   jobs.delete(job.id)
@@ -1085,6 +1200,183 @@ app.delete('/jobs/:id/files', requireJobAccess, async (req, res, next) =>
   }
   catch (err)
   {
+    next(err)
+  }
+})
+
+// --- Shared library: receiving jobs (VM only) --------------------------------
+// A client machine PUTs a finished job to /library/jobs/:id (the /library
+// middleware has already checked the shared key). It is written to a hidden
+// folder first (".incoming-..." -- scanJobs ignores names with a dot), checked,
+// then moved into jobs/ in the normal layout, so it is served exactly like a
+// job made on the VM.
+
+/************************************************************************/
+/*!
+  \brief
+    Refuses new library jobs when the VM's disk is nearly full, before any
+    upload is written.
+  \return
+    507 if free space is below config.minFreeDiskGB
+*/
+/************************************************************************/
+async function requireFreeDisk(_req, res, next)
+{
+  try
+  {
+    const stats = await fs.promises.statfs(config.jobsDir)
+    const freeGB = (stats.bavail * stats.bsize) / 1024 ** 3
+    if (freeGB < config.minFreeDiskGB)
+    {
+      console.warn(`[backend] library: refused job, only ${freeGB.toFixed(1)} GB free`)
+      return res.status(507).json({ error: `The VM is low on disk space (${freeGB.toFixed(1)} GB free).` })
+    }
+    next()
+  }
+  catch (err)
+  {
+    next(err)
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Checks the job id and makes the hidden staging folder the upload is
+    written into (req.storeDir), laid out as <id>/images/ and <id>_out/.
+  \return
+    404 for an invalid id
+*/
+/************************************************************************/
+function prepareStore(req, res, next)
+{
+  const { id } = req.params
+  if (!JOB_ID_RE.test(id) || id.endsWith('_out')) return res.status(404).json({ error: 'job not found' })
+  req.storeDir = path.join(config.jobsDir, `.incoming-${crypto.randomUUID()}`)
+  fs.mkdirSync(path.join(req.storeDir, id, 'images'), { recursive: true })
+  fs.mkdirSync(path.join(req.storeDir, `${id}_out`), { recursive: true })
+  next()
+}
+
+// Photos keep the client's names (0000.jpg, ...) so their URLs stay the same;
+// the model and metrics get fixed names. Anything else is dropped.
+const storeUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) =>
+      cb(null, file.fieldname === 'images'
+        ? path.join(req.storeDir, req.params.id, 'images')
+        : path.join(req.storeDir, `${req.params.id}_out`)),
+    filename: (_req, file, cb) =>
+      cb(null, file.fieldname === 'images' ? file.originalname
+        : file.fieldname === 'result' ? 'result.ply' : 'metrics.json'),
+  }),
+  limits: { fileSize: config.maxResultSizeMB * 1024 * 1024, files: config.maxFiles + 2 },
+  fileFilter: (_req, file, cb) => cb(null,
+    file.fieldname === 'images'
+      ? /^[\w.-]+$/.test(file.originalname) && IMAGE_EXT_RE.test(file.originalname)
+      : ['result', 'metrics'].includes(file.fieldname)),
+})
+
+/************************************************************************/
+/*!
+  \brief
+    VM only: store a finished job sent by a client machine. Multipart
+    fields: images (photos), result (the .ply), metrics (optional),
+    status (the job's status.json as text), ownerId (the VM user id, or
+    empty) and origin (the sending machine's name). Checks the photos are
+    real JPEG/PNG, each under the photo size limit, and the model is a
+    .ply. Writes a fresh status record (never trusting the sent paths),
+    moves the job into jobs/ (replacing an earlier copy) and records its
+    owner, origin and size. An owner id the VM doesn't know becomes
+    admin-only.
+  \return
+    400 on bad content, 409 if a job with this id is running on the VM,
+    507 if the disk is nearly full, else 201 { id, bytes }
+*/
+/************************************************************************/
+app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
+  storeUpload.fields([{ name: 'images' }, { name: 'result', maxCount: 1 }, { name: 'metrics', maxCount: 1 }]),
+  async (req, res, next) =>
+{
+  const { id } = req.params
+  const rmOpts = { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }
+  const reject = async (status, error) =>
+  {
+    await fs.promises.rm(req.storeDir, rmOpts)
+    return res.status(status).json({ error })
+  }
+
+  try
+  {
+    const images = req.files?.images ?? []
+    const result = req.files?.result?.[0]
+    if (images.length === 0 || !result) return reject(400, 'A job needs its photos and result.ply.')
+
+    const { fileTypeFromFile } = await import('file-type')
+    for (const image of images)
+    {
+      if (image.size > config.maxFileSizeMB * 1024 * 1024)
+        return reject(413, `Photo ${image.originalname} is over ${config.maxFileSizeMB} MB.`)
+      const type = await fileTypeFromFile(image.path)
+      if (!type || !['image/jpeg', 'image/png'].includes(type.mime))
+        return reject(400, `Photo ${image.originalname} is not a real JPEG or PNG.`)
+    }
+    const handle = await fs.promises.open(result.path)
+    const head = Buffer.alloc(3)
+    await handle.read(head, 0, 3, 0)
+    await handle.close()
+    if (head.toString('latin1') !== 'ply') return reject(400, 'result.ply is not a .ply file.')
+
+    // A fresh status record: only harmless fields are taken from the client,
+    // and the result path is always this job's own result.ply.
+    let sent = {}
+    try { sent = JSON.parse(req.body?.status ?? '{}') } catch { sent = {} }
+    const record = {
+      version: STATUS_VERSION,
+      id,
+      status: 'done',
+      phase: 'done',
+      progress: 1,
+      detail: null,
+      error: null,
+      source: ['upload', 'youtube'].includes(sent.source) ? sent.source : null,
+      name: typeof sent.name === 'string' ? sent.name.slice(0, MAX_JOB_NAME_LENGTH) : null,
+      sampleFile: null,
+      imageCount: images.length,
+      removeBackground: sent.removeBackground === true,
+      createdAt: Number.isFinite(sent.createdAt) ? sent.createdAt : Date.now(),
+      updatedAt: Date.now(),
+      result: `${id}_out/result.ply`,
+      logTail: Array.isArray(sent.logTail) ? sent.logTail.slice(-40).map(String) : [],
+    }
+    fs.writeFileSync(path.join(req.storeDir, id, STATUS_FILE), JSON.stringify(record, null, 2))
+
+    const live = jobs.get(id)
+    if (live && !['done', 'error', 'cancelled'].includes(live.status))
+      return reject(409, 'A job with this id is still running on the VM.')
+
+    // Replace any earlier copy, then move the checked job into place.
+    jobs.delete(id)
+    await fs.promises.rm(path.join(config.jobsDir, id), rmOpts)
+    await fs.promises.rm(path.join(config.jobsDir, `${id}_out`), rmOpts)
+    await fs.promises.rename(path.join(req.storeDir, id), path.join(config.jobsDir, id))
+    await fs.promises.rename(path.join(req.storeDir, `${id}_out`), path.join(config.jobsDir, `${id}_out`))
+    await fs.promises.rm(req.storeDir, rmOpts)
+
+    const ownerNumber = Number(req.body?.ownerId)
+    const ownerId = Number.isInteger(ownerNumber) && findUserById(ownerNumber) ? ownerNumber : null
+    const origin = typeof req.body?.origin === 'string' ? req.body.origin.slice(0, 100) : null
+    const bytes = [...images, result, ...(req.files?.metrics ?? [])].reduce((sum, f) => sum + f.size, 0)
+    recordStoredJob(id, ownerId, origin, bytes)
+
+    const scanned = await scanJob(id)
+    if (scanned) restoreJob(scanned)
+    console.log(`[backend] library: stored job ${id} from ${origin ?? 'unknown'} (${(bytes / 1024 ** 2).toFixed(1)} MB, owner ${ownerId ?? 'admin-only'})`)
+    res.status(201).json({ id, bytes })
+  }
+  catch (err)
+  {
+    await fs.promises.rm(req.storeDir, rmOpts).catch(() => {})
     next(err)
   }
 })
@@ -1586,6 +1878,14 @@ app.use((err, req, res, _next) => {
       // Nothing to clean up, or it's already gone.
     }
   }
+  // Same for a shared-library upload rejected part-way (see prepareStore).
+  if (req.storeDir) {
+    try {
+      fs.rmSync(req.storeDir, { recursive: true, force: true })
+    } catch {
+      // Already gone.
+    }
+  }
 
   if (err instanceof multer.MulterError) {
     // The limits come from config (maxFileSizeMB, maxFiles); keep the messages
@@ -1653,6 +1953,13 @@ app.listen(config.port, () =>
     if (problem) console.warn(`[backend] *** sign up / log in will not work: ${problem} ***`)
     else if (config.allowInsecureAuth && new URL(config.vmAuthUrl).protocol !== 'https:')
       console.warn('[backend] *** AUTH_ALLOW_HTTP=1: passwords are sent to the VM unencrypted. Testing only. ***')
+    // Shared library: send each finished job to the VM, now and as they finish.
+    if (!problem)
+    {
+      setOnJobDone(() => syncPendingJobs())
+      startLibrarySync()
+    }
+    else console.warn('[backend] *** finished jobs will not be sent to the shared library until that is fixed. ***')
   }
   else
   {

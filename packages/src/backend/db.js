@@ -49,6 +49,17 @@ users table under the VM's id (no password stored).
 On a 'client' machine: backs up the database, then removes accounts made on
 this machine so they can't clash with the VM's. Their uploads become
 admin-only.
+- findOrCreateGoogleUser({ sub, email, name })
+On the VM: the account for a Google sign-in (see its comment for linking).
+- findUserById(id)
+Looks up a user by id (the VM acting as a user a client machine names).
+- recordStoredJob(jobId, ownerId, origin, bytes)
+On the VM: records a job received from a client machine for the shared
+library (owner, origin machine, size). Stored in the jobs table's origin and
+bytes columns.
+- markJobSynced / unmarkJobSynced / isJobSynced(jobId)
+On a client machine: which finished jobs the VM already has (table
+synced_jobs), so each is sent once.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -190,6 +201,34 @@ const insertGoogleUser = db.prepare(
 // ownership, so a password set before the real owner arrived may not be theirs.
 const linkGoogleToUser = db.prepare(`UPDATE users SET google_sub = ?, password_hash = 'google-sso' WHERE id = ?`)
 const deleteSessionsForUser = db.prepare('DELETE FROM sessions WHERE user_id = ?')
+
+const selectUserById = db.prepare('SELECT id, email, name, role, created_at FROM users WHERE id = ?')
+
+// Shared library: on the VM, where each stored job came from and how much
+// disk it takes. Added to databases made before the library existed.
+const jobColumns = db.prepare('PRAGMA table_info(jobs)').all().map((c) => c.name)
+if (!jobColumns.includes('origin')) db.exec('ALTER TABLE jobs ADD COLUMN origin TEXT')
+if (!jobColumns.includes('bytes')) db.exec('ALTER TABLE jobs ADD COLUMN bytes INTEGER')
+
+// On a client machine: which finished jobs the VM has already received, so
+// each is sent once. Not a column on jobs: old jobs may have no jobs row.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS synced_jobs (
+    id        TEXT PRIMARY KEY,
+    synced_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`)
+
+const upsertStoredJob = db.prepare(`
+  INSERT INTO jobs (id, owner_id, origin, bytes) VALUES (?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    owner_id = excluded.owner_id,
+    origin   = excluded.origin,
+    bytes    = excluded.bytes
+`)
+const insertSyncedJob = db.prepare('INSERT OR REPLACE INTO synced_jobs (id) VALUES (?)')
+const deleteSyncedJob = db.prepare('DELETE FROM synced_jobs WHERE id = ?')
+const selectSyncedJob = db.prepare('SELECT 1 FROM synced_jobs WHERE id = ?')
 
 
 // ----- Start of Functions --------------------------------------------------- //
@@ -507,5 +546,69 @@ export function findOrCreateGoogleUser({ sub, email, name })
 
   const row = insertGoogleUser.get(email, name || email, sub)
   return { id: row.id, email: row.email, name: row.name, role: row.role, createdAt: row.created_at }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Looks up a user by id. On the VM, used to act as the user a client
+    machine names, with the role taken from the VM's own database.
+  \param id
+  number
+    The user's id
+  \return
+    { id, email, name, role, created_at }, or null
+*/
+/************************************************************************/
+export function findUserById(id)
+{
+  return selectUserById.get(id) ?? null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    On the VM: records a job received from a client machine -- its owner
+    (null = admin-only), the machine it came from, and its size on disk.
+    Sending the same job again overwrites the record.
+  \param jobId
+  string
+  \param ownerId
+  number | null
+  \param origin
+  string
+    The sending machine's name
+  \param bytes
+  number
+    Total size of the stored files
+*/
+/************************************************************************/
+export function recordStoredJob(jobId, ownerId, origin, bytes)
+{
+  upsertStoredJob.run(jobId, ownerId, origin, bytes)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    On a client machine: marks a job as received by the VM / no longer
+    there / asks whether it was received.
+  \param jobId
+  string
+*/
+/************************************************************************/
+export function markJobSynced(jobId)
+{
+  insertSyncedJob.run(jobId)
+}
+
+export function unmarkJobSynced(jobId)
+{
+  deleteSyncedJob.run(jobId)
+}
+
+export function isJobSynced(jobId)
+{
+  return Boolean(selectSyncedJob.get(jobId))
 }
 // ----- End of Functions ----------------------------------------------------- //

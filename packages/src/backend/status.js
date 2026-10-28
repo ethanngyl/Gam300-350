@@ -26,7 +26,9 @@ import path from 'node:path'
 import { config } from './config.js'
 
 export const STATUS_FILE = 'status.json'
-const VERSION = 1
+// The record format version; the VM also writes it when storing a synced job.
+export const STATUS_VERSION = 1
+const VERSION = STATUS_VERSION
 const VALID_STATUS = new Set(['queued', 'running', 'done', 'error', 'cancelled'])
 const TERMINAL_STATUS = new Set(['done', 'error', 'cancelled'])
 // Progress updates arrive on nearly every log line; don't rewrite the file that often.

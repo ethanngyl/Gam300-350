@@ -50,6 +50,12 @@ The job's filename in the engine's samples folder.
 The samples filename to use for a job's display name after a rename.
 - restoreJob(record)
 Rebuilds an in-memory job from a record scanned off disk (see scan.js).
+- pruneJob(job)
+After a job finishes: deletes COLMAP/Brush working files, keeping only the
+photos, status.json, the final model and metrics.json.
+- setOnJobDone(fn)
+Registers what runs after each successful job (server.js: send it to the
+VM's shared library).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -772,6 +778,15 @@ export async function runPipeline(job) {
     job.status = 'done'
     appendLog(job, `\nDone. Result: ${job.resultPath}`)
     saveJob(job)
+
+    // Only the photos and the final model are kept (see pruneJob), then
+    // whoever registered for finished jobs (server.js: send it to the VM).
+    await pruneJob(job)
+    if (onJobDone) {
+      Promise.resolve()
+        .then(() => onJobDone(job))
+        .catch((err) => console.error(`[backend] after-done step failed for job ${job.id}:`, err))
+    }
   } catch (err) {
     if (job.cancelled) return // cancelJob already set status/error
     job.status = 'error'
@@ -829,6 +844,57 @@ export function pickSampleFileName(job, name) {
   const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
   if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
   return `${base}_${shortId}.ply`
+}
+
+// Called with each job that finishes successfully (set by setOnJobDone).
+let onJobDone = null
+
+/************************************************************************/
+/*!
+  \brief
+    Registers a function to run after each job finishes successfully (after
+    pruneJob). server.js uses it to send the job to the VM's shared library.
+    Errors it throws are logged and never affect the job.
+  \param fn
+    function(job), or null to remove it
+*/
+/************************************************************************/
+export function setOnJobDone(fn) {
+  onJobDone = fn
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Deletes a finished job's working files, keeping only what the library
+    needs: images/, status.json, the final model (result.ply, or the raw
+    export if normalizing failed) and metrics.json. Removes COLMAP's
+    database.db and sparse/, the mask folders and Brush's other .ply
+    exports -- usually most of a job's disk space. Never throws.
+  \param job
+    A job with status 'done'
+  \return
+    nothing
+*/
+/************************************************************************/
+export async function pruneJob(job) {
+  const jobDir = path.join(config.jobsDir, job.id)
+  const outDir = path.join(config.jobsDir, `${job.id}_out`)
+  const keepPly = job.resultPath ? path.basename(job.resultPath) : 'result.ply'
+  const rmOpts = { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }
+  try {
+    for (const name of ['database.db', 'sparse', 'masks', 'colmap_stencils']) {
+      await fsp.rm(path.join(jobDir, name), rmOpts)
+    }
+    const outNames = fs.existsSync(outDir) ? await fsp.readdir(outDir) : []
+    for (const name of outNames) {
+      if (name.toLowerCase().endsWith('.ply') && name !== keepPly) {
+        await fsp.rm(path.join(outDir, name), rmOpts)
+      }
+    }
+  } catch (err) {
+    console.warn(`[backend] could not tidy up job ${job.id}: ${err.message}`)
+  }
 }
 
 /************************************************************************/
