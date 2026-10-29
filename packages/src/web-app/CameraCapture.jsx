@@ -17,9 +17,10 @@ near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
 Taking a photo plays the camera shutter sound (quieter for auto-capture).
 If the camera can't start, the preview reads "Click to enable camera" and
-clicking it asks for the camera again. The Remove background option is
-here and in the Photo Editor; coming back from there ("Back to camera"),
-initialPhotos brings the batch and that choice back with it.
+clicking it asks for the camera again. The Remove background option and
+the Model detail slider (training iteration cap) are here and in the Photo
+Editor; coming back from there ("Back to camera"), initialPhotos brings
+the batch and those choices back with it.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -28,6 +29,8 @@ import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
+import TrainingQualitySlider from './TrainingQualitySlider.jsx';
+import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 
 const HARD_CAP = 200;
 
@@ -105,7 +108,7 @@ function CameraCapture({
     // Also set in the Photo Editor, and kept when coming back from it.
     const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
     // Model detail (training iteration cap), also set in the Photo Editor.
-    const [trainIters] = useState(initialPhotos?.trainIters ?? null);
+    const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
@@ -621,6 +624,8 @@ function CameraCapture({
                             <small>Turn on for turntable captures (object spins, camera stays still).</small>
                         </span>
                     </label>
+
+                    <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} />
 
                     {issueSummary && (
                         <p className="capture-issues" role="status">

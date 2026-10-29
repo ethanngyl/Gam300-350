@@ -28,11 +28,11 @@ REM Web app. start.bat opens its own extra windows (backend + tunnel).
 start "CoDeFine Web App" cmd /k "cd /d packages && call start.bat"
 
 REM Engine. run.bat builds then launches the engine GUI in this window.
-start "CoDeFine Engine" cmd /k "cd /d engine && call run.bat"
+start "Genesis Alpha Build" cmd /k "cd /d engine && call run.bat"
 
 echo Two windows are opening:
 echo    - "CoDeFine Web App" : dependency setup, build, backend + tunnel
-echo    - "CoDeFine Engine"  : CMake build, then the engine window
+echo    - "Genesis Alpha Build"  : CMake build, then the engine window
 echo.
 echo Close each window to stop that part.
 endlocal

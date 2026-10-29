@@ -31,14 +31,14 @@ LoginDialog::LoginDialog(BackendClient* client, QWidget* parent)
 
     auto* layout = new QVBoxLayout(this);
 
-    auto* intro = new QLabel("Sign in with your Codefine web app account to open the models you uploaded.", this);
+    auto* intro = new QLabel("Sign in with your web app account to open the models you uploaded.", this);
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
     auto* form = new QFormLayout();
     m_server = new QLineEdit(client->serverUrl().toString(), this);
     m_server->setPlaceholderText("http://localhost:5005");
-    m_server->setToolTip("Address of the machine running the Codefine backend (the web app's URL)");
+    m_server->setToolTip("Address of the machine running the web app's backend (the web app's URL)");
     m_email = new QLineEdit(client->savedEmail(), this);
     m_email->setPlaceholderText("you@example.com");
     m_password = new QLineEdit(this);

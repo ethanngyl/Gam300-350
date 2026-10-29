@@ -192,7 +192,7 @@ glm::vec3 UnflipPosition(const glm::vec3& p) { return glm::vec3(p.x, -p.y, p.z);
 glm::vec4 UnflipRotation(const glm::vec4& q) { return glm::vec4(q.x, -q.y, q.z, -q.w); }
 
 void WriteGaussianPly(Writer& w, const std::vector<SplatVertex>& splats) {
-    w.text("ply\nformat binary_little_endian 1.0\ncomment Exported by Codefine Engine\nelement vertex ");
+    w.text("ply\nformat binary_little_endian 1.0\ncomment Exported by Genesis Alpha Build\nelement vertex ");
     w.number(static_cast<uint64_t>(splats.size()));
     w.text("\nproperty float x\nproperty float y\nproperty float z\n"
            "property float f_dc_0\nproperty float f_dc_1\nproperty float f_dc_2\n"
@@ -245,7 +245,7 @@ void WriteSplatFile(Writer& w, const std::vector<SplatVertex>& splats) {
 // ---- Geometry formats (engine coordinates: y up, as shown in the viewport) ----
 
 void WritePly(Writer& w, const Mesh& mesh) {
-    w.text("ply\nformat binary_little_endian 1.0\ncomment Exported by Codefine Engine\nelement vertex ");
+    w.text("ply\nformat binary_little_endian 1.0\ncomment Exported by Genesis Alpha Build\nelement vertex ");
     w.number(static_cast<uint64_t>(mesh.positions.size()));
     w.text("\nproperty float x\nproperty float y\nproperty float z\n"
            "property uchar red\nproperty uchar green\nproperty uchar blue\nproperty uchar alpha\n");
@@ -268,7 +268,7 @@ void WritePly(Writer& w, const Mesh& mesh) {
 
 //Vertex colours use the widely supported "v x y z r g b" extension (Blender, MeshLab).
 void WriteObj(Writer& w, const Mesh& mesh) {
-    w.text("# Exported by Codefine Engine\n");
+    w.text("# Exported by Genesis Alpha Build\n");
     for (size_t i = 0; i < mesh.positions.size(); ++i) {
         const glm::vec3& p = mesh.positions[i];
         const auto& c = mesh.colors[i];
@@ -290,7 +290,7 @@ void WriteObj(Writer& w, const Mesh& mesh) {
 
 void WriteStl(Writer& w, const Mesh& mesh) {
     char header[80] = {};
-    constexpr std::string_view kHeader = "Exported by Codefine Engine";
+    constexpr std::string_view kHeader = "Exported by Genesis Alpha Build";
     std::memcpy(header, kHeader.data(), kHeader.size());
     w.bytes(header, sizeof(header));
     w.pod(static_cast<uint32_t>(mesh.indices.size() / 3));
@@ -350,7 +350,7 @@ bool WriteGlb(Writer& w, const Mesh& mesh, std::string& error) {
     };
 
     std::string json;
-    json += R"({"asset":{"version":"2.0","generator":"Codefine Engine"},)";
+    json += R"({"asset":{"version":"2.0","generator":"Genesis Alpha Build"},)";
     json += R"("extensionsUsed":["KHR_materials_unlit"],)";
     json += R"("scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],)";
     json += R"("meshes":[{"primitives":[{"attributes":{"POSITION":0,"COLOR_0":1},)";

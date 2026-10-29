@@ -181,10 +181,12 @@ function ModelPickerDialog({ models, modelsStatus, onPick, onClose }) {
                     <button className="forma-btn" onClick={onClose}>Close</button>
                 </div>
 
-                {phoneSheet === 'cleanup' && (
-                    <div className="forma-card scene-builder-sheet">
-                        {selectedObject ? cleanupSlider : <p className="scene-builder-note">Select a model first.</p>}
-                    </div>
+                {modelsStatus === 'loading' && <p className="scene-builder-note">Loading your models...</p>}
+                {modelsStatus === 'error' && (
+                    <p className="scene-builder-note">Could not load your models. Is the server running?</p>
+                )}
+                {modelsStatus === 'ready' && models.length === 0 && (
+                    <p className="scene-builder-note">No finished models yet. Build one from your photos first.</p>
                 )}
 
                 <div className="scene-builder-model-grid">
