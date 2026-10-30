@@ -43,22 +43,22 @@ void InputManager::CallbackKeyPress(int key, INPUT_TYPE inputType)
 
 	switch (key)
 	{
-	case Qt::Key_W:
+	//case Qt::Key_W:
 	case Qt::Key_Up:
 		TriggerCallback(FORWARD, inputType);
 		break;
 
-	case Qt::Key_S:
+	//case Qt::Key_S:
 	case Qt::Key_Down:
 		TriggerCallback(BACKSWARD, inputType);
 		break;
 
-	case Qt::Key_A:
+	//case Qt::Key_A:
 	case Qt::Key_Left:
 		TriggerCallback(LEFT, inputType);
 		break;
 
-	case Qt::Key_D:
+	//case Qt::Key_D:
 	case Qt::Key_Right:
 		TriggerCallback(RIGHT, inputType);
 		break;
