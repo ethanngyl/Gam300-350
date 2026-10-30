@@ -6,8 +6,8 @@
 \par Software Engineering Project 5
 \date 15-10-2026
 \brief
-Implements OutlinerPanel: the model list, its empty state, inline rename,
-and the right-click Rename / Delete menu.
+Implements OutlinerPanel: the model list, its empty state, inline rename
+(F2, double-click or the right-click menu), and the right-click Rename/Delete menu.
 **************************************************************************/
 #include "ui/OutlinerPanel.h"
 
@@ -77,6 +77,13 @@ OutlinerPanel::OutlinerPanel(QWidget* parent)
             return;
         }
         emit renameRequested(item->data(kNameColumn, kIndexRole).toInt(), item->text(kNameColumn).trimmed());
+    });
+
+    //Double-click the name to rename. Done here rather than with the DoubleClicked edit trigger, which would also open an editor on the Splats column.
+    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int column) {
+        if (column == kNameColumn) {
+            m_tree->editItem(item, kNameColumn);
+        }
     });
 
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
