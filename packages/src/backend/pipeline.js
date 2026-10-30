@@ -36,11 +36,17 @@ or returns null for anything else (playlists, channels, other sites).
 - extractYoutubeFrames(job, url, { fps, maxFrames })
 Runs tools/youtube_frames.py to download a video and save frames into the
 job's images/ folder. Returns the number of frames written.
+- extractVideoFileFrames(job, videoPath, { fps, maxFrames })
+The same for an uploaded video file (youtube_frames.py --file), with the
+same frame selection.
 - generateMasks(job, imagesDir, jobDir)
 Runs tools/make_masks.py to write foreground masks for every photo, so COLMAP
 and Brush ignore the background. Only used when job.removeBackground is set.
 - runYoutubePipeline(job, url, opts)
 Extracts the frames, checks there are at least 8, then runs runPipeline.
+- runVideoFilePipeline(job, videoPath, opts)
+The same for an uploaded video file, which is deleted as soon as its frames
+are extracted (before COLMAP starts).
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.
@@ -387,16 +393,19 @@ export function canonicalYoutubeUrl(input) {
 /************************************************************************/
 /*!
   \brief
-    Extract frames from a YouTube URL into a job's images/ directory by
-    running tools/youtube_frames.py. The script reports
-    "PROGRESS <stage> <0..1>" lines, which drive job.detail, and
-    "ERROR: ..." lines, which become the job's error instead of a bare
-    exit code.
+    Extract frames into a job's images/ directory by running
+    tools/youtube_frames.py, from a YouTube URL or a local video file. The
+    script reports "PROGRESS <stage> <0..1>" lines, which drive
+    job.detail, and "ERROR: ..." lines, which become the job's error
+    instead of a bare exit code.
   \param job
     The job to extract frames for
-  \param url
+  \param sourceArgs
+    string[]
+    The script's source arguments: the URL, or --file and a path
+  \param firstDetail
     string
-    The canonical YouTube video URL
+    The job.detail shown until the script reports progress
   \param fps
     number
     Optional. Frames per second to extract, defaults to config.ytFps
@@ -407,7 +416,7 @@ export function canonicalYoutubeUrl(input) {
     The number of frames written to images/.
 */
 /************************************************************************/
-export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
+async function extractFrames(job, sourceArgs, firstDetail, { fps, maxFrames } = {}) {
     const jobDir = path.join(config.jobsDir, job.id)
     const imagesDir = path.join(jobDir, 'images')
     await fsp.mkdir(imagesDir, { recursive: true })
@@ -418,7 +427,7 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
     job.metrics.ytMaxFrames = maxFrames ?? config.ytMaxFrames
     job.phase = 'extract'
     job.progress = 0
-    job.detail = 'Fetching video info…'
+    job.detail = firstDetail
     saveJob(job)
 
     // Extraction owns the 0..0.05 slice of the bar (COLMAP starts at 0.05);
@@ -449,13 +458,11 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
             config.pythonBin,
             [
                 config.ytScript,
-                url,
+                ...sourceArgs,
                 '--output', imagesDir,
                 '--fps', String(fps ?? config.ytFps),
                 '--max-frames', String(maxFrames ?? config.ytMaxFrames),
                 '--max-duration', String(config.ytMaxDurationSec),
-                // Lets yt-dlp use this very Node binary as its JavaScript runtime.
-                '--node-path', process.execPath,
             ],
             { onData, timeoutMs: config.ytTimeoutMin * 60_000 },
         )
@@ -470,6 +477,49 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
         IMAGE_EXT_RE.test(f),
     )
     return frames.length
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Extract frames from a YouTube URL (see extractFrames).
+  \param job
+    The job to extract frames for
+  \param url
+    string
+    The canonical YouTube video URL
+  \param opts
+    object
+    Optional { fps, maxFrames }
+  \return
+    The number of frames written to images/.
+*/
+/************************************************************************/
+export function extractYoutubeFrames(job, url, opts = {}) {
+    // --node-path lets yt-dlp use this very Node binary as its JavaScript runtime.
+    return extractFrames(job, [url, '--node-path', process.execPath], 'Fetching video info…', opts)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Extract frames from an uploaded video file (see extractFrames), with
+    the same frame selection as a YouTube video. The script only reads
+    the file; runVideoFilePipeline deletes it.
+  \param job
+    The job to extract frames for
+  \param videoPath
+    string
+    The uploaded video's path
+  \param opts
+    object
+    Optional { fps, maxFrames }
+  \return
+    The number of frames written to images/.
+*/
+/************************************************************************/
+export function extractVideoFileFrames(job, videoPath, opts = {}) {
+    return extractFrames(job, ['--file', videoPath], 'Reading video…', opts)
 }
 
 /************************************************************************/
@@ -492,8 +542,59 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
 */
 /************************************************************************/
 export async function runYoutubePipeline(job, url, opts = {}) {
+    await runFramesPipeline(job, () => extractYoutubeFrames(job, url, opts))
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Create a reconstruction job seeded from an uploaded video file, like
+    runYoutubePipeline. The video is deleted as soon as extraction ends
+    (done, failed or cancelled), before COLMAP starts, so only its frames
+    are kept. Intended to be called in the background (not awaited).
+  \param job
+    The job to run
+  \param videoPath
+    string
+    The uploaded video's path
+  \param opts
+    object
+    Optional { fps, maxFrames }, passed to extractVideoFileFrames
+  \return
+    nothing; sets the job to error if fewer than 8 frames were extracted
+    or extraction failed
+*/
+/************************************************************************/
+export async function runVideoFilePipeline(job, videoPath, opts = {}) {
+    await runFramesPipeline(job, async () => {
+        try {
+            return await extractVideoFileFrames(job, videoPath, opts)
+        } finally {
+            await fsp.rm(videoPath, { force: true, maxRetries: 5, retryDelay: 200 }).catch((err) =>
+                console.error(`[backend] couldn't delete uploaded video ${videoPath}: ${err.message}`),
+            )
+        }
+    })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Shared body of the video pipelines: extract frames, check there are at
+    least 8, then run the normal reconstruction pipeline.
+  \param job
+    The job to run
+  \param extract
+    function
+    Extracts the frames; resolves to how many were written
+  \return
+    nothing; sets the job to error if fewer than 8 frames were extracted
+    or extraction failed
+*/
+/************************************************************************/
+async function runFramesPipeline(job, extract) {
     try {
-        const count = await extractYoutubeFrames(job, url, opts)
+        const count = await extract()
         job.imageCount = count
         saveJob(job)
         if (count < 8) {

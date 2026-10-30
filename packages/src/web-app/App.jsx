@@ -10,7 +10,7 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (top nav + a collapsible sidebar, laid out like the Genesis
 wireframe) with these pages inside it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, YouTube Extractor, Capture and Account. Capture
+Builder, Model Viewer, Video Extractor, Capture and Account. Capture
 opens from the sidebar's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
 batch to the Photo Editor. The sidebar's collapsed state is remembered in

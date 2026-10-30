@@ -417,6 +417,9 @@ export const config = {
     // Upload limits.
     maxFiles: 300,
     maxFileSizeMB: 30,
+    // An uploaded .mp4 for the video extractor (kept only until its frames are
+    // extracted). The web-app's MAX_VIDEO_MB (YoutubeIngest.jsx) should match.
+    maxVideoSizeMB: Number(process.env.MAX_VIDEO_MB) || 1024,
 
     // --- Python post-processing / ingest scripts (repo tools/ dir) -------------
     // Interpreter used to run them. Needs `pip install -r tools/requirements.txt`
@@ -424,7 +427,8 @@ export const config = {
     // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
     // to its virtualenv's interpreter).
     pythonBin: process.env.PYTHON_BIN || findPython(),
-    // Extracts evenly spaced frames from a YouTube video into a job's images/.
+    // Extracts evenly spaced frames from a YouTube video (or, with --file, an
+    // uploaded .mp4) into a job's images/. The yt* limits below apply to both.
     ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
     // Default extraction rate (frames per second) and cap on frames pulled.
     ytFps: Number(process.env.YT_FPS) || 2,

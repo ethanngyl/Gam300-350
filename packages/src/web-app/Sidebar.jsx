@@ -10,7 +10,7 @@ Left sidebar shown on every dashboard page, laid out like the Genesis
 wireframe. From top to bottom: a collapse button; "New model", which opens
 the camera capture page; "Add photos", which opens the file picker and
 hands the chosen photos to the capture page; the workspace pages (Home,
-Media Library, Photo Editor, Scene Builder, YouTube Extractor, Model
+Media Library, Photo Editor, Scene Builder, Video Extractor, Model
 Viewer); and the signed-in user at the bottom, whose menu links to the
 account page, mutes / unmutes sound effects, and signs out (or in, for
 guests). The item for the current
@@ -28,7 +28,7 @@ const WORKSPACE_ITEMS = [
     { id: 'library', label: 'Media Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
     { id: 'scene', label: 'Scene Builder', icon: 'shield' },
-    { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
+    { id: 'youtube', label: 'Video Extractor', icon: 'play' },
     { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
 ];
 
