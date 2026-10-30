@@ -52,10 +52,8 @@ The samples filename to use for a job's display name after a rename.
 Rebuilds an in-memory job from a record scanned off disk (see scan.js).
 - pruneJob(job)
 After a job finishes: deletes COLMAP/Brush working files, keeping only the
-photos, status.json, the final model and metrics.json.
-- setOnJobDone(fn)
-Registers what runs after each successful job (server.js: send it to the
-VM's shared library).
+photos, status.json, the final model, metrics.json and cover.webp. Called by
+server.js (afterJobEnds) once the cover has been made from the masks.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -779,15 +777,9 @@ export async function runPipeline(job) {
     job.status = 'done'
     appendLog(job, `\nDone. Result: ${job.resultPath}`)
     saveJob(job)
-
-    // Only the photos and the final model are kept (see pruneJob), then
-    // whoever registered for finished jobs (server.js: send it to the VM).
-    await pruneJob(job)
-    if (onJobDone) {
-      Promise.resolve()
-        .then(() => onJobDone(job))
-        .catch((err) => console.error(`[backend] after-done step failed for job ${job.id}:`, err))
-    }
+    // Tidying up (cover, pruneJob, sending to the VM, moving photos into
+    // the database) is done by server.js once this promise settles, in an
+    // order that keeps the photos and masks until the cover is made.
   } catch (err) {
     if (job.cancelled) return // cancelJob already set status/error
     job.status = 'error'
@@ -845,23 +837,6 @@ export function pickSampleFileName(job, name) {
     const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
     if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
     return `${base}_${shortId}.ply`
-}
-
-// Called with each job that finishes successfully (set by setOnJobDone).
-let onJobDone = null
-
-/************************************************************************/
-/*!
-  \brief
-    Registers a function to run after each job finishes successfully (after
-    pruneJob). server.js uses it to send the job to the VM's shared library.
-    Errors it throws are logged and never affect the job.
-  \param fn
-    function(job), or null to remove it
-*/
-/************************************************************************/
-export function setOnJobDone(fn) {
-  onJobDone = fn
 }
 
 /************************************************************************/

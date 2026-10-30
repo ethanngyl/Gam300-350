@@ -72,6 +72,12 @@ returns 400. This guards against a client that lies about the MIME type.
 Makes the job's card cover (<id>_out/cover.webp) with tools/make_cover.py
 the first time it is asked for: the object cut out of a photo with the
 job's background masks. Concurrent requests share one run.
+- afterJobEnds(job)
+Runs once a job is done, failed or cancelled: makes the cover while the
+photos and masks exist, tidies up working files (pruneJob), sends the job
+to the VM (client machines) and, on the VM with FILE_STORE=db, moves its
+photos into the database (imagestore.js). Photos then come from the
+database in GET /jobs/:id/images/:name.
 - shutdown(reason, exitCode)
 Runs only once. Marks every running job as error and saves it, calls 
 killChildren() to stop the COLMAP/Brush/python processes, then exits.
@@ -93,13 +99,14 @@ import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
 import
 {
-  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
-  findOrCreateGoogleUser, findSessionUser, findUserByEmail, findUserById,
-  getJobOwnerId, isJobSynced, listOwnedJobIds, recordStoredJob,
-  retireLocalAccounts, setJobOwner, unmarkJobSynced, upsertLocalUser,
-  verifyPassword,
+  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteDbImages,
+  deleteSession, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
+  findUserById, getDbImage, getJobOwnerId, isJobSynced, listDbImageNames,
+  listOwnedJobIds, recordStoredJob, retireLocalAccounts, setJobOwner,
+  storeJobImages, unmarkJobSynced, upsertLocalUser, verifyPassword,
 }
     from './db.js'
+import { migrateImagesToDb, moveImagesToDb } from './imagestore.js'
 import { createLimiter } from './ratelimit.js'
 import
 {
@@ -108,15 +115,15 @@ import
 from './library.js'
 import
 { 
-  IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
-  scanJobs
-} 
+  IMAGE_EXT_RE, JOB_ID_RE, scanJob,
+  scanJobs, setImageNameSource,
+}
 from './scan.js'
 import 
 { 
   cancelJob, canonicalYoutubeUrl, jobs,
-  killChildren, makeJob, pickSampleFileName, restoreJob,
-  runPipeline, runYoutubePipeline, sampleFileName, setOnJobDone,
+  killChildren, makeJob, pickSampleFileName, pruneJob, restoreJob,
+  runPipeline, runYoutubePipeline, sampleFileName,
 }
     from './pipeline.js'
 
@@ -124,6 +131,19 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
+
+// Photos in the database (FILE_STORE=db) is for the VM only: client machines
+// build models from photos on disk and send them to the VM.
+const imagesInDb = config.fileStore === 'db' && config.authMode === 'authority'
+if (config.fileStore === 'db' && !imagesInDb)
+  console.warn('[backend] FILE_STORE=db is ignored: it only applies with AUTH_MODE=authority (the VM).')
+if (imagesInDb)
+{
+  // Jobs whose images/ folder has moved into the database are still listed,
+  // and any photos still on disk (first start, or after a crash) move in now.
+  setImageNameSource(listDbImageNames)
+  await migrateImagesToDb()
+}
 
 // Jobs live in memory, so rebuild them from the job folders on disk. Without
 // this, everything finished before a restart 404s on /jobs/:id and result.ply.
@@ -798,7 +818,9 @@ app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxF
     // Optional multipart text field: training iteration cap (Fast / Normal / Detailed).
     job.trainIters = parseTrainIters(req.body?.trainIters)
     saveJob(job) // gives upload-only jobs a status record from the start
-    runPipeline(job) // fire-and-forget; do not await
+    // fire-and-forget; do not await. Settles once the job is done, failed
+    // or cancelled (never rejects), then its files are tidied up.
+    runPipeline(job).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
@@ -841,6 +863,12 @@ app.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
       imageCount: record.imageCount,
       hasResult: job.status === 'done' && !!job.resultPath,
       thumbnail: record.thumbnail,
+      // Cut-out cover for the cards: already made, or can still be made
+      // from the job's background masks (see ensureCover).
+      cover: fs.existsSync(path.join(config.jobsDir, `${record.id}_out`, 'cover.webp')) ||
+        fs.existsSync(path.join(config.jobsDir, record.id, 'masks'))
+        ? `/jobs/${record.id}/cover.webp`
+        : null,
       images: record.images,
     }
   })
@@ -864,7 +892,8 @@ app.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
     Serve a single uploaded image. id/name are whitelisted to plain filename
     characters so a request can't use `..` or slashes to escape the jobs
     folder. Only the job's owner or an admin can load it. A job only in
-    the VM's shared library is fetched from there.
+    the VM's shared library is fetched from there. On the VM with
+    FILE_STORE=db, a photo no longer on disk is served from the database.
   \return
     401 if not logged in, 404 if image doesn't exist or isn't theirs, else
     the image itself
@@ -874,11 +903,20 @@ app.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJob
 {
   if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const { id, name } = req.params
-  if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
+  if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name))
   {
     return res.status(404).json({ error: 'image not found' })
   }
-  res.sendFile(path.join(config.jobsDir, id, 'images', name), (err) => 
+  const filePath = path.join(config.jobsDir, id, 'images', name)
+  if (!fs.existsSync(filePath) && imagesInDb)
+  {
+    const image = getDbImage(id, name)
+    if (!image) return res.status(404).json({ error: 'image not found' })
+    res.type(image.mime)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    return res.send(image.data)
+  }
+  res.sendFile(filePath, (err) =>
   {
     if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
   })
@@ -922,7 +960,8 @@ app.post('/jobs/from-youtube', requireUser, (req, res) => {
         opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
     }
 
-    runYoutubePipeline(job, videoUrl, opts) // fire-and-forget; the frontend polls /jobs/:id
+    // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
+    runYoutubePipeline(job, videoUrl, opts).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id })
 })
 
@@ -1052,10 +1091,12 @@ function ensureCover(jobId) {
   \return
     401 if not logged in, 404 if the job isn't theirs, has no background
     masks or the cover couldn't be made (the cards then show the first
-    photo), else the WebP image
+    photo), else the WebP image. A job only in the VM's shared library is
+    fetched from there.
 */
 /************************************************************************/
-app.get('/jobs/:id/cover.webp', requireJobAccess, async (req, res) => {
+app.get(['/jobs/:id/cover.webp', '/library/jobs/:id/cover.webp'], requireJobAccess, async (req, res) => {
+    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
     try {
         const coverPath = await ensureCover(req.params.id)
         res.setHeader('Cache-Control', 'private, max-age=86400')
@@ -1066,6 +1107,41 @@ app.get('/jobs/:id/cover.webp', requireJobAccess, async (req, res) => {
         res.status(404).json({ error: 'no cover' })
     }
 })
+
+/************************************************************************/
+/*!
+  \brief
+    Tidies up a job once it has ended (done, failed or cancelled), in an
+    order that keeps what each step needs:
+      1. done + background masks: make the cover now, while the photos
+         and masks still exist (ensureCover);
+      2. done: delete COLMAP/Brush working files and the masks (pruneJob);
+      3. done, client machine: send it to the VM's shared library;
+      4. VM with FILE_STORE=db: move its photos into the database (also
+         for failed / cancelled jobs, so their photos are kept).
+    Never throws: each step logs its own problems.
+  \param job
+    The job whose pipeline just settled
+  \return
+    nothing
+*/
+/************************************************************************/
+async function afterJobEnds(job) {
+    try {
+        if (job.status === 'done') {
+            if (fs.existsSync(path.join(config.jobsDir, job.id, 'masks'))) {
+                await ensureCover(job.id).catch((err) =>
+                    console.warn(`[backend] no cover for ${job.id}: ${err.stderr?.trim() || err.message}`))
+            }
+            await pruneJob(job)
+            if (config.authMode === 'client' && !clientAuthProblem()) syncPendingJobs()
+        }
+        if (imagesInDb) await moveImagesToDb(job.id)
+    }
+    catch (err) {
+        console.error(`[backend] tidying up job ${job.id} failed:`, err)
+    }
+}
 
 const MAX_JOB_NAME_LENGTH = 80
 
@@ -1168,6 +1244,8 @@ app.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, asy
         await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
         await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
         await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
+        // Photos kept in the database (VM with FILE_STORE=db). No-op otherwise.
+        deleteDbImages(job.id)
         res.json({ id: job.id, deleted: true })
     }
     catch (err) {
@@ -1230,7 +1308,8 @@ function prepareStore(req, res, next)
 }
 
 // Photos keep the client's names (0000.jpg, ...) so their URLs stay the same;
-// the model and metrics get fixed names. Anything else is dropped.
+// the model, metrics and cover get fixed names. Anything else is dropped.
+const STORE_FILE_NAMES = { result: 'result.ply', metrics: 'metrics.json', cover: 'cover.webp' }
 const storeUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) =>
@@ -1238,27 +1317,55 @@ const storeUpload = multer({
         ? path.join(req.storeDir, req.params.id, 'images')
         : path.join(req.storeDir, `${req.params.id}_out`)),
     filename: (_req, file, cb) =>
-      cb(null, file.fieldname === 'images' ? file.originalname
-        : file.fieldname === 'result' ? 'result.ply' : 'metrics.json'),
+      cb(null, file.fieldname === 'images' ? file.originalname : STORE_FILE_NAMES[file.fieldname]),
   }),
-  limits: { fileSize: config.maxResultSizeMB * 1024 * 1024, files: config.maxFiles + 2 },
+  limits: { fileSize: config.maxResultSizeMB * 1024 * 1024, files: config.maxFiles + 3 },
   fileFilter: (_req, file, cb) => cb(null,
     file.fieldname === 'images'
       ? /^[\w.-]+$/.test(file.originalname) && IMAGE_EXT_RE.test(file.originalname)
-      : ['result', 'metrics'].includes(file.fieldname)),
+      : Object.hasOwn(STORE_FILE_NAMES, file.fieldname)),
 })
 
 /************************************************************************/
 /*!
   \brief
+    Reads the first bytes of a file (to check what it really is).
+  \param filePath
+  string
+  \param count
+  number
+  \return
+    Buffer of up to count bytes
+*/
+/************************************************************************/
+async function readFileHead(filePath, count)
+{
+  const handle = await fs.promises.open(filePath)
+  try
+  {
+    const head = Buffer.alloc(count)
+    const { bytesRead } = await handle.read(head, 0, count, 0)
+    return head.subarray(0, bytesRead)
+  }
+  finally
+  {
+    await handle.close()
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
     VM only: store a finished job sent by a client machine. Multipart
-    fields: images (photos), result (the .ply), metrics (optional),
-    status (the job's status.json as text), ownerId (the VM user id, or
-    empty) and origin (the sending machine's name). Checks the photos are
-    real JPEG/PNG, each under the photo size limit, and the model is a
-    .ply. Writes a fresh status record (never trusting the sent paths),
-    moves the job into jobs/ (replacing an earlier copy) and records its
-    owner, origin and size. An owner id the VM doesn't know becomes
+    fields: images (photos), result (the .ply), metrics and cover
+    (optional), status (the job's status.json as text), ownerId (the VM
+    user id, or empty) and origin (the sending machine's name). Checks the
+    photos are real JPEG/PNG, each under the photo size limit, the model is
+    a .ply and the cover a WebP (a bad cover is just dropped). Writes a
+    fresh status record (never trusting the sent paths), moves the job
+    into jobs/ (replacing an earlier copy) and records its owner, origin
+    and size. With FILE_STORE=db the photos go straight into the database
+    instead of jobs/<id>/images/. An owner id the VM doesn't know becomes
     admin-only.
   \return
     400 on bad content, 409 if a job with this id is running on the VM,
@@ -1266,7 +1373,12 @@ const storeUpload = multer({
 */
 /************************************************************************/
 app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
-  storeUpload.fields([{ name: 'images' }, { name: 'result', maxCount: 1 }, { name: 'metrics', maxCount: 1 }]),
+  storeUpload.fields([
+    { name: 'images' },
+    { name: 'result', maxCount: 1 },
+    { name: 'metrics', maxCount: 1 },
+    { name: 'cover', maxCount: 1 },
+  ]),
   async (req, res, next) =>
 {
   const { id } = req.params
@@ -1292,11 +1404,17 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
       if (!type || !['image/jpeg', 'image/png'].includes(type.mime))
         return reject(400, `Photo ${image.originalname} is not a real JPEG or PNG.`)
     }
-    const handle = await fs.promises.open(result.path)
-    const head = Buffer.alloc(3)
-    await handle.read(head, 0, 3, 0)
-    await handle.close()
-    if (head.toString('latin1') !== 'ply') return reject(400, 'result.ply is not a .ply file.')
+    if ((await readFileHead(result.path, 3)).toString('latin1') !== 'ply')
+      return reject(400, 'result.ply is not a .ply file.')
+
+    // The cover is optional, so a bad one is dropped rather than refusing the job.
+    const cover = req.files?.cover?.[0]
+    if (cover)
+    {
+      const head = await readFileHead(cover.path, 12)
+      const isWebp = head.subarray(0, 4).toString('latin1') === 'RIFF' && head.subarray(8, 12).toString('latin1') === 'WEBP'
+      if (!isWebp) await fs.promises.rm(cover.path, { force: true })
+    }
 
     // A fresh status record: only harmless fields are taken from the client,
     // and the result path is always this job's own result.ply.
@@ -1326,6 +1444,15 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
     if (live && !['done', 'error', 'cancelled'].includes(live.status))
       return reject(409, 'A job with this id is still running on the VM.')
 
+    // FILE_STORE=db: the photos go into the database (replacing any earlier
+    // copy's) instead of moving into jobs/<id>/images/ with the rest.
+    if (imagesInDb)
+    {
+      const stagedImages = path.join(req.storeDir, id, 'images')
+      storeJobImages(id, stagedImages)
+      await fs.promises.rm(stagedImages, rmOpts)
+    }
+
     // Replace any earlier copy, then move the checked job into place.
     jobs.delete(id)
     await fs.promises.rm(path.join(config.jobsDir, id), rmOpts)
@@ -1337,7 +1464,8 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
     const ownerNumber = Number(req.body?.ownerId)
     const ownerId = Number.isInteger(ownerNumber) && findUserById(ownerNumber) ? ownerNumber : null
     const origin = typeof req.body?.origin === 'string' ? req.body.origin.slice(0, 100) : null
-    const bytes = [...images, result, ...(req.files?.metrics ?? [])].reduce((sum, f) => sum + f.size, 0)
+    const bytes = [...images, result, ...(req.files?.metrics ?? []), ...(req.files?.cover ?? [])]
+      .reduce((sum, f) => sum + f.size, 0)
     recordStoredJob(id, ownerId, origin, bytes)
 
     const scanned = await scanJob(id)
@@ -1883,6 +2011,7 @@ app.listen(config.port, () =>
     console.log('[backend] accounts: authority (this machine holds the account database)')
     if (!config.authApiKey)
       console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
+    console.log(`[backend] photos: ${imagesInDb ? 'stored in the database (FILE_STORE=db)' : 'stored as files in jobs/'}`)
   }
   else if (config.authMode === 'client')
   {
@@ -1891,12 +2020,9 @@ app.listen(config.port, () =>
     if (problem) console.warn(`[backend] *** sign up / log in will not work: ${problem} ***`)
     else if (config.allowInsecureAuth && new URL(config.vmAuthUrl).protocol !== 'https:')
       console.warn('[backend] *** AUTH_ALLOW_HTTP=1: passwords are sent to the VM unencrypted. Testing only. ***')
-    // Shared library: send each finished job to the VM, now and as they finish.
-    if (!problem)
-    {
-      setOnJobDone(() => syncPendingJobs())
-      startLibrarySync()
-    }
+    // Shared library: send finished jobs to the VM now, then as they finish
+    // (afterJobEnds) and on a timer for retries.
+    if (!problem) startLibrarySync()
     else console.warn('[backend] *** finished jobs will not be sent to the shared library until that is fixed. ***')
   }
   else

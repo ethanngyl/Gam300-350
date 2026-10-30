@@ -18,6 +18,9 @@ Finds the newest .ply file Brush exported in an <id>_out folder, ignoring
 result.ply. The names are zero-padded (splat_00500, splat_07000), so an 
 alphabetical sort puts the highest iteration last. Returns null if the folder 
 is missing or has no .ply files.
+- setImageNameSource(fn)
+Where photo names come from when a job has no images/ folder (the VM keeps
+photos in the database with FILE_STORE=db). Set by server.js.
 - scanJob(id, jobsDir)
 Builds one job record from its folder.
 - scanJobs(jobsDir)
@@ -50,7 +53,26 @@ export const IMAGE_EXT_RE = /\.(jpe?g|png)$/i
 // Job ids become path segments, so only plain filename characters are accepted.
 export const JOB_ID_RE = /^[\w-]+$/
 
+// Where to find a job's photo names when its images/ folder is gone (the VM
+// with FILE_STORE=db keeps photos in the database). Set by server.js, so
+// this file stays free of database code.
+let imageNameSource = null
+
 // ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Tells scanJob where photo names come from when a job has no images/
+    folder (or it is empty).
+  \param fn
+    function(jobId) -> string[] of photo names, or null
+*/
+/************************************************************************/
+export function setImageNameSource(fn)
+{
+  imageNameSource = fn
+}
 
 /************************************************************************/
 /*!
@@ -129,9 +151,18 @@ export async function scanJob(id, jobsDir = config.jobsDir)
   try 
   {
     const jobDir = path.join(jobsDir, id)
-    const names = (await fsp.readdir(path.join(jobDir, 'images')))
-      .filter((n) => IMAGE_EXT_RE.test(n))
-      .sort()
+    let names = []
+    try
+    {
+      names = (await fsp.readdir(path.join(jobDir, 'images')))
+        .filter((n) => IMAGE_EXT_RE.test(n))
+        .sort()
+    }
+    catch
+    {
+      // No images/ folder: the photos may be in the database (below).
+    }
+    if (names.length === 0 && imageNameSource) names = imageNameSource(id)
     if (names.length === 0) return null
 
     const st = await fsp.stat(jobDir)

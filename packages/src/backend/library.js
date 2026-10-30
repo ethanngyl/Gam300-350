@@ -70,8 +70,8 @@ function vmHeaders(user)
 /************************************************************************/
 /*!
   \brief
-    Sends one finished job to the VM: its photos, final model, metrics and
-    status record, plus its owner (the VM's user id -- on a client machine
+    Sends one finished job to the VM: its photos, final model, metrics,
+    card cover and status record, plus its owner (the VM's user id -- on a client machine
     local ids are the VM's) and this machine's name. Marks it synced once
     the VM confirms. Logs and returns false on any failure, so the next
     sync round tries again.
@@ -98,6 +98,10 @@ export async function syncJob(record)
     const metricsPath = path.join(config.jobsDir, `${record.id}_out`, 'metrics.json')
     if (fs.existsSync(metricsPath))
       form.append('metrics', await fs.openAsBlob(metricsPath), 'metrics.json')
+    // The card cover (made from the background masks before they were tidied up).
+    const coverPath = path.join(config.jobsDir, `${record.id}_out`, 'cover.webp')
+    if (fs.existsSync(coverPath))
+      form.append('cover', await fs.openAsBlob(coverPath), 'cover.webp')
 
     const resp = await fetch(`${config.vmAuthUrl}/library/jobs/${record.id}`, {
       method: 'PUT',

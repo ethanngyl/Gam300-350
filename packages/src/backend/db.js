@@ -60,6 +60,12 @@ bytes columns.
 - markJobSynced / unmarkJobSynced / isJobSynced(jobId)
 On a client machine: which finished jobs the VM already has (table
 synced_jobs), so each is sent once.
+- backupDatabase()
+A consistent copy of app.db (VACUUM INTO), safe while running.
+- storeJobImages(jobId, imagesDir) / listDbImageNames / getDbImage /
+  deleteDbImages / hasDbImages
+On the VM with FILE_STORE=db: finished jobs' photos are kept in the table
+job_images instead of jobs/<id>/images/ (see imagestore.js).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -89,6 +95,10 @@ export const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'))
 
 // SQLite ignores REFERENCES / ON DELETE unless this is on (per connection).
 db.exec('PRAGMA foreign_keys = ON')
+// Write-ahead log: reading (e.g. serving photos from job_images) doesn't
+// block writing, or the other way round. Backups must then use VACUUM INTO
+// (or stop the backend first), not a plain copy of app.db.
+db.exec('PRAGMA journal_mode = WAL')
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -229,6 +239,31 @@ const upsertStoredJob = db.prepare(`
 const insertSyncedJob = db.prepare('INSERT OR REPLACE INTO synced_jobs (id) VALUES (?)')
 const deleteSyncedJob = db.prepare('DELETE FROM synced_jobs WHERE id = ?')
 const selectSyncedJob = db.prepare('SELECT 1 FROM synced_jobs WHERE id = ?')
+
+// On the VM with FILE_STORE=db: each finished job's photos, stored whole
+// (photos are small enough, and <img> never asks for byte ranges). Deleting
+// the job's jobs row deletes its photos.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS job_images (
+    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    name   TEXT NOT NULL,
+    mime   TEXT NOT NULL,
+    size   INTEGER NOT NULL,
+    data   BLOB NOT NULL,
+    PRIMARY KEY (job_id, name)
+  )
+`)
+
+// The photos need a jobs row (foreign key). OR IGNORE: an existing row keeps
+// its owner; a job with no row (older, ownerless) stays admin-only.
+const ensureJobRow = db.prepare('INSERT OR IGNORE INTO jobs (id) VALUES (?)')
+const insertJobImage = db.prepare('INSERT INTO job_images (job_id, name, mime, size, data) VALUES (?, ?, ?, ?, ?)')
+const deleteJobImages = db.prepare('DELETE FROM job_images WHERE job_id = ?')
+const selectJobImageNames = db.prepare('SELECT name FROM job_images WHERE job_id = ? ORDER BY name')
+const selectJobImage = db.prepare('SELECT mime, size, data FROM job_images WHERE job_id = ? AND name = ?')
+const selectAnyJobImage = db.prepare('SELECT 1 FROM job_images LIMIT 1')
+
+const PHOTO_NAME_RE = /\.(jpe?g|png)$/i
 
 
 // ----- Start of Functions --------------------------------------------------- //
@@ -489,10 +524,7 @@ export function retireLocalAccounts()
   const { n } = countLocalAccounts.get()
   if (n === 0) return { removed: 0, backupPath: null }
 
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const backupPath = path.join(DATA_DIR, `app.db.bak-${stamp}`)
-  db.prepare('VACUUM INTO ?').run(backupPath)
-
+  const backupPath = backupDatabase()
   const { changes } = deleteLocalAccounts.run()
   return { removed: Number(changes), backupPath }
 }
@@ -610,5 +642,126 @@ export function unmarkJobSynced(jobId)
 export function isJobSynced(jobId)
 {
   return Boolean(selectSyncedJob.get(jobId))
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A consistent copy of the whole database at data/app.db.bak-<time>,
+    safe while the backend is running (VACUUM INTO, not a file copy).
+  \return
+    The backup's path
+*/
+/************************************************************************/
+export function backupDatabase()
+{
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupPath = path.join(DATA_DIR, `app.db.bak-${stamp}`)
+  db.prepare('VACUUM INTO ?').run(backupPath)
+  return backupPath
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Stores every JPEG/PNG in a folder as the job's photos, replacing any
+    it already had. One transaction: either all photos are stored or none
+    (it throws, and the caller keeps the folder). Files are read one at a
+    time, so memory use is one photo at a time.
+  \param jobId
+  string
+  \param imagesDir
+  string
+    The folder holding the photos (jobs/<id>/images or a staging copy)
+  \return
+    { count, bytes }
+*/
+/************************************************************************/
+export function storeJobImages(jobId, imagesDir)
+{
+  const names = fs.readdirSync(imagesDir).filter((n) => PHOTO_NAME_RE.test(n)).sort()
+  let bytes = 0
+  db.exec('BEGIN')
+  try
+  {
+    ensureJobRow.run(jobId)
+    deleteJobImages.run(jobId)
+    for (const name of names)
+    {
+      const data = fs.readFileSync(path.join(imagesDir, name))
+      const mime = /\.png$/i.test(name) ? 'image/png' : 'image/jpeg'
+      insertJobImage.run(jobId, name, mime, data.length, data)
+      bytes += data.length
+    }
+    db.exec('COMMIT')
+  }
+  catch (err)
+  {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return { count: names.length, bytes }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The names of a job's photos in the database, sorted (0000.jpg, ...).
+  \param jobId
+  string
+  \return
+    string[] (empty if none)
+*/
+/************************************************************************/
+export function listDbImageNames(jobId)
+{
+  return selectJobImageNames.all(jobId).map((row) => row.name)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    One photo from the database.
+  \param jobId
+  string
+  \param name
+  string
+  \return
+    { mime, size, data: Buffer }, or null
+*/
+/************************************************************************/
+export function getDbImage(jobId, name)
+{
+  const row = selectJobImage.get(jobId, name)
+  if (!row) return null
+  // node:sqlite returns BLOBs as Uint8Array; wrapped (no copy) as the Buffer
+  // the rest of Node code expects.
+  return { mime: row.mime, size: row.size, data: Buffer.from(row.data.buffer, row.data.byteOffset, row.data.byteLength) }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether any photos are stored in the database yet.
+  \return
+    bool
+*/
+/************************************************************************/
+export function hasDbImages()
+{
+  return Boolean(selectAnyJobImage.get())
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Removes a job's photos from the database (the job is being deleted).
+  \param jobId
+  string
+*/
+/************************************************************************/
+export function deleteDbImages(jobId)
+{
+  deleteJobImages.run(jobId)
 }
 // ----- End of Functions ----------------------------------------------------- //

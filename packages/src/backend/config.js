@@ -458,6 +458,10 @@ export const config = {
     syncIntervalMin: Number(process.env.SYNC_INTERVAL_MIN) || 5,
     // Largest result.ply the VM accepts from a client.
     maxResultSizeMB: 500,
+    // Where finished jobs' photos are kept. 'disk' (default): jobs/<id>/images/.
+    // 'db': inside the database (app.db, table job_images) -- set FILE_STORE=db
+    // on the VM only (ignored unless AUTH_MODE=authority). Models stay as files.
+    fileStore: process.env.FILE_STORE === 'db' ? 'db' : 'disk',
 
     // --- Account authority (centralized accounts on the VM) --------------------
     // 'local' (default): accounts live in this machine's own database, as
