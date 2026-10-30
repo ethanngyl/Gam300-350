@@ -72,7 +72,7 @@ namespace {
     // ignored instead of restoring a broken arrangement.
     constexpr int kLayoutVersion = 2;
 
-    const QString kAppTitle = QStringLiteral("Codefine Engine");
+    const QString kAppTitle = QStringLiteral("Genesis Alpha Build");
 
     // QSettings keys.
     const QString kGeometryKey = QStringLiteral("window/geometry");
@@ -351,7 +351,7 @@ void MainWindow::createMenus() {
     QMenu* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&Controls", QKeySequence::HelpContents, this, [this] { showControls(); });
     helpMenu->addSeparator();
-    helpMenu->addAction("&About Codefine", this, [this] { showAbout(); });
+    helpMenu->addAction("&About Genesis Alpha Build", this, [this] { showAbout(); });
     helpMenu->addAction("About &Qt", qApp, &QApplication::aboutQt);
 }
 
@@ -1002,7 +1002,7 @@ void MainWindow::showControls() {
 }
 
 void MainWindow::showAbout() {
-    QMessageBox::about(this, "About Codefine",
+    QMessageBox::about(this, "About Genesis Alpha Build",
                        QString("<h3>%1</h3>"
                                "<p>Real-world object scanning to 3D: a viewer and editor for "
                                "Gaussian-splat reconstructions.</p>"

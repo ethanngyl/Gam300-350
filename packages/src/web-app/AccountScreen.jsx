@@ -79,7 +79,7 @@ function AccountScreen({ user, onSignOut }) {
 
     return (
         <div className="account-screen">
-            <p className="eyebrow">Account</p>
+            <p className="eyebrow eyebrow-accent">Account</p>
             <h1>Your account</h1>
 
             <div className="forma-card account-profile">

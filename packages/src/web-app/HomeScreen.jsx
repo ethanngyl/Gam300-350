@@ -6,9 +6,10 @@
 \par Software Engineering Project 5
 \date 26-10-2026
 \brief
-Dashboard landing screen, focused on the user's own work: a welcome with
-one "New model" button that opens the capture flow, then "Recent" with two
-tabs. "Your files" shows the latest photo batches and opens the Photo
+Dashboard landing screen, laid out like the Genesis wireframe and focused
+on the user's own work: a welcome line and subtitle (plus a "New model"
+button on phones, where the sidebar is a drawer), then "Recent" with two
+tabs and a "View all" button. "Your files" shows the latest photo batches and opens the Photo
 Library; "Generated models" shows the latest finished models and opens one
 in the full-page viewer. Both come from GET /jobs. With nothing made yet,
 it shows a single "Create your first 3D model" card instead.
@@ -26,10 +27,6 @@ const RECENT_TABS = [
     { id: 'files', label: 'Your files' },
     { id: 'models', label: 'Generated models' },
 ];
-
-function pluralize(count, word) {
-    return `${count} ${word}${count === 1 ? '' : 's'}`;
-}
 
 // "Just now", "5m ago", "3h ago", "Yesterday", "4d ago", or a date.
 function formatTimeAgo(timestamp) {
@@ -82,7 +79,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
         .map((job) => ({
             id: job.id,
             name: jobDisplayName(job, 'Photos'),
-            kind: job.status === 'done' ? pluralize(job.images.length, 'photo') : 'Processing',
+            kind: job.status === 'done' ? `Source photos \u00B7 ${job.images.length}` : 'Processing',
             coverUrl: job.images[0].url,
             createdAt: job.createdAt,
         }));
@@ -115,11 +112,15 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
 
     return (
         <div className="home-screen">
-            <p className="eyebrow">Default workspace</p>
+            <p className="eyebrow eyebrow-accent">Default workspace</p>
             <div className="home-heading-row">
-                <h1>Welcome back, {userName}</h1>
+                <div>
+                    <h1>Welcome back, {userName}</h1>
+                    <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
+                </div>
+                {/* Phones only: on wider screens New model is in the sidebar. */}
                 <button className="forma-btn forma-btn-primary home-new-model" onClick={startNewModel}>
-                    <Icon name="plus" size={15} /> New model
+                    <Icon name="camera" size={15} /> New model
                 </button>
             </div>
 
@@ -144,7 +145,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     </div>
                 </div>
                 <button
-                    className="home-link"
+                    className="forma-btn home-view-all"
                     onClick={() => {
                         playSound('tap');
                         onOpenLibrary(isShowingFiles ? 'photos' : 'models');
@@ -190,7 +191,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                                     <Icon name="layers" size={26} />
                                 )}
                                 <span className="home-file-type">
-                                    <Icon name={isShowingFiles ? 'image' : 'layers'} size={12} />
+                                    <Icon name={isShowingFiles ? 'image' : 'layers'} size={13} />
                                 </span>
                             </span>
                             <span className="home-file-copy">

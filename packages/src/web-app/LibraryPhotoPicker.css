@@ -10,7 +10,7 @@
     display: flex;
     align-items: stretch;
     justify-content: center;
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--forma-font);
     color: var(--forma-text);
 }
 
@@ -18,7 +18,7 @@
     position: absolute;
     inset: 0;
     border: none;
-    background: rgba(8, 14, 20, 0.7);
+    background: rgba(var(--forma-backdrop-rgb), 0.7);
 }
 
 .library-picker-dialog {
@@ -79,7 +79,7 @@
 }
 
 .library-picker-batch-meta {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     color: var(--forma-text-dim);
 }
@@ -135,8 +135,8 @@
     height: 22px;
     border-radius: 50%;
     border: 1px solid var(--forma-border-strong);
-    background: rgba(17, 29, 41, 0.75);
-    color: #f4fbfd;
+    background: rgba(var(--forma-bg-rgb), 0.75);
+    color: var(--forma-on-accent);
     display: flex;
     align-items: center;
     justify-content: center;

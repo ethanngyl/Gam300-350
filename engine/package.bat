@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: ============================================================
-::  Codefine Engine - build a distributable desktop app
+::  Genesis Alpha Build - build a distributable desktop app
 ::
 ::  Builds the Release configuration and packages it so it runs on
 ::  machines without Visual Studio, Qt or this repo:

@@ -219,7 +219,7 @@ void RemoteModelsPanel::onSessionChanged() {
         m_accountLabel->setToolTip(QString());
         m_accountButton->setText("Sign In...");
         m_accountButton->setToolTip("Sign in with your web app account");
-        m_message->setText("Sign in with your Codefine web app account to see the models you uploaded.");
+        m_message->setText("Sign in with your web app account to see the models you uploaded.");
         m_message->show();
     }
     updateButtons();

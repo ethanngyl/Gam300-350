@@ -89,20 +89,20 @@ Responsive grid of square photo thumbnails.
     align-items: baseline;
     gap: 12px;
     margin-bottom: 12px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.95rem;
 }
 
-/************************************************************************/
-/*!
+    /************************************************************************/
+    /*!
   \brief
     The status and photo count in the job heading, smaller and muted.
 */
-/************************************************************************/
-.gallery-job h3 span {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
+    /************************************************************************/
+    .gallery-job h3 span {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
 
 /************************************************************************/
 /*!
@@ -116,22 +116,22 @@ Responsive grid of square photo thumbnails.
     gap: 10px;
 }
 
-/************************************************************************/
-/*!
+    /************************************************************************/
+    /*!
   \brief
     Each thumbnail: fills its cell as a square, cropped to fit, with
     rounded corners and a border.
 */
-/************************************************************************/
-.gallery-grid img {
-    display: block;
-    width: 100%;
-    aspect-ratio: 1;
-    object-fit: cover;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-strong);
-    background: var(--surface);
-}
+    /************************************************************************/
+    .gallery-grid img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: cover;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-strong);
+        background: var(--surface);
+    }
 
 /* Compact card-grid layout for ImageGallery's variant="compact" mode,
    used when embedded inside LibraryScreen's Photo Library sub-tab. */

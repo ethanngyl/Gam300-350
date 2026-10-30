@@ -27,7 +27,8 @@ export const SCENES_SAVED_ON_SERVER = SCENES_API_READY;
 export const NEW_SCENE_INFO = {
     id: null,
     name: 'Untitled scene',
-    background: '#111d29',
+    // Same as --forma-panel, so the viewport matches the site's panels.
+    background: '#18181b',
     renderMode: 'splats',
     hasUnsavedChanges: false,
 };

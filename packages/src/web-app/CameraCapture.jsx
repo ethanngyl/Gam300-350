@@ -17,9 +17,10 @@ near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
 Taking a photo plays the camera shutter sound (quieter for auto-capture).
 If the camera can't start, the preview reads "Click to enable camera" and
-clicking it asks for the camera again. The Remove background option now
-lives in the Photo Editor; coming back from there ("Back to camera"),
-initialPhotos brings the batch and that choice back with it.
+clicking it asks for the camera again. The Remove background option and
+the Model detail slider (training iteration cap) are here and in the Photo
+Editor; coming back from there ("Back to camera"), initialPhotos brings
+the batch and those choices back with it.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -28,6 +29,8 @@ import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
+import TrainingQualitySlider from './TrainingQualitySlider.jsx';
+import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 
 const HARD_CAP = 200;
 
@@ -58,9 +61,20 @@ function createBatchPhoto(file) {
     };
 }
 
-// initialPhotos: { files, removeBackground } handed back from the Photo
+// addedFiles: photos chosen with the sidebar's Add photos button before
+// this page opened; they start in the batch. While the page is open,
+// onRegisterAddFiles(handler) hands App a function that adds more.
+// initialPhotos: { files, removeBackground, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
-function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, initialPhotos = null }) {
+function CameraCapture({
+    onBatchReady,
+    onReviewPhotos,
+    onBack,
+    uploadError,
+    initialPhotos = null,
+    addedFiles = null,
+    onRegisterAddFiles = null,
+}) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -76,7 +90,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     const [cameraRequestCount, setCameraRequestCount] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [photos, setPhotos] = useState(() =>
-        (initialPhotos?.files ?? []).filter((file) => file.type.startsWith('image/')).map(createBatchPhoto)
+        [...(initialPhotos?.files ?? []), ...(addedFiles ?? [])]
+            .filter((file) => file.type.startsWith('image/'))
+            .map(createBatchPhoto)
     );
 
     const [captureFeedback, setCaptureFeedback] = useState(null);
@@ -87,9 +103,12 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     const [isAutoCapturing, setIsAutoCapturing] = useState(false);
     const [intervalSeconds, setIntervalSeconds] = useState(2);
     const [maxCaptures, setMaxCaptures] = useState(50);
-    // Mask out the background before reconstruction. Set in the Photo
-    // Editor; kept here so the choice survives going back to the camera.
-    const [removeBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Mask out the background before reconstruction. Needed for turntable
+    // captures, where the static background makes the model come out flat.
+    // Also set in the Photo Editor, and kept when coming back from it.
+    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Model detail (training iteration cap), also set in the Photo Editor.
+    const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
@@ -199,6 +218,20 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
 
         return newPhotos.length;
     }, []);
+
+    // While this page is open, the sidebar's Add photos button adds to
+    // this batch through the handler registered here.
+    useEffect(() => {
+        if (!onRegisterAddFiles) return;
+        onRegisterAddFiles((files) => {
+            const addedCount = addFiles(files);
+            if (addedCount > 0) {
+                setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
+                setTimeout(() => setUploadFeedback(null), 2000);
+            }
+        });
+        return () => onRegisterAddFiles(null);
+    }, [onRegisterAddFiles, addFiles]);
 
     const capturePhoto = useCallback((showFeedback = true) => {
         const video = videoRef.current;
@@ -326,14 +359,14 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     // this page and releases the thumbnails; the File objects stay valid.
     function handleReview() {
         setIsAutoCapturing(false);
-        onReviewPhotos(photos.map((p) => p.file), { removeBackground });
+        onReviewPhotos(photos.map((p) => p.file), { removeBackground, trainIters });
     }
 
     // "Train model" is the only trigger that starts the reconstruction.
     function handleTrain() {
         const files = photos.map((p) => p.file);
         if (onBatchReady) {
-            onBatchReady(files, { removeBackground });
+            onBatchReady(files, { removeBackground, trainIters });
         }
 
         setIsBatchSent(true);
@@ -576,6 +609,23 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                             ))}
                         </div>
                     )}
+
+                    <label className="capture-option">
+                        <input
+                            type="checkbox"
+                            checked={removeBackground}
+                            onChange={(e) => {
+                                playSound('tap');
+                                setRemoveBackground(e.target.checked);
+                            }}
+                        />
+                        <span>
+                            Remove background
+                            <small>Turn on for turntable captures (object spins, camera stays still).</small>
+                        </span>
+                    </label>
+
+                    <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} />
 
                     {issueSummary && (
                         <p className="capture-issues" role="status">
