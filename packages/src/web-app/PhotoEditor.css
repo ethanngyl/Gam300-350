@@ -59,7 +59,7 @@
     .photo-editor-empty:hover,
     .photo-editor-empty.is-dragging {
         border-color: var(--forma-blue);
-        background: rgba(63, 152, 173, 0.08);
+        background: rgba(var(--forma-accent-rgb), 0.08);
     }
 
 .photo-editor-empty-title {
@@ -91,7 +91,7 @@
 
     .photo-editor-counts b {
         color: var(--forma-text);
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
     }
 
     .photo-editor-counts .is-warning b {
@@ -99,7 +99,7 @@
     }
 
 .photo-editor-checking {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.76rem;
     color: var(--forma-teal-text);
 }
@@ -177,7 +177,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -195,14 +195,14 @@
 }
 
 .photo-editor-issue {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.58rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 2px 5px;
     border-radius: 3px;
     color: #ffd9cf;
-    background: rgba(240, 111, 96, 0.85);
+    background: rgba(var(--forma-red-rgb), 0.85);
 }
 
 /* 30px on phones so it's easy to tap; smaller on desktop below. */
@@ -214,7 +214,7 @@
     height: 30px;
     border-radius: 50%;
     border: 1px solid var(--forma-border-strong);
-    background: rgba(17, 29, 41, 0.85);
+    background: rgba(var(--forma-bg-rgb), 0.85);
     color: var(--forma-text-muted);
     display: flex;
     align-items: center;
@@ -226,7 +226,7 @@
     .photo-editor-keep-toggle.is-kept {
         background: var(--forma-blue);
         border-color: var(--forma-blue);
-        color: #f4fbfd;
+        color: var(--forma-on-accent);
     }
 
 /* ---------- Side panel ---------- */
@@ -265,7 +265,7 @@
     }
 
 .photo-editor-preview-name {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.72rem;
     color: var(--forma-text-dim);
     overflow: hidden;
@@ -340,7 +340,7 @@
 
     .photo-editor-slider b {
         color: var(--forma-teal-text);
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-weight: 500;
     }
 
@@ -405,23 +405,11 @@
             font-size: 2rem;
         }
 
+    /* Buttons stay under the title and description, as on phones. */
     .photo-editor-heading {
-        flex-direction: row;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 24px;
+        gap: 16px;
         margin-bottom: 24px;
     }
-
-        .photo-editor-heading > div {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .photo-editor-heading > .forma-btn,
-        .photo-editor-heading > .photo-editor-heading-actions {
-            flex: none;
-        }
 
     .photo-editor-summary {
         flex-direction: row;
@@ -546,7 +534,7 @@
 .photo-editor-crop-box {
     position: absolute;
     border: 2px solid var(--forma-teal-text);
-    box-shadow: 0 0 0 9999px rgba(8, 14, 20, 0.6);
+    box-shadow: 0 0 0 9999px rgba(var(--forma-backdrop-rgb), 0.6);
 }
 
 .photo-editor-crop-handle {
@@ -630,14 +618,14 @@
     position: absolute;
     top: 6px;
     left: 6px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.58rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     padding: 2px 5px;
     border-radius: 3px;
-    color: #e3f4f7;
-    background: rgba(63, 152, 173, 0.9);
+    color: var(--forma-text);
+    background: rgba(var(--forma-accent-rgb), 0.9);
 }
 
 .photo-editor .photo-editor-warning {
@@ -714,7 +702,13 @@
     cursor: crosshair;
 }
 
-/* "Use original photos" switch in the bottom bar */
+/* "Use original photos" and "Remove background" switches in the bottom bar */
+.photo-editor-footer-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+}
+
 .photo-editor-originals {
     display: flex;
     align-items: center;
@@ -754,7 +748,7 @@
     }
 
     .photo-editor-switch:checked {
-        background: rgba(63, 152, 173, 0.45);
+        background: rgba(var(--forma-accent-rgb), 0.45);
         border-color: var(--forma-blue);
     }
 

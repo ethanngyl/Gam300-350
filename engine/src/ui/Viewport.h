@@ -31,6 +31,7 @@ through renderer().
 #include <functional>
 #include <memory>
 
+class SplatModel;
 class SplatRenderer;
 
 // The 3D view. Owns the OpenGL context, the splat renderer and the ImGui
@@ -46,6 +47,10 @@ public:
 
     // Engine -> Qt UI: called once the GL context and renderer() exist.
     std::function<void()> onInitialized;
+
+    // Engine -> Qt UI: called once when a gizmo drag ends with the model's
+    // transform before and after the whole drag (not once per frame).
+    std::function<void(SplatModel* model, const glm::mat4& before, const glm::mat4& after)> onTransformEdited;
 
     // Qt UI -> ImGui: whether the ImGui "Engine Stats" overlay is drawn.
     void setShowImGuiStats(bool show) { m_showImGuiStats = show; }
@@ -75,7 +80,7 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
-    // Draws the translate gizmo on the selected model and writes drags back to it.
+    //Draws the translate gizmo on the selected model and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
     Camera m_camera;
@@ -90,4 +95,9 @@ private:
     bool m_leftHeld = false;
     bool m_rightHeld = false;
     QPointF m_lastMousePos;
+
+    // Gizmo drag in progress: the model and where it started, for onTransformEdited.
+    bool m_gizmoWasUsing = false;
+    SplatModel* m_dragModel = nullptr;
+    glm::mat4 m_dragBefore = glm::mat4(1.0f);
 };

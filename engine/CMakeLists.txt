@@ -263,12 +263,12 @@ else()
         COMPONENT ${CODEFINE_COMPONENT})
 endif()
 
-set(CPACK_PACKAGE_NAME "Codefine")
+set(CPACK_PACKAGE_NAME "Genesis Alpha Build")
 set(CPACK_PACKAGE_VENDOR "Team CoDefine")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Codefine - Gaussian splat viewer and editor")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Genesis Alpha Build - Gaussian splat viewer and editor")
 set(CPACK_PACKAGE_VERSION "0.1.0")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "Codefine")
-set(CPACK_PACKAGE_EXECUTABLES "Codefine;Codefine Engine")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Genesis Alpha Build")
+set(CPACK_PACKAGE_EXECUTABLES "Codefine;Genesis Alpha Build")
 # Package only the Codefine component (build dir;project;component;subdir).
 set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${CMAKE_PROJECT_NAME};${CODEFINE_COMPONENT};/")
 set(CPACK_PACKAGE_FILE_NAME "Codefine-${CPACK_PACKAGE_VERSION}-win64")
@@ -278,16 +278,16 @@ find_program(CODEFINE_MAKENSIS makensis
     PATHS "$ENV{ProgramFiles}/NSIS" "$ENV{ProgramFiles\(x86\)}/NSIS")
 if(CODEFINE_MAKENSIS)
     list(APPEND CPACK_GENERATOR "NSIS")
-    set(CPACK_NSIS_DISPLAY_NAME "Codefine Engine")
-    set(CPACK_NSIS_PACKAGE_NAME "Codefine Engine")
+    set(CPACK_NSIS_DISPLAY_NAME "Genesis Alpha Build")
+    set(CPACK_NSIS_PACKAGE_NAME "Genesis Alpha Build")
     set(CPACK_NSIS_INSTALLED_ICON_NAME "Codefine.exe")
     set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Codefine.exe")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     # Backslashes are escaped twice: once for this file, once for the
     # CPackConfig.cmake that CPack generates from it.
     set(CPACK_NSIS_CREATE_ICONS_EXTRA
-        "CreateShortCut '$DESKTOP\\\\Codefine Engine.lnk' '$INSTDIR\\\\Codefine.exe'")
-    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\Codefine Engine.lnk'")
+        "CreateShortCut '$DESKTOP\\\\Genesis Alpha Build.lnk' '$INSTDIR\\\\Codefine.exe'")
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\Genesis Alpha Build.lnk'")
 endif()
 
 include(CPack)

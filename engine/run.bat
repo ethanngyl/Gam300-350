@@ -11,7 +11,7 @@ echo !cmdcmdline! | "%SystemRoot%\System32\find.exe" /i "%~nx0" >nul
 if not errorlevel 1 set "DOUBLECLICK=1"
 
 echo ========================================
-echo Codefine Engine - Build ^& Run (Debug)
+echo Genesis Alpha Build - Build ^& Run (Debug)
 echo ========================================
 echo.
 

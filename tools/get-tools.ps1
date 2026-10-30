@@ -10,9 +10,14 @@
       - COLMAP  (~128 MB nocuda / ~380 MB cuda) turns photos into a sparse
         reconstruction. colmap.exe depends on a folder of DLLs (Qt, Ceres, glog,
         FreeImage, and the CUDA runtime on the CUDA build).
-      - Brush   (~160 MB) turns COLMAP's sparse reconstruction into a trained
+      - Brush   (~125 MB) turns COLMAP's sparse reconstruction into a trained
         gaussian splat .ply. It renders with the GPU (wgpu / Vulkan / DX12), so a
         working GPU is required to train - there is no CPU-only build.
+        Brush 1.0.0 has no prebuilt release yet, so it is built from source
+        (brush-cli at a pinned commit, ~10-15 min). That needs Git and the
+        Visual Studio C++ build tools; Rust is installed automatically if
+        missing. Older release builds can still be downloaded with
+        -BrushVersion v0.3.0.
 
     Each developer runs this once. The binaries stay out of git and are found via
     config.js (or the COLMAP_BIN / BRUSH_BIN env vars). At the end it prints the
@@ -29,7 +34,14 @@
     COLMAP release tag to fetch. Defaults to 4.0.4.
 
 .PARAMETER BrushVersion
-    Brush release tag to fetch. Defaults to v0.3.0.
+    Brush version to install. Defaults to 1.0.0, built from source at
+    -BrushCommit. A release tag starting with "v" (e.g. v0.3.0) downloads
+    that prebuilt release instead.
+
+.PARAMETER BrushCommit
+    The Brush commit built for 1.0.0. Pinned so every machine trains with the
+    same Brush (--alpha-mode, which the masked-background training needs, is
+    1.0+ only).
 
 .PARAMETER SkipColmap
     Don't install COLMAP (install Brush only).
@@ -46,7 +58,8 @@
 param(
     [switch]$NoCuda,
     [string]$ColmapVersion = "4.0.4",
-    [string]$BrushVersion  = "v0.3.0",
+    [string]$BrushVersion  = "1.0.0",
+    [string]$BrushCommit   = "1388f74c6fe0236f68ee4915564bf00e9d2e3747",
     [switch]$SkipColmap,
     [switch]$SkipBrush
 )
@@ -77,6 +90,76 @@ function Install-Zip {
     Remove-Item $zipPath -Force
 
     return $destDir
+}
+
+# Build brush-cli from source at $Commit and put the exe in tools/brush,
+# returning the exe. Installs Rust (rustup, per-user) if cargo is missing.
+function Install-BrushFromSource {
+    param([string]$Commit)
+
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        throw "Git is needed to build Brush. Install it from https://git-scm.com and run this again."
+    }
+
+    # Rust on Windows links with the MSVC linker from Visual Studio.
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    $vcTools = $null
+    if (Test-Path $vswhere) {
+        $vcTools = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    }
+    if (-not $vcTools) {
+        throw "The Visual Studio C++ build tools are needed to build Brush. Install Visual Studio (or the Build Tools) with the 'Desktop development with C++' workload, then run this again."
+    }
+
+    $cargo = Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe"
+    if (-not (Test-Path $cargo)) {
+        $onPath = Get-Command cargo -ErrorAction SilentlyContinue
+        if ($onPath) { $cargo = $onPath.Source }
+    }
+    if (-not (Test-Path $cargo)) {
+        Write-Host "Installing Rust (rustup, for this user only) ..." -ForegroundColor Cyan
+        $rustupInit = Join-Path $env:TEMP "rustup-init.exe"
+        Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe" -OutFile $rustupInit
+        & $rustupInit -y --profile minimal --default-toolchain stable
+        if ($LASTEXITCODE -ne 0) { throw "Rust install failed (rustup-init exit code $LASTEXITCODE)." }
+        Remove-Item $rustupInit -Force
+        $cargo = Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe"
+    }
+
+    # Fetch only the pinned commit, into a gitignored working folder.
+    $srcDir = Join-Path $toolsDir "brush-src"
+    Write-Host "Fetching Brush source at $Commit ..." -ForegroundColor Cyan
+    if (-not (Test-Path (Join-Path $srcDir ".git"))) {
+        if (Test-Path $srcDir) { Remove-Item -Recurse -Force $srcDir }
+        git init --quiet $srcDir
+        git -C $srcDir remote add origin https://github.com/ArthurBrussee/brush.git
+    }
+    git -C $srcDir fetch --quiet --depth 1 origin $Commit
+    if ($LASTEXITCODE -ne 0) { throw "Could not fetch Brush commit $Commit." }
+    git -C $srcDir checkout --quiet --force FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) { throw "Could not check out Brush commit $Commit." }
+
+    # --locked uses Brush's own Cargo.lock, so every machine gets the same
+    # dependency versions.
+    Write-Host "Building Brush (release) - about 10-15 minutes the first time ..." -ForegroundColor Cyan
+    Push-Location $srcDir
+    try {
+        & $cargo build --release --locked -p brush-cli
+        if ($LASTEXITCODE -ne 0) { throw "Brush build failed (cargo exit code $LASTEXITCODE)." }
+    }
+    finally {
+        Pop-Location
+    }
+
+    $destDir = Join-Path $toolsDir "brush"
+    if (Test-Path $destDir) { Remove-Item -Recurse -Force $destDir }
+    New-Item -ItemType Directory -Path $destDir | Out-Null
+    Copy-Item (Join-Path $srcDir "target\release\brush-cli.exe") $destDir
+
+    # The build folder is several GB; only the exe is needed.
+    Remove-Item -Recurse -Force $srcDir
+
+    return Get-Item (Join-Path $destDir "brush-cli.exe")
 }
 
 $colmapExe = $null
@@ -111,7 +194,13 @@ if (-not $SkipColmap) {
     Write-Host ""
 }
 
-if (-not $SkipBrush) {
+if (-not $SkipBrush -and -not $BrushVersion.StartsWith("v")) {
+    Write-Host "Brush $BrushVersion (built from source)" -ForegroundColor Cyan
+    $brushExe = Install-BrushFromSource -Commit $BrushCommit
+    Write-Host "Brush ready: $($brushExe.FullName)" -ForegroundColor Green
+    Write-Host ""
+}
+elseif (-not $SkipBrush) {
     $zipName = "brush-app-x86_64-pc-windows-msvc.zip"
     $url     = "https://github.com/ArthurBrussee/brush/releases/download/$BrushVersion/$zipName"
 

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "jobId": "367cdea5-d277-475e-93bc-6e4db472fcd5",
+  "source": "upload",
+  "createdAt": "2026-10-27T01:09:11.851Z",
+  "finishedAt": "2026-10-27T01:19:50.527Z",
+  "timing": {
+    "totalSec": 638.7,
+    "sinceCreatedSec": 638.7,
+    "colmapSec": 37.8,
+    "trainingSec": 536.3,
+    "phasesSec": {
+      "masking": 64.3,
+      "colmap-features": 2.3,
+      "colmap-matching": 1.1,
+      "colmap-mapping": 34.3,
+      "training": 536.3,
+      "normalize": 0.3
+    }
+  },
+  "training": {
+    "iterationsTarget": 30000,
+    "lastIterationLogged": 29801,
+    "itersPerSec": 55.9,
+    "maxResolution": 1024
+  },
+  "input": {
+    "imageCount": 47,
+    "sparseModels": 2
+  },
+  "output": {
+    "splatCount": 25293,
+    "plyFormat": "binary_little_endian",
+    "propertiesPerSplat": 59,
+    "rawPlyBytes": 5970698,
+    "finalPlyBytes": 5970698,
+    "normalized": true,
+    "rawPly": "367cdea5-d277-475e-93bc-6e4db472fcd5_out/splat_30000.ply",
+    "finalPly": "367cdea5-d277-475e-93bc-6e4db472fcd5_out/result.ply"
+  },
+  "gpuDuringTraining": {
+    "samples": 106,
+    "peakVramUsedMB": 2571,
+    "avgUtilizationPct": 95
+  },
+  "hardware": {
+    "host": "DESKTOP-AST7VMF",
+    "os": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "version": "Windows 11 Home",
+      "arch": "x64"
+    },
+    "cpu": {
+      "model": "AMD Ryzen 7 7435HS",
+      "logicalCores": 16,
+      "speedMHz": 3094
+    },
+    "memory": {
+      "totalMB": 32587
+    },
+    "gpus": [
+      {
+        "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+        "vramMB": 8188,
+        "driver": "596.49",
+        "vendor": "NVIDIA"
+      }
+    ],
+    "tools": {
+      "colmap": "COLMAP 4.2.0 (Commit be5e291 on 2026-08-31 with CUDA)",
+      "colmapUseGpu": true,
+      "brush": "brush-cli 0.3.0"
+    },
+    "node": "v24.21.0"
+  }
+}

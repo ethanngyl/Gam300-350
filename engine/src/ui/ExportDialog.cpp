@@ -47,7 +47,7 @@ namespace {
         case ExportFormat::Stl:
             return "Triangle mesh without colour, for 3D printing and CAD.";
         case ExportFormat::GaussianPly:
-            return "Gaussian splats with your trimming and position applied. Re-opens in Codefine and "
+            return "Gaussian splats with your trimming and position applied. Re-opens in Genesis Alpha Build and "
                    "other splat viewers. View-dependent colour (f_rest) is not kept.";
         case ExportFormat::SplatFile:
             return "Compact splat format (32 bytes per splat) used by web splat viewers.";

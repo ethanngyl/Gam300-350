@@ -154,6 +154,11 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
             `${jobDisplayName(job, 'Batch')} ${job.id} ${job.status}`.toLowerCase().includes(normalizedSearch)
         );
         if (sortOrder === 'oldest') visibleJobs.reverse();
+        if (sortOrder === 'lastEdited') {
+            // Most recently changed first; jobs with no update time use when they were made.
+            const lastEditedTime = (job) => Date.parse(job.updatedAt ?? job.createdAt) || 0;
+            visibleJobs.sort((a, b) => lastEditedTime(b) - lastEditedTime(a));
+        }
         if (sortOrder === 'name') {
             visibleJobs.sort((a, b) => jobDisplayName(a, 'Batch').localeCompare(jobDisplayName(b, 'Batch')));
         }

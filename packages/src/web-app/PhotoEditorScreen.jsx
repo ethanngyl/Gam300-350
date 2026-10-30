@@ -13,7 +13,11 @@ or left out. Edits (auto fix, brightness, contrast, warmth, tint, auto
 color, pick a neutral spot, sharpen, crop) apply to all photos by
 default; on desktop a photo can also be edited on its own. Strong
 settings, lost highlight/shadow detail, large crops and mixed crops all
-show warnings. "Use original photos" bypasses every edit. Edits are only
+show warnings. "Use original photos" bypasses every edit, and "Remove
+background" (moved here from Camera Capture, so it covers both captured
+and uploaded batches) masks out the background when the model is
+built, and the "Model detail" slider (Fast / Normal / Detailed) sets how
+many training iterations the build runs. Edits are only
 settings until upload, so the originals are never changed. Phones get a
 simpler, batch-only set of tools. "Review photos first" in Camera Capture
 opens the editor with that batch already loaded (initialPhotos); its
@@ -48,6 +52,8 @@ import {
     renderEditedCanvas,
     sampleColor,
 } from './PhotoEdits.js';
+import TrainingQualitySlider from './TrainingQualitySlider.jsx';
+import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import './PhotoEditor.css';
 
 // Fewest kept photos allowed before building a model (matches capture).
@@ -227,9 +233,10 @@ function CropOverlay({ crop, onChange }) {
     );
 }
 
-// initialPhotos: { files, removeBackground } handed over from Camera Capture,
-// or null when the editor is opened on its own. onBackToCapture(files,
-// { removeBackground }) sends the photos to Camera Capture.
+// initialPhotos: { files, removeBackground, trainIters } handed over from
+// Camera Capture, or null when the editor is opened on its own.
+// onBackToCapture(files, { removeBackground, trainIters }) sends the photos
+// to Camera Capture.
 function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null, onBackToCapture }) {
     const isPhone = useIsPhone();
     const fileInputRef = useRef(null);
@@ -242,8 +249,12 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     const [photos, setPhotos] = useState(() =>
         (initialPhotos?.files ?? []).filter(isImageFile).map(createEditorPhoto)
     );
-    // Carried over from Camera Capture so the build uses the same setting.
-    const removeBackground = initialPhotos?.removeBackground ?? false;
+    // Mask out the background before reconstruction. Needed for turntable
+    // captures, where the static background makes the model come out flat.
+    // Starts with the choice carried over from Camera Capture, if any.
+    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Training iteration cap from the "Model detail" slider.
+    const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     // Opened from Camera Capture, so it can send the photos back there.
     // Fixed when the editor opens, so re-clicking the tab doesn't hide it.
     const [isFromCapture] = useState(() => initialPhotos !== null && Boolean(onBackToCapture));
@@ -408,7 +419,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // out" choices only live in the editor, so they reset.
     function backToCapture() {
         playSound(isFromCapture ? 'back' : 'tap');
-        onBackToCapture(photos.map((photo) => photo.file), { removeBackground });
+        onBackToCapture(photos.map((photo) => photo.file), { removeBackground, trainIters });
     }
 
     function openFilePicker() {
@@ -630,6 +641,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
         setIsPickingNeutral(false);
     }
 
+    function handleRemoveBackgroundChange(event) {
+        playSound('tap');
+        setRemoveBackground(event.target.checked);
+    }
+
     async function handleGenerate() {
         playSound('confirm');
         setIsCropping(false);
@@ -643,7 +659,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
             }
             // On success App switches to the processing screen; on failure it
             // sets uploadError, which is shown in the bottom bar.
-            await onGenerateModel(filesToUpload, { removeBackground });
+            await onGenerateModel(filesToUpload, { removeBackground, trainIters });
         } finally {
             setPreparedCount(null);
         }
@@ -1122,15 +1138,30 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                     </div>
 
                     <div className="photo-editor-footer">
-                        <label className="photo-editor-originals">
-                            <input
-                                type="checkbox"
-                                className="photo-editor-switch"
-                                checked={useOriginals}
-                                onChange={handleUseOriginalsChange}
-                            />
-                            Use original photos
-                        </label>
+                        <div className="photo-editor-footer-options">
+                            <label className="photo-editor-originals">
+                                <input
+                                    type="checkbox"
+                                    className="photo-editor-switch"
+                                    checked={useOriginals}
+                                    onChange={handleUseOriginalsChange}
+                                />
+                                Use original photos
+                            </label>
+                            <label
+                                className="photo-editor-originals"
+                                title="Turn on for turntable captures (object spins, camera stays still)."
+                            >
+                                <input
+                                    type="checkbox"
+                                    className="photo-editor-switch"
+                                    checked={removeBackground}
+                                    onChange={handleRemoveBackgroundChange}
+                                />
+                                Remove background
+                            </label>
+                        </div>
+                        <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} disabled={isPreparing} />
                         <div className="photo-editor-footer-text">{renderFooterMessage()}</div>
                         <button
                             className="forma-btn forma-btn-primary"

@@ -196,7 +196,7 @@ void BackendClient::signIn(const QUrl& server, const QString& email, const QStri
         }
         const RemoteUser user = ParseUser(QJsonDocument::fromJson(data).object());
         if (token.isEmpty() || user.email.isEmpty()) {
-            emit signInFinished(false, "The server's reply wasn't understood. Is this the Codefine backend?");
+            emit signInFinished(false, "The server's reply wasn't understood. Is this the web app's backend?");
             return;
         }
 

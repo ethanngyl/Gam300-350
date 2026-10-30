@@ -31,7 +31,13 @@ import { playSound } from '../audio/Audio.js';
 // produces a model; the others are hidden from the grid.
 const FINISHED_STATUSES = ['done', 'error', 'cancelled'];
 
-function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos }) {
+// When a model was last changed, for the "Last edited" sort. Falls back to
+// when it was made if the server has no update time.
+function lastEditedTime(model) {
+    return Date.parse(model.updatedAt ?? model.createdAt) || 0;
+}
+
+function LibraryScreen({ subTab, onSubTabChange }) {
     const [search, setSearch] = useState('');
     const [sortOrder, setSortOrder] = useState('newest');
     const [jobs, setJobs] = useState([]);
@@ -80,6 +86,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             customName: job.name ?? '',
             photoCount: job.images?.length ?? 0,
             createdAt: job.createdAt,
+            updatedAt: job.updatedAt,
             isReady: job.status === 'done',
             coverUrl: job.cover ?? null,
             photoUrl: job.images?.[0]?.url ?? null,
@@ -90,6 +97,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
         `${model.name} ${model.id}`.toLowerCase().includes(normalizedSearch)
     );
     if (sortOrder === 'oldest') visibleModels.reverse();
+    if (sortOrder === 'lastEdited') visibleModels.sort((a, b) => lastEditedTime(b) - lastEditedTime(a));
     if (sortOrder === 'name') visibleModels.sort((a, b) => a.name.localeCompare(b.name));
 
     function openModelMenu(event, model) {
@@ -175,20 +183,11 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                     <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
                         <option value="newest">Newest</option>
                         <option value="oldest">Oldest</option>
+                        <option value="lastEdited">Last edited</option>
                         <option value="name">Name</option>
                     </select>
                     <Icon name="chevron" size={13} />
                 </label>
-
-                {subTab === 'models' ? (
-                    <button className="forma-btn forma-btn-primary" onClick={() => { playSound('tap'); onGenerateModel(); }}>
-                        <Icon name="plus" size={14} /> Generate Model
-                    </button>
-                ) : (
-                    <button className="forma-btn forma-btn-primary" onClick={() => { playSound('tap'); onUploadPhotos(); }}>
-                        <Icon name="plus" size={14} /> Upload Photos
-                    </button>
-                )}
             </div>
 
             {subTab === 'models' ? (
@@ -201,7 +200,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use Generate Model to create one.'}
+                                : 'No generated models yet. Use New model in the sidebar to create one.'}
                         </p>
                     )}
 

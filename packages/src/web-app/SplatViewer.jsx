@@ -164,7 +164,7 @@ export default function SplatViewer({ url }) {
           className={`btn ${active === 'engine' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => choose('engine')}
           disabled={!engineAvailable}
-          title={engineAvailable ? 'Render with the Codefine engine (WebAssembly)' : engineNotice ?? undefined}
+          title={engineAvailable ? 'Render with the Genesis Alpha Build engine (WebAssembly)' : engineNotice ?? undefined}
         >
           Engine renderer
         </button>
