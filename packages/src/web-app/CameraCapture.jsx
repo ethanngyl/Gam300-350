@@ -16,6 +16,8 @@ Each photo is checked in the background for blur, bad exposure and
 near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
 Taking a photo plays the camera shutter sound (quieter for auto-capture).
+Cameras that allow it start in autofocus; tapping the preview focuses on
+that spot, and a Focus slider sets the focus by hand.
 If the camera can't start, the preview reads "Click to enable camera" and
 clicking it asks for the camera again. The Remove background option and
 the Model detail slider (training iteration cap) are here and in the Photo
@@ -49,6 +51,40 @@ const ISSUE_SUMMARY_PHRASES = {
     dark: (count) => `${count} ${count === 1 ? 'is' : 'are'} too dark`,
     bright: (count) => `${count} ${count === 1 ? 'is' : 'are'} too bright`,
 };
+
+// What focus control the camera offers: continuous autofocus, focusing on a
+// tapped point, and/or a manual focus distance. Phone cameras usually offer
+// some of these; many desktop webcams offer none (they keep their own focus).
+function readFocusSupport(track) {
+    const capabilities = track.getCapabilities?.() ?? {};
+    const focusModes = capabilities.focusMode ?? [];
+    const canFocusOnPoint = Boolean(navigator.mediaDevices.getSupportedConstraints?.().pointsOfInterest);
+    return {
+        autoMode: focusModes.includes('continuous') ? 'continuous' : focusModes.includes('single-shot') ? 'single-shot' : null,
+        canTapFocus: canFocusOnPoint && (focusModes.includes('continuous') || focusModes.includes('single-shot')),
+        distanceRange: focusModes.includes('manual') && capabilities.focusDistance ? capabilities.focusDistance : null,
+    };
+}
+
+// Turns a click on the preview into a point on the camera frame (0-1 on
+// each axis). The preview is cropped to fill its box (object-fit: cover),
+// so the hidden overflow is added back before dividing.
+function clickToFramePoint(event, video) {
+    const rect = video.getBoundingClientRect();
+    const scale = Math.max(rect.width / video.videoWidth, rect.height / video.videoHeight);
+    const shownWidth = video.videoWidth * scale;
+    const shownHeight = video.videoHeight * scale;
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+    return {
+        frame: {
+            x: Math.min(1, Math.max(0, (clickX + (shownWidth - rect.width) / 2) / shownWidth)),
+            y: Math.min(1, Math.max(0, (clickY + (shownHeight - rect.height) / 2) / shownHeight)),
+        },
+        // Where to draw the focus ring, as a percentage of the preview.
+        ring: { left: (clickX / rect.width) * 100, top: (clickY / rect.height) * 100 },
+    };
+}
 
 // Builds one batch entry. Checks start as 'pending'.
 function createBatchPhoto(file) {
@@ -112,6 +148,17 @@ function CameraCapture({
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
+    // Focus: what the current camera supports (null until it starts),
+    // 'auto' or 'manual', the manual focus distance, the ring drawn where
+    // the preview was tapped, and a short note when focusing isn't possible.
+    const [focusSupport, setFocusSupport] = useState(null);
+    const [focusMode, setFocusMode] = useState('auto');
+    const [focusDistance, setFocusDistance] = useState(null);
+    const [focusRing, setFocusRing] = useState(null);
+    const [focusNote, setFocusNote] = useState(null);
+    const focusRingTimerRef = useRef(null);
+    const focusNoteTimerRef = useRef(null);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -132,6 +179,17 @@ function CameraCapture({
 
                 streamRef.current = mediaStream;
                 setStream(mediaStream);
+
+                // See what focus control this camera has and switch it to
+                // autofocus, so photos start sharp without the user doing anything.
+                const track = mediaStream.getVideoTracks()[0];
+                const support = readFocusSupport(track);
+                setFocusSupport(support);
+                setFocusMode('auto');
+                setFocusDistance(track.getSettings?.().focusDistance ?? support.distanceRange?.min ?? null);
+                if (support.autoMode) {
+                    track.applyConstraints({ advanced: [{ focusMode: support.autoMode }] }).catch(() => {});
+                }
                 if (videoRef.current) {
                     videoRef.current.srcObject = mediaStream;
                 }
@@ -157,6 +215,65 @@ function CameraCapture({
         playSound('tap');
         setError(null);
         setCameraRequestCount((count) => count + 1);
+    }
+
+    useEffect(() => {
+        return () => {
+            clearTimeout(focusRingTimerRef.current);
+            clearTimeout(focusNoteTimerRef.current);
+        };
+    }, []);
+
+    function showFocusNote(note) {
+        setFocusNote(note);
+        clearTimeout(focusNoteTimerRef.current);
+        focusNoteTimerRef.current = setTimeout(() => setFocusNote(null), 2500);
+    }
+
+    // Tap / click the preview to focus on that spot. Goes back to autofocus
+    // (centred on the spot) if the manual slider was in use.
+    async function handlePreviewClick(event) {
+        const video = videoRef.current;
+        const track = streamRef.current?.getVideoTracks()[0];
+        if (!stream || !track || !video?.videoWidth) return;
+
+        if (!focusSupport?.canTapFocus) {
+            showFocusNote('This camera adjusts its own focus');
+            return;
+        }
+
+        const { frame, ring } = clickToFramePoint(event, video);
+        playSound('tap', 0.5);
+        setFocusRing({ ...ring, id: Date.now() });
+        clearTimeout(focusRingTimerRef.current);
+        focusRingTimerRef.current = setTimeout(() => setFocusRing(null), 1200);
+
+        try {
+            await track.applyConstraints({
+                advanced: [{ focusMode: focusSupport.autoMode, pointsOfInterest: [frame] }],
+            });
+            setFocusMode('auto');
+        } catch {
+            showFocusNote("Couldn't focus there");
+        }
+    }
+
+    function handleAutoFocus() {
+        const track = streamRef.current?.getVideoTracks()[0];
+        if (!track || !focusSupport?.autoMode) return;
+        playSound('tap');
+        track.applyConstraints({ advanced: [{ focusMode: focusSupport.autoMode }] })
+            .then(() => setFocusMode('auto'))
+            .catch(() => showFocusNote("Couldn't switch to autofocus"));
+    }
+
+    function handleFocusDistanceChange(distance) {
+        const track = streamRef.current?.getVideoTracks()[0];
+        if (!track) return;
+        setFocusDistance(distance);
+        setFocusMode('manual');
+        track.applyConstraints({ advanced: [{ focusMode: 'manual', focusDistance: distance }] })
+            .catch(() => showFocusNote("Couldn't set the focus"));
     }
 
     useEffect(() => {
@@ -397,7 +514,10 @@ function CameraCapture({
 
             <div className="capture-layout">
                 <div className="forma-card capture-camera">
-                    <div className="capture-viewport">
+                    <div
+                        className={focusSupport?.canTapFocus ? 'capture-viewport can-tap-focus' : 'capture-viewport'}
+                        onClick={handlePreviewClick}
+                    >
                         <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
@@ -426,6 +546,18 @@ function CameraCapture({
                                 Live
                             </span>
                         )}
+
+                        {focusRing && (
+                            <span
+                                key={focusRing.id}
+                                className="capture-focus-ring"
+                                style={{ left: `${focusRing.left}%`, top: `${focusRing.top}%` }}
+                            ></span>
+                        )}
+                        {stream && focusSupport?.canTapFocus && !focusNote && (
+                            <span className="capture-focus-hint">Tap to focus</span>
+                        )}
+                        {focusNote && <span className="capture-focus-hint" role="status">{focusNote}</span>}
                     </div>
 
                     {error && <p className="capture-error">{error}</p>}
@@ -512,6 +644,31 @@ function CameraCapture({
                                         Capturing every {intervalSeconds}s... ({photos.length}/{maxCaptures})
                                     </span>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Manual focus, only for cameras that allow it. */}
+                        {stream && focusSupport?.distanceRange && (
+                            <div className="capture-focus-controls">
+                                <span className="capture-interval-label">focus</span>
+                                <button
+                                    type="button"
+                                    className={focusMode === 'auto' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
+                                    onClick={handleAutoFocus}
+                                    disabled={!focusSupport.autoMode}
+                                >
+                                    Auto
+                                </button>
+                                <input
+                                    type="range"
+                                    className="capture-focus-slider"
+                                    aria-label="Manual focus distance"
+                                    min={focusSupport.distanceRange.min}
+                                    max={focusSupport.distanceRange.max}
+                                    step={focusSupport.distanceRange.step || 0.01}
+                                    value={focusDistance ?? focusSupport.distanceRange.min}
+                                    onChange={(e) => handleFocusDistanceChange(Number(e.target.value))}
+                                />
                             </div>
                         )}
                     </div>

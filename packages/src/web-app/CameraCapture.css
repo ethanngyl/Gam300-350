@@ -156,6 +156,73 @@
     background: var(--forma-coral);
 }
 
+/* ---------- Focus ---------- */
+
+.capture-viewport.can-tap-focus {
+    cursor: crosshair;
+}
+
+/* Square drawn where the preview was tapped; shrinks in, then fades. */
+.capture-focus-ring {
+    position: absolute;
+    width: 64px;
+    height: 64px;
+    margin: -32px 0 0 -32px;
+    border: 2px solid var(--forma-blue);
+    border-radius: 6px;
+    pointer-events: none;
+    animation: capture-focus-ring 1.2s ease-out forwards;
+}
+
+@keyframes capture-focus-ring {
+    0% { transform: scale(1.5); opacity: 0; }
+    20% { transform: scale(1); opacity: 1; }
+    75% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .capture-focus-ring {
+        animation: none;
+    }
+}
+
+.capture-focus-hint {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--forma-font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--forma-text-muted);
+    background: rgba(var(--forma-bg-rgb), 0.75);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 4px;
+    padding: 3px 8px;
+    pointer-events: none;
+}
+
+.capture-focus-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+    .capture-focus-controls .capture-mode-btn {
+        flex: none;
+        padding: 6px 12px;
+        border: 1px solid var(--forma-border);
+    }
+
+.capture-focus-slider {
+    flex: 1;
+    min-width: 120px;
+    accent-color: var(--forma-blue);
+}
+
 /* On phones each control takes a full-width row. */
 .capture-controls {
     display: flex;
