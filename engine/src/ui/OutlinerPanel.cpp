@@ -107,7 +107,7 @@ OutlinerPanel::OutlinerPanel(QWidget* parent)
         const bool hidden = item->data(kNameColumn, kHiddenRole).toBool();
 
         QMenu menu(this);
-        menu.addAction("Rename", this, [this] { editSelectedName(); });
+        menu.addAction("Rename (F2)", this, [this] { editSelectedName(); });
         menu.addAction(hidden ? "Show" : "Hide", this, [this, index] { emit toggleHiddenRequested(index); });
         menu.addAction("Export...", this, [this, index] { emit exportRequested(index); });
         menu.addSeparator();
