@@ -18,6 +18,7 @@ Implements OutlinerPanel: the model list, its empty state, inline rename
 #include <QLocale>
 #include <QMenu>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -79,11 +80,20 @@ OutlinerPanel::OutlinerPanel(QWidget* parent)
         emit renameRequested(item->data(kNameColumn, kIndexRole).toInt(), item->text(kNameColumn).trimmed());
     });
 
-    //Double-click the name to rename. Done here rather than with the DoubleClicked edit trigger, which would also open an editor on the Splats column.
+    //Double-click the name to rename
+    //Done here rather than with the DoubleClicked edit trigger, which would also open an editor on the Splats column.
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int column) {
-        if (column == kNameColumn) {
-            m_tree->editItem(item, kNameColumn);
+        if (column != kNameColumn) {
+            return;
         }
+        //Opened on the next event loop pass, not here
+        //Bug where a preselected row would have closed it after opening
+        const QPersistentModelIndex index = m_tree->indexFromItem(item, kNameColumn);
+        QTimer::singleShot(0, this, [this, index] {
+            if (index.isValid()) {
+                m_tree->edit(index);
+            }
+        });
     });
 
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
