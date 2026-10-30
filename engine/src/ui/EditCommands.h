@@ -11,6 +11,8 @@ Push calls redo() straight away, so the edit is applied by the command itself
 
 #include <QUndoCommand>
 
+#include <string>
+
 class SplatModel;
 
 //Transforms a model
@@ -19,8 +21,7 @@ class SplatModel;
 //MainWindow clears the undo stack when a model is removed from the scene
 class MoveModelCommand : public QUndoCommand {
 public:
-    MoveModelCommand(SplatModel* model, const glm::mat4& before, const glm::mat4& after,
-                     QUndoCommand* parent = nullptr);
+    MoveModelCommand(SplatModel* model, const glm::mat4& before, const glm::mat4& after, QUndoCommand* parent = nullptr);
 
     void undo() override;
     void redo() override;
@@ -29,4 +30,18 @@ private:
     SplatModel* m_model;
     glm::mat4 m_before;
     glm::mat4 m_after;
+};
+
+//Renames a modle
+class RenameModelCommand : public QUndoCommand {
+public:
+    RenameModelCommand(SplatModel* model, const std::string& before, const std::string& after, QUndoCommand* parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    SplatModel* m_model;
+    std::string m_before;
+    std::string m_after;
 };

@@ -252,6 +252,19 @@ void MainWindow::createActions() {
     m_redoAction = m_undo.createRedoAction(this, "&Redo");
     m_redoAction->setShortcut(QKeySequence::Redo);
 
+    //Qt's Singal and shot system, this makes it so that the pannel is refreshed on an undo
+    //m_undo is sender
+    //QUndoStack::indexChanged is the signal thats emmited if the undo stack pos moves
+    //this is reciever
+    connect(&m_undo, &QUndoStack::indexChanged, this, [this] {
+        //0ms delay -> run on next event loop
+        //this -> reciever
+        QTimer::singleShot(0, this, [this] { 
+            //Refesh pannel
+            refreshScenePanels();
+            });
+    });
+
     m_renderModeGroup = new QActionGroup(this);
     m_renderModeGroup->setExclusive(true);
     m_pointCloudAction = new QAction("&Point Cloud", m_renderModeGroup);
@@ -757,8 +770,9 @@ void MainWindow::selectModel(int index) {
 void MainWindow::renameModel(int index, const QString& name) {
     SplatRenderer* renderer = m_viewport->renderer();
     SplatModel* model = renderer ? renderer->GetModel(index) : nullptr;
-    if (model && !name.isEmpty()) {
-        model->SetName(name.toStdString());
+    if (model && !name.isEmpty() && name.toStdString() != model->GetName()) {
+        //push() runs redo(), which applies the new name
+        m_undo.push(new RenameModelCommand(model, model->GetName(), name.toStdString()));
     }
     // Deferred: this can be reached from the outliner's own edit commit,
     // and rebuilding the tree in the middle of that is unsafe.
