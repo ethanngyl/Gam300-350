@@ -8,13 +8,12 @@
 \brief
 Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
-dashboard (top nav + a collapsible sidebar, laid out like the Genesis
-wireframe) with these pages inside it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, YouTube Extractor, Capture and Account. Capture
-opens from the sidebar's New model button, or from Add photos with the
+dashboard (a floating dock at the bottom, laid out like the Genesis second
+layout) with these pages above it: Home, Library, Photo Editor, Scene
+Builder, Model Viewer, YouTube Extractor, Feedback, Capture and Account. Capture
+opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
-batch to the Photo Editor. The sidebar's collapsed state is remembered in
-localStorage.
+batch to the Photo Editor.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -27,14 +26,14 @@ import Processing from './Processing.jsx';
 import SplatViewer from './SplatViewer.jsx';
 import YoutubeIngest from './YoutubeIngest.jsx';
 import ImageGallery from './ImageGallery.jsx';
-import TopNav from './TopNav.jsx';
-import Sidebar from './Sidebar.jsx';
+import Dock from './Dock.jsx';
 import HomeScreen from './HomeScreen.jsx';
 import LibraryScreen from './LibraryScreen.jsx';
 import PhotoEditorScreen from './PhotoEditorScreen.jsx';
 import SceneBuilderScreen from './SceneBuilderScreen.jsx';
 import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
+import FeedbackScreen from './FeedbackScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
 import { useUndoableState } from './useUndoableState.js';
@@ -44,16 +43,6 @@ import './AppTheme.css';
 import './App.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
-const SIDEBAR_COLLAPSED_KEY = 'genesis-sidebar-collapsed';
-
-// Whether the sidebar was left collapsed last time (wider screens only).
-function loadSidebarCollapsed() {
-    try {
-        return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
-    } catch {
-        return false;
-    }
-}
 
 // Reads the saved session once on first render. Storage can be blocked
 // (private windows, site data off), so every access is wrapped.
@@ -134,7 +123,7 @@ function App() {
     // Capture reopens with those photos: { files, removeBackground, trainIters }.
     // Cleared on any other navigation.
     const [photosForCapture, setPhotosForCapture] = useState(null);
-    // Photos chosen with the sidebar's Add photos button, handed to the
+    // Photos chosen with the dock's Add photos button, handed to the
     // capture page when it opens. Cleared on any other navigation.
     const [photosToAdd, setPhotosToAdd] = useState(null);
     // While the capture page is open, its function for adding more photos
@@ -143,21 +132,6 @@ function App() {
     const registerCaptureAddFiles = useCallback((addFilesToBatch) => {
         addToCaptureBatchRef.current = addFilesToBatch;
     }, []);
-    // Whether the sidebar drawer is open (phones only).
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    // Whether the sidebar shows icons only (wider screens only).
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(loadSidebarCollapsed);
-
-    function toggleSidebarCollapsed() {
-        setIsSidebarCollapsed((wasCollapsed) => {
-            try {
-                window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(!wasCollapsed));
-            } catch {
-                // Storage unavailable: the choice just isn't remembered.
-            }
-            return !wasCollapsed;
-        });
-    }
     // Models placed in the Scene Builder, with their undo history, and the
     // scene's id, name and settings. Kept here so the scene survives
     // switching tabs (each page remounts when its tab opens).
@@ -177,16 +151,14 @@ function App() {
         saveUser(null);
         setCurrentUser(null);
         setScreen(null);
-        setIsMenuOpen(false);
         scene.reset([]);
         setSceneInfo(NEW_SCENE_INFO);
         setActiveTab('home');
     }
 
-    // Every navigation goes through here: it closes the phone drawer and
-    // clears a stale upload error so it doesn't reappear on the next visit.
+    // Every navigation goes through here: it clears a stale upload error so
+    // it doesn't reappear on the next visit.
     function goToTab(tab) {
-        setIsMenuOpen(false);
         setUploadError(null);
         setPhotosForEditor(null);
         setPhotosForCapture(null);
@@ -194,7 +166,7 @@ function App() {
         setActiveTab(tab);
     }
 
-    // Adds the photos chosen with the sidebar's Add photos button to the
+    // Adds the photos chosen with the dock's Add photos button to the
     // capture page's batch, opening the page first if needed.
     function addPhotosToCapture(files) {
         if (activeTab === 'capture' && addToCaptureBatchRef.current) {
@@ -356,41 +328,8 @@ function App() {
     }
 
     return (
-        <div className={isSidebarCollapsed ? 'forma-app genesis-shell is-sidebar-collapsed' : 'forma-app genesis-shell'}>
-            <TopNav
-                activeTab={activeTab}
-                onTabChange={goToTab}
-                user={currentUser}
-                onOpenAccount={() => goToTab('account')}
-                onSignOut={handleSignOut}
-                onToggleMenu={() => setIsMenuOpen((wasOpen) => !wasOpen)}
-            />
-
+        <div className="forma-app genesis-shell">
             <div className="genesis-body">
-                {/* Dark overlay behind the phone drawer; tapping it closes the drawer. */}
-                {isMenuOpen && (
-                    <button
-                        type="button"
-                        className="genesis-backdrop"
-                        aria-label="Close menu"
-                        onClick={() => setIsMenuOpen(false)}
-                    />
-                )}
-
-                <Sidebar
-                    activeTab={activeTab}
-                    onNavigate={goToTab}
-                    onNewModel={() => goToTab('capture')}
-                    onAddPhotos={addPhotosToCapture}
-                    user={currentUser}
-                    onOpenAccount={() => goToTab('account')}
-                    onSignOut={handleSignOut}
-                    isCollapsed={isSidebarCollapsed}
-                    onToggleCollapsed={toggleSidebarCollapsed}
-                    isOpen={isMenuOpen}
-                    onClose={() => setIsMenuOpen(false)}
-                />
-
                 {/* key resets the scroll position, so each page opens at the top. */}
                 <div className="genesis-main" key={activeTab}>
                     {activeTab === 'home' && (
@@ -451,8 +390,22 @@ function App() {
                     {activeTab === 'account' && (
                         <AccountScreen user={currentUser} onSignOut={handleSignOut} />
                     )}
+                    {activeTab === 'feedback' && (
+                        // Guests are sent back to the login screen to sign in.
+                        <FeedbackScreen user={currentUser} onSignIn={handleSignOut} />
+                    )}
                 </div>
             </div>
+
+            <Dock
+                activeTab={activeTab}
+                onNavigate={goToTab}
+                onNewModel={() => goToTab('capture')}
+                onAddPhotos={addPhotosToCapture}
+                user={currentUser}
+                onOpenAccount={() => goToTab('account')}
+                onSignOut={handleSignOut}
+            />
         </div>
     );
 }
