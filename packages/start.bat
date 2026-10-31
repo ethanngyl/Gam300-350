@@ -113,22 +113,19 @@ if "%NEED_TOOLS%"=="1" (
     )
 )
 
-REM Python packages for the YouTube frame extractor (yt-dlp, OpenCV). Not fatal:
-REM photo uploads still work without them. yt-dlp is upgraded every run because
-REM YouTube changes regularly break older releases.
+REM Python packages for the frame extractor (OpenCV). Not fatal: photo uploads
+REM still work without them.
 where python >nul 2>nul
 if errorlevel 1 (
-    echo     Python not found - YouTube import will not work until Python 3.10+ is installed.
+    echo     Python not found - the Frame Extractor will not work until Python 3.10+ is installed.
     goto :after_python
 )
-echo     Installing Python packages for the YouTube extractor...
+echo     Installing Python packages for the Frame Extractor...
 python -m pip install --disable-pip-version-check -q -r "%TOOLS%\requirements.txt"
-if errorlevel 1 goto :pip_failed
-python -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]"
 if errorlevel 1 goto :pip_failed
 goto :after_python
 :pip_failed
-echo     *** pip install failed - YouTube import may not work. Run by hand to see why:
+echo     *** pip install failed - the Frame Extractor may not work. Run by hand to see why:
 echo     ***   python -m pip install -r tools\requirements.txt
 :after_python
 

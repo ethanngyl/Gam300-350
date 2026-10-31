@@ -10,7 +10,7 @@ Floating dock at the bottom of every dashboard page (Genesis "second
 layout"), replacing the top nav and sidebar. Left to right: "New model",
 which opens the camera capture page; "Add photos", which opens the file
 picker and hands the chosen photos to the capture page; the workspace
-pages (Home, Media Library, Photo Editor, Scene Builder, YouTube
+pages (Home, Media Library, Photo Editor, Scene Builder, Frame
 Extractor, Model Viewer, Feedback); and the signed-in user, whose menu opens upwards
 and links to the account page, mutes / unmutes sound effects, and signs
 out (or in, for guests). Each item is an icon whose label slides out on
@@ -31,7 +31,7 @@ const WORKSPACE_ITEMS = [
     { id: 'library', label: 'Media Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
     { id: 'scene', label: 'Scene Builder', icon: 'shield' },
-    { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
+    { id: 'extractor', label: 'Frame Extractor', icon: 'play' },
     { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
     { id: 'feedback', label: 'Feedback', icon: 'message' },
 ];

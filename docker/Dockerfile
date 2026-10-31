@@ -34,10 +34,9 @@ FROM colmap/colmap:latest
 ARG BRUSH_VERSION=v0.3.0
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Python (YouTube extractor + normalize_ply), ffmpeg for yt-dlp, OpenCV's
-# system libs, and Vulkan loader + Mesa drivers for Brush (wgpu).
+# Python (frame extractor + normalize_ply), OpenCV's system libs, and Vulkan loader + Mesa drivers for Brush (wgpu).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-venv ffmpeg libgl1 libglib2.0-0 \
+        python3 python3-venv libgl1 libglib2.0-0 \
         libvulkan1 mesa-vulkan-drivers curl xz-utils ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -59,7 +58,7 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /app/tools/requirements.txt
 
 # App: same layout as the repo so config.js resolves tools/ correctly.
-COPY tools/youtube_frames.py tools/normalize_ply.py /app/tools/
+COPY tools/extract_frames.py tools/make_masks.py tools/normalize_ply.py /app/tools/
 COPY --from=web /app/packages /app/packages
 
 ENV PORT=5005 \

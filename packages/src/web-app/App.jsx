@@ -10,7 +10,7 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (a floating dock at the bottom, laid out like the Genesis second
 layout) with these pages above it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, YouTube Extractor, Feedback, Capture and Account. Capture
+Builder, Model Viewer, Frame Extractor, Feedback, Capture and Account. Capture
 opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
 batch to the Photo Editor.
@@ -24,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
 import SplatViewer from './SplatViewer.jsx';
-import YoutubeIngest from './YoutubeIngest.jsx';
+import FrameExtractor from './FrameExtractor.jsx';
 import ImageGallery from './ImageGallery.jsx';
 import Dock from './Dock.jsx';
 import HomeScreen from './HomeScreen.jsx';
@@ -100,7 +100,7 @@ function App() {
     }, []);
 
     // Page shown inside the shell:
-    // home | library | editor | scene | viewer | youtube | capture | account
+    // home | library | editor | scene | viewer | extractor | capture | account
     const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState('models');
@@ -371,9 +371,9 @@ function App() {
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}
-                    {activeTab === 'youtube' && (
-                        // YoutubeIngest plays the click sound itself, so none here.
-                        <YoutubeIngest />
+                    {activeTab === 'extractor' && (
+                        // FrameExtractor plays the click sound itself, so none here.
+                        <FrameExtractor />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.

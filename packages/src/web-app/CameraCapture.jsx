@@ -119,6 +119,8 @@ function CameraCapture({
     const photosRef = useRef([]);
     // Id of the photo currently being checked, so only one runs at a time.
     const analyzingPhotoIdRef = useRef(null);
+    // Photos grabbed but still encoding, not yet counted in the batch.
+    const capturesInFlightRef = useRef(0);
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
@@ -360,11 +362,13 @@ function CameraCapture({
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         // Shutter sound the moment the frame is grabbed. Quieter for
-        // auto-capture, which repeats every few seconds.
+        // auto-capture, which can repeat as often as twice a second.
         playSound('camera', showFeedback ? 1 : 0.5);
 
+        capturesInFlightRef.current += 1;
         canvas.toBlob(
             (blob) => {
+                capturesInFlightRef.current -= 1;
                 if (!blob) return;
                 const file = new File([blob], `capture-${Date.now()}.jpg`, {
                     type: 'image/jpeg',
@@ -384,8 +388,10 @@ function CameraCapture({
     useEffect(() => {
         if (captureMode !== 'auto' || !isAutoCapturing) return;
 
+        // The count is read from refs so a new photo doesn't restart the timer,
+        // which would stretch every interval by the time a photo takes to encode.
         const id = setInterval(() => {
-            if (photos.length >= maxCaptures) {
+            if (photosRef.current.length + capturesInFlightRef.current >= maxCaptures) {
                 setIsAutoCapturing(false);
                 return;
             }
@@ -393,7 +399,7 @@ function CameraCapture({
         }, intervalSeconds * 1000);
 
         return () => clearInterval(id);
-    }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto, photos.length]);
+    }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto]);
 
     // Space: take a photo in Manual mode, start / stop in Auto mode.
     useEffect(() => {
@@ -617,6 +623,7 @@ function CameraCapture({
                                         onChange={(e) => setIntervalSeconds(Number(e.target.value))}
                                         disabled={isAutoCapturing}
                                     >
+                                        <option value={0.5}>0.5s</option>
                                         <option value={1}>1s</option>
                                         <option value={2}>2s</option>
                                         <option value={3}>3s</option>

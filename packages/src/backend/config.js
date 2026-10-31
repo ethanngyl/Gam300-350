@@ -417,24 +417,26 @@ export const config = {
     // Upload limits.
     maxFiles: 300,
     maxFileSizeMB: 30,
+    // Videos / GIFs per Frame Extractor job, and the size of each. Their frames
+    // still count towards frameMaxFrames. FrameExtractor.jsx checks the same limits.
+    maxMediaFiles: 10,
+    maxMediaSizeMB: Number(process.env.MAX_MEDIA_SIZE_MB) || 2048,
 
     // --- Python post-processing / ingest scripts (repo tools/ dir) -------------
     // Interpreter used to run them. Needs `pip install -r tools/requirements.txt`
-    // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
+    // for the frame extractor (opencv); normalize needs only stdlib.
     // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
     // to its virtualenv's interpreter).
     pythonBin: process.env.PYTHON_BIN || findPython(),
-    // Extracts evenly spaced frames from a YouTube video into a job's images/.
-    ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
+    // Extracts evenly spaced frames from uploaded media into a job's images/.
+    frameScript: process.env.FRAME_SCRIPT || path.join(toolsDir, 'extract_frames.py'),
     // Default extraction rate (frames per second) and cap on frames pulled.
-    ytFps: Number(process.env.YT_FPS) || 2,
-    ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
+    frameFps: Number(process.env.FRAME_FPS) || 2,
+    frameMaxFrames: Number(process.env.FRAME_MAX_FRAMES) || 200,
     // Upper bound on the requested extraction rate.
-    ytMaxFps: 30,
-    // Videos longer than this are refused before anything is downloaded.
-    ytMaxDurationSec: Number(process.env.YT_MAX_DURATION) || 20 * 60,
-    // Kill the download + extraction if it runs longer than this.
-    ytTimeoutMin: Number(process.env.YT_TIMEOUT_MIN) || 30,
+    frameMaxFps: 30,
+    // Kill the extraction if it runs longer than this.
+    frameTimeoutMin: Number(process.env.FRAME_TIMEOUT_MIN) || 30,
     // Recenters/rescales the trained splat into the viewer's frame.
     normalizeScript:
         process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),

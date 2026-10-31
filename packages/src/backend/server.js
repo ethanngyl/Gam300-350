@@ -12,7 +12,7 @@
 \brief
 This source file is the Express backend that serves the built React frontend 
 of the website and exposes a HTTP API for a pipeline to turn either a group
-of photos or a youtube video into Gaussian Splat .ply file, using COLMAP and 
+of photos or uploaded videos into Gaussian Splat .ply file, using COLMAP and 
 Brush. The actual work is done in the other files, "config.js, status.js, 
 scan.js, pipeline.js", this file focuses on startup, shutdown and HTTP 
 matters.
@@ -64,6 +64,10 @@ to .jpg.
 - upload(multer instance)
 Applies size and count limits from config and accepts only files whose 
 declared MIME type is JPEG or PNG.
+- mediaUpload(multer instance) / onlyMedia(req, res, next)
+The same for the Frame Extractor's videos and GIFs, saved to the job's media/
+folder until their frames are extracted. onlyMedia also removes the job folder
+if the browser gives up part-way through the upload.
 - onlyImages(req, res, next)
 Reads each uploaded file's bytes and checks the real type with file-type. If 
 any file isn't really a JPEG or PNG, it deletes the whole job folder and 
@@ -114,9 +118,9 @@ import
 from './scan.js'
 import 
 { 
-  cancelJob, canonicalYoutubeUrl, jobs,
+  cancelJob, jobs,
   killChildren, makeJob, pickSampleFileName, restoreJob,
-  runPipeline, runYoutubePipeline, sampleFileName, setOnJobDone,
+  runMediaPipeline, runPipeline, sampleFileName, setOnJobDone,
 }
     from './pipeline.js'
 
@@ -168,8 +172,8 @@ if (config.trustProxy) {
     app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value)
 }
 
-// Parse JSON bodies (used by /jobs/from-youtube). Only applies to
-// application/json requests, so the multipart photo upload is unaffected.
+// Parse JSON bodies. Only applies to application/json requests, so the
+// multipart photo and media uploads are unaffected.
 app.use(express.json())
 
 // Serve the built React frontend (run `npm run build` to produce web-app/dist).
@@ -442,6 +446,100 @@ const upload = multer({
     limits: { fileSize: config.maxFileSizeMB * 1024 * 1024, files: config.maxFiles },
     fileFilter: (_req, file, cb) => cb(null, /^image\/(jpe?g|png)$/i.test(file.mimetype))
 })
+
+// What the Frame Extractor accepts. Filtered by extension, because browsers
+// often send no MIME type for formats like .mkv. FrameExtractor.jsx checks the same.
+const MEDIA_EXT_RE = /\.(mp4|m4v|mov|webm|mkv|avi|mpe?g|gif)$/i
+
+/************************************************************************/
+/*!
+  \brief
+    Save the Frame Extractor's files into the job's media/ folder, under
+    ordered names so they are extracted in the order they were sent.
+  \return
+    nothing
+*/
+/************************************************************************/
+const mediaUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, _file, cb) => {
+            const mediaDir = path.join(config.jobsDir, req.jobId, 'media')
+            fs.mkdirSync(mediaDir, { recursive: true })
+            cb(null, mediaDir)
+        },
+        filename: (req, file, cb) => {
+            const ext = path.extname(file.originalname).toLowerCase()
+            cb(null, `${String(req._fileIdx++).padStart(4, '0')}${ext}`)
+        },
+    }),
+    limits: { fileSize: config.maxMediaSizeMB * 1024 * 1024, files: config.maxMediaFiles },
+    fileFilter: (_req, file, cb) => cb(null, MEDIA_EXT_RE.test(file.originalname)),
+})
+
+/************************************************************************/
+/*!
+  \brief
+    A large upload can be abandoned part-way (Cancel, closed tab, lost
+    connection). If the connection closes before a job was made, remove the
+    folder assignJobId created, along with any partial files. Retries because
+    on Windows the partial file can stay locked for a moment. Must run before
+    multer.
+  \param req
+    The request from the user
+  \param res
+    The response from the backend
+  \param next
+    moving on
+  \return
+    nothing
+*/
+/************************************************************************/
+function removeJobIfAborted(req, res, next) {
+    res.on('close', () => {
+        if (jobs.has(req.jobId)) return
+        fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+            .catch(() => {})
+    })
+    next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Content-level guard for the Frame Extractor, like onlyImages: reads the
+    actual bytes of every uploaded file and rejects the whole batch (deleting
+    the job folder) if any isn't really a video or GIF.
+  \param req
+    The request from the user
+  \param res
+    The response from the backend
+  \param next
+    moving on
+  \return
+    400 if a file isn't a video or GIF, and deletes the job folder.
+*/
+/************************************************************************/
+async function onlyMedia(req, res, next) {
+    try {
+        const { fileTypeFromFile } = await import('file-type')
+
+        for (const file of req.files || []) {
+            const type = await fileTypeFromFile(file.path)
+
+            if (!type || !(type.mime.startsWith('video/') || type.mime === 'image/gif')) {
+                await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+                return res.status(400).json({
+                    error: `"${file.originalname}" isn't a video or GIF file.`,
+                    detected: type ? type.mime : 'unknown',
+                })
+            }
+        }
+
+        next()
+    } catch (err) {
+        next(err)
+    }
+}
 
 /************************************************************************/
 /*!
@@ -887,42 +985,42 @@ app.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJob
 /************************************************************************/
 /*!
   \brief
-    Create a reconstruction job from a YouTube link. Frames are extracted 
-    server side (tools/youtube_frames.py) into the job's images/ folder, 
-    then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?:
-    number, maxFrames?: number, trainIters?: number }. The job is owned by the logged-in user.
+    Create a reconstruction job from uploaded videos / GIFs. Frames are
+    extracted server side (tools/extract_frames.py) into the job's images/
+    folder, then the same COLMAP + Brush pipeline runs. Multipart body: media
+    (the files), and the optional text fields fps, maxFrames, trainIters and
+    removeBackground.
+    The job is owned by the logged-in user. requireUser runs before
+    assignJobId so a logged-out request never creates a folder.
   \return
-    401 if not logged in, 400 if url doesn't work, else 202 and starts a
-    job and runs youtube pipeline
+    401 if not logged in, 400 if no usable files were sent, else 202 and
+    starts a job and runs the media pipeline
 */
 /************************************************************************/
-app.post('/jobs/from-youtube', requireUser, (req, res) => {
-    const { url, fps, maxFrames, trainIters } = req.body || {}
-    // Only single YouTube videos; the canonical form drops any playlist params.
-    const videoUrl = canonicalYoutubeUrl(url)
-    if (!videoUrl) {
-        return res.status(400).json({
-            error: 'Please use a link to a single YouTube video (youtube.com/watch?v=…, youtu.be/…, or youtube.com/shorts/…).',
-        })
+app.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, mediaUpload.array('media', config.maxMediaFiles), onlyMedia, (req, res) => {
+    if (!req.files?.length) {
+        fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+        return res.status(400).json({ error: 'Please upload at least one video or animated GIF.' })
     }
 
-    const jobId = crypto.randomUUID()
-    fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
-    setJobOwner(jobId, req.user.id)
-    const job = makeJob(jobId)
-    job.source = 'youtube'
+    const { fps, maxFrames, trainIters } = req.body || {}
+    setJobOwner(req.jobId, req.user.id)
+    const job = makeJob(req.jobId)
+    job.source = 'media'
+    // Mask out the background before COLMAP, see generateMasks in pipeline.js.
+    job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
     job.trainIters = parseTrainIters(trainIters)
     saveJob(job)
 
     const opts = {}
     if (Number.isFinite(Number(fps)) && Number(fps) > 0) {
-        opts.fps = Math.min(Number(fps), config.ytMaxFps)
+        opts.fps = Math.min(Number(fps), config.frameMaxFps)
     }
     if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
         opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
     }
 
-    runYoutubePipeline(job, videoUrl, opts) // fire-and-forget; the frontend polls /jobs/:id
+    runMediaPipeline(job, opts) // fire-and-forget; the frontend polls /jobs/:id
     res.status(202).json({ id: job.id })
 })
 
@@ -1310,7 +1408,7 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
       progress: 1,
       detail: null,
       error: null,
-      source: ['upload', 'youtube'].includes(sent.source) ? sent.source : null,
+      source: ['upload', 'media', 'youtube'].includes(sent.source) ? sent.source : null,
       name: typeof sent.name === 'string' ? sent.name.slice(0, MAX_JOB_NAME_LENGTH) : null,
       sampleFile: null,
       imageCount: images.length,
@@ -1829,18 +1927,24 @@ app.use((err, req, res, _next) => {
   }
 
     if (err instanceof multer.MulterError) {
-        // The limits come from config (maxFileSizeMB, maxFiles); keep the messages
-        // in sync with those so they stay true if the limits change.
+        // The limits come from config (maxFileSizeMB, maxFiles, and the media
+        // versions); keep the messages in sync with those so they stay true if
+        // the limits change.
+        const isMediaUpload = req.path === '/jobs/from-media'
         switch (err.code) {
             case 'LIMIT_FILE_SIZE':
                 return res.status(413).json({
-                    error: `That file is too large -- each photo must be under ${config.maxFileSizeMB} MB.`,
+                    error: isMediaUpload
+                        ? `That file is too large -- each file must be under ${config.maxMediaSizeMB} MB.`
+                        : `That file is too large -- each photo must be under ${config.maxFileSizeMB} MB.`,
                 })
             case 'LIMIT_FILE_COUNT':
             case 'LIMIT_PART_COUNT':
             case 'LIMIT_UNEXPECTED_FILE':
                 return res.status(400).json({
-                    error: `Too many files -- upload at most ${config.maxFiles} photos at once.`,
+                    error: isMediaUpload
+                        ? `Too many files -- upload at most ${config.maxMediaFiles} files at once.`
+                        : `Too many files -- upload at most ${config.maxFiles} photos at once.`,
                 })
             default:
                 return res.status(400).json({ error: `Upload rejected: ${err.message}.` })
