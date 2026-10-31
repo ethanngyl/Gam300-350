@@ -11,7 +11,7 @@ layout"), replacing the top nav and sidebar. Left to right: "New model",
 which opens the camera capture page; "Add photos", which opens the file
 picker and hands the chosen photos to the capture page; the workspace
 pages (Home, Media Library, Photo Editor, Scene Builder, YouTube
-Extractor, Model Viewer); and the signed-in user, whose menu opens upwards
+Extractor, Model Viewer, Feedback); and the signed-in user, whose menu opens upwards
 and links to the account page, mutes / unmutes sound effects, and signs
 out (or in, for guests). Each item is an icon whose label slides out on
 hover or keyboard focus; the current page is highlighted.
@@ -33,6 +33,7 @@ const WORKSPACE_ITEMS = [
     { id: 'scene', label: 'Scene Builder', icon: 'shield' },
     { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
     { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
+    { id: 'feedback', label: 'Feedback', icon: 'message' },
 ];
 
 // How long the dock waits after the pointer leaves before it fades.

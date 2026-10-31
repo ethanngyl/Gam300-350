@@ -1,0 +1,351 @@
+/* ============================================================
+   Feedback page - GENESIS theme
+   Uses the --forma-* variables from AppTheme.css.
+   Mobile-first: heading, then the form (or the sign-in / thank-you
+   card), then the tips, in one column. From 981px the tips sit in a
+   narrower column beside the form.
+   ============================================================ */
+
+.feedback-screen {
+    padding: 20px 16px 40px;
+}
+
+    /* App.css still styles bare h1, h2 and p with the old theme, so reset them here. */
+    .feedback-screen :is(h1, h2, p) {
+        font-family: inherit;
+        max-width: none;
+        margin: 0;
+    }
+
+/* ---------- Heading ---------- */
+
+.feedback-heading {
+    margin-bottom: 20px;
+}
+
+.feedback-screen .feedback-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.feedback-screen .feedback-subtitle {
+    margin-top: 8px;
+    max-width: 620px;
+    color: var(--forma-text-muted);
+    line-height: 1.6;
+}
+
+/* ---------- Layout ---------- */
+
+.feedback-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.feedback-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+}
+
+.feedback-screen .feedback-card-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.feedback-screen .feedback-muted {
+    color: var(--forma-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* ---------- Form ---------- */
+
+.feedback-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.feedback-screen .feedback-label {
+    margin: 0;
+}
+
+/* Bug report / Idea / Other, as one segmented control. */
+.feedback-types {
+    display: flex;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--forma-panel-alt);
+    border: 1px solid var(--forma-border);
+}
+
+.feedback-type {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 10px 4px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+    .feedback-type svg {
+        flex: none;
+    }
+
+    .feedback-type:hover {
+        color: var(--forma-text);
+    }
+
+    .feedback-type.is-active {
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+        font-weight: 600;
+    }
+
+        .feedback-type.is-active svg {
+            color: var(--forma-teal-text);
+        }
+
+    .feedback-type:focus-visible {
+        outline: 2px solid var(--forma-blue);
+        outline-offset: -2px;
+    }
+
+.feedback-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 160px;
+    resize: vertical;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-bg);
+    color: var(--forma-text);
+    font-family: inherit;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    outline: none;
+}
+
+    .feedback-textarea::placeholder {
+        color: var(--forma-text-dim);
+    }
+
+    .feedback-textarea:focus {
+        border-color: var(--forma-blue);
+    }
+
+    .feedback-textarea:disabled {
+        opacity: 0.6;
+    }
+
+/* Left: the minimum-length hint (if any). Right: the character count. */
+.feedback-counter {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--forma-font-mono);
+    font-size: 0.7rem;
+    color: var(--forma-text-dim);
+}
+
+.feedback-screen .feedback-error {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(var(--forma-red-rgb), 0.12);
+    border: 1px solid rgba(var(--forma-red-rgb), 0.4);
+    color: var(--forma-red);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+/* Phones: who it is sent as, then a full-width Send button. */
+.feedback-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--forma-border);
+}
+
+.feedback-sender {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 6px;
+    min-width: 0;
+    font-size: 0.82rem;
+    color: var(--forma-text-muted);
+}
+
+    .feedback-sender strong {
+        color: var(--forma-text);
+        font-weight: 600;
+    }
+
+.feedback-sender-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--forma-font-mono);
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+}
+
+.feedback-screen .feedback-submit,
+.feedback-screen .feedback-action {
+    justify-content: center;
+    padding: 12px 22px;
+}
+
+    .feedback-screen .feedback-submit:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+/* ---------- Sign-in and thank-you cards ---------- */
+
+.feedback-locked,
+.feedback-sent {
+    align-items: flex-start;
+    gap: 12px;
+}
+
+    .feedback-locked .feedback-action,
+    .feedback-sent .feedback-action {
+        margin-top: 6px;
+        width: 100%;
+    }
+
+.feedback-state-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(var(--forma-accent-rgb), 0.14);
+    border: 1px solid rgba(var(--forma-accent-rgb), 0.4);
+    color: var(--forma-teal-text);
+}
+
+    .feedback-state-icon.is-success {
+        background: rgba(var(--forma-green-rgb), 0.14);
+        border-color: rgba(var(--forma-green-rgb), 0.4);
+        color: var(--forma-green);
+    }
+
+/* ---------- Tips ---------- */
+
+.feedback-tips {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.feedback-screen .feedback-tips-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.feedback-tips-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+    .feedback-tips-list li {
+        display: flex;
+        gap: 10px;
+        font-size: 0.85rem;
+        line-height: 1.55;
+        color: var(--forma-text-muted);
+    }
+
+        .feedback-tips-list li svg {
+            flex: none;
+            margin-top: 3px;
+            color: var(--forma-teal-text);
+        }
+
+.feedback-screen .feedback-tips-note {
+    padding-top: 12px;
+    border-top: 1px solid var(--forma-border);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--forma-text-dim);
+}
+
+/* Small phones: labels only, so "Bug report" stays on one line. */
+@media (max-width: 380px) {
+    .feedback-type svg {
+        display: none;
+    }
+}
+
+/* ---------- Tablets and up ---------- */
+
+@media (min-width: 761px) {
+    .feedback-screen {
+        padding: 32px 40px 48px;
+    }
+
+        .feedback-screen .feedback-title {
+            font-size: 2rem;
+        }
+
+    .feedback-heading {
+        margin-bottom: 24px;
+    }
+
+    .feedback-type {
+        gap: 7px;
+        padding: 10px 8px;
+        font-size: 0.84rem;
+    }
+
+    /* Sender on the left, Send on the right. */
+    .feedback-footer {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .feedback-locked .feedback-action,
+    .feedback-sent .feedback-action {
+        width: auto;
+    }
+}
+
+/* ---------- Wide screens: tips beside the form ---------- */
+
+@media (min-width: 981px) {
+    .feedback-layout {
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 20px;
+    }
+
+    .feedback-tips {
+        position: sticky;
+        top: 16px;
+    }
+}

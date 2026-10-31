@@ -3393,18 +3393,36 @@ html {
         margin: 0 2px;
     }
 
+    /* 34px items, so all 10 fit on a 390px-wide phone. */
     .genesis-dock-item {
-        height: 36px;
-        min-width: 36px;
-        padding: 0 8px;
+        height: 34px;
+        min-width: 34px;
+        padding: 0 7px;
     }
 
         .genesis-dock-item.genesis-dock-avatar {
-            padding: 2px;
+            padding: 1px;
         }
 
     .genesis-dock-avatar-icon {
         width: 30px;
         height: 30px;
+    }
+}
+
+/* Small phones (360px wide and similar): tighter items so the dock still fits. */
+@media (max-width: 380px) {
+    .genesis-dock-item {
+        min-width: 32px;
+        padding: 0 6px;
+    }
+
+    .genesis-dock-divider {
+        margin: 0 1px;
+    }
+
+    .genesis-dock-avatar-icon {
+        width: 28px;
+        height: 28px;
     }
 }

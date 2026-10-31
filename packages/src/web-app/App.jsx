@@ -10,7 +10,7 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (a floating dock at the bottom, laid out like the Genesis second
 layout) with these pages above it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, YouTube Extractor, Capture and Account. Capture
+Builder, Model Viewer, YouTube Extractor, Feedback, Capture and Account. Capture
 opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
 batch to the Photo Editor.
@@ -33,6 +33,7 @@ import PhotoEditorScreen from './PhotoEditorScreen.jsx';
 import SceneBuilderScreen from './SceneBuilderScreen.jsx';
 import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
+import FeedbackScreen from './FeedbackScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
 import { useUndoableState } from './useUndoableState.js';
@@ -388,6 +389,10 @@ function App() {
                     )}
                     {activeTab === 'account' && (
                         <AccountScreen user={currentUser} onSignOut={handleSignOut} />
+                    )}
+                    {activeTab === 'feedback' && (
+                        // Guests are sent back to the login screen to sign in.
+                        <FeedbackScreen user={currentUser} onSignIn={handleSignOut} />
                     )}
                 </div>
             </div>
