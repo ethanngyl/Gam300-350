@@ -3277,9 +3277,10 @@ html {
     transition: max-width 0.34s cubic-bezier(0.22, 1, 0.36, 1), margin 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
 }
 
-/* Only with a mouse: on touch screens a tapped item keeps hover / focus,
-   so its label would stay open and push the dock wider than the phone. */
-@media (hover: hover) and (pointer: fine) {
+/* Desktop view with a mouse only. On touch screens a tapped item keeps
+   hover / focus, and in the mobile view labels would push the dock wider
+   than the screen, so there it stays icons only. */
+@media (hover: hover) and (pointer: fine) and (min-width: 761px) {
     .genesis-dock-item:hover,
     .genesis-dock-item:focus-visible {
         padding-right: 15px;
@@ -3335,7 +3336,7 @@ html {
         background: var(--forma-panel-raised);
     }
 
-@media (hover: hover) and (pointer: fine) {
+@media (hover: hover) and (pointer: fine) and (min-width: 761px) {
     .genesis-dock-item.genesis-dock-avatar:hover,
     .genesis-dock-item.genesis-dock-avatar:focus-visible {
         padding-right: 3px;
@@ -3365,9 +3366,15 @@ html {
     max-width: calc(100vw - 24px);
 }
 
-/* ---------- Phones: smaller items, no fading ---------- */
+/* ---------- Mobile view: smaller items, never fades ---------- */
 
 @media (max-width: 760px) {
+    /* Also undoes a fade started before the window was made narrow. */
+    .genesis-dock.is-idle {
+        opacity: 1;
+        transform: translateX(-50%);
+    }
+
     .genesis-main {
         padding-bottom: 72px;
     }

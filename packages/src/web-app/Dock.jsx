@@ -17,8 +17,9 @@ out (or in, for guests). Each item is an icon whose label slides out on
 hover or keyboard focus; the current page is highlighted.
 On devices with a mouse, the dock fades and slides mostly out of view 3s
 after the pointer leaves it, and comes back when the pointer reaches the
-bottom of the screen or the dock gets keyboard focus. Touch screens have
-no hover, so there the dock always stays in view.
+bottom of the screen or the dock gets keyboard focus. In the mobile view
+(760px wide or less, or any touch screen) the dock always stays in view
+and shows icons only, to save space.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -37,9 +38,10 @@ const WORKSPACE_ITEMS = [
 // How long the dock waits after the pointer leaves before it fades.
 const IDLE_DELAY_MS = 3000;
 
-// Only devices that can hover can bring a faded dock back, so only they fade it.
-function canHover() {
-    return window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? false;
+// Only the desktop view fades the dock: it needs a mouse to bring the dock
+// back, and the mobile view keeps it in view at all times.
+function canFadeDock() {
+    return window.matchMedia?.('(hover: hover) and (pointer: fine) and (min-width: 761px)').matches ?? false;
 }
 
 function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAccount, onSignOut }) {
@@ -66,7 +68,7 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
     // Starts the countdown to fade the dock (not while its menu is open).
     function scheduleIdle() {
         clearIdleTimer();
-        if (isProfileMenuOpen || !canHover()) return;
+        if (isProfileMenuOpen || !canFadeDock()) return;
         idleTimerRef.current = window.setTimeout(() => setIsIdle(true), IDLE_DELAY_MS);
     }
 
