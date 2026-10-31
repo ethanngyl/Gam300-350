@@ -50,6 +50,8 @@ are extracted (before COLMAP starts).
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.
+- setSkipSampleCopy(flag)
+Turns off the engine samples copy (the VM keeps models in the database).
 - sampleFileName(job)
 The job's filename in the engine's samples folder.
 - pickSampleFileName(job, name)
@@ -863,8 +865,11 @@ export async function runPipeline(job) {
         // Best-effort copy into the engine's samples folder, so a finished scan can
         // be opened straight from the native viewer's file browser (main.cpp scans
         // assets/samples/ for *.ply on launch). Never fails the job -- the result is
-        // still servable from resultPath/the Download button either way.
-        try {
+        // still servable from resultPath/the Download button either way. Skipped
+        // on the VM with FILE_STORE=db, which keeps no model files on disk.
+        if (skipSampleCopy) {
+            appendLog(job, 'Model will be stored in the database (no engine samples copy).')
+        } else try {
             fs.mkdirSync(config.engineSamplesDir, { recursive: true })
             const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
             fs.copyFileSync(job.resultPath, enginePath)
@@ -888,6 +893,24 @@ export async function runPipeline(job) {
     appendLog(job, `\nERROR: ${err.message}`)
     saveJob(job)
   }
+}
+
+// Set on the VM with FILE_STORE=db (see setSkipSampleCopy).
+let skipSampleCopy = false
+
+/************************************************************************/
+/*!
+  \brief
+    Turns off copying finished models into the engine's samples folder
+    (the VM with FILE_STORE=db keeps models in the database instead).
+  \param flag
+    bool
+  \return
+    nothing
+*/
+/************************************************************************/
+export function setSkipSampleCopy(flag) {
+    skipSampleCopy = flag
 }
 
 // Names Windows won't accept as a filename, with or without an extension.

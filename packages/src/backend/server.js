@@ -81,8 +81,11 @@ job's background masks. Concurrent requests share one run.
 Runs once a job is done, failed or cancelled: makes the cover while the
 photos and masks exist, tidies up working files (pruneJob), sends the job
 to the VM (client machines) and, on the VM with FILE_STORE=db, moves its
-photos into the database (imagestore.js). Photos then come from the
-database in GET /jobs/:id/images/:name.
+model and photos into the database (dbstore.js). They then come from the
+database in GET /jobs/:id/result.ply and GET /jobs/:id/images/:name.
+- sendDbModel(req, res, jobId, info)
+Serves a model stored in the database, piece by piece, with byte ranges
+(the viewer reads the first 4 KB), HEAD and ETag (304) like sendFile.
 - shutdown(reason, exitCode)
 Runs only once. Marks every running job as error and saves it, calls 
 killChildren() to stop the COLMAP/Brush/python processes, then exits.
@@ -105,13 +108,13 @@ import { marked } from 'marked'
 import
 {
   SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteDbImages,
-  deleteSession, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
-  findUserById, getDbImage, getJobOwnerId, isJobSynced, listDbImageNames,
-  listOwnedJobIds, recordStoredJob, retireLocalAccounts, setJobOwner,
-  storeJobImages, unmarkJobSynced, upsertLocalUser, verifyPassword,
+  deleteDbModel, deleteSession, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
+  findUserById, getDbImage, getDbModelInfo, getJobOwnerId, isJobSynced, listDbImageNames,
+  listOwnedJobIds, readDbModelChunk, recordStoredJob, retireLocalAccounts, setJobOwner,
+  storeJobImages, storeJobModel, unmarkJobSynced, upsertLocalUser, verifyPassword,
 }
     from './db.js'
-import { migrateImagesToDb, moveImagesToDb } from './imagestore.js'
+import { migrateToDb, moveImagesToDb, moveModelToDb } from './dbstore.js'
 import { createLimiter } from './ratelimit.js'
 import
 {
@@ -121,14 +124,14 @@ from './library.js'
 import
 { 
   IMAGE_EXT_RE, JOB_ID_RE, scanJob,
-  scanJobs, setImageNameSource,
+  scanJobs, setImageNameSource, setModelSource,
 }
 from './scan.js'
 import 
 { 
   cancelJob, canonicalYoutubeUrl, jobs,
   killChildren, makeJob, pickSampleFileName, pruneJob, restoreJob,
-  runPipeline, runVideoFilePipeline, runYoutubePipeline, sampleFileName,
+  runPipeline, runVideoFilePipeline, runYoutubePipeline, sampleFileName, setSkipSampleCopy,
 }
     from './pipeline.js'
 
@@ -137,17 +140,21 @@ const __dirname = path.dirname(__filename)
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
 
-// Photos in the database (FILE_STORE=db) is for the VM only: client machines
-// build models from photos on disk and send them to the VM.
-const imagesInDb = config.fileStore === 'db' && config.authMode === 'authority'
-if (config.fileStore === 'db' && !imagesInDb)
+// Photos and models in the database (FILE_STORE=db) is for the VM only:
+// other machines (localhost) build models from files on disk, keep them
+// there, and send them to the VM.
+const filesInDb = config.fileStore === 'db' && config.authMode === 'authority'
+if (config.fileStore === 'db' && !filesInDb)
   console.warn('[backend] FILE_STORE=db is ignored: it only applies with AUTH_MODE=authority (the VM).')
-if (imagesInDb)
+if (filesInDb)
 {
-  // Jobs whose images/ folder has moved into the database are still listed,
-  // and any photos still on disk (first start, or after a crash) move in now.
+  // Jobs whose photos / model have moved into the database are still listed
+  // (and stay done), and any still on disk (first start, or after a crash)
+  // move in now. No model copies go into the engine's samples folder.
   setImageNameSource(listDbImageNames)
-  await migrateImagesToDb()
+  setModelSource((jobId) => Boolean(getDbModelInfo(jobId)))
+  setSkipSampleCopy(true)
+  await migrateToDb()
 }
 
 // Jobs live in memory, so rebuild them from the job folders on disk. Without
@@ -975,7 +982,7 @@ app.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJob
     return res.status(404).json({ error: 'image not found' })
   }
   const filePath = path.join(config.jobsDir, id, 'images', name)
-  if (!fs.existsSync(filePath) && imagesInDb)
+  if (!fs.existsSync(filePath) && filesInDb)
   {
     const image = getDbImage(id, name)
     if (!image) return res.status(404).json({ error: 'image not found' })
@@ -1135,7 +1142,9 @@ app.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res
 /************************************************************************/
 /*!
   \brief
-    Download / stream the finished splat .ply. Owner or admin only.
+    Download / stream the finished splat .ply. Owner or admin only. On
+    the VM with FILE_STORE=db, a model no longer on disk is served from
+    the database (sendDbModel).
   \return
     401 if not logged in, 404 if result is not ready or isn't theirs
 */
@@ -1144,13 +1153,118 @@ app.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobAcce
 {
   if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
-  if (!job || job.status !== 'done' || !job.resultPath) 
+  if (!job || job.status !== 'done' || !job.resultPath)
   {
     return res.status(404).json({ error: 'result not ready' })
+  }
+  if (filesInDb && !fs.existsSync(job.resultPath))
+  {
+    const info = getDbModelInfo(job.id)
+    if (!info) return res.status(404).json({ error: 'result not ready' })
+    return sendDbModel(req, res, job.id, info)
   }
   res.setHeader('Content-Type', 'application/octet-stream')
   res.sendFile(job.resultPath)
 })
+
+/************************************************************************/
+/*!
+  \brief
+    Waits until a response can take more data, or the client has gone.
+  \param res
+    The response
+  \return
+    Promise that resolves on 'drain' or 'close'
+*/
+/************************************************************************/
+function waitForDrain(res)
+{
+  return new Promise((resolve) =>
+  {
+    const done = () =>
+    {
+      res.off('drain', done)
+      res.off('close', done)
+      resolve()
+    }
+    res.on('drain', done)
+    res.on('close', done)
+  })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Serves a model stored in the database the way sendFile serves a file:
+    a single byte range (206; the viewer first reads bytes 0-4095), HEAD,
+    and an ETag so an unchanged model answers 304. Only the pieces the
+    range covers are read, one at a time, waiting whenever the client is
+    slower than the database, so a whole model is never in memory.
+  \param req
+    The request
+  \param res
+    The response
+  \param jobId
+    string
+  \param info
+    { size, chunkSize, storedAt } from getDbModelInfo
+  \return
+    nothing; the response is sent (or destroyed if the model was deleted
+    part-way through)
+*/
+/************************************************************************/
+async function sendDbModel(req, res, jobId, info)
+{
+  const etag = `"${jobId}-${info.size}-${info.storedAt}"`
+  res.setHeader('Content-Type', 'application/octet-stream')
+  res.setHeader('Accept-Ranges', 'bytes')
+  res.setHeader('ETag', etag)
+  res.setHeader('Cache-Control', 'private, no-cache')
+  if (req.fresh) return res.status(304).end()
+
+  let start = 0
+  let end = info.size - 1
+  // If-Range: only honour the range if the client's copy is this model.
+  const ifRange = req.headers['if-range']
+  const ranges = req.headers.range && (!ifRange || ifRange === etag) ? req.range(info.size, { combine: true }) : undefined
+  if (ranges === -1)
+  {
+    res.setHeader('Content-Range', `bytes */${info.size}`)
+    return res.status(416).end()
+  }
+  // A single range is served as asked; a malformed one (-2) or several
+  // ranges get the whole file, as sendFile does.
+  if (Array.isArray(ranges) && ranges.type === 'bytes' && ranges.length === 1)
+  {
+    start = ranges[0].start
+    end = ranges[0].end
+    res.status(206)
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`)
+  }
+  res.setHeader('Content-Length', String(end - start + 1))
+  if (req.method === 'HEAD' || end < start) return res.end()
+
+  let clientGone = false
+  res.on('close', () => { clientGone = true })
+  try
+  {
+    for (let seq = Math.floor(start / info.chunkSize); seq * info.chunkSize <= end; seq++)
+    {
+      if (clientGone) return
+      const chunk = readDbModelChunk(jobId, seq)
+      if (!chunk) throw new Error(`piece ${seq} is missing (deleted while being sent?)`)
+      const chunkStart = seq * info.chunkSize
+      const piece = chunk.subarray(Math.max(0, start - chunkStart), Math.min(chunk.length, end - chunkStart + 1))
+      if (!res.write(piece)) await waitForDrain(res)
+    }
+    res.end()
+  }
+  catch (err)
+  {
+    console.warn(`[backend] stopped sending the model of job ${jobId}: ${err.message}`)
+    res.destroy()
+  }
+}
 
 const execFileAsync = promisify(execFile)
 // Covers being made right now, by job id, so cards asking at the same
@@ -1227,7 +1341,8 @@ app.get(['/jobs/:id/cover.webp', '/library/jobs/:id/cover.webp'], requireJobAcce
          and masks still exist (ensureCover);
       2. done: delete COLMAP/Brush working files and the masks (pruneJob);
       3. done, client machine: send it to the VM's shared library;
-      4. VM with FILE_STORE=db: move its photos into the database (also
+      4. done, VM with FILE_STORE=db: move its model into the database;
+      5. VM with FILE_STORE=db: move its photos into the database (also
          for failed / cancelled jobs, so their photos are kept).
     Never throws: each step logs its own problems.
   \param job
@@ -1245,8 +1360,9 @@ async function afterJobEnds(job) {
             }
             await pruneJob(job)
             if (config.authMode === 'client' && !clientAuthProblem()) syncPendingJobs()
+            if (filesInDb) await moveModelToDb(job)
         }
-        if (imagesInDb) await moveImagesToDb(job.id)
+        if (filesInDb) await moveImagesToDb(job.id)
     }
     catch (err) {
         console.error(`[backend] tidying up job ${job.id} failed:`, err)
@@ -1354,8 +1470,9 @@ app.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, asy
         await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
         await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
         await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
-        // Photos kept in the database (VM with FILE_STORE=db). No-op otherwise.
+        // Photos and model kept in the database (VM with FILE_STORE=db). No-op otherwise.
         deleteDbImages(job.id)
+        deleteDbModel(job.id)
         res.json({ id: job.id, deleted: true })
     }
     catch (err) {
@@ -1474,8 +1591,8 @@ async function readFileHead(filePath, count)
     a .ply and the cover a WebP (a bad cover is just dropped). Writes a
     fresh status record (never trusting the sent paths), moves the job
     into jobs/ (replacing an earlier copy) and records its owner, origin
-    and size. With FILE_STORE=db the photos go straight into the database
-    instead of jobs/<id>/images/. An owner id the VM doesn't know becomes
+    and size. With FILE_STORE=db the photos and model go straight into the
+    database instead of jobs/. An owner id the VM doesn't know becomes
     admin-only.
   \return
     400 on bad content, 409 if a job with this id is running on the VM,
@@ -1538,7 +1655,7 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
       progress: 1,
       detail: null,
       error: null,
-      source: ['upload', 'youtube'].includes(sent.source) ? sent.source : null,
+      source: ['upload', 'youtube', 'video'].includes(sent.source) ? sent.source : null,
       name: typeof sent.name === 'string' ? sent.name.slice(0, MAX_JOB_NAME_LENGTH) : null,
       sampleFile: null,
       imageCount: images.length,
@@ -1554,13 +1671,17 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
     if (live && !['done', 'error', 'cancelled'].includes(live.status))
       return reject(409, 'A job with this id is still running on the VM.')
 
-    // FILE_STORE=db: the photos go into the database (replacing any earlier
-    // copy's) instead of moving into jobs/<id>/images/ with the rest.
-    if (imagesInDb)
+    // FILE_STORE=db: the photos and the model go into the database (replacing
+    // any earlier copy's) instead of moving into jobs/ with the rest. The
+    // status record still names <id>_out/result.ply, which is then served
+    // from the database.
+    if (filesInDb)
     {
       const stagedImages = path.join(req.storeDir, id, 'images')
       storeJobImages(id, stagedImages)
       await fs.promises.rm(stagedImages, rmOpts)
+      storeJobModel(id, result.path)
+      await fs.promises.rm(result.path, { force: true })
     }
 
     // Replace any earlier copy, then move the checked job into place.
@@ -2134,7 +2255,7 @@ const server = app.listen(config.port, () =>
     console.log('[backend] accounts: authority (this machine holds the account database)')
     if (!config.authApiKey)
       console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
-    console.log(`[backend] photos: ${imagesInDb ? 'stored in the database (FILE_STORE=db)' : 'stored as files in jobs/'}`)
+    console.log(`[backend] files: ${filesInDb ? 'photos and models stored in the database (FILE_STORE=db)' : 'photos and models stored as files in jobs/'}`)
   }
   else if (config.authMode === 'client')
   {

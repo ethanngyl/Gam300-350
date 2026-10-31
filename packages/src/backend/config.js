@@ -462,9 +462,11 @@ export const config = {
     syncIntervalMin: Number(process.env.SYNC_INTERVAL_MIN) || 5,
     // Largest result.ply the VM accepts from a client.
     maxResultSizeMB: 500,
-    // Where finished jobs' photos are kept. 'disk' (default): jobs/<id>/images/.
-    // 'db': inside the database (app.db, table job_images) -- set FILE_STORE=db
-    // on the VM only (ignored unless AUTH_MODE=authority). Models stay as files.
+    // Where finished jobs' photos and models are kept. 'disk' (default):
+    // jobs/<id>/images/ and jobs/<id>_out/result.ply (plus a copy in the engine
+    // samples folder). 'db': inside the database (app.db, tables job_images,
+    // job_models and job_model_chunks), with no samples copy -- set
+    // FILE_STORE=db on the VM only (ignored unless AUTH_MODE=authority).
     fileStore: process.env.FILE_STORE === 'db' ? 'db' : 'disk',
 
     // --- Account authority (centralized accounts on the VM) --------------------

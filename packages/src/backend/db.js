@@ -65,7 +65,13 @@ A consistent copy of app.db (VACUUM INTO), safe while running.
 - storeJobImages(jobId, imagesDir) / listDbImageNames / getDbImage /
   deleteDbImages / hasDbImages
 On the VM with FILE_STORE=db: finished jobs' photos are kept in the table
-job_images instead of jobs/<id>/images/ (see imagestore.js).
+job_images instead of jobs/<id>/images/ (see dbstore.js).
+- storeJobModel(jobId, filePath) / getDbModelInfo / readDbModelChunk /
+  deleteDbModel / hasDbModels
+On the VM with FILE_STORE=db: finished models are kept in the tables
+job_models (size) and job_model_chunks (the .ply in 4 MiB pieces) instead
+of jobs/<id>_out/result.ply, so a byte range or a download never has to
+load a whole model into memory.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -99,6 +105,9 @@ db.exec('PRAGMA foreign_keys = ON')
 // block writing, or the other way round. Backups must then use VACUUM INTO
 // (or stop the backend first), not a plain copy of app.db.
 db.exec('PRAGMA journal_mode = WAL')
+// Storing a model is one big transaction, which grows app.db-wal to the
+// model's size; shrink it back to at most 64 MB after each checkpoint.
+db.exec('PRAGMA journal_size_limit = 67108864')
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -264,6 +273,37 @@ const selectJobImage = db.prepare('SELECT mime, size, data FROM job_images WHERE
 const selectAnyJobImage = db.prepare('SELECT 1 FROM job_images LIMIT 1')
 
 const PHOTO_NAME_RE = /\.(jpe?g|png)$/i
+
+// On the VM with FILE_STORE=db: each finished model (.ply, often hundreds of
+// MB) in fixed-size pieces. SQLite reads a value whole, so pieces let a
+// byte range (the viewer's 4 KB header read) or a download read only what it
+// needs. Deleting the job's jobs row (or its job_models row) deletes them.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS job_models (
+    job_id     TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+    size       INTEGER NOT NULL,
+    chunk_size INTEGER NOT NULL,
+    stored_at  INTEGER NOT NULL
+  )
+`)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS job_model_chunks (
+    job_id TEXT NOT NULL REFERENCES job_models(job_id) ON DELETE CASCADE,
+    seq    INTEGER NOT NULL,
+    data   BLOB NOT NULL,
+    PRIMARY KEY (job_id, seq)
+  )
+`)
+
+// Size of each piece. Stored per model (chunk_size), so changing it later
+// doesn't break models already stored.
+const MODEL_CHUNK_BYTES = 4 * 1024 * 1024
+const insertJobModel = db.prepare('INSERT INTO job_models (job_id, size, chunk_size, stored_at) VALUES (?, ?, ?, ?)')
+const insertModelChunk = db.prepare('INSERT INTO job_model_chunks (job_id, seq, data) VALUES (?, ?, ?)')
+const deleteJobModel = db.prepare('DELETE FROM job_models WHERE job_id = ?')
+const selectJobModel = db.prepare('SELECT size, chunk_size, stored_at FROM job_models WHERE job_id = ?')
+const selectModelChunk = db.prepare('SELECT data FROM job_model_chunks WHERE job_id = ? AND seq = ?')
+const selectAnyJobModel = db.prepare('SELECT 1 FROM job_models LIMIT 1')
 
 
 // ----- Start of Functions --------------------------------------------------- //
@@ -763,5 +803,128 @@ export function hasDbImages()
 export function deleteDbImages(jobId)
 {
   deleteJobImages.run(jobId)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Stores a finished model (.ply) as the job's model, replacing any it
+    already had. One transaction: either the whole file is stored or
+    nothing is (it throws, and the caller keeps the file). The file is
+    read MODEL_CHUNK_BYTES at a time, so memory use stays at one piece.
+    Synchronous on purpose: the backend shares this one connection, so an
+    await inside the transaction would let other requests' writes land in
+    it (and be rolled back with it).
+  \param jobId
+  string
+  \param filePath
+  string
+    The model file (jobs/<id>_out/result.ply or a staging copy)
+  \return
+    { size } in bytes
+*/
+/************************************************************************/
+export function storeJobModel(jobId, filePath)
+{
+  const fd = fs.openSync(filePath, 'r')
+  try
+  {
+    const size = fs.fstatSync(fd).size
+    db.exec('BEGIN')
+    try
+    {
+      ensureJobRow.run(jobId)
+      deleteJobModel.run(jobId)
+      insertJobModel.run(jobId, size, MODEL_CHUNK_BYTES, Date.now())
+      let offset = 0
+      for (let seq = 0; offset < size; seq++)
+      {
+        const chunk = Buffer.allocUnsafe(Math.min(MODEL_CHUNK_BYTES, size - offset))
+        let filled = 0
+        while (filled < chunk.length)
+        {
+          const read = fs.readSync(fd, chunk, filled, chunk.length - filled, offset + filled)
+          if (read === 0) throw new Error(`${path.basename(filePath)} got shorter while it was being stored`)
+          filled += read
+        }
+        insertModelChunk.run(jobId, seq, chunk)
+        offset += chunk.length
+      }
+      db.exec('COMMIT')
+      return { size }
+    }
+    catch (err)
+    {
+      db.exec('ROLLBACK')
+      throw err
+    }
+  }
+  finally
+  {
+    fs.closeSync(fd)
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A stored model's details, without its data.
+  \param jobId
+  string
+  \return
+    { size, chunkSize, storedAt }, or null if the job has no stored model
+*/
+/************************************************************************/
+export function getDbModelInfo(jobId)
+{
+  const row = selectJobModel.get(jobId)
+  return row ? { size: row.size, chunkSize: row.chunk_size, storedAt: row.stored_at } : null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    One piece of a stored model: bytes [seq * chunkSize, (seq + 1) *
+    chunkSize) of the .ply.
+  \param jobId
+  string
+  \param seq
+  number
+    The piece's index, from 0
+  \return
+    Buffer, or null if there is no such piece (e.g. the job was deleted)
+*/
+/************************************************************************/
+export function readDbModelChunk(jobId, seq)
+{
+  const row = selectModelChunk.get(jobId, seq)
+  // Wrapped (no copy) as a Buffer, like getDbImage.
+  return row ? Buffer.from(row.data.buffer, row.data.byteOffset, row.data.byteLength) : null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether any models are stored in the database yet.
+  \return
+    bool
+*/
+/************************************************************************/
+export function hasDbModels()
+{
+  return Boolean(selectAnyJobModel.get())
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Removes a job's model from the database (its pieces go with it).
+  \param jobId
+  string
+*/
+/************************************************************************/
+export function deleteDbModel(jobId)
+{
+  deleteJobModel.run(jobId)
 }
 // ----- End of Functions ----------------------------------------------------- //

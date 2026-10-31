@@ -21,6 +21,9 @@ is missing or has no .ply files.
 - setImageNameSource(fn)
 Where photo names come from when a job has no images/ folder (the VM keeps
 photos in the database with FILE_STORE=db). Set by server.js.
+- setModelSource(fn)
+How to tell a job's model is in the database when its result file is gone
+(the VM with FILE_STORE=db), so the job stays done. Set by server.js.
 - scanJob(id, jobsDir)
 Builds one job record from its folder.
 - scanJobs(jobsDir)
@@ -57,6 +60,9 @@ export const JOB_ID_RE = /^[\w-]+$/
 // with FILE_STORE=db keeps photos in the database). Set by server.js, so
 // this file stays free of database code.
 let imageNameSource = null
+// The same for a job's model: says whether the database holds it when its
+// result file is gone. Without it, such a job would be marked "missing".
+let modelSource = null
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -72,6 +78,21 @@ let imageNameSource = null
 export function setImageNameSource(fn)
 {
   imageNameSource = fn
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Tells scanJob how to check for a job's model when its result file is
+    not on disk. The job then keeps its result path (still used for its
+    name and status.json) and stays done.
+  \param fn
+    function(jobId) -> bool, true if the model is stored elsewhere, or null
+*/
+/************************************************************************/
+export function setModelSource(fn)
+{
+  modelSource = fn
 }
 
 /************************************************************************/
@@ -184,7 +205,7 @@ export async function scanJob(id, jobsDir = config.jobsDir)
       progress = saved.progress ?? 0
       error = saved.error ?? null
       resultPath = saved.result ? path.join(jobsDir, saved.result) : null
-      if (resultPath && !(await exists(resultPath))) resultPath = null
+      if (resultPath && !(await exists(resultPath)) && !modelSource?.(id)) resultPath = null
       needsWrite = false
 
       if (status === 'running' || (status === 'queued' && hasColmapFiles)) 
