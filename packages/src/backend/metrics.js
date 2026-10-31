@@ -7,7 +7,7 @@
 \brief
 Collects generation statistics for every .ply the pipeline produces: how long
 each phase took, how many training iterations ran, how big the result is, and
-what hardware it ran on. Each finished job gets <jobsDir>/<id>_out/metrics.json
+what hardware it ran on. Each finished job gets <jobsDir>/<id>/metrics.json
 and one line appended to <jobsDir>/metrics.jsonl, so runs on different
 machines and settings can be compared afterwards (one JSON object per line).
 Nothing here ever throws into the pipeline -- metrics are best-effort.
@@ -345,7 +345,7 @@ const secs = (ms) => (ms == null ? null : Math.round(ms / 100) / 10)
 /*!
   \brief
     Build the metrics record for a job whose .ply was just generated,
-    write it next to the .ply as metrics.json, append it to the global
+    write it to the job folder as metrics.json, append it to the global
     metrics.jsonl, and put a one-line summary in the job log.
     Best-effort: errors are logged, never thrown.
   \param job
@@ -434,7 +434,7 @@ export async function recordPlyMetrics(job, { rawPly, finalPly, normalized, log 
     }
 
     const json = JSON.stringify(record, null, 2)
-    await fsp.writeFile(path.join(path.dirname(finalPly), METRICS_FILE), json)
+    await fsp.writeFile(path.join(config.jobsDir, job.id, METRICS_FILE), json)
     fs.appendFileSync(path.join(config.jobsDir, METRICS_LOG), `${JSON.stringify(record)}\n`)
 
     const gpuName = hardware.gpus?.[0]?.name ?? 'unknown GPU'

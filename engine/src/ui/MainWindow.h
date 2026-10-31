@@ -8,9 +8,11 @@
 \brief
 Declares MainWindow, the editor shell. It hosts the 3D Viewport in the
 centre and arranges the editor around it: menu bar, main toolbar, status
-bar, and the dockable Scene (outliner), Inspector, Assets, Console and
-Audio panels. It owns the scene-editing commands (import, select, rename,
-delete, render mode), loads .ply files on a worker thread, accepts .ply
+bar, and the dockable Scene (outliner), Inspector, Assets, My Models,
+Console and Audio panels, plus the Account menu for signing in with a web
+app account. It owns the scene-editing commands (import, select, rename,
+delete, render mode, export), loads .ply files and writes exports on
+worker threads, accepts .ply
 drag-and-drop, and persists layout and preferences with QSettings.
 **************************************************************************/
 #pragma once
@@ -20,6 +22,7 @@ drag-and-drop, and persists layout and preferences with QSettings.
 #include <QMainWindow>
 #include <QPointer>
 #include <QStringList>
+#include <QUndoStack>
 
 #include <vector>
 
@@ -32,13 +35,17 @@ class QProgressBar;
 class QThread;
 class QToolBar;
 
+#include "splat/SplatTrimmer.h"
+
 struct SplatVertex;
 
 class AssetBrowserPanel;
 class AudioPanel;
+class BackendClient;
 class ConsolePanel;
 class InspectorPanel;
 class OutlinerPanel;
+class RemoteModelsPanel;
 class Viewport;
 
 class MainWindow : public QMainWindow {
@@ -75,11 +82,22 @@ private:
     // Queues a .ply for import; files load one at a time on a worker thread.
     void importSplat(const QString& path);
     void startNextImport();
-    void finishImport(const QString& path, std::vector<SplatVertex>& splats, size_t originalCount);
+    // `original` holds the untrimmed data, or is empty if the import was not trimmed.
+    // `trimData` is the values the import was trimmed with (stored on the model).
+    void finishImport(const QString& path, std::vector<SplatVertex>& splats, std::vector<SplatVertex>& original,
+                      const TrimData& trimData);
+    void showTrimDialog();
+    void applyDefaultTrim(const TrimData& trim);   // saves the global defaults used for new imports
+    void applyModelTrim(const TrimData& trim);     // re-trims the selected model and stores the values on it
+    void untrimModel();                            // restores the selected model's original splats
     void selectModel(int index);
     void renameModel(int index, const QString& name);
     void deleteSelectedModel();
+    void toggleModelHidden(int index);
     void setRenderMode(int mode); // SplatRenderer::RenderMode as int
+    // Asks for export options and a file name, then writes the selected
+    // model (or the whole scene) on a worker thread.
+    void exportModels();
 
     // Rebuilds the outliner/inspector from the renderer and updates which
     // scene actions are enabled.
@@ -90,11 +108,23 @@ private:
     void addRecentFile(const QString& path);
     void rebuildRecentMenu();
 
+    // ---- account ----
+    // Opens the sign-in dialog for the web app account.
+    void showSignIn();
+    void updateAccountActions();
+
     // ---- help ----
     void showControls();
     void showAbout();
 
     Viewport* m_viewport = nullptr;
+
+    // Undo history. Edits are pushed as QUndoCommands (see EditCommands.h);
+    // the stack is cleared whenever a model is removed so no command can
+    // hold a dangling model pointer.
+    QUndoStack m_undo;
+    QAction* m_undoAction = nullptr;
+    QAction* m_redoAction = nullptr;
 
     // Panels (owned by their docks).
     OutlinerPanel* m_outliner = nullptr;
@@ -102,15 +132,18 @@ private:
     AssetBrowserPanel* m_assets = nullptr;
     ConsolePanel* m_console = nullptr;
     AudioPanel* m_audio = nullptr;
+    RemoteModelsPanel* m_remoteModels = nullptr;
     QList<QDockWidget*> m_docks;
     QToolBar* m_toolBar = nullptr;
 
     // Actions.
     QAction* m_importAction = nullptr;
+    QAction* m_exportAction = nullptr;
     QAction* m_exitAction = nullptr;
     QAction* m_renameAction = nullptr;
     QAction* m_deleteAction = nullptr;
     QAction* m_deselectAction = nullptr;
+    QAction* m_toggleVisibilityAction = nullptr;
     QAction* m_resetPositionAction = nullptr;
     QActionGroup* m_renderModeGroup = nullptr;
     QAction* m_pointCloudAction = nullptr;
@@ -118,9 +151,17 @@ private:
     QAction* m_recenterCameraAction = nullptr;
     QAction* m_statsOverlayAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
+    QAction* m_trimSettingsAction = nullptr;
+    TrimData m_trimSettings;
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;
     QMenu* m_windowMenu = nullptr;
+    QAction* m_accountInfoAction = nullptr;
+    QAction* m_signInAction = nullptr;
+    QAction* m_signOutAction = nullptr;
+
+    // Connection to the web app's backend (accounts, uploaded models).
+    BackendClient* m_backend = nullptr;
 
     // Status bar.
     QLabel* m_loadingLabel = nullptr;
@@ -133,6 +174,7 @@ private:
     // Import queue / worker.
     QStringList m_pendingImports;
     QPointer<QThread> m_loadThread;
+    QPointer<QThread> m_exportThread;
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout

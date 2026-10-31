@@ -30,7 +30,7 @@
     --forma-coral: #f59e0b;
     --forma-green: #4fc4a6;
     --forma-red: #f06f60;
-    --forma-red-text: #ff8c7c;
+    --forma-red-text: var(--forma-red-text);
     --forma-purple: #a78bfa;
     --forma-orange: #f97316;
     /* ----- Same colours as R, G, B for see-through tints:
@@ -109,7 +109,8 @@ html {
     gap: 20px;
     padding: 0 20px;
     background: var(--forma-sidebar);
-    border-bottom: 1px solid var(--forma-border);
+    /* No line under the top bar: it and the sidebar share one colour, so
+       they read as a single frame around the page. */
 }
 
 .forma-logo {
@@ -124,6 +125,42 @@ html {
     letter-spacing: 0.16em;
 }
 
+/* The top nav's logo is a button that goes to Home. On wider screens it
+   is as wide as the open sidebar (240px, minus the nav's 20px padding),
+   so the tabs start where the page content does. No divider line. */
+.forma-logo-home {
+    box-sizing: border-box;
+    width: 220px;
+    flex: none;
+    /* Same speed as the sidebar opening / closing. */
+    transition: width 0.18s ease;
+    align-self: stretch;
+    background: transparent;
+    border: none;
+    padding-left: 0;
+    color: inherit;
+    cursor: pointer;
+}
+
+/* Sidebar collapsed (wider screens; phones use a drawer): shrink to
+       just fit the logo and word, so the tabs sit next to it instead of
+       leaving a gap. */
+@media (min-width: 761px) {
+    .genesis-shell.is-sidebar-collapsed .forma-logo-home {
+        width: 132px;
+    }
+}
+
+.forma-logo-home:hover .forma-logo-icon {
+    border-color: var(--forma-blue);
+}
+
+.forma-logo-home:focus-visible {
+    outline: 2px solid var(--forma-blue);
+    outline-offset: 4px;
+    border-radius: 6px;
+}
+
 .forma-logo-icon {
     width: 30px;
     height: 30px;
@@ -135,6 +172,13 @@ html {
     align-items: center;
     justify-content: center;
 }
+
+    /* The GENESIS logo (GenesisLogo.svg) inside the logo box. */
+    .forma-logo-icon img {
+        width: 20px;
+        height: 20px;
+        display: block;
+    }
 
 .forma-tabs {
     display: flex;
@@ -168,24 +212,6 @@ html {
         background: rgba(var(--forma-accent-rgb), 0.16);
         border-color: rgba(var(--forma-accent-rgb), 0.4);
     }
-
-.forma-status {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-family: var(--forma-font-mono);
-    font-size: 0.72rem;
-    color: var(--forma-text-muted);
-    white-space: nowrap;
-}
-
-.forma-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--forma-blue);
-    flex: none;
-}
 
 .forma-account {
     position: relative;
@@ -705,6 +731,8 @@ html {
     padding: 7px 16px;
     border-radius: 6px;
     cursor: pointer;
+    /* Fixed width, so the bold active tab doesn't shift the toolbar. */
+    min-width: 110px;
 }
 
     .library-subtab.is-active {
@@ -777,11 +805,28 @@ html {
     justify-content: center;
 }
 
-    .library-thumb .forma-badge {
-        position: absolute;
-        top: 10px;
-        right: 10px;
+/* Picture on a model card (ModelCover.jsx): a photo cropped to fill the
+   card, or a transparent cut-out of the object shown whole. */
+.library-thumb-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+    .library-thumb-image.is-cutout {
+        box-sizing: border-box;
+        padding: 10px;
+        object-fit: contain;
     }
+
+.library-thumb .forma-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1; /* above the cover photo */
+}
 
 .library-item-name {
     padding: 14px 14px 4px;
@@ -953,12 +998,16 @@ html {
     color: var(--forma-red);
 }
 
-/* Photo Library cards (ImageGallery compact variant) */
+/* Photo Library cards (ImageGallery compact variant). Laid out exactly like
+   the 3D Models grid: full width, same columns, card height and text rows. */
 
 .gallery-compact {
     padding: 0;
     background: transparent;
     color: var(--forma-text);
+    /* ImageGallery.css centres .gallery in a 1100px column; undo that here. */
+    max-width: none;
+    margin: 0;
 }
 
     .gallery-compact .gallery-note {
@@ -993,7 +1042,9 @@ html {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 2px;
-    aspect-ratio: 16 / 10;
+    /* Same height as .library-thumb on the 3D Models cards. */
+    aspect-ratio: auto;
+    height: 128px;
     background: var(--forma-bg);
 }
 
@@ -1022,8 +1073,13 @@ html {
 
 .library-photo-badge {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 10px;
+    right: 10px;
+}
+
+/* Solid backing so the badge stays readable on top of photos. */
+.library-photo-thumbgrid .library-photo-badge {
+    background-color: rgba(var(--forma-bg-rgb), 0.9);
 }
 
 .library-photo-name {
@@ -1215,14 +1271,30 @@ html {
         color: var(--forma-teal-text);
     }
 
-.scene-outliner-child {
-    padding-left: 34px;
-    cursor: default;
+    .scene-outliner-item.is-hidden .scene-outliner-name {
+        opacity: 0.45;
+    }
+
+.scene-outliner-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.scene-outliner-toggle {
-    width: 14px;
-    height: 14px;
+.scene-outliner-status {
+    font-size: 0.6rem;
+    color: var(--forma-text-dim);
+}
+
+    .scene-outliner-status.is-error {
+        color: var(--forma-red);
+    }
+
+.scene-outliner-eye {
+    width: 18px;
+    height: 18px;
     background: none;
     border: none;
     color: inherit;
@@ -1232,6 +1304,16 @@ html {
     justify-content: center;
     cursor: pointer;
     flex: none;
+}
+
+    .scene-outliner-eye[aria-pressed="true"] {
+        opacity: 0.35;
+    }
+
+.scene-outliner-note {
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
 }
 
 .scene-add-library {
@@ -1257,6 +1339,9 @@ html {
 
 .scene-viewport {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     overflow: hidden;
     background: linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-bg);
 }
@@ -1277,47 +1362,47 @@ html {
     color: var(--forma-text-dim);
 }
 
-.scene-view-cube {
-    position: absolute;
-    top: 52px;
-    right: 14px;
-    width: 62px;
-    border: 1px solid var(--forma-border-strong);
-    border-radius: 4px;
-    background: var(--forma-panel);
+/* Holds the splat viewer's canvas (SceneViewport.jsx). */
+.scene-canvas {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.scene-viewport-error {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 8px 0;
-    gap: 10px;
-    font-family: var(--forma-font-mono);
-    font-size: 0.6rem;
-    color: var(--forma-text-dim);
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--forma-red);
 }
 
-.scene-selection {
+.scene-viewport-empty {
     position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 136px;
-    height: 136px;
-    transform: translate(-50%, -50%);
-    border: 1px solid var(--forma-blue);
+    inset: 37px 0 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: var(--forma-text-dim);
+    gap: 12px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+    pointer-events: none;
 }
 
-.scene-handle {
-    position: absolute;
-    width: 7px;
-    height: 7px;
-    background: var(--forma-blue);
-    transform: translate(-50%, -50%);
-}
+    .scene-viewport-empty button {
+        pointer-events: auto;
+    }
 
 .scene-axes {
+    pointer-events: none;
     position: absolute;
     left: 18px;
     bottom: 18px;
@@ -1350,18 +1435,156 @@ html {
     color: #5a68d4;
 }
 
-.scene-front-button {
-    position: absolute;
-    right: 14px;
-    bottom: 14px;
-    background: var(--forma-bg);
-    border: 1px solid var(--forma-border-strong);
-    color: var(--forma-text-muted);
-    font-family: var(--forma-font-mono);
-    font-size: 0.68rem;
-    padding: 8px 14px;
-    border-radius: 5px;
+.scene-chip:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
+
+.scene-bar-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 0 4px;
+    background: var(--forma-border-strong);
+}
+
+.scene-chip-danger:hover {
+    border-color: var(--forma-red);
+    color: var(--forma-red);
+}
+
+/* Outliner right-click menu */
+.scene-context-menu {
+    position: fixed;
+    z-index: 60;
+    padding: 4px;
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.scene-context-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--forma-text);
+    font-family: var(--forma-font-mono);
+    font-size: 0.74rem;
+    padding: 7px 10px;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .scene-context-item:hover,
+    .scene-context-item:focus-visible {
+        background: var(--forma-panel-alt);
+        outline: none;
+    }
+
+    .scene-context-item.is-danger:hover,
+    .scene-context-item.is-danger:focus-visible {
+        color: var(--forma-red);
+    }
+
+/* Add from Library picker */
+.scene-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(var(--forma-backdrop-rgb), 0.6);
+}
+
+.scene-picker {
+    display: flex;
+    flex-direction: column;
+    width: min(440px, 100%);
+    max-height: min(560px, 100%);
+    background: var(--forma-sidebar);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.scene-picker-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .scene-picker-head .scene-panel-title {
+        border-bottom: none;
+    }
+
+.scene-picker-close {
+    background: none;
+    border: none;
+    color: var(--forma-text-muted);
+    font-size: 1.2rem;
+    padding: 4px 14px;
+    cursor: pointer;
+}
+
+.scene-picker .scene-outliner-search {
+    margin-top: 10px;
+}
+
+.scene-picker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 8px 10px;
+}
+
+.scene-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: 5px;
+    color: var(--forma-text);
+    font-family: var(--forma-font-mono);
+    font-size: 0.76rem;
+    padding: 9px 8px;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .scene-picker-item:hover {
+        background: var(--forma-panel-alt);
+    }
+
+.scene-picker-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.scene-picker-meta {
+    font-size: 0.66rem;
+    color: var(--forma-text-dim);
+}
+
+.scene-picker-note {
+    padding: 8px;
+    font-size: 0.74rem;
+    color: var(--forma-text-muted);
+}
+
+    .scene-picker-note.is-error {
+        color: var(--forma-red);
+    }
 
 .scene-inspector {
     border-left: 1px solid var(--forma-border);
@@ -1588,6 +1811,28 @@ html {
             border-color: var(--forma-blue);
         }
 
+/* Password field with the "Forgot password?" link under its right corner. */
+.login-password {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.login-forgot {
+    align-self: flex-end;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+    .login-forgot:hover {
+        text-decoration: underline;
+    }
+
 .login-remember {
     display: flex;
     align-items: center;
@@ -1699,6 +1944,122 @@ html {
     gap: 16px;
 }
 
+/* ---------- Sound settings (Account page) ---------- */
+
+/* On/off switch; usable anywhere as <input type="checkbox" className="forma-switch" />. */
+.forma-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 38px;
+    height: 22px;
+    margin: 0;
+    flex: none;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    position: relative;
+    cursor: pointer;
+}
+
+    .forma-switch::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--forma-text-muted);
+        transition: transform 0.15s ease;
+    }
+
+    .forma-switch:checked {
+        background: rgba(var(--forma-accent-rgb), 0.45);
+        border-color: var(--forma-blue);
+    }
+
+        .forma-switch:checked::after {
+            transform: translateX(16px);
+            background: #fff;
+        }
+
+    .forma-switch:focus-visible {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 2px;
+    }
+
+.account-sound {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-bottom: 32px;
+    max-width: 560px;
+}
+
+.account-sound-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+}
+
+.account-sound-icon {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-panel-alt);
+    color: var(--forma-teal-text);
+}
+
+.account-sound-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.account-sound-title {
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+
+.account-sound-hint {
+    font-size: 0.78rem;
+    color: var(--forma-text-muted);
+}
+
+.account-sound-volume {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--forma-text-muted);
+}
+
+    .account-sound-volume b {
+        color: var(--forma-text);
+        font-weight: 600;
+    }
+
+    .account-sound-volume input {
+        width: 100%;
+        accent-color: var(--forma-blue);
+        cursor: pointer;
+    }
+
+    .account-sound-volume.is-disabled {
+        opacity: 0.45;
+    }
+
+        .account-sound-volume.is-disabled input {
+            cursor: not-allowed;
+        }
+
 .home-stat {
     background: var(--forma-panel);
     border: 1px solid var(--forma-border);
@@ -1758,6 +2119,566 @@ html {
         border: 1px solid var(--forma-border-strong);
         color: var(--forma-text);
     }
+
+/* ---------- Home: recent files and models ---------- */
+
+.home-new-model {
+    flex: none;
+    padding: 11px 20px;
+}
+
+.home-recent-v2-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+    .home-recent-v2-header .home-section-title {
+        margin-bottom: 10px !important;
+    }
+
+.home-recent-tabs {
+    display: flex;
+    gap: 20px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.home-recent-tab {
+    padding: 0 0 10px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .home-recent-tab:hover {
+        color: var(--forma-text);
+    }
+
+    .home-recent-tab.is-active {
+        color: var(--forma-text);
+        border-bottom-color: var(--forma-blue);
+    }
+
+.home-file-grid {
+    display: grid;
+    /* 4 cards a row with the sidebar open on a laptop, 5 when collapsed. */
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 18px;
+}
+
+.home-file-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .home-file-card:hover {
+        border-color: var(--forma-blue);
+    }
+
+.home-file-preview {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forma-panel-alt);
+    color: var(--forma-text-dim);
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .home-file-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+.home-file-type {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(var(--forma-bg-rgb), 0.85);
+    border: 1px solid var(--forma-border-strong);
+    color: var(--forma-teal-text);
+}
+
+.home-file-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px 16px;
+    min-width: 0;
+}
+
+.home-file-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--forma-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-file-kind {
+    font-family: var(--forma-font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--forma-text-muted);
+}
+
+.home-file-time {
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+    margin-top: 6px;
+}
+
+.home-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--forma-text-muted);
+}
+
+    .home-empty svg {
+        color: var(--forma-teal-text);
+    }
+
+    .home-empty h3 {
+        font-size: 1.05rem;
+        color: var(--forma-heading);
+    }
+
+    .home-empty p {
+        max-width: 42ch;
+        font-size: 0.86rem;
+    }
+
+    .home-empty .forma-btn {
+        margin-top: 6px;
+    }
+
+@media (max-width: 760px) {
+    .home-new-model {
+        align-self: stretch;
+        justify-content: center;
+    }
+
+    .home-recent-v2-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+        .home-recent-v2-header .home-link {
+            align-self: flex-start;
+            padding: 0;
+        }
+
+    .home-file-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
+/* Home, wireframe layout: bigger welcome with a subtitle, an outlined
+   "View all" button, and New model only on phones (it is in the sidebar). */
+.home-heading-row h1 {
+    font-size: 2.6rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.home-heading-row .home-subtitle {
+    margin-top: 12px !important;
+    font-size: 1rem;
+    color: var(--forma-text-soft);
+}
+
+.home-screen .eyebrow-accent {
+    margin-bottom: 10px !important;
+}
+
+.home-view-all {
+    flex: none;
+    padding: 9px 16px;
+    background: var(--forma-panel);
+}
+
+@media (min-width: 761px) {
+    .home-new-model {
+        display: none;
+    }
+
+    .home-heading-row {
+        margin-bottom: 40px;
+    }
+}
+
+/* ---------- Model detail slider (TrainingQualitySlider) ---------- */
+
+.training-quality {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 220px;
+}
+
+    .training-quality.is-disabled {
+        opacity: 0.6;
+    }
+
+.training-quality-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.82rem;
+    color: var(--forma-text);
+}
+
+.training-quality-value {
+    font-family: var(--forma-font-mono);
+    font-size: 0.7rem;
+    color: var(--forma-teal-text);
+    white-space: nowrap;
+}
+
+.training-quality-range {
+    width: 100%;
+    margin: 0;
+    accent-color: var(--forma-blue);
+    cursor: pointer;
+}
+
+.training-quality-stops {
+    display: flex;
+    justify-content: space-between;
+}
+
+.training-quality-stop {
+    padding: 0;
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.72rem;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .training-quality-stop.is-active {
+        color: var(--forma-text);
+        font-weight: 600;
+    }
+
+    .training-quality-stop:disabled {
+        cursor: default;
+    }
+
+/* ---------- Sidebar: Genesis wireframe layout ----------
+   Collapse button, New model + Add photos, workspace pages, and the
+   signed-in user at the bottom. Collapses to icons only on wider screens
+   (.is-sidebar-collapsed on the shell, .is-collapsed on the sidebar). */
+
+.genesis-body {
+    grid-template-columns: 240px minmax(0, 1fr);
+    transition: grid-template-columns 0.18s ease;
+}
+
+.genesis-shell.is-sidebar-collapsed .genesis-body {
+    grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.genesis-sidebar {
+    padding: 16px 14px 14px;
+}
+
+.genesis-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    width: 36px;
+    height: 36px;
+    flex: none;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel);
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .genesis-collapse-btn:hover {
+        color: var(--forma-text);
+        background: var(--forma-panel-alt);
+    }
+
+    /* The chevron icon points down; turn it to point left while expanded. */
+    .genesis-collapse-btn svg {
+        transform: rotate(90deg);
+    }
+
+.genesis-new-model,
+.genesis-add-photos {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+}
+
+.genesis-new-model {
+    margin-bottom: 8px;
+}
+
+.genesis-add-photos {
+    margin-bottom: 10px;
+    background: var(--forma-panel);
+}
+
+    .genesis-side-item span,
+    .genesis-new-model span,
+    .genesis-add-photos span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+.genesis-side-item {
+    gap: 12px;
+    padding: 10px 12px;
+    color: var(--forma-text-soft);
+    font-size: 0.88rem;
+}
+
+    .genesis-side-item.is-active {
+        color: var(--forma-text);
+    }
+
+/* ---------- Signed-in user at the bottom of the sidebar ---------- */
+
+.genesis-profile {
+    position: relative;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--forma-border);
+}
+
+.genesis-profile-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .genesis-profile-btn:hover,
+    .genesis-profile-btn.is-active {
+        background: var(--forma-panel-alt);
+    }
+
+    /* Chevron points up, toward the menu that opens above. */
+    .genesis-profile-btn > svg {
+        flex: none;
+        color: var(--forma-text-dim);
+        transform: rotate(180deg);
+    }
+
+.genesis-profile-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    border-color: rgba(var(--forma-accent-rgb), 0.5);
+    color: var(--forma-teal-text);
+}
+
+.genesis-profile-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.genesis-profile-name,
+.genesis-profile-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.genesis-profile-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.genesis-profile-email {
+    font-family: var(--forma-font-mono);
+    font-size: 0.68rem;
+    color: var(--forma-text-dim);
+}
+
+.genesis-profile-menu {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 8px);
+    padding: 14px;
+    border-radius: 12px;
+    background: var(--forma-panel);
+    border: 1px solid var(--forma-border-strong);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    z-index: 50;
+}
+
+.genesis-profile-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.genesis-profile-avatar-large {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 48px;
+    height: 48px;
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    border-color: rgba(var(--forma-accent-rgb), 0.5);
+    color: var(--forma-teal-text);
+    cursor: default;
+}
+
+.genesis-profile-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+    .genesis-profile-identity strong {
+        font-size: 0.92rem;
+        color: var(--forma-heading);
+    }
+
+    .genesis-profile-identity span {
+        font-size: 0.76rem;
+        color: var(--forma-text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+.genesis-profile-link {
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.78rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.genesis-profile-divider {
+    height: 1px;
+    margin: 12px 0 8px;
+    background: var(--forma-border);
+}
+
+/* ---------- Collapsed sidebar: icons only (wider screens) ---------- */
+
+@media (min-width: 761px) {
+    .genesis-sidebar.is-collapsed {
+        padding-left: 12px;
+        padding-right: 12px;
+        align-items: center;
+    }
+
+        .genesis-sidebar.is-collapsed .genesis-collapse-btn {
+            align-self: center;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-side-label,
+        .genesis-sidebar.is-collapsed .genesis-side-item span,
+        .genesis-sidebar.is-collapsed .genesis-new-model span,
+        .genesis-sidebar.is-collapsed .genesis-add-photos span,
+        .genesis-sidebar.is-collapsed .genesis-profile-text,
+        .genesis-sidebar.is-collapsed .genesis-profile-btn > svg {
+            display: none;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-collapse-btn svg {
+            transform: rotate(-90deg);
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-new-model,
+        .genesis-sidebar.is-collapsed .genesis-add-photos,
+        .genesis-sidebar.is-collapsed .genesis-side-item,
+        .genesis-sidebar.is-collapsed .genesis-profile-btn {
+            width: 46px;
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        /* A gap where the Workspace label was. */
+        .genesis-sidebar.is-collapsed .genesis-add-photos {
+            margin-bottom: 18px;
+        }
+
+        .genesis-sidebar.is-collapsed .genesis-profile {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+
+    /* The collapsed sidebar is too narrow for the account menu, so let
+           it open past the sidebar's edge, over the page. */
+    .genesis-sidebar.is-collapsed {
+        overflow: visible;
+        position: relative;
+        z-index: 20;
+    }
+
+        .genesis-sidebar.is-collapsed .genesis-profile-menu {
+            left: 0;
+            right: auto;
+            width: 260px;
+        }
+}
 
 /* ============================================================
    Responsive layout: tablets (<=1100px) and phones (<=760px)
@@ -1830,12 +2751,12 @@ html {
     }
 
     .forma-logo {
+        width: auto;
         border-right: none;
         padding-right: 0;
     }
 
-    .forma-logo-text,
-    .forma-status {
+    .forma-logo-text {
         display: none;
     }
 
@@ -1851,9 +2772,14 @@ html {
             display: none;
         }
 
-    /* Sidebar becomes a slide-in drawer */
-    .genesis-body {
+    /* Sidebar becomes a slide-in drawer, so it never collapses */
+    .genesis-body,
+    .genesis-shell.is-sidebar-collapsed .genesis-body {
         grid-template-columns: 1fr;
+    }
+
+    .genesis-collapse-btn {
+        display: none;
     }
 
     .genesis-sidebar {
@@ -1944,7 +2870,7 @@ html {
         font-size: 1.4rem;
     }
 
-    /* Library: subtabs and search on their own rows, sort + action share one */
+    /* Library: subtabs, search and sort each on their own row */
     .library-toolbar {
         flex-wrap: wrap;
         gap: 10px;
@@ -1967,11 +2893,6 @@ html {
         flex: 1;
     }
 
-    .library-toolbar > .forma-btn {
-        flex: 1;
-        justify-content: center;
-    }
-
     .library-grid,
     .library-photo-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1979,7 +2900,8 @@ html {
         padding: 0 16px;
     }
 
-    .library-thumb {
+    .library-thumb,
+    .library-photo-thumbgrid {
         height: 96px;
     }
 
@@ -2109,435 +3031,9 @@ html {
     }
 }
 
-/* ============================================================
-   Theme 2 layout (Jia Ming's Figma design)
-   - No top nav on wider screens: the sidebar holds the logo, every
-     page and the account menu, and can collapse to icons only.
-   - Home: welcome + "Recent" with Your files / Generated models tabs.
-   - Login: hero panel on the left, form on the right.
-   Kept at the very end of this file: several rules here override
-   earlier ones, and in CSS the later rule wins.
-   ============================================================ */
+/* ---------- Login: split layout (hero left, form right) ---------- */
 
-/* ---------- Shell ---------- */
-
-.genesis-body {
-    grid-template-columns: 232px minmax(0, 1fr);
-    transition: grid-template-columns 0.18s ease;
-}
-
-.genesis-shell.is-sidebar-collapsed .genesis-body {
-    grid-template-columns: 68px minmax(0, 1fr);
-}
-
-/* ---------- Sidebar ---------- */
-
-.genesis-sidebar {
-    padding: 16px 14px 14px;
-    gap: 4px;
-}
-
-.genesis-side-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 14px;
-}
-
-.genesis-side-logo {
-    border-right: none;
-    padding-right: 0;
-    min-width: 0;
-}
-
-.genesis-collapse-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    flex: none;
-    border-radius: 8px;
-    border: 1px solid var(--forma-border-strong);
-    background: transparent;
-    color: var(--forma-text-muted);
-    cursor: pointer;
-}
-
-    .genesis-collapse-btn:hover {
-        color: var(--forma-text);
-        background: var(--forma-panel-alt);
-    }
-
-    /* The chevron icon points down; turn it to point left while expanded. */
-    .genesis-collapse-btn svg {
-        transform: rotate(90deg);
-    }
-
-.genesis-new-model,
-.genesis-add-photos {
-    width: 100%;
-    justify-content: flex-start;
-    padding: 10px 12px;
-}
-
-.genesis-new-model {
-    margin-bottom: 6px;
-}
-
-.genesis-add-photos {
-    margin-bottom: 8px;
-}
-
-    .genesis-side-item span,
-    .genesis-new-model span,
-    .genesis-add-photos span {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-/* ---------- Profile at the bottom of the sidebar ---------- */
-
-.genesis-profile {
-    position: relative;
-    margin-top: auto;
-    padding-top: 12px;
-    border-top: 1px solid var(--forma-border);
-}
-
-.genesis-profile-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 8px;
-    border-radius: 8px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--forma-text);
-    font-family: inherit;
-    text-align: left;
-    cursor: pointer;
-}
-
-    .genesis-profile-btn:hover,
-    .genesis-profile-btn.is-active {
-        background: var(--forma-panel-alt);
-    }
-
-    .genesis-profile-btn .forma-avatar {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex: none;
-    }
-
-    /* Chevron points up, toward the menu that opens above. */
-    .genesis-profile-btn > svg {
-        flex: none;
-        color: var(--forma-text-dim);
-        transform: rotate(180deg);
-    }
-
-.genesis-profile-text {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    flex: 1;
-}
-
-.genesis-profile-name,
-.genesis-profile-email {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.genesis-profile-name {
-    font-size: 0.84rem;
-    font-weight: 600;
-}
-
-.genesis-profile-email {
-    font-family: var(--forma-font-mono);
-    font-size: 0.68rem;
-    color: var(--forma-text-dim);
-}
-
-.genesis-profile-menu {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: calc(100% + 6px);
-    min-width: 210px;
-    padding: 12px;
-    border-radius: 10px;
-    background: var(--forma-panel);
-    border: 1px solid var(--forma-border-strong);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
-    z-index: 50;
-}
-
-/* ---------- Collapsed sidebar: icons only (wider screens) ---------- */
-
-@media (min-width: 761px) {
-    /* The sidebar replaces the top nav. */
-    .forma-nav {
-        display: none;
-    }
-
-    .genesis-sidebar.is-collapsed {
-        padding-left: 10px;
-        padding-right: 10px;
-        align-items: center;
-    }
-
-        .genesis-sidebar.is-collapsed .genesis-side-top {
-            flex-direction: column;
-        }
-
-        .genesis-sidebar.is-collapsed .forma-logo-text,
-        .genesis-sidebar.is-collapsed .genesis-side-label,
-        .genesis-sidebar.is-collapsed .genesis-side-item span,
-        .genesis-sidebar.is-collapsed .genesis-new-model span,
-        .genesis-sidebar.is-collapsed .genesis-add-photos span,
-        .genesis-sidebar.is-collapsed .genesis-profile-text,
-        .genesis-sidebar.is-collapsed .genesis-profile-btn > svg {
-            display: none;
-        }
-
-        .genesis-sidebar.is-collapsed .genesis-collapse-btn svg {
-            transform: rotate(-90deg);
-        }
-
-        .genesis-sidebar.is-collapsed .genesis-new-model,
-        .genesis-sidebar.is-collapsed .genesis-add-photos,
-        .genesis-sidebar.is-collapsed .genesis-side-item,
-        .genesis-sidebar.is-collapsed .genesis-profile-btn {
-            width: 44px;
-            justify-content: center;
-            padding-left: 0;
-            padding-right: 0;
-        }
-
-        .genesis-sidebar.is-collapsed .genesis-profile {
-            width: 100%;
-            display: flex;
-            justify-content: center;
-        }
-
-        .genesis-sidebar.is-collapsed .genesis-profile-menu {
-            left: 0;
-            right: auto;
-        }
-}
-
-/* ---------- Phones: the sidebar is a drawer, so never collapsed ---------- */
-
-@media (max-width: 760px) {
-    .genesis-body,
-    .genesis-shell.is-sidebar-collapsed .genesis-body {
-        grid-template-columns: 1fr;
-    }
-
-    /* The drawer can't collapse; the header has the menu button. */
-    .genesis-collapse-btn {
-        display: none;
-    }
-
-    .genesis-sidebar .forma-logo-text {
-        display: inline;
-    }
-}
-
-/* ---------- Home ---------- */
-
-.home-welcome {
-    margin-bottom: 36px;
-}
-
-    .home-welcome h1 {
-        font-size: 2.3rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        color: var(--forma-heading);
-    }
-
-.home-recent-v2-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 18px;
-}
-
-    .home-recent-v2-header .home-section-title {
-        margin-bottom: 10px !important;
-    }
-
-.home-recent-tabs {
-    display: flex;
-    gap: 20px;
-    border-bottom: 1px solid var(--forma-border);
-}
-
-.home-recent-tab {
-    padding: 0 0 10px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    background: transparent;
-    color: var(--forma-text-muted);
-    font-family: inherit;
-    font-size: 0.84rem;
-    cursor: pointer;
-}
-
-    .home-recent-tab:hover {
-        color: var(--forma-text);
-    }
-
-    .home-recent-tab.is-active {
-        color: var(--forma-text);
-        border-bottom-color: var(--forma-blue);
-    }
-
-.home-file-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 14px;
-}
-
-.home-file-card {
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    overflow: hidden;
-    text-align: left;
-    cursor: pointer;
-}
-
-    .home-file-card:hover {
-        border-color: var(--forma-border-strong);
-    }
-
-.home-file-preview {
-    position: relative;
-    aspect-ratio: 4 / 3;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--forma-panel-alt);
-    color: var(--forma-text-dim);
-    border-bottom: 1px solid var(--forma-border);
-}
-
-    .home-file-preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
-    }
-
-.home-file-type {
-    position: absolute;
-    left: 10px;
-    bottom: 10px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: rgba(var(--forma-bg-rgb), 0.85);
-    border: 1px solid var(--forma-border-strong);
-    color: var(--forma-teal-text);
-}
-
-.home-file-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 12px;
-    min-width: 0;
-}
-
-.home-file-name {
-    font-size: 0.86rem;
-    font-weight: 600;
-    color: var(--forma-text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.home-file-kind {
-    font-family: var(--forma-font-mono);
-    font-size: 0.66rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--forma-text-muted);
-}
-
-.home-file-time {
-    font-size: 0.72rem;
-    color: var(--forma-text-dim);
-    margin-top: 6px;
-}
-
-.home-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding: 40px 24px;
-    text-align: center;
-    color: var(--forma-text-muted);
-}
-
-    .home-empty svg {
-        color: var(--forma-teal-text);
-    }
-
-    .home-empty h3 {
-        font-size: 1.05rem;
-        color: var(--forma-heading);
-    }
-
-    .home-empty p {
-        max-width: 42ch;
-        font-size: 0.86rem;
-    }
-
-    .home-empty .forma-btn {
-        margin-top: 6px;
-    }
-
-@media (max-width: 760px) {
-    .home-welcome {
-        margin-bottom: 24px;
-    }
-
-        .home-welcome h1 {
-            font-size: 1.7rem;
-        }
-
-    .home-recent-v2-header {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .home-file-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-    }
-}
-
-/* ---------- Login ---------- */
-
-.genesis-login-v2 {
+.genesis-login-split {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
     align-items: stretch;
@@ -2551,7 +3047,7 @@ html {
     gap: 32px;
     padding: 48px 64px;
     border-right: 1px solid var(--forma-border);
-    background: radial-gradient(circle at 15% 85%, rgba(var(--forma-accent-rgb), 0.16), transparent 45%), radial-gradient(circle at 80% 15%, rgba(var(--forma-coral-rgb), 0.08), transparent 40%), linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-sidebar);
+    background: radial-gradient(circle at 15% 85%, rgba(var(--forma-accent-rgb), 0.18), transparent 45%), radial-gradient(circle at 80% 15%, rgba(var(--forma-coral-rgb), 0.1), transparent 40%), linear-gradient(var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, linear-gradient(90deg, var(--forma-border) 1px, transparent 1px) 0 0 / 56px 56px, var(--forma-sidebar);
 }
 
 .login-hero-logo {
@@ -2579,7 +3075,7 @@ html {
 }
 
 .login-hero-copy p:not(.eyebrow) {
-    color: var(--forma-text-soft);
+    color: var(--forma-text);
     font-size: 1rem;
     line-height: 1.6;
 }
@@ -2618,19 +3114,44 @@ html {
 }
 
 /* The form sits straight on the page, not in a card. */
-.genesis-login-v2 .login-card {
+.genesis-login-split .login-card {
     background: transparent;
     border: none;
     padding: 0;
 }
 
 /* The hero already shows the logo on wider screens. */
-.genesis-login-v2 .login-logo {
+.genesis-login-split .login-logo {
     display: none;
 }
 
+/* "or continue with" line between the email form and Google sign-in. */
+.login-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.74rem;
+    color: var(--forma-text-dim);
+}
+
+    .login-divider::before,
+    .login-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--forma-border);
+    }
+
+.login-google {
+    gap: 10px;
+}
+
+    .login-google svg {
+        flex: none;
+    }
+
 @media (max-width: 900px) {
-    .genesis-login-v2 {
+    .genesis-login-split {
         grid-template-columns: 1fr;
     }
 
@@ -2638,7 +3159,7 @@ html {
         display: none;
     }
 
-    .genesis-login-v2 .login-logo {
+    .genesis-login-split .login-logo {
         display: flex;
     }
 }

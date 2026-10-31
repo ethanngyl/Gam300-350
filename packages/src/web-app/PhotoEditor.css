@@ -314,6 +314,9 @@
     .photo-editor-preview-actions .forma-btn {
         flex: 1;
         justify-content: center;
+        white-space: nowrap;
+        padding-left: 10px;
+        padding-right: 10px;
     }
 
         /* Stops the browser selecting text while the button is held down. */
@@ -402,22 +405,11 @@
             font-size: 2rem;
         }
 
+    /* Buttons stay under the title and description, as on phones. */
     .photo-editor-heading {
-        flex-direction: row;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 24px;
+        gap: 16px;
         margin-bottom: 24px;
     }
-
-        .photo-editor-heading > div {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .photo-editor-heading > .forma-btn {
-            flex: none;
-        }
 
     .photo-editor-summary {
         flex-direction: row;
@@ -456,11 +448,35 @@
         gap: 20px;
     }
 
-    /* Panel stays in view while scrolling a long photo grid. */
+    /* Panel stays in view while scrolling a long photo grid, and scrolls on
+       its own (above the sticky footer) instead of pushing the sliders off
+       the page. */
     .photo-editor-panel {
         position: sticky;
         top: 16px;
+        max-height: calc(100dvh - 60px - 32px - 76px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
     }
+
+    /* Keep the preview compact so the sliders stay close by. */
+    .photo-editor-preview-canvas {
+        max-height: 180px;
+    }
+
+    /* Same width as the side panel, so the two line up. */
+    .photo-editor-summary-actions {
+        width: 320px;
+    }
+
+        .photo-editor-summary-actions .forma-btn {
+            flex: 1;
+            justify-content: center;
+            white-space: nowrap;
+            padding-left: 10px;
+            padding-right: 10px;
+        }
 }
 
 /* ============================================================
@@ -686,7 +702,13 @@
     cursor: crosshair;
 }
 
-/* "Use original photos" switch in the bottom bar */
+/* "Use original photos" and "Remove background" switches in the bottom bar */
+.photo-editor-footer-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+}
+
 .photo-editor-originals {
     display: flex;
     align-items: center;

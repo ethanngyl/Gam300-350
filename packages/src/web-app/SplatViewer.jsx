@@ -11,11 +11,7 @@ it uses the Codefine engine's own renderer compiled to WebAssembly (see
 EngineSplatViewer.jsx). If that is unavailable, or the user switches to it,
 it uses @mkkellogg/gaussian-splats-3d for the WebGL rendering, depth sorting
 and orbit controls, reading the scene's up direction from the .ply header so
-any scene renders upright.
-- readCameraUp(url)
-Private helper. Fetches only the first 4 KB of the .ply (HTTP Range) and
-reads the "Vertical axis" line Brush writes into the header. Returns it as
-[x, y, z], or [0, 1, 0] (+Y) if it can't be found.
+any scene renders upright (readCameraUp, see plyHeader.js).
 - ThreeSplatViewer({ url })
 Private component. Creates the @mkkellogg viewer, loads the .ply at url and
 starts rendering. Stops and disposes the viewer when url changes or the
@@ -30,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d'
 import EngineSplatViewer from './EngineSplatViewer.jsx'
 import { isEngineAvailable } from './codefineEngine.js'
+import { readCameraUp } from './plyHeader.js'
 
 const RENDERER_PREF_KEY = 'genesis.splatRenderer'
 
@@ -47,35 +44,6 @@ function writeRendererPref(renderer) {
   } catch {
     /* storage blocked, the choice just isn't remembered */
   }
-}
-
-/**
- * Read the scene's "up" direction from a Brush-exported .ply header so arbitrary
- * scenes render upright. Only the first few KB are fetched (HTTP Range).
- * Falls back to +Y if not found.
- */
-async function readCameraUp(url) {
-  try {
-    const res = await fetch(url, { headers: { Range: 'bytes=0-4095' } })
-    // Blob URLs (a .ply opened from disk) may ignore Range, so stop reading
-    // after 4 KB instead of pulling in the whole file
-    const reader = res.body.getReader()
-    const chunks = []
-    let received = 0
-    while (received < 4096) {
-      const { done, value } = await reader.read()
-      if (done) break
-      chunks.push(value)
-      received += value.length
-    }
-    reader.cancel().catch(() => {})
-    const text = new TextDecoder().decode(await new Blob(chunks).arrayBuffer())
-    const m = text.match(/Vertical axis:\s*([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/)
-    if (m) return [Number(m[1]), Number(m[2]), Number(m[3])]
-  } catch {
-    /* ignore — use default */
-  }
-  return [0, 1, 0]
 }
 
 /**
@@ -196,7 +164,7 @@ export default function SplatViewer({ url }) {
           className={`btn ${active === 'engine' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => choose('engine')}
           disabled={!engineAvailable}
-          title={engineAvailable ? 'Render with the Codefine engine (WebAssembly)' : engineNotice ?? undefined}
+          title={engineAvailable ? 'Render with the Genesis Alpha Build engine (WebAssembly)' : engineNotice ?? undefined}
         >
           Engine renderer
         </button>

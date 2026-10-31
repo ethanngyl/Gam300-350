@@ -1,3 +1,9 @@
-jobs/
+# Job working dirs, except each run's metrics.json and the rolling
+# metrics.jsonl (see the repo-root .gitignore for why it is written this way).
+/jobs/*
+!/jobs/*_out/
+/jobs/*_out/*
+!/jobs/*_out/metrics.json
+!/jobs/metrics.jsonl
 # Per-machine settings with the shared API key (see .env.example)
 .env

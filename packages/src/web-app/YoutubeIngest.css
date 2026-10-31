@@ -1,8 +1,8 @@
 /* ============================================================
    YoutubeIngest - GENESIS theme
    Uses the --forma-* variables from AppTheme.css.
-   Layout is mobile-first: one column by default, two columns
-   (link form beside status) only on wide screens.
+   Layout is mobile-first and stays one column on every screen size:
+   the link form spans the page and the status card appears under it.
    ============================================================ */
 
 .yt {
@@ -12,17 +12,8 @@
 /* ---------- Heading ---------- */
 
 .yt-heading {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
     margin-bottom: 20px;
 }
-
-    /* On phones the Back button sits above the title. */
-    .yt-heading > .forma-btn {
-        order: -1;
-        align-self: flex-start;
-    }
 
 .yt .yt-title {
     font-size: 1.5rem;
@@ -60,24 +51,50 @@
     color: var(--forma-heading);
 }
 
-/* ---------- Form ---------- */
+/* ---------- Link box: URL, fps and Process video on one row ---------- */
 
-.yt-form {
-    display: flex;
-    flex-direction: column;
+.yt-source {
     gap: 14px;
 }
+
+.yt .yt-source-label {
+    margin: 0;
+}
+
+/* On phones the link takes its own row; fps and the button share the next. */
+.yt-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.yt-input-wrap {
+    position: relative;
+    flex: 1 1 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+    /* Link icon inside the field, on the left. */
+    .yt-input-wrap > svg {
+        position: absolute;
+        left: 14px;
+        color: var(--forma-text-dim);
+        pointer-events: none;
+    }
 
 .yt-input {
     width: 100%;
     box-sizing: border-box;
-    background: var(--forma-panel-alt);
+    background: var(--forma-bg);
     border: 1px solid var(--forma-border-strong);
     border-radius: 8px;
     color: var(--forma-text);
-    font-family: inherit;
-    font-size: 0.92rem;
-    padding: 12px 14px;
+    font-family: var(--forma-font-mono);
+    font-size: 0.9rem;
+    padding: 13px 14px 13px 42px;
     outline: none;
 }
 
@@ -89,41 +106,37 @@
         opacity: 0.6;
     }
 
-/* fps box and Extract button share one row; the button fills the rest. */
-.yt-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 12px;
-}
-
+/* fps number with its unit written after it, same height as the field. */
 .yt-fps {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
     flex: none;
+    padding: 0 12px;
+    background: var(--forma-bg);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
     font-family: var(--forma-font-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--forma-text-dim);
 }
 
-    .yt-fps input {
-        width: 84px;
-        box-sizing: border-box;
-        background: var(--forma-panel-alt);
-        border: 1px solid var(--forma-border-strong);
-        border-radius: 8px;
-        color: var(--forma-text);
-        font-family: var(--forma-font-mono);
-        font-size: 0.86rem;
-        padding: 10px 12px;
-        outline: none;
+    .yt-fps:focus-within {
+        border-color: var(--forma-blue);
     }
 
-        .yt-fps input:focus {
-            border-color: var(--forma-blue);
-        }
+    .yt-fps input {
+        width: 52px;
+        background: transparent;
+        border: none;
+        color: var(--forma-text);
+        font-family: var(--forma-font-mono);
+        font-size: 0.9rem;
+        padding: 12px 0;
+        outline: none;
+    }
 
         .yt-fps input:disabled {
             opacity: 0.6;
@@ -132,8 +145,66 @@
 .yt-submit {
     flex: 1;
     justify-content: center;
-    padding: 11px 22px;
+    gap: 8px;
+    padding: 12px 22px;
 }
+
+.yt-source .training-quality {
+    max-width: 360px;
+}
+
+/* ---------- Preview box: thumbnail, or how to start ---------- */
+
+.yt-preview-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 36px 20px 28px;
+    border: 1px dashed var(--forma-border-strong);
+    border-radius: 12px;
+    background: var(--forma-panel);
+    text-align: center;
+}
+
+.yt-preview-icon {
+    color: var(--forma-text-dim);
+    margin-bottom: 6px;
+}
+
+.yt .yt-preview-title {
+    color: var(--forma-text-muted);
+    font-size: 0.95rem;
+}
+
+.yt .yt-preview-formats {
+    font-family: var(--forma-font-mono);
+    font-size: 0.74rem;
+    color: var(--forma-text-dim);
+}
+
+.yt .yt-preview-box .yt-hint {
+    max-width: 640px;
+    margin-top: 10px;
+}
+
+/* Thumbnail of the linked video, in the preview box. */
+.yt-preview {
+    width: 100%;
+    max-width: 420px;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-bg);
+}
+
+    .yt-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
 
 .yt .yt-hint {
     color: var(--forma-text-dim);
@@ -148,16 +219,6 @@
 }
 
 /* ---------- Status ---------- */
-
-.yt-empty {
-    border: 1px dashed var(--forma-border-strong);
-    border-radius: 10px;
-    padding: 24px 18px;
-    text-align: center;
-    color: var(--forma-text-dim);
-    font-size: 0.84rem;
-    line-height: 1.6;
-}
 
 .yt-status {
     display: flex;
@@ -215,84 +276,29 @@
     color: var(--forma-text-muted);
 }
 
-.yt-bar {
-    height: 8px;
-    background: var(--forma-panel-alt);
-    border-radius: 999px;
-    overflow: hidden;
+/* Extracted frames, shown in place of the bar once the job is done. */
+.yt-frame-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
 }
 
-.yt-bar-fill {
-    height: 100%;
-    background: var(--forma-blue);
-    border-radius: 999px;
-    transition: width 0.4s ease;
-}
-
-.yt-steps {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.yt-step {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.82rem;
-    color: var(--forma-text-dim);
-}
-
-.yt-step-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 1px solid var(--forma-border-strong);
-    flex: none;
-}
-
-.yt-step-done {
-    color: var(--forma-text-muted);
-}
-
-    .yt-step-done .yt-step-dot {
-        background: var(--forma-green);
-        border-color: var(--forma-green);
-    }
-
-.yt-step-active {
-    color: var(--forma-text);
-    font-weight: 600;
-}
-
-    .yt-step-active .yt-step-dot {
-        background: var(--forma-coral);
-        border-color: var(--forma-coral);
+    .yt-frame-grid img {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        display: block;
+        border-radius: 6px;
+        border: 1px solid var(--forma-border);
+        background: var(--forma-panel-alt);
     }
 
 .yt-download {
     align-self: stretch;
     justify-content: center;
     text-decoration: none;
-}
-
-.yt-log {
-    margin: 0;
-    max-height: 220px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    background: var(--forma-bg);
-    border: 1px solid var(--forma-border);
-    border-radius: 8px;
-    padding: 12px;
-    font-family: var(--forma-font-mono);
-    font-size: 0.7rem;
-    line-height: 1.6;
-    color: var(--forma-text-muted);
 }
 
 /* ---------- Tablets and up ---------- */
@@ -306,31 +312,18 @@
             font-size: 2rem;
         }
 
-    /* Back button returns to the right of the title. */
     .yt-heading {
-        flex-direction: row;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 24px;
         margin-bottom: 24px;
     }
-
-        .yt-heading > div {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .yt-heading > .forma-btn {
-            order: 0;
-            flex: none;
-        }
 
     .yt-card {
         padding: 22px;
     }
 
-    .yt-fps input {
-        width: 96px;
+    /* Link, fps and Process video on one row. */
+    .yt-input-wrap {
+        flex-basis: 0;
+        flex-grow: 1;
     }
 
     .yt-submit {
@@ -339,14 +332,5 @@
 
     .yt-download {
         align-self: flex-start;
-    }
-}
-
-/* ---------- Wide screens: form beside status ---------- */
-
-@media (min-width: 981px) {
-    .yt-layout {
-        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-        gap: 20px;
     }
 }

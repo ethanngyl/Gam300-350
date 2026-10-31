@@ -8,13 +8,19 @@
 \brief
 In-browser photo capture screen for scanning an object, laid out to match
 the GENESIS theme: a camera panel (live preview, manual or interval-based
-auto-capture with a user-adjustable photo cap) beside a batch panel
+auto-capture with a user-adjustable photo cap, and the Space key as a
+shortcut for both) beside a batch panel
 (drag-and-drop and file-picker uploads, live thumbnails with per-photo
 removal, and the button that sends the batch for reconstruction).
 Each photo is checked in the background for blur, bad exposure and
 near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
-Photos picked with the sidebar's Add photos button arrive as initialFiles.
+Taking a photo plays the camera shutter sound (quieter for auto-capture).
+If the camera can't start, the preview reads "Click to enable camera" and
+clicking it asks for the camera again. The Remove background option and
+the Model detail slider (training iteration cap) are here and in the Photo
+Editor; coming back from there ("Back to camera"), initialPhotos brings
+the batch and those choices back with it.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -23,8 +29,18 @@ import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
+import TrainingQualitySlider from './TrainingQualitySlider.jsx';
+import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 
 const HARD_CAP = 200;
+
+// Space is the capture shortcut, except while typing or on a focused
+// control outside the camera panel, where it keeps its normal job (e.g.
+// pressing that button). The camera's own buttons always use the shortcut.
+function isShortcutBlockedBy(target) {
+    if (target.closest?.('.capture-controls')) return false;
+    return Boolean(target.closest?.('input, textarea, select, button, a, [contenteditable="true"], [role="dialog"]'));
+}
 
 // Builds the warning above the buttons, e.g. "3 look blurry, 2 are near-duplicates".
 const ISSUE_SUMMARY_PHRASES = {
@@ -45,8 +61,20 @@ function createBatchPhoto(file) {
     };
 }
 
-// initialFiles: photos chosen with the sidebar's Add photos button, or null.
-function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, initialFiles = null }) {
+// addedFiles: photos chosen with the sidebar's Add photos button before
+// this page opened; they start in the batch. While the page is open,
+// onRegisterAddFiles(handler) hands App a function that adds more.
+// initialPhotos: { files, removeBackground, trainIters } handed back from the Photo
+// Editor, or null when the page is opened fresh.
+function CameraCapture({
+    onBatchReady,
+    onReviewPhotos,
+    onBack,
+    uploadError,
+    initialPhotos = null,
+    addedFiles = null,
+    onRegisterAddFiles = null,
+}) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -58,9 +86,13 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
+    // Bumped by "Click to enable camera" to ask for the camera again.
+    const [cameraRequestCount, setCameraRequestCount] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [photos, setPhotos] = useState(() =>
-        (initialFiles ?? []).filter((file) => file.type.startsWith('image/')).map(createBatchPhoto)
+        [...(initialPhotos?.files ?? []), ...(addedFiles ?? [])]
+            .filter((file) => file.type.startsWith('image/'))
+            .map(createBatchPhoto)
     );
 
     const [captureFeedback, setCaptureFeedback] = useState(null);
@@ -73,7 +105,10 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     const [maxCaptures, setMaxCaptures] = useState(50);
     // Mask out the background before reconstruction. Needed for turntable
     // captures, where the static background makes the model come out flat.
-    const [removeBackground, setRemoveBackground] = useState(false);
+    // Also set in the Photo Editor, and kept when coming back from it.
+    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Model detail (training iteration cap), also set in the Photo Editor.
+    const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
@@ -116,7 +151,13 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                 streamRef.current = null;
             }
         };
-    }, []);
+    }, [cameraRequestCount]);
+
+    function retryCamera() {
+        playSound('tap');
+        setError(null);
+        setCameraRequestCount((count) => count + 1);
+    }
 
     useEffect(() => {
         photosRef.current = photos;
@@ -178,6 +219,20 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
         return newPhotos.length;
     }, []);
 
+    // While this page is open, the sidebar's Add photos button adds to
+    // this batch through the handler registered here.
+    useEffect(() => {
+        if (!onRegisterAddFiles) return;
+        onRegisterAddFiles((files) => {
+            const addedCount = addFiles(files);
+            if (addedCount > 0) {
+                setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
+                setTimeout(() => setUploadFeedback(null), 2000);
+            }
+        });
+        return () => onRegisterAddFiles(null);
+    }, [onRegisterAddFiles, addFiles]);
+
     const capturePhoto = useCallback((showFeedback = true) => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -187,6 +242,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Shutter sound the moment the frame is grabbed. Quieter for
+        // auto-capture, which repeats every few seconds.
+        playSound('camera', showFeedback ? 1 : 0.5);
 
         canvas.toBlob(
             (blob) => {
@@ -219,6 +277,26 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
 
         return () => clearInterval(id);
     }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto, photos.length]);
+
+    // Space: take a photo in Manual mode, start / stop in Auto mode.
+    useEffect(() => {
+        function handleKeyDown(event) {
+            if (event.code !== 'Space' || event.repeat || !stream) return;
+            if (isLibraryPickerOpen || isShortcutBlockedBy(event.target)) return;
+            event.preventDefault();
+            // A focused camera button would otherwise also be pressed on key-up.
+            if (event.target.closest?.('.capture-controls')) event.target.blur();
+            if (captureMode === 'manual') {
+                capturePhoto(true);
+            } else {
+                playSound('tap');
+                setIsAutoCapturing((wasCapturing) => !wasCapturing);
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [captureMode, stream, capturePhoto, isLibraryPickerOpen]);
 
     function handleModeChange(mode) {
         setCaptureMode(mode);
@@ -281,14 +359,14 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
     // this page and releases the thumbnails; the File objects stay valid.
     function handleReview() {
         setIsAutoCapturing(false);
-        onReviewPhotos(photos.map((p) => p.file), { removeBackground });
+        onReviewPhotos(photos.map((p) => p.file), { removeBackground, trainIters });
     }
 
     // "Train model" is the only trigger that starts the reconstruction.
     function handleTrain() {
         const files = photos.map((p) => p.file);
         if (onBatchReady) {
-            onBatchReady(files, { removeBackground });
+            onBatchReady(files, { removeBackground, trainIters });
         }
 
         setIsBatchSent(true);
@@ -309,7 +387,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                 <button
                     className="forma-btn capture-back"
                     onClick={() => {
-                        playSound('click3');
+                        playSound('back');
                         onBack();
                     }}
                 >
@@ -323,11 +401,18 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-                        {!stream && (
+                        {!stream && !error && (
                             <div className="capture-placeholder">
                                 <Icon name="camera" size={34} />
-                                <span>{error ? 'Camera not available' : 'Waiting for camera...'}</span>
+                                <span>Waiting for camera...</span>
                             </div>
+                        )}
+                        {!stream && error && (
+                            <button type="button" className="capture-placeholder capture-enable" onClick={retryCamera}>
+                                <Icon name="camera" size={34} />
+                                <span>Camera not available</span>
+                                <span className="capture-enable-hint">Click to enable camera</span>
+                            </button>
                         )}
 
                         <span className="capture-corner capture-corner-tl"></span>
@@ -335,22 +420,22 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         <span className="capture-corner capture-corner-bl"></span>
                         <span className="capture-corner capture-corner-br"></span>
 
-                        <span className={stream ? 'capture-live is-live' : 'capture-live'}>
-                            <span className="capture-live-dot"></span>
-                            {stream ? 'Live' : 'Offline'}
-                        </span>
+                        {stream && (
+                            <span className="capture-live is-live">
+                                <span className="capture-live-dot"></span>
+                                Live
+                            </span>
+                        )}
                     </div>
 
                     {error && <p className="capture-error">{error}</p>}
-
-                    {captureFeedback && <div className="capture-feedback">{captureFeedback}</div>}
 
                     <div className="capture-controls">
                         <div className="capture-mode-toggle">
                             <button
                                 className={captureMode === 'manual' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
                                 onClick={() => {
-                                    playSound('click');
+                                    playSound('tap');
                                     handleModeChange('manual');
                                 }}
                             >
@@ -359,7 +444,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                             <button
                                 className={captureMode === 'auto' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
                                 onClick={() => {
-                                    playSound('click');
+                                    playSound('tap');
                                     handleModeChange('auto');
                                 }}
                             >
@@ -371,24 +456,26 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                             <button
                                 className="forma-btn capture-btn"
                                 onClick={() => {
-                                    playSound('click');
                                     capturePhoto(true);
                                 }}
                                 disabled={!stream}
                             >
                                 <Icon name="camera" size={16} /> Capture photo
+                                <kbd className="capture-key">Space</kbd>
                             </button>
                         ) : (
                             <div className="capture-auto-controls">
                                 <button
-                                    className={isAutoCapturing ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                                    className={isAutoCapturing ? 'forma-btn capture-btn is-capturing' : 'forma-btn capture-btn'}
                                     onClick={() => {
-                                        playSound('click');
+                                        playSound('tap');
                                         setIsAutoCapturing((prev) => !prev);
                                     }}
                                     disabled={!stream}
                                 >
-                                    {isAutoCapturing ? 'Stop auto-capture' : 'Start auto-capture'}
+                                    <Icon name="camera" size={16} />
+                                    {isAutoCapturing ? ' Stop auto-capture' : ' Start auto-capture'}
+                                    <kbd className="capture-key">Space</kbd>
                                 </button>
 
                                 <label className="capture-interval-label">
@@ -428,6 +515,9 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                             </div>
                         )}
                     </div>
+
+                    {/* Below the buttons, so showing it doesn't push them down. */}
+                    {captureFeedback && <div className="capture-feedback">{captureFeedback}</div>}
                 </div>
 
                 <div className="forma-card capture-batch">
@@ -442,7 +532,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             handleBrowseClick();
                         }}
                         role="button"
@@ -456,7 +546,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                             className="forma-btn"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                playSound('click');
+                                playSound('tap');
                                 handleBrowseClick();
                             }}
                         >
@@ -478,7 +568,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         type="button"
                         className="forma-btn capture-library-btn"
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             setIsLibraryPickerOpen(true);
                         }}
                     >
@@ -508,7 +598,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                                     <button
                                         className="capture-thumb-remove"
                                         onClick={() => {
-                                            playSound('click');
+                                            playSound('tap');
                                             removePhoto(photo.id);
                                         }}
                                         aria-label="Remove photo"
@@ -524,13 +614,18 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         <input
                             type="checkbox"
                             checked={removeBackground}
-                            onChange={(e) => setRemoveBackground(e.target.checked)}
+                            onChange={(e) => {
+                                playSound('tap');
+                                setRemoveBackground(e.target.checked);
+                            }}
                         />
                         <span>
                             Remove background
                             <small>Turn on for turntable captures (object spins, camera stays still).</small>
                         </span>
                     </label>
+
+                    <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} />
 
                     {issueSummary && (
                         <p className="capture-issues" role="status">
@@ -549,7 +644,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         className={issueSummary ? 'forma-btn batch-review-btn is-suggested' : 'forma-btn batch-review-btn'}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('click');
+                            playSound('confirm');
                             handleReview();
                         }}
                     >
@@ -560,7 +655,7 @@ function CameraCapture({ onBatchReady, onReviewPhotos, onBack, uploadError, init
                         className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('click');
+                            playSound('confirm');
                             handleTrain();
                         }}
                     >

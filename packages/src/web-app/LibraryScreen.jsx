@@ -10,9 +10,11 @@ Library tab with two sub-views: a searchable, sortable grid of generated
 3D models and a Photo Library that embeds ImageGallery in its compact
 variant. The 3D Models grid is built from GET /jobs: finished jobs show
 as Ready, jobs still running show as Processing, and failed or cancelled
-jobs are hidden. Viewing a model is left to the Model Viewer tab;
-right-clicking a card here renames or deletes it. The active sub-tab is
-controlled by the parent so the sidebar can open either one directly.
+jobs are hidden. Each card shows the object cut out of one of its photos,
+or its first photo (see ModelCover.jsx).
+Viewing a model is left to the Model Viewer tab; right-clicking a card
+here renames or deletes it. The active sub-tab is controlled by the parent
+so the sidebar can open either one directly.
 **************************************************************************/
 
 import { useCallback, useEffect, useState } from 'react';
@@ -21,6 +23,7 @@ import ImageGallery from './ImageGallery.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import { menuPosition } from './menuPosition.js';
 import ActionDialog from './ActionDialog.jsx';
+import ModelCover from './ModelCover.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 
@@ -28,7 +31,13 @@ import { playSound } from '../audio/Audio.js';
 // produces a model; the others are hidden from the grid.
 const FINISHED_STATUSES = ['done', 'error', 'cancelled'];
 
-function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos }) {
+// When a model was last changed, for the "Last edited" sort. Falls back to
+// when it was made if the server has no update time.
+function lastEditedTime(model) {
+    return Date.parse(model.updatedAt ?? model.createdAt) || 0;
+}
+
+function LibraryScreen({ subTab, onSubTabChange }) {
     const [search, setSearch] = useState('');
     const [sortOrder, setSortOrder] = useState('newest');
     const [jobs, setJobs] = useState([]);
@@ -77,7 +86,10 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             customName: job.name ?? '',
             photoCount: job.images?.length ?? 0,
             createdAt: job.createdAt,
+            updatedAt: job.updatedAt,
             isReady: job.status === 'done',
+            coverUrl: job.cover ?? null,
+            photoUrl: job.images?.[0]?.url ?? null,
         }));
 
     const normalizedSearch = search.trim().toLowerCase();
@@ -85,6 +97,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
         `${model.name} ${model.id}`.toLowerCase().includes(normalizedSearch)
     );
     if (sortOrder === 'oldest') visibleModels.reverse();
+    if (sortOrder === 'lastEdited') visibleModels.sort((a, b) => lastEditedTime(b) - lastEditedTime(a));
     if (sortOrder === 'name') visibleModels.sort((a, b) => a.name.localeCompare(b.name));
 
     function openModelMenu(event, model) {
@@ -110,7 +123,6 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                 setJobs((current) =>
                     current.map((job) => (job.id === model.id ? { ...job, name: result.name } : job))
                 );
-                playSound('click');
                 setDialog(null);
             },
         });
@@ -128,7 +140,6 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
             onConfirm: async () => {
                 await deleteJob(model.id);
                 setJobs((current) => current.filter((job) => job.id !== model.id));
-                playSound('click');
                 setDialog(null);
             },
         });
@@ -140,13 +151,19 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                 <div className="library-subtabs">
                     <button
                         className={subTab === 'models' ? 'library-subtab is-active' : 'library-subtab'}
-                        onClick={() => onSubTabChange('models')}
+                        onClick={() => {
+                            playSound('tap');
+                            onSubTabChange('models');
+                        }}
                     >
                         3D Models
                     </button>
                     <button
                         className={subTab === 'photos' ? 'library-subtab is-active' : 'library-subtab'}
-                        onClick={() => onSubTabChange('photos')}
+                        onClick={() => {
+                            playSound('tap');
+                            onSubTabChange('photos');
+                        }}
                     >
                         Photo Library
                     </button>
@@ -166,20 +183,11 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                     <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
                         <option value="newest">Newest</option>
                         <option value="oldest">Oldest</option>
+                        <option value="lastEdited">Last edited</option>
                         <option value="name">Name</option>
                     </select>
                     <Icon name="chevron" size={13} />
                 </label>
-
-                {subTab === 'models' ? (
-                    <button className="forma-btn forma-btn-primary" onClick={onGenerateModel}>
-                        <Icon name="plus" size={14} /> Generate Model
-                    </button>
-                ) : (
-                    <button className="forma-btn forma-btn-primary" onClick={onUploadPhotos}>
-                        <Icon name="plus" size={14} /> Upload Photos
-                    </button>
-                )}
             </div>
 
             {subTab === 'models' ? (
@@ -192,7 +200,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use Generate Model to create one.'}
+                                : 'No generated models yet. Use New model in the sidebar to create one.'}
                         </p>
                     )}
 
@@ -220,7 +228,7 @@ function LibraryScreen({ subTab, onSubTabChange, onGenerateModel, onUploadPhotos
                                     >
                                         {model.isReady ? 'Ready' : 'Processing'}
                                     </span>
-                                    <Icon name="layers" size={44} />
+                                    <ModelCover coverUrl={model.coverUrl} photoUrl={model.photoUrl} icon="layers" />
                                 </div>
                                 <div className="library-item-name">{model.name}</div>
                                 <div className="library-item-meta">

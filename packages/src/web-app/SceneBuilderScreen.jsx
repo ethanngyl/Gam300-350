@@ -10,79 +10,61 @@ Scene Builder: arrange finished models (Gaussian splats from GET /jobs)
 into a scene, then save it.
 
 Both web and phone: add a model from the library, select it, move /
-rotate / scale it by dragging, drop it to the floor, clean up stray
-splats with one slider, duplicate, delete, undo / redo, save and reopen.
-Web only (advanced): outliner with hide, inspector with exact values and
-keep-proportions scaling, advanced clean-up settings, snapping, splat /
-point render mode, background colour, reset view, screenshot and
-keyboard shortcuts (W/E/R, Ctrl+Z, Ctrl+Y, Delete, Esc).
+rotate / scale it with the viewport gizmo, drop it to the floor, clean up
+stray splats with one slider, duplicate, delete, undo / redo, save and
+reopen. Web only (advanced): outliner with hide and load status,
+inspector with exact values and keep-proportions scaling, advanced
+clean-up settings, snapping, splat / point render mode, background
+colour, screenshot and keyboard shortcuts (1/2/3, W/A/S/D, Ctrl+Z,
+Ctrl+Y, Delete, Esc).
 Phone: bottom tool bar, models list and clean-up in bottom sheets, and a
 cap on how many models a scene can hold.
 
-The viewport talks to the engine only through SceneEngine.js, and saving
-goes through SceneStorage.js. Both are placeholders for now (see those
-files): until the engine exports the scene functions, the viewport shows
-a top-down placement map so the rest of the page can be used and tested.
+The scene's objects (with their undo history) and its id, name and
+settings are owned by the parent (App) so the scene survives switching
+tabs; this screen edits them through onObjectsChange(updater,
+{ mergeKey }) (see useUndoableState.js) and onSceneInfoChange. A whole
+field edit, slider drag, gizmo drag or held W/A/S/D key is one undo step.
+The 3D view is SceneViewport.jsx. Clean-up, render mode, reset view,
+screenshots and an exact drop to floor still wait on the engine (see
+SceneEngine.js), and saving goes through SceneStorage.js.
 **************************************************************************/
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
+import SceneViewport from './SceneViewport.jsx';
+import { jobDisplayName } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
-import {
-    addSceneModel,
-    captureSceneScreenshot,
-    getSceneSplatCount,
-    measureLowestPoint,
-    orbitSceneCamera,
-    panSceneCamera,
-    pickSceneObject,
-    removeSceneModel,
-    renderSceneFrame,
-    resetSceneCamera,
-    setSceneBackground,
-    setSceneRenderMode,
-    setSceneTransform,
-    setSceneTrim,
-    setSceneVisible,
-    startSceneEngine,
-    stopSceneEngine,
-    zoomSceneCamera,
-} from './SceneEngine.js';
-import { SCENES_SAVED_ON_SERVER, deleteScene, listScenes, loadScene, saveScene } from './SceneStorage.js';
+import { captureSceneScreenshot, isSceneEngineReady, measureLowestPoint, resetSceneCamera } from './SceneEngine.js';
+import { NEW_SCENE_INFO, SCENES_SAVED_ON_SERVER, deleteScene, listScenes, loadScene, saveScene } from './SceneStorage.js';
 import './SceneBuilder.css';
 
 const PHONE_MEDIA_QUERY = '(max-width: 760px)';
 
+// gizmoMode is the matching SceneViewport transformMode. W/A/S/D move the
+// selected model in the viewport, so the modes use number keys.
 const TRANSFORM_MODES = [
-    { id: 'move', label: 'Move', icon: 'move', shortcut: 'W' },
-    { id: 'rotate', label: 'Rotate', icon: 'refresh', shortcut: 'E' },
-    { id: 'scale', label: 'Scale', icon: 'cube', shortcut: 'R' },
+    { id: 'move', gizmoMode: 'translate', label: 'Move', icon: 'move', shortcut: '1' },
+    { id: 'rotate', gizmoMode: 'rotate', label: 'Rotate', icon: 'refresh', shortcut: '2' },
+    { id: 'scale', gizmoMode: 'scale', label: 'Scale', icon: 'cube', shortcut: '3' },
 ];
 
 const DEFAULT_TRIM = { strength: 0, minOpacity: 0, maxSplatSize: 0, density: 0 };
-const DEFAULT_BACKGROUND = '#111d29';
 const AXIS_LABELS = ['X', 'Y', 'Z'];
 
-// The placeholder map shows -MAP_RANGE_METRES..+MAP_RANGE_METRES on X and Z.
-const MAP_RANGE_METRES = 5;
-// Drag speed in the engine viewport, where there is no map to measure against.
-const ENGINE_METRES_PER_PIXEL = 0.01;
-const DEGREES_PER_PIXEL = 0.5;
-const SCALE_SPEED_PER_PIXEL = 0.005;
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 20;
 
-const MOVE_SNAP_METRES = 0.25;
-const ROTATE_SNAP_DEGREES = 15;
-const SCALE_SNAP = 0.05;
-
-const MAX_HISTORY = 50;
-// A click that moves less than this many pixels counts as a tap, not a drag.
-const DRAG_THRESHOLD_PIXELS = 4;
+// Gizmo steps while Snap is on.
+const GIZMO_SNAP = { move: 0.25, rotateDegrees: 15, scale: 0.05 };
 
 // Splats are heavy on phone GPUs, so phone scenes are capped.
 const PHONE_MODEL_LIMIT = 4;
 const PHONE_SPLAT_BUDGET = 1500000;
+
+// Counts field edits and slider drags, so two separate edits never share
+// an undo step.
+let lastEditSession = 0;
 
 function useIsPhone() {
     const [isPhone, setIsPhone] = useState(() => window.matchMedia(PHONE_MEDIA_QUERY).matches);
@@ -100,24 +82,24 @@ function useIsPhone() {
 }
 
 function makeObjectId() {
+    // Not crypto.randomUUID: that needs HTTPS, and the app is also opened over plain LAN http.
     return `object-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function createSceneObject(model) {
+// Placed at the origin, named after the model (numbered if it is already
+// in the scene).
+function createSceneObject(model, objects) {
+    const copies = objects.filter((sceneObject) => sceneObject.jobId === model.id).length;
     return {
         objectId: makeObjectId(),
         jobId: model.id,
-        name: model.name,
+        name: copies === 0 ? model.name : `${model.name} (${copies + 1})`,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: [1, 1, 1],
         trim: { ...DEFAULT_TRIM },
         isHidden: false,
     };
-}
-
-function roundToStep(value, step) {
-    return Math.round(value / step) * step;
 }
 
 function clamp(value, min, max) {
@@ -129,12 +111,16 @@ function tidyNumber(value) {
     return Math.round(value * 1000) / 1000;
 }
 
-function getModelName(jobId) {
-    return `Model ${jobId.slice(0, 8)}`;
-}
-
 function getPlyUrl(jobId) {
     return `/jobs/${jobId}/result.ply`;
+}
+
+// Fields where Ctrl+Z should undo the typing rather than the scene.
+// Number fields undo the scene, as every keystroke there is a scene edit.
+function isTextEntry(target) {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable || target.tagName === 'TEXTAREA') return true;
+    return target.tagName === 'INPUT' && target.type !== 'number';
 }
 
 // Three number inputs (X, Y, Z). onEditStart / onEditEnd let the screen
@@ -245,7 +231,7 @@ function SceneListDialog({ onOpenScene, onClose }) {
 
     async function handleDelete(scene) {
         if (!window.confirm(`Delete "${scene.name}"? This can't be undone.`)) return;
-        playSound('click3');
+        playSound('back');
         await deleteScene(scene.id);
         setListVersion((version) => version + 1);
     }
@@ -287,244 +273,63 @@ function SceneListDialog({ onOpenScene, onClose }) {
     );
 }
 
-// Viewport: the engine canvas, plus the top-down placeholder map while
-// the engine can't render scenes yet. Reports drags in pixels; the screen
-// turns them into transform changes.
-function SceneViewport({
+function SceneBuilderScreen({
     objects,
-    selectedObjectId,
-    background,
-    onEngineReadyChange,
-    onSelect,
-    onDragStart,
-    onDrag,
-    onDragEnd,
+    onObjectsChange,
+    onObjectsReset,
+    onUndo,
+    onRedo,
+    canUndo,
+    canRedo,
+    sceneInfo,
+    onSceneInfoChange,
 }) {
-    const containerRef = useRef(null);
-    const canvasRef = useRef(null);
-    const mapRef = useRef(null);
-    const pointerRef = useRef(null);
-    const [isEngineRunning, setIsEngineRunning] = useState(false);
-
-    useEffect(() => {
-        let isCancelled = false;
-        let animationFrameId = 0;
-
-        function renderLoop() {
-            const canvas = canvasRef.current;
-            if (canvas) {
-                const width = canvas.clientWidth * window.devicePixelRatio;
-                const height = canvas.clientHeight * window.devicePixelRatio;
-                if (canvas.width !== width || canvas.height !== height) {
-                    canvas.width = width;
-                    canvas.height = height;
-                }
-                renderSceneFrame(width, height);
-            }
-            animationFrameId = requestAnimationFrame(renderLoop);
-        }
-
-        startSceneEngine(canvasRef.current).then((didStart) => {
-            if (isCancelled) return;
-            setIsEngineRunning(didStart);
-            onEngineReadyChange(didStart);
-            if (didStart) animationFrameId = requestAnimationFrame(renderLoop);
-        });
-
-        return () => {
-            isCancelled = true;
-            cancelAnimationFrame(animationFrameId);
-            stopSceneEngine();
-        };
-    }, [onEngineReadyChange]);
-
-    useEffect(() => {
-        const container = containerRef.current;
-        if (!container || !isEngineRunning) return;
-
-        function handleWheel(event) {
-            event.preventDefault();
-            zoomSceneCamera(clamp(-event.deltaY / 100, -2, 2));
-        }
-
-        container.addEventListener('wheel', handleWheel, { passive: false });
-        return () => container.removeEventListener('wheel', handleWheel);
-    }, [isEngineRunning]);
-
-    function getMetresPerPixel() {
-        if (isEngineRunning || !mapRef.current) return ENGINE_METRES_PER_PIXEL;
-        return (MAP_RANGE_METRES * 2) / mapRef.current.clientWidth;
-    }
-
-    function findObjectUnderPointer(event) {
-        if (isEngineRunning) {
-            const bounds = canvasRef.current.getBoundingClientRect();
-            return pickSceneObject(
-                (event.clientX - bounds.left) * window.devicePixelRatio,
-                (event.clientY - bounds.top) * window.devicePixelRatio,
-            );
-        }
-        return event.target.closest('[data-object-id]')?.dataset.objectId ?? null;
-    }
-
-    function handlePointerDown(event) {
-        const objectId = findObjectUnderPointer(event);
-        containerRef.current.setPointerCapture(event.pointerId);
-        pointerRef.current = {
-            objectId,
-            startX: event.clientX,
-            startY: event.clientY,
-            lastX: event.clientX,
-            lastY: event.clientY,
-            isDragging: false,
-            usePan: event.button === 2 || event.shiftKey,
-        };
-
-        if (objectId) {
-            onSelect(objectId);
-            onDragStart(objectId);
-        }
-    }
-
-    function handlePointerMove(event) {
-        const pointer = pointerRef.current;
-        if (!pointer) return;
-
-        const totalX = event.clientX - pointer.startX;
-        const totalY = event.clientY - pointer.startY;
-        if (!pointer.isDragging && Math.hypot(totalX, totalY) < DRAG_THRESHOLD_PIXELS) return;
-        pointer.isDragging = true;
-
-        if (pointer.objectId) {
-            onDrag(pointer.objectId, totalX, totalY, getMetresPerPixel());
-        } else if (isEngineRunning) {
-            const stepX = event.clientX - pointer.lastX;
-            const stepY = event.clientY - pointer.lastY;
-            if (pointer.usePan) panSceneCamera(stepX, stepY);
-            else orbitSceneCamera(stepX, stepY);
-        }
-
-        pointer.lastX = event.clientX;
-        pointer.lastY = event.clientY;
-    }
-
-    function handlePointerUp() {
-        const pointer = pointerRef.current;
-        pointerRef.current = null;
-        if (!pointer) return;
-
-        if (pointer.objectId) onDragEnd();
-        // Tapping empty space clears the selection.
-        else if (!pointer.isDragging) onSelect(null);
-    }
-
-    function getMapPosition(position) {
-        const toPercent = (metres) => clamp((metres / MAP_RANGE_METRES) * 50 + 50, 2, 98);
-        return { left: `${toPercent(position[0])}%`, top: `${toPercent(position[2])}%` };
-    }
-
-    return (
-        <div
-            ref={containerRef}
-            className="scene-builder-viewport"
-            style={{ background }}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onContextMenu={(event) => event.preventDefault()}
-        >
-            <canvas
-                ref={canvasRef}
-                id="scene-builder-canvas"
-                className={isEngineRunning ? 'scene-builder-canvas' : 'scene-builder-canvas is-hidden'}
-            />
-
-            {!isEngineRunning && (
-                <>
-                    <div ref={mapRef} className="scene-builder-map">
-                        <span className="scene-builder-map-axis is-x" />
-                        <span className="scene-builder-map-axis is-z" />
-                        {objects.map((sceneObject) => {
-                            const averageScale = (sceneObject.scale[0] + sceneObject.scale[2]) / 2;
-                            const markerSize = clamp(20 * averageScale, 12, 64);
-                            const className = [
-                                'scene-builder-marker',
-                                sceneObject.objectId === selectedObjectId ? 'is-selected' : '',
-                                sceneObject.isHidden ? 'is-hidden' : '',
-                            ].join(' ');
-
-                            return (
-                                <button
-                                    key={sceneObject.objectId}
-                                    type="button"
-                                    data-object-id={sceneObject.objectId}
-                                    className={className}
-                                    style={{ ...getMapPosition(sceneObject.position), width: markerSize, height: markerSize }}
-                                    aria-label={sceneObject.name}
-                                >
-                                    <span
-                                        className="scene-builder-marker-facing"
-                                        style={{ transform: `rotate(${-sceneObject.rotation[1]}deg)` }}
-                                    />
-                                    <span className="scene-builder-marker-label">{sceneObject.name}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <p className="scene-builder-map-note">
-                        Top-down placement preview. The 3D view arrives with the engine update.
-                    </p>
-                </>
-            )}
-
-            {objects.length === 0 && (
-                <p className="scene-builder-empty">Add a model to start building your scene.</p>
-            )}
-        </div>
-    );
-}
-
-function SceneBuilderScreen() {
     const isPhone = useIsPhone();
 
-    const [sceneId, setSceneId] = useState(null);
-    const [sceneName, setSceneName] = useState('Untitled scene');
-    const [objects, setObjects] = useState([]);
     const [selectedObjectId, setSelectedObjectId] = useState(null);
     const [transformMode, setTransformMode] = useState('move');
-    const [undoStack, setUndoStack] = useState([]);
-    const [redoStack, setRedoStack] = useState([]);
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
-    const [background, setBackground] = useState(DEFAULT_BACKGROUND);
-    const [renderMode, setRenderMode] = useState('splats');
     const [isSnapping, setIsSnapping] = useState(false);
     const [isKeepingProportions, setIsKeepingProportions] = useState(true);
 
     const [models, setModels] = useState([]);
     const [modelsStatus, setModelsStatus] = useState('loading');
-    const [isEngineReady, setIsEngineReady] = useState(false);
+    // Load results from the viewport by objectId: { splatCount } or { error }.
+    // Not part of the undo history; the viewport reports again after a remount.
+    const [modelStatus, setModelStatus] = useState({});
 
     const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
     const [isSceneListOpen, setIsSceneListOpen] = useState(false);
     const [phoneSheet, setPhoneSheet] = useState(null); // null | 'models' | 'cleanup'
     const [statusMessage, setStatusMessage] = useState(null);
 
-    // Latest objects for event handlers, and the state before the current
-    // drag / field edit so that whole edit becomes one undo step.
-    const objectsRef = useRef(objects);
-    const editSnapshotRef = useRef(null);
-    const dragStartObjectRef = useRef(null);
-    const loadedObjectIdsRef = useRef(new Set());
+    // Merge key shared by every change of the current field edit or slider
+    // drag, so the whole edit is one undo step. null outside an edit.
+    const editKeyRef = useRef(null);
     const shortcutHandlersRef = useRef({});
 
+    const { background, renderMode } = sceneInfo;
+    // Undo can remove the selected model; it then counts as unselected.
     const selectedObject = objects.find((sceneObject) => sceneObject.objectId === selectedObjectId) ?? null;
+    const selectedStatus = selectedObject && modelStatus[selectedObject.objectId];
     const hasReachedPhoneLimit = isPhone && objects.length >= PHONE_MODEL_LIMIT;
+    const sceneSplatCount = objects.reduce(
+        (total, sceneObject) => total + (modelStatus[sceneObject.objectId]?.splatCount ?? 0),
+        0,
+    );
+    const isOverPhoneBudget = isPhone && sceneSplatCount > PHONE_SPLAT_BUDGET;
 
-    useEffect(() => {
-        objectsRef.current = objects;
-    }, [objects]);
+    // The objects as SceneViewport expects them.
+    const viewportObjects = useMemo(
+        () => objects.map((sceneObject) => ({
+            id: sceneObject.objectId,
+            url: getPlyUrl(sceneObject.jobId),
+            position: sceneObject.position,
+            rotation: sceneObject.rotation,
+            scale: sceneObject.scale,
+            visible: !sceneObject.isHidden,
+        })),
+        [objects],
+    );
 
     // Finished models to add, from the same GET /jobs the Library uses.
     useEffect(() => {
@@ -538,10 +343,10 @@ function SceneBuilderScreen() {
                 if (isCancelled) return;
                 setModels(
                     jobs
-                        .filter((job) => job.status === 'done')
+                        .filter((job) => job.hasResult)
                         .map((job) => ({
                             id: job.id,
-                            name: getModelName(job.id),
+                            name: jobDisplayName(job, 'Model'),
                             photoCount: job.imageCount ?? job.images?.length ?? 0,
                             thumbnailUrl: job.images?.[0]?.url ?? null,
                         })),
@@ -558,40 +363,6 @@ function SceneBuilderScreen() {
         };
     }, []);
 
-    // Keep the engine's scene in step with objects. All no-ops until the
-    // engine exports the scene functions (see SceneEngine.js).
-    useEffect(() => {
-        if (!isEngineReady) return;
-
-        const currentIds = new Set(objects.map((sceneObject) => sceneObject.objectId));
-        for (const loadedId of loadedObjectIdsRef.current) {
-            if (!currentIds.has(loadedId)) removeSceneModel(loadedId);
-        }
-
-        for (const sceneObject of objects) {
-            if (!loadedObjectIdsRef.current.has(sceneObject.objectId)) {
-                addSceneModel(sceneObject.objectId, getPlyUrl(sceneObject.jobId));
-            }
-            setSceneTransform(sceneObject.objectId, {
-                position: sceneObject.position,
-                rotation: sceneObject.rotation,
-                scale: sceneObject.scale,
-            });
-            setSceneVisible(sceneObject.objectId, !sceneObject.isHidden);
-            setSceneTrim(sceneObject.objectId, sceneObject.trim);
-        }
-
-        loadedObjectIdsRef.current = currentIds;
-    }, [objects, isEngineReady]);
-
-    useEffect(() => {
-        setSceneBackground(background);
-    }, [background, isEngineReady]);
-
-    useEffect(() => {
-        setSceneRenderMode(renderMode);
-    }, [renderMode, isEngineReady]);
-
     // Status messages fade after a few seconds.
     useEffect(() => {
         if (!statusMessage) return;
@@ -599,63 +370,61 @@ function SceneBuilderScreen() {
         return () => clearTimeout(timeoutId);
     }, [statusMessage]);
 
-    // ---------- History ----------
+    // ---------- Scene info and history ----------
 
-    function pushHistory(previousObjects) {
-        setUndoStack((stack) => [...stack.slice(-(MAX_HISTORY - 1)), previousObjects]);
-        setRedoStack([]);
+    function changeSceneInfo(changes) {
+        onSceneInfoChange((current) => ({ ...current, ...changes }));
     }
 
-    // Every change to objects goes through here. Outside a drag or field
-    // edit, each change is its own undo step.
-    function editObjects(updater) {
-        const previousObjects = objectsRef.current;
-        const nextObjects = updater(previousObjects);
-        objectsRef.current = nextObjects;
-        setObjects(nextObjects);
-        setHasUnsavedChanges(true);
-        if (!editSnapshotRef.current) pushHistory(previousObjects);
+    function markUnsaved() {
+        onSceneInfoChange((current) => (current.hasUnsavedChanges ? current : { ...current, hasUnsavedChanges: true }));
+    }
+
+    // Every change to objects goes through here. Outside a field edit or
+    // slider drag, and without a mergeKey, each change is its own undo step.
+    function editObjects(updater, mergeKey = editKeyRef.current) {
+        onObjectsChange(updater, { mergeKey });
+        markUnsaved();
     }
 
     function beginEdit() {
-        if (!editSnapshotRef.current) editSnapshotRef.current = objectsRef.current;
+        if (!editKeyRef.current) editKeyRef.current = `edit:${++lastEditSession}`;
     }
 
     function endEdit() {
-        const snapshot = editSnapshotRef.current;
-        editSnapshotRef.current = null;
-        if (snapshot && snapshot !== objectsRef.current) pushHistory(snapshot);
+        editKeyRef.current = null;
     }
 
-    function updateObject(objectId, changes) {
-        editObjects((current) =>
-            current.map((sceneObject) => (sceneObject.objectId === objectId ? { ...sceneObject, ...changes } : sceneObject)),
+    function updateObject(objectId, changes, mergeKey) {
+        editObjects(
+            (current) => current.map((sceneObject) => (
+                sceneObject.objectId === objectId ? { ...sceneObject, ...changes } : sceneObject
+            )),
+            mergeKey,
         );
     }
 
-    function restoreObjects(nextObjects) {
-        objectsRef.current = nextObjects;
-        setObjects(nextObjects);
-        setHasUnsavedChanges(true);
-        if (!nextObjects.some((sceneObject) => sceneObject.objectId === selectedObjectId)) {
-            setSelectedObjectId(null);
-        }
+    // Leave a number field first, so it shows the restored value instead of
+    // the text that was being typed.
+    function leaveField() {
+        endEdit();
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     }
 
     function undo() {
-        if (undoStack.length === 0) return;
-        playSound('click');
-        setRedoStack((stack) => [...stack, objectsRef.current]);
-        restoreObjects(undoStack[undoStack.length - 1]);
-        setUndoStack((stack) => stack.slice(0, -1));
+        if (!canUndo) return;
+        playSound('tap');
+        leaveField();
+        onUndo();
+        markUnsaved();
     }
 
     function redo() {
-        if (redoStack.length === 0) return;
-        playSound('click');
-        setUndoStack((stack) => [...stack, objectsRef.current]);
-        restoreObjects(redoStack[redoStack.length - 1]);
-        setRedoStack((stack) => stack.slice(0, -1));
+        if (!canRedo) return;
+        playSound('tap');
+        leaveField();
+        onRedo();
+        markUnsaved();
     }
 
     // ---------- Objects ----------
@@ -665,15 +434,11 @@ function SceneBuilderScreen() {
             setStatusMessage(`Phone scenes hold up to ${PHONE_MODEL_LIMIT} models. Use a computer for bigger scenes.`);
             return;
         }
-        playSound('click');
-        const sceneObject = createSceneObject(model);
+        playSound('tap');
+        const sceneObject = createSceneObject(model, objects);
         editObjects((current) => [...current, sceneObject]);
         setSelectedObjectId(sceneObject.objectId);
         setIsModelPickerOpen(false);
-
-        if (isPhone && getSceneSplatCount() > PHONE_SPLAT_BUDGET) {
-            setStatusMessage('This scene is getting heavy for a phone and may run slowly.');
-        }
     }
 
     function duplicateSelected() {
@@ -682,7 +447,7 @@ function SceneBuilderScreen() {
             setStatusMessage(`Phone scenes hold up to ${PHONE_MODEL_LIMIT} models.`);
             return;
         }
-        playSound('click');
+        playSound('tap');
         const copy = {
             ...selectedObject,
             objectId: makeObjectId(),
@@ -695,20 +460,20 @@ function SceneBuilderScreen() {
 
     function deleteSelected() {
         if (!selectedObject) return;
-        playSound('click3');
+        playSound('back');
         editObjects((current) => current.filter((sceneObject) => sceneObject.objectId !== selectedObject.objectId));
         setSelectedObjectId(null);
     }
 
     function toggleHidden(objectId) {
-        playSound('click');
-        const sceneObject = objectsRef.current.find((item) => item.objectId === objectId);
+        playSound('tap');
+        const sceneObject = objects.find((item) => item.objectId === objectId);
         if (sceneObject) updateObject(objectId, { isHidden: !sceneObject.isHidden });
     }
 
     function dropSelectedToFloor() {
         if (!selectedObject) return;
-        playSound('click');
+        playSound('tap');
         const lowestPoint = measureLowestPoint(selectedObject.objectId);
         const [x, y, z] = selectedObject.position;
 
@@ -747,84 +512,62 @@ function SceneBuilderScreen() {
         updateObject(selectedObject.objectId, { trim: { ...selectedObject.trim, [settingName]: value } });
     }
 
-    // ---------- Dragging in the viewport ----------
+    // ---------- Viewport ----------
 
-    function handleDragStart(objectId) {
-        beginEdit();
-        dragStartObjectRef.current = objectsRef.current.find((sceneObject) => sceneObject.objectId === objectId) ?? null;
+    // Gizmo drags and W/A/S/D moves; each drag or held key is one undo step.
+    function handleObjectTransform(objectId, transform, dragSession) {
+        const changes = transform.scale
+            ? { ...transform, scale: transform.scale.map((axisValue) => clamp(axisValue, MIN_SCALE, MAX_SCALE)) }
+            : transform;
+        updateObject(objectId, changes, `drag:${dragSession}`);
     }
 
-    function handleDrag(objectId, totalX, totalY, metresPerPixel) {
-        const startObject = dragStartObjectRef.current;
-        if (!startObject || startObject.objectId !== objectId) return;
+    // Also clears an old status when an undo brings back a removed model.
+    const handleModelLoadStart = useCallback((objectId) => {
+        setModelStatus((current) => ({ ...current, [objectId]: {} }));
+    }, []);
 
-        if (transformMode === 'move') {
-            let x = startObject.position[0] + totalX * metresPerPixel;
-            let z = startObject.position[2] + totalY * metresPerPixel;
-            if (isSnapping) {
-                x = roundToStep(x, MOVE_SNAP_METRES);
-                z = roundToStep(z, MOVE_SNAP_METRES);
-            }
-            updateObject(objectId, { position: [x, startObject.position[1], z] });
-        } else if (transformMode === 'rotate') {
-            let yaw = startObject.rotation[1] + totalX * DEGREES_PER_PIXEL;
-            if (isSnapping) yaw = roundToStep(yaw, ROTATE_SNAP_DEGREES);
-            updateObject(objectId, { rotation: [startObject.rotation[0], yaw, startObject.rotation[2]] });
-        } else {
-            // Drag up to grow, down to shrink, keeping proportions.
-            let factor = Math.exp(-totalY * SCALE_SPEED_PER_PIXEL);
-            if (isSnapping) factor = Math.max(SCALE_SNAP, roundToStep(factor, SCALE_SNAP));
-            updateObject(objectId, {
-                scale: startObject.scale.map((axisValue) => clamp(axisValue * factor, MIN_SCALE, MAX_SCALE)),
-            });
-        }
+    const handleModelLoaded = useCallback((objectId, { splatCount }) => {
+        setModelStatus((current) => ({ ...current, [objectId]: { splatCount } }));
+    }, []);
+
+    const handleModelFailed = useCallback((objectId, message) => {
+        setModelStatus((current) => ({ ...current, [objectId]: { error: message } }));
+    }, []);
+
+    function getStatusLabel(sceneObject) {
+        const status = modelStatus[sceneObject.objectId];
+        if (status?.error) return 'failed';
+        if (status?.splatCount === undefined) return 'loading';
+        return null;
     }
-
-    function handleDragEnd() {
-        dragStartObjectRef.current = null;
-        endEdit();
-    }
-
-    const handleEngineReadyChange = useCallback((isReady) => setIsEngineReady(isReady), []);
 
     // ---------- Scenes ----------
 
     function confirmDiscardChanges() {
-        return !hasUnsavedChanges || window.confirm('You have unsaved changes. Discard them?');
-    }
-
-    function resetHistory() {
-        editSnapshotRef.current = null;
-        setUndoStack([]);
-        setRedoStack([]);
+        return !sceneInfo.hasUnsavedChanges || window.confirm('You have unsaved changes. Discard them?');
     }
 
     function startNewScene() {
         if (!confirmDiscardChanges()) return;
-        playSound('click');
-        objectsRef.current = [];
-        setObjects([]);
-        setSceneId(null);
-        setSceneName('Untitled scene');
+        playSound('tap');
+        endEdit();
+        onObjectsReset([]);
+        onSceneInfoChange(NEW_SCENE_INFO);
         setSelectedObjectId(null);
-        setBackground(DEFAULT_BACKGROUND);
-        setRenderMode('splats');
-        setHasUnsavedChanges(false);
-        resetHistory();
     }
 
     async function handleSave() {
-        playSound('click');
+        playSound('confirm');
         try {
             const savedScene = await saveScene({
-                id: sceneId ?? undefined,
-                name: sceneName.trim() || 'Untitled scene',
+                id: sceneInfo.id ?? undefined,
+                name: sceneInfo.name.trim() || NEW_SCENE_INFO.name,
                 background,
                 renderMode,
                 objects,
             });
-            setSceneId(savedScene.id);
-            setHasUnsavedChanges(false);
+            changeSceneInfo({ id: savedScene.id, hasUnsavedChanges: false });
             setStatusMessage(SCENES_SAVED_ON_SERVER ? 'Scene saved.' : 'Scene saved in this browser. Saving to your account is coming soon.');
         } catch (error) {
             setStatusMessage(`Could not save: ${error.message}`);
@@ -833,7 +576,7 @@ function SceneBuilderScreen() {
 
     async function handleOpenScene(sceneIdToOpen) {
         if (!confirmDiscardChanges()) return;
-        playSound('click');
+        playSound('tap');
         try {
             const scene = await loadScene(sceneIdToOpen);
             // Skip models that were deleted since the scene was saved.
@@ -843,15 +586,16 @@ function SceneBuilderScreen() {
                 : scene.objects;
             const skippedCount = scene.objects.length - keptObjects.length;
 
-            objectsRef.current = keptObjects;
-            setObjects(keptObjects);
-            setSceneId(scene.id);
-            setSceneName(scene.name);
-            setBackground(scene.background ?? DEFAULT_BACKGROUND);
-            setRenderMode(scene.renderMode ?? 'splats');
+            endEdit();
+            onObjectsReset(keptObjects);
+            onSceneInfoChange({
+                id: scene.id,
+                name: scene.name,
+                background: scene.background ?? NEW_SCENE_INFO.background,
+                renderMode: scene.renderMode ?? NEW_SCENE_INFO.renderMode,
+                hasUnsavedChanges: false,
+            });
             setSelectedObjectId(null);
-            setHasUnsavedChanges(false);
-            resetHistory();
             setIsSceneListOpen(false);
             if (skippedCount > 0) {
                 setStatusMessage(`${skippedCount} model${skippedCount === 1 ? ' was' : 's were'} deleted and left out.`);
@@ -862,7 +606,7 @@ function SceneBuilderScreen() {
     }
 
     async function handleScreenshot() {
-        playSound('click');
+        playSound('tap');
         const imageBlob = await captureSceneScreenshot();
         if (!imageBlob) {
             setStatusMessage('Screenshots arrive with the engine update.');
@@ -870,13 +614,13 @@ function SceneBuilderScreen() {
         }
         const downloadLink = document.createElement('a');
         downloadLink.href = URL.createObjectURL(imageBlob);
-        downloadLink.download = `${sceneName.trim() || 'scene'}.png`;
+        downloadLink.download = `${sceneInfo.name.trim() || 'scene'}.png`;
         downloadLink.click();
         URL.revokeObjectURL(downloadLink.href);
     }
 
     function chooseTransformMode(modeId) {
-        playSound('click');
+        playSound('tap');
         setTransformMode(modeId);
     }
 
@@ -890,25 +634,28 @@ function SceneBuilderScreen() {
 
     useEffect(() => {
         function handleKeyDown(event) {
-            const typingTarget = event.target.closest?.('input, textarea, select');
-            if (typingTarget) return;
-
             const handlers = shortcutHandlersRef.current;
             const key = event.key.toLowerCase();
             const isCommand = event.ctrlKey || event.metaKey;
 
-            if (isCommand && key === 'z' && !event.shiftKey) {
+            if (isCommand && !event.altKey && (key === 'z' || key === 'y')) {
+                // Search and name boxes keep the browser's own text undo.
+                if (isTextEntry(event.target)) return;
                 event.preventDefault();
-                handlers.undo();
-            } else if (isCommand && (key === 'y' || (key === 'z' && event.shiftKey))) {
-                event.preventDefault();
-                handlers.redo();
-            } else if (key === 'delete' || key === 'backspace') {
+                if (key === 'z' && !event.shiftKey) handlers.undo();
+                else handlers.redo();
+                return;
+            }
+
+            const typingTarget = event.target.closest?.('input, textarea, select, [contenteditable="true"]');
+            if (typingTarget) return;
+
+            if (key === 'delete' || key === 'backspace') {
                 handlers.deleteSelected();
             } else if (key === 'escape') {
                 setSelectedObjectId(null);
-            } else if (!isCommand) {
-                const mode = TRANSFORM_MODES.find((transformOption) => transformOption.shortcut.toLowerCase() === key);
+            } else if (!isCommand && !event.altKey) {
+                const mode = TRANSFORM_MODES.find((transformOption) => transformOption.shortcut === key);
                 if (mode) setTransformMode(mode.id);
             }
         }
@@ -933,31 +680,40 @@ function SceneBuilderScreen() {
 
     const objectList = (
         <ul className="scene-builder-outliner-list">
-            {objects.map((sceneObject) => (
-                <li
-                    key={sceneObject.objectId}
-                    className={sceneObject.objectId === selectedObjectId ? 'scene-builder-outliner-item is-selected' : 'scene-builder-outliner-item'}
-                >
-                    <button
-                        className="scene-builder-outliner-name"
-                        onClick={() => {
-                            playSound('click');
-                            setSelectedObjectId(sceneObject.objectId);
-                        }}
+            {objects.map((sceneObject) => {
+                const statusLabel = getStatusLabel(sceneObject);
+                return (
+                    <li
+                        key={sceneObject.objectId}
+                        className={sceneObject.objectId === selectedObjectId ? 'scene-builder-outliner-item is-selected' : 'scene-builder-outliner-item'}
+                        title={modelStatus[sceneObject.objectId]?.error}
                     >
-                        <Icon name="cube" size={13} />
-                        <span className={sceneObject.isHidden ? 'is-hidden' : ''}>{sceneObject.name}</span>
-                    </button>
-                    <button
-                        className="scene-builder-icon-button"
-                        onClick={() => toggleHidden(sceneObject.objectId)}
-                        aria-label={sceneObject.isHidden ? `Show ${sceneObject.name}` : `Hide ${sceneObject.name}`}
-                        title={sceneObject.isHidden ? 'Show' : 'Hide'}
-                    >
-                        <Icon name="eye" size={14} />
-                    </button>
-                </li>
-            ))}
+                        <button
+                            className="scene-builder-outliner-name"
+                            onClick={() => {
+                                playSound('tap');
+                                setSelectedObjectId(sceneObject.objectId);
+                            }}
+                        >
+                            <Icon name="cube" size={13} />
+                            <span className={sceneObject.isHidden ? 'is-hidden' : ''}>{sceneObject.name}</span>
+                            {statusLabel && (
+                                <em className={statusLabel === 'failed' ? 'scene-builder-outliner-status is-error' : 'scene-builder-outliner-status'}>
+                                    {statusLabel}
+                                </em>
+                            )}
+                        </button>
+                        <button
+                            className="scene-builder-icon-button"
+                            onClick={() => toggleHidden(sceneObject.objectId)}
+                            aria-label={sceneObject.isHidden ? `Show ${sceneObject.name}` : `Hide ${sceneObject.name}`}
+                            title={sceneObject.isHidden ? 'Show' : 'Hide'}
+                        >
+                            <Icon name="eye" size={14} />
+                        </button>
+                    </li>
+                );
+            })}
         </ul>
     );
 
@@ -974,24 +730,21 @@ function SceneBuilderScreen() {
     const sceneHeading = (
         <div className="scene-builder-heading">
             <div className="scene-builder-title">
-                <p className="eyebrow">Scene Builder</p>
+                <p className="eyebrow eyebrow-accent">Scene Builder</p>
                 <input
                     className="scene-builder-name-input"
-                    value={sceneName}
-                    onChange={(event) => {
-                        setSceneName(event.target.value);
-                        setHasUnsavedChanges(true);
-                    }}
+                    value={sceneInfo.name}
+                    onChange={(event) => changeSceneInfo({ name: event.target.value, hasUnsavedChanges: true })}
                     aria-label="Scene name"
                 />
-                {hasUnsavedChanges && <span className="scene-builder-unsaved">Unsaved</span>}
+                {sceneInfo.hasUnsavedChanges && <span className="scene-builder-unsaved">Unsaved</span>}
             </div>
             <div className="scene-builder-heading-actions">
                 {!isPhone && <button className="forma-btn" onClick={startNewScene}>New</button>}
                 <button
                     className="forma-btn"
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         setIsSceneListOpen(true);
                     }}
                 >
@@ -1005,16 +758,25 @@ function SceneBuilderScreen() {
     );
 
     const viewport = (
-        <SceneViewport
-            objects={objects}
-            selectedObjectId={selectedObjectId}
-            background={background}
-            onEngineReadyChange={handleEngineReadyChange}
-            onSelect={setSelectedObjectId}
-            onDragStart={handleDragStart}
-            onDrag={handleDrag}
-            onDragEnd={handleDragEnd}
-        />
+        <div
+            className="scene-builder-viewport"
+            style={{ background }}
+            onContextMenu={(event) => event.preventDefault()}
+        >
+            <SceneViewport
+                objects={viewportObjects}
+                selectedId={selectedObjectId}
+                transformMode={TRANSFORM_MODES.find((mode) => mode.id === transformMode).gizmoMode}
+                snap={isSnapping ? GIZMO_SNAP : null}
+                onObjectTransform={handleObjectTransform}
+                onModelLoadStart={handleModelLoadStart}
+                onModelLoaded={handleModelLoaded}
+                onModelFailed={handleModelFailed}
+            />
+            {objects.length === 0 && (
+                <p className="scene-builder-empty">Add a model to start building your scene.</p>
+            )}
+        </div>
     );
 
     const dialogs = (
@@ -1035,7 +797,7 @@ function SceneBuilderScreen() {
     );
 
     function openModelPicker() {
-        playSound('click');
+        playSound('tap');
         setIsModelPickerOpen(true);
     }
 
@@ -1074,6 +836,9 @@ function SceneBuilderScreen() {
                     </div>
                 )}
 
+                {isOverPhoneBudget && (
+                    <p className="scene-builder-note">This scene is getting heavy for a phone and may run slowly.</p>
+                )}
                 <p className="scene-builder-note scene-builder-desktop-hint">
                     Exact values, advanced clean-up and snapping are on the computer version.
                 </p>
@@ -1082,7 +847,7 @@ function SceneBuilderScreen() {
                     <button
                         className={phoneSheet === 'models' ? 'scene-builder-tool is-active' : 'scene-builder-tool'}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             setPhoneSheet(phoneSheet === 'models' ? null : 'models');
                         }}
                     >
@@ -1097,7 +862,7 @@ function SceneBuilderScreen() {
                     <button
                         className={phoneSheet === 'cleanup' ? 'scene-builder-tool is-active' : 'scene-builder-tool'}
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             setPhoneSheet(phoneSheet === 'cleanup' ? null : 'cleanup');
                         }}
                         disabled={!selectedObject}
@@ -1124,11 +889,11 @@ function SceneBuilderScreen() {
                 </button>
                 <div className="scene-builder-tool-group">{transformButtons}</div>
                 <div className="scene-builder-tool-group">
-                    <button className="scene-builder-tool" onClick={undo} disabled={undoStack.length === 0} title="Undo (Ctrl+Z)">
+                    <button className="scene-builder-tool" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
                         <Icon name="stepBack" size={16} />
                         <span>Undo</span>
                     </button>
-                    <button className="scene-builder-tool" onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Y)">
+                    <button className="scene-builder-tool" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Y)">
                         <Icon name="stepForward" size={16} />
                         <span>Redo</span>
                     </button>
@@ -1146,10 +911,10 @@ function SceneBuilderScreen() {
                     <button
                         className="scene-builder-tool"
                         onClick={() => {
-                            playSound('click');
+                            playSound('tap');
                             resetSceneCamera();
                         }}
-                        disabled={!isEngineReady}
+                        disabled={!isSceneEngineReady()}
                         title="Reset view"
                     >
                         <Icon name="eye" size={16} />
@@ -1182,6 +947,14 @@ function SceneBuilderScreen() {
                                 onChange={(event) => updateObject(selectedObject.objectId, { name: event.target.value })}
                                 aria-label="Model name"
                             />
+                            <p className="scene-builder-note">
+                                Splats{' '}
+                                <b>
+                                    {selectedStatus?.error
+                                        ? 'failed to load'
+                                        : selectedStatus?.splatCount?.toLocaleString() ?? 'loading'}
+                                </b>
+                            </p>
 
                             <AxisFields
                                 label="Position (m)"
@@ -1266,10 +1039,7 @@ function SceneBuilderScreen() {
                                 <input
                                     type="color"
                                     value={background}
-                                    onChange={(event) => {
-                                        setBackground(event.target.value);
-                                        setHasUnsavedChanges(true);
-                                    }}
+                                    onChange={(event) => changeSceneInfo({ background: event.target.value, hasUnsavedChanges: true })}
                                 />
                             </label>
                             <div className="scene-builder-segmented" role="group" aria-label="Render mode">
@@ -1281,9 +1051,8 @@ function SceneBuilderScreen() {
                                         key={option.id}
                                         className={renderMode === option.id ? 'is-active' : ''}
                                         onClick={() => {
-                                            playSound('click');
-                                            setRenderMode(option.id);
-                                            setHasUnsavedChanges(true);
+                                            playSound('tap');
+                                            changeSceneInfo({ renderMode: option.id, hasUnsavedChanges: true });
                                         }}
                                     >
                                         {option.label}
@@ -1291,7 +1060,12 @@ function SceneBuilderScreen() {
                                 ))}
                             </div>
                             <p className="scene-builder-note">
-                                Shortcuts: W move, E rotate, R scale, Ctrl+Z undo, Ctrl+Y redo, Delete removes, Esc deselects.
+                                Drag the gizmo's arrows, rings or boxes to move, rotate or scale the selected
+                                model, or press W / A / S / D to slide it along the ground (Shift for bigger
+                                steps). Drag anywhere else to orbit, right-drag to pan and scroll to zoom.
+                            </p>
+                            <p className="scene-builder-note">
+                                Shortcuts: 1 move, 2 rotate, 3 scale, Ctrl+Z undo, Ctrl+Y redo, Delete removes, Esc deselects.
                             </p>
                         </>
                     )}

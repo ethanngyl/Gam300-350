@@ -23,6 +23,16 @@ const SCENES_API_READY = false;
 // Lets the screen say where a save went.
 export const SCENES_SAVED_ON_SERVER = SCENES_API_READY;
 
+// The Scene Builder's settings for a scene that hasn't been saved yet.
+export const NEW_SCENE_INFO = {
+    id: null,
+    name: 'Untitled scene',
+    // Same as --forma-panel, so the viewport matches the site's panels.
+    background: '#18181b',
+    renderMode: 'splats',
+    hasUnsavedChanges: false,
+};
+
 const LOCAL_STORAGE_KEY = 'genesis.scenes';
 
 function readLocalScenes() {

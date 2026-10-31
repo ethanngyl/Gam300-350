@@ -190,20 +190,61 @@
         font-weight: 600;
     }
 
-/* The shutter button reuses the coral accent from the Home banner. */
+/* The shutter button uses the same bright blue as the other primary
+   buttons (coral read as a warning / negative action). */
 .capture-page .capture-btn {
     justify-content: center;
-    background: var(--forma-coral);
-    border-color: var(--forma-coral);
-    color: var(--forma-on-coral);
-    padding: 11px 22px;
+    background: var(--forma-blue);
+    border-color: var(--forma-blue);
+    color: var(--forma-on-accent);
 }
 
-    .capture-page .capture-btn:hover:not(:disabled) {
-        background: var(--forma-coral);
-        border-color: var(--forma-coral);
-        filter: brightness(1.08);
+    /* While auto-capture runs, the button turns into an outlined Stop. */
+    .capture-page .capture-btn.is-capturing {
+        background: transparent;
+        color: var(--forma-teal-text);
     }
+
+/* Keyboard hint on the capture button (shown from tablet width up). */
+.capture-key {
+    display: none;
+    margin-left: 4px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    font-family: var(--forma-font-mono);
+    font-size: 0.64rem;
+    font-weight: 500;
+    opacity: 0.7;
+}
+
+.capture-page .capture-btn:hover:not(:disabled) {
+    background: var(--forma-blue-hover);
+    border-color: var(--forma-blue-hover);
+}
+
+.capture-page .capture-btn.is-capturing:hover:not(:disabled) {
+    background: rgba(var(--forma-accent-rgb), 0.14);
+}
+
+/* Shown in the preview when the camera couldn't start; clicking it asks
+   for the camera again. */
+.capture-enable {
+    width: 100%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+    .capture-enable:hover .capture-enable-hint {
+        text-decoration: underline;
+    }
+
+.capture-enable-hint {
+    font-family: inherit;
+    font-size: 0.84rem;
+    color: var(--forma-teal-text);
+}
 
 .capture-auto-controls {
     display: flex;
@@ -380,7 +421,7 @@
 
     .capture-option input {
         margin-top: 3px;
-        accent-color: var(--forma-green);
+        accent-color: var(--forma-blue);
     }
 
     .capture-option small {
@@ -449,9 +490,14 @@
         padding: 7px 16px;
     }
 
+    .capture-page .capture-btn,
     .capture-auto-controls > .forma-btn,
     .capture-auto-status {
         flex: none;
+    }
+
+    .capture-key {
+        display: inline;
     }
 
     .capture-batch {

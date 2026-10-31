@@ -12,14 +12,21 @@ echo !cmdcmdline! | "%SystemRoot%\System32\find.exe" /i "%~nx0" >nul
 if not errorlevel 1 set "DOUBLECLICK=1"
 
 echo ========================================
-echo Codefine Engine - Web (WebAssembly) build
+echo Genesis Alpha Build - Web (WebAssembly) build
 echo ========================================
 echo.
 
 cd /d "%~dp0"
 
+:: emsdk runs on Python and, until it has its own bundled copy, calls plain
+:: "python". On many machines that is the Microsoft Store stub
+:: (WindowsApps\python.exe), which only prints "Python was not found", so
+:: find a real Python and put it first on PATH for this script.
+call :find_python
+if errorlevel 1 goto :error
+
 :: Download the Emscripten SDK on first run into Library\emsdk (gitignored).
-:: (Not named EMSDK_*: emsdk activate clears those.) Keep CF_EMSDK_VERSION in sync with the emscripten/emsdk image in the Dockerfile.
+:: (Not named EMSDK_*: emsdk activate clears those.) Keep CF_EMSDK_VERSION in sync with the emscripten/emsdk image in docker/Dockerfile.
 set "CF_EMSDK_VERSION=4.0.10"
 set "CF_EMSDK_DIR=Library\emsdk"
 if not exist "%CF_EMSDK_DIR%\emsdk.bat" (
@@ -75,3 +82,24 @@ echo ========================================
 :: Only pause when double-clicked; packages\start.bat calls this and carries on.
 if defined DOUBLECLICK pause
 exit /b 1
+
+:: Sets PATH so "python" is a real Python 3: the py launcher's pick first,
+:: else the first "python" on PATH that isn't a WindowsApps alias.
+:find_python
+set "CF_PYTHON="
+for /f "usebackq delims=" %%p in (`py -3 -c "import sys; print(sys.executable)" 2^>nul`) do set "CF_PYTHON=%%p"
+if defined CF_PYTHON if not exist "%CF_PYTHON%" set "CF_PYTHON="
+if not defined CF_PYTHON for /f "delims=" %%p in ('where python 2^>nul') do (
+    if not defined CF_PYTHON (
+        echo %%p | "%SystemRoot%\System32\find.exe" /i "\WindowsApps\" >nul
+        if errorlevel 1 set "CF_PYTHON=%%p"
+    )
+)
+if not defined CF_PYTHON (
+    echo Python 3 was not found. Install it from https://www.python.org/downloads/
+    echo and check that "py" or "python" works in a new terminal.
+    exit /b 1
+)
+for %%d in ("%CF_PYTHON%") do set "PATH=%%~dpd;%PATH%"
+echo Using Python: %CF_PYTHON%
+exit /b 0

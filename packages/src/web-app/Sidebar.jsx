@@ -4,25 +4,26 @@
 \par DP email: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
-\date 23-10-2026
+\date 27-10-2026
 \brief
-Left sidebar, the main navigation (theme 2: there is no top nav on
-desktop). From top to bottom: GENESIS logo and a collapse button; "New
-model", which opens the camera capture page; "Add photos", which opens
-the file picker and hands the chosen photos to the capture page; the
-pages (Home, Media Library, Photo Editor, Scene Builder, YouTube
-Extractor, Model Viewer); and the signed-in user at the bottom, whose
-menu links to the account page and signs out (or in, for guests).
-The item for the current page is highlighted. Collapsed, only icons show.
-On phones it becomes a slide-in drawer: isOpen shows it, and every item
-calls onClose so the drawer shuts after a choice is made.
+Left sidebar shown on every dashboard page, laid out like the Genesis
+wireframe. From top to bottom: a collapse button; "New model", which opens
+the camera capture page; "Add photos", which opens the file picker and
+hands the chosen photos to the capture page; the workspace pages (Home,
+Media Library, Photo Editor, Scene Builder, YouTube Extractor, Model
+Viewer); and the signed-in user at the bottom, whose menu links to the
+account page, mutes / unmutes sound effects, and signs out (or in, for
+guests). The item for the current
+page is highlighted. Collapsed (wider screens), only icons show. On phones
+it becomes a slide-in drawer: isOpen shows it, and every item calls
+onClose so the drawer shuts after a choice is made.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
+import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 
-const PAGE_ITEMS = [
+const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Media Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
@@ -47,6 +48,8 @@ function Sidebar({
     const fileInputRef = useRef(null);
     const profileRef = useRef(null);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+    const { isMuted } = useSoundSettings();
+    const isCapturePage = activeTab === 'capture';
 
     // Close the profile menu when the user clicks anywhere outside it.
     useEffect(() => {
@@ -75,53 +78,48 @@ function Sidebar({
         'genesis-sidebar',
         isOpen ? 'is-open' : '',
         isCollapsed ? 'is-collapsed' : '',
-    ].join(' ');
+    ].join(' ').trim();
 
     return (
         <aside className={sidebarClassName}>
-            <div className="genesis-side-top">
-                <div className="forma-logo genesis-side-logo">
-                    <span className="forma-logo-icon"><Icon name="cube" size={18} /></span>
-                    <span className="forma-logo-text">GENESIS</span>
-                </div>
-                <button
-                    className="genesis-collapse-btn"
-                    onClick={() => {
-                        playSound('click');
-                        onToggleCollapsed();
-                    }}
-                    aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                    title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                >
-                    <Icon name="chevron" size={14} />
-                </button>
-            </div>
+            <button
+                className="genesis-collapse-btn"
+                onClick={() => {
+                    playSound('tap');
+                    setIsProfileMenuOpen(false);
+                    onToggleCollapsed();
+                }}
+                aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+                <Icon name="chevron" size={15} />
+            </button>
 
             <button
                 className={
-                    activeTab === 'capture'
+                    isCapturePage
                         ? 'forma-btn forma-btn-primary genesis-new-model is-active'
                         : 'forma-btn forma-btn-primary genesis-new-model'
                 }
                 onClick={() => {
-                    playSound('click');
+                    playSound('tap');
                     onClose();
                     onNewModel();
                 }}
                 title="New model"
             >
-                <Icon name="camera" size={15} /> <span>New model</span>
+                <Icon name="camera" size={16} /> <span>New model</span>
             </button>
 
             <button
                 className="forma-btn genesis-add-photos"
                 onClick={() => {
-                    playSound('click');
+                    playSound('tap');
                     fileInputRef.current?.click();
                 }}
                 title="Add photos"
             >
-                <Icon name="image" size={15} /> <span>Add photos</span>
+                <Icon name="upload" size={16} /> <span>Add photos</span>
             </button>
             <input
                 ref={fileInputRef}
@@ -133,41 +131,62 @@ function Sidebar({
             />
 
             <div className="genesis-side-label">Workspace</div>
-            {PAGE_ITEMS.map((item) => (
+            {WORKSPACE_ITEMS.map((item) => (
                 <button
                     key={item.id}
                     className={activeTab === item.id ? 'genesis-side-item is-active' : 'genesis-side-item'}
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         onClose();
                         onNavigate(item.id);
                     }}
                     title={item.label}
                 >
-                    <Icon name={item.icon} size={15} /> <span>{item.label}</span>
+                    <Icon name={item.icon} size={16} /> <span>{item.label}</span>
                 </button>
             ))}
 
             <div className="genesis-profile" ref={profileRef}>
                 {isProfileMenuOpen && (
-                    <div className="genesis-profile-menu">
-                        <div className="forma-account-menu-name">{user.name}</div>
-                        <div className="forma-account-menu-email">{user.email}</div>
+                    <div className="genesis-profile-menu" role="dialog" aria-label="Account overview">
+                        <div className="genesis-profile-summary">
+                            <span className="forma-avatar genesis-profile-avatar-large">
+                                <Icon name="user" size={22} />
+                            </span>
+                            <div className="genesis-profile-identity">
+                                <strong>{user.name}</strong>
+                                <span>{user.email}</span>
+                                {!user.isGuest && (
+                                    <button
+                                        className="genesis-profile-link"
+                                        onClick={() => {
+                                            playSound('tap');
+                                            setIsProfileMenuOpen(false);
+                                            onClose();
+                                            onOpenAccount();
+                                        }}
+                                    >
+                                        Manage account
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div className="genesis-profile-divider" />
                         <button
                             className="forma-account-menu-item"
                             onClick={() => {
-                                playSound('click');
-                                setIsProfileMenuOpen(false);
-                                onClose();
-                                onOpenAccount();
+                                setSoundMuted(!isMuted);
+                                // Muting stays silent; unmuting plays once to confirm.
+                                if (isMuted) playSound('tap');
                             }}
                         >
-                            <Icon name="user" size={14} /> My account
+                            <Icon name={isMuted ? 'volume' : 'volumeOff'} size={14} />
+                            {isMuted ? ' Unmute sounds' : ' Mute sounds'}
                         </button>
                         <button
                             className="forma-account-menu-item"
                             onClick={() => {
-                                playSound('click3');
+                                playSound('back');
                                 setIsProfileMenuOpen(false);
                                 onSignOut();
                             }}
@@ -182,13 +201,14 @@ function Sidebar({
                 <button
                     className={activeTab === 'account' ? 'genesis-profile-btn is-active' : 'genesis-profile-btn'}
                     onClick={() => {
-                        playSound('click');
+                        playSound('tap');
                         setIsProfileMenuOpen((wasOpen) => !wasOpen);
                     }}
+                    aria-expanded={isProfileMenuOpen}
                     aria-label="Open account menu"
                     title={user.name}
                 >
-                    <span className="forma-avatar">{user.name.charAt(0).toUpperCase()}</span>
+                    <span className="forma-avatar genesis-profile-avatar"><Icon name="user" size={15} /></span>
                     <span className="genesis-profile-text">
                         <span className="genesis-profile-name">{user.name}</span>
                         <span className="genesis-profile-email">{user.email}</span>

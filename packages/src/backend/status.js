@@ -26,7 +26,9 @@ import path from 'node:path'
 import { config } from './config.js'
 
 export const STATUS_FILE = 'status.json'
-const VERSION = 1
+// The record format version; the VM also writes it when storing a synced job.
+export const STATUS_VERSION = 1
+const VERSION = STATUS_VERSION
 const VALID_STATUS = new Set(['queued', 'running', 'done', 'error', 'cancelled'])
 const TERMINAL_STATUS = new Set(['done', 'error', 'cancelled'])
 // Progress updates arrive on nearly every log line; don't rewrite the file that often.
@@ -50,56 +52,57 @@ const LOG_TAIL_LINES = 40
 */
 /************************************************************************/
 export function saveJob(job, { throttle = false } = {}) {
-  const now = Date.now()
-  if (throttle && job.savedAt && now - job.savedAt < THROTTLE_MS) return
+    const now = Date.now()
+    if (throttle && job.savedAt && now - job.savedAt < THROTTLE_MS) return
 
-  const jobDir = path.join(config.jobsDir, job.id)
-  if (!fs.existsSync(jobDir)) return // folder was removed; don't recreate it
+    const jobDir = path.join(config.jobsDir, job.id)
+    if (!fs.existsSync(jobDir)) return // folder was removed; don't recreate it
 
-  job.updatedAt = now
-  job.savedAt = now
+    job.updatedAt = now
+    job.savedAt = now
 
-  const record = {
-    version: VERSION,
-    id: job.id,
-    status: job.status,
-    phase: job.phase ?? null,
-    progress: job.progress ?? 0,
-    detail: job.detail ?? null,
-    error: job.error ?? null,
-    source: job.source ?? null,
-    // Display name set from the Media Library; null shows the default name.
-    name: job.name ?? null,
-    // The copy's filename in the engine's samples folder; follows renames.
-    sampleFile: job.sampleFile ?? null,
-    imageCount: job.imageCount ?? null,
-    removeBackground: job.removeBackground ?? false,
-    createdAt: job.createdAt,
-    updatedAt: now,
-    // Relative to jobsDir so moving JOBS_DIR doesn't break old records.
-    result: job.resultPath
-      ? path.relative(config.jobsDir, job.resultPath).split(path.sep).join('/')
-      : null,
-  }
-  // Keep a log tail for finished jobs so a failure stays diagnosable after a restart.
-  if (TERMINAL_STATUS.has(job.status)) record.logTail = job.log.slice(-LOG_TAIL_LINES)
-
-  const file = path.join(jobDir, STATUS_FILE)
-  const tmp = `${file}.tmp`
-  const json = JSON.stringify(record, null, 2)
-  try {
-    // Write-then-rename so a crash mid-write can't leave a half-written record.
-    fs.writeFileSync(tmp, json)
-    try {
-      fs.renameSync(tmp, file)
-    } catch {
-      // Windows can refuse to replace a file another process has open.
-      fs.writeFileSync(file, json)
-      fs.rmSync(tmp, { force: true })
+    const record = {
+        version: VERSION,
+        id: job.id,
+        status: job.status,
+        phase: job.phase ?? null,
+        progress: job.progress ?? 0,
+        detail: job.detail ?? null,
+        error: job.error ?? null,
+        source: job.source ?? null,
+        // Display name set from the Media Library; null shows the default name.
+        name: job.name ?? null,
+        // The copy's filename in the engine's samples folder; follows renames.
+        sampleFile: job.sampleFile ?? null,
+        imageCount: job.imageCount ?? null,
+        removeBackground: job.removeBackground ?? false,
+        trainIters: job.trainIters ?? null,
+        createdAt: job.createdAt,
+        updatedAt: now,
+        // Relative to jobsDir so moving JOBS_DIR doesn't break old records.
+        result: job.resultPath
+            ? path.relative(config.jobsDir, job.resultPath).split(path.sep).join('/')
+            : null,
     }
-  } catch (err) {
-    console.warn(`[backend] could not save status for job ${job.id}: ${err.message}`)
-  }
+    // Keep a log tail for finished jobs so a failure stays diagnosable after a restart.
+    if (TERMINAL_STATUS.has(job.status)) record.logTail = job.log.slice(-LOG_TAIL_LINES)
+
+    const file = path.join(jobDir, STATUS_FILE)
+    const tmp = `${file}.tmp`
+    const json = JSON.stringify(record, null, 2)
+    try {
+        // Write-then-rename so a crash mid-write can't leave a half-written record.
+        fs.writeFileSync(tmp, json)
+        try {
+            fs.renameSync(tmp, file)
+        } catch {
+            // Windows can refuse to replace a file another process has open.
+            fs.writeFileSync(file, json)
+            fs.rmSync(tmp, { force: true })
+        }
+    } catch (err) {
+        console.warn(`[backend] could not save status for job ${job.id}: ${err.message}`)
+    }
 }
 
 /************************************************************************/
@@ -115,21 +118,18 @@ export function saveJob(job, { throttle = false } = {}) {
     Record of the job, else null.
 */
 /************************************************************************/
-export async function readStatus(id, jobsDir = config.jobsDir) 
-{
-  try 
-  {
-    const record = JSON.parse(await fsp.readFile(path.join(jobsDir, id, STATUS_FILE), 'utf8'))
-    if (record?.version !== VERSION || record.id !== id || !VALID_STATUS.has(record.status)) 
-    {
-      return null
+export async function readStatus(id, jobsDir = config.jobsDir) {
+    try {
+        const record = JSON.parse(await fsp.readFile(path.join(jobsDir, id, STATUS_FILE), 'utf8'))
+        if (record?.version !== VERSION || record.id !== id || !VALID_STATUS.has(record.status)) {
+            return null
+        }
+        return record
     }
-    return record
-  } 
-  catch 
-  {
-    return null
-  }
+    catch
+    {
+        return null
+    }
 }
 
 // ----- End of Functions ----------------------------------------------------- //

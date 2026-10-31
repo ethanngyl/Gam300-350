@@ -1,0 +1,202 @@
+CoDeFine - Current Features
+===========================
+
+Compiled from the source code. "Not done yet" marks things the code
+itself flags as stubs.
+
+
+WEB APPLICATION (GENESIS)
+=========================
+
+Accounts and sign-in
+--------------------
+- Sign in or create an account (email and password, stored as a hash in
+  SQLite), or continue as a guest.
+- Login and signup are rate-limited to slow down password guessing.
+- Account page: profile card, sign out, sound settings (on/off and volume),
+  and usage stats (models, photos, failed builds, queue).
+- Admins see every user's jobs; normal users see only their own.
+- Not done yet: "Continue with Google" and "Forgot password" both show a
+  message and do nothing else.
+
+Navigation
+----------
+- Top bar (Library / Photo Editor / Scene Builder / YouTube Extractor tabs,
+  account menu with a quick mute).
+- Collapsible sidebar ("New model", "Add photos", all pages, user menu); it
+  becomes a slide-in drawer on phones.
+- Layouts work on both desktop and phone.
+- UI sounds: tap, confirm, back, camera shutter, tick, success, error.
+
+Home
+----
+- Welcome line and a "Recent" section with two tabs, "Your files" and
+  "Generated models", plus "View all".
+- With nothing made yet, it shows a "Create your first 3D model" card.
+
+Camera Capture
+--------------
+- Live camera preview, with manual capture or timed auto-capture up to a
+  photo limit you set; Space takes a photo.
+- Add photos by drag-and-drop, file picker, or from the library; remove any
+  photo from the batch.
+- Each photo is checked in the background for blur, bad exposure and
+  near-duplicates, and problem photos are outlined.
+- "Remove background" option and the Model detail slider.
+- "Review photos first" opens the Photo Editor; "Use this batch" starts the
+  build.
+
+Photo Editor
+------------
+- The same photo checks, with keep or leave out for each photo.
+- Edits: auto fix, brightness, contrast, warmth, tint, auto colour, pick a
+  neutral spot, sharpen, crop.
+- Edits apply to the whole batch, or to a single photo on desktop.
+- Warns about strong settings, lost highlight or shadow detail, and large or
+  mixed crops.
+- "Use original photos" ignores all edits; the originals are never changed.
+- Remove background and Model detail (Fast 5k / Normal 7k / Detailed 10k
+  iterations).
+- "Back to camera" / "Go to camera" moves the photos to the capture page.
+
+YouTube Extractor
+-----------------
+- Paste a link, set the frame rate and model detail, see a thumbnail
+  preview, then "Process video".
+- Live progress card while it runs, with Cancel.
+- Result card with the extracted frames and a .ply download.
+
+Processing screen
+-----------------
+- Live step, iteration counter, progress bar, elapsed time, a scanning photo
+  preview and a step tracker.
+- Leaving the screen in any way cancels the job on the server, so COLMAP and
+  Brush stop using the GPU.
+- Explains failures with tips; asks you to name the model when it finishes.
+
+Library
+-------
+- 3D Models: a searchable, sortable grid with Ready / Processing status. The
+  cover image is the object cut out of one of its photos.
+- Right-click a model to rename or delete it; deleting also removes its
+  photo batch.
+- Photo Library: batches grouped by job, with search and sort; click a photo
+  to download it.
+
+Model Viewer
+------------
+- Pick any finished model, or open a local .ply file, in a full-screen
+  viewer.
+- The viewer uses the engine's WebAssembly renderer by default.
+- It falls back to, or can be switched to, a three.js renderer
+  (gaussian-splats-3d); the choice is remembered per browser.
+
+Scene Builder
+-------------
+- Live 3D viewport showing every model in the scene at once (one
+  gaussian-splats-3d viewer), each with its own position, rotation, scale
+  and visibility. Each model is turned upright from its .ply header.
+- Add models from the library; move, rotate and scale the selected one with
+  a three.js gizmo (dragging elsewhere orbits the camera); W/A/S/D slide it
+  along the ground relative to the camera (Shift for bigger steps); drop to
+  floor; duplicate; delete; undo/redo; save and reopen.
+- Desktop extras: outliner with hide, an inspector with exact values,
+  snapping, render mode, background colour, screenshot and keyboard
+  shortcuts.
+- Phone: a bottom toolbar and bottom sheets, with a limit on how many models
+  a scene holds.
+- Not done yet:
+  - Clean-up, render mode, reset view, screenshot and an exact drop to floor
+    are waiting on scene functions in the WebAssembly engine
+    (SceneEngine.js).
+  - Scenes are saved only in the browser (localStorage), because the backend
+    has no /scenes routes.
+
+Backend
+-------
+- Upload -> optional background masks -> COLMAP -> Brush training ->
+  normalized .ply -> copy into the engine's samples folder.
+- YouTube frame extraction (needs at least 8 frames).
+- Jobs and their status survive a server restart.
+- Cancel kills the whole process tree; working files are cleaned up after a
+  job finishes.
+- Shared library: GPU machines send finished jobs to a central VM, and jobs
+  a machine doesn't have are fetched from the VM.
+- Per-job metrics: phase timings, iterations, splat count, hardware, and
+  VRAM/GPU use via nvidia-smi.
+- /wiki pages served from markdown.
+- One-click launcher (start.bat) that installs tools and dependencies,
+  builds the wasm and web app, and starts the backend and a Cloudflare
+  tunnel.
+
+Metrics dashboard (separate app, port 5010)
+-------------------------------------------
+- Overview: KPIs and charts.
+- Metrics: a sortable, filterable table with CSV/JSON export and full-record
+  detail.
+- Hardware: throughput by host and GPU.
+- Follows the light/dark system setting.
+
+
+ENGINE (CODEFINE DESKTOP EDITOR, Qt + OpenGL 3.3)
+=================================================
+
+Viewport
+--------
+- Renders Gaussian splats in two modes: Point Cloud, or Gaussian Splat
+  (oriented 2D ellipses).
+- Orbit camera: right-drag orbits, left-drag pans, the wheel zooms, Home
+  recenters.
+- ImGui stats overlay.
+
+Scene editing
+-------------
+- Load several models; select, rename (F2), delete, hide/show, reset
+  position.
+- Nudge the selected model with W/A/S/D or the arrow keys; Esc deselects.
+- Undo/redo for moves.
+
+Import
+------
+- Ctrl+O, drag-and-drop .ply files, or a Recent files menu.
+- Files load on a worker thread.
+- Optional trim on import.
+
+Trimming
+--------
+- Removes low-opacity splats, crops a percentage off each end of every axis,
+  and drops splats in sparse regions.
+- Global defaults in a Trim Settings dialog; values for each model in the
+  Inspector.
+
+Export (Ctrl+E, written on a worker thread)
+-------------------------------------------
+- Formats: Gaussian .ply, .splat, point-cloud .ply, .obj, .glb, .stl.
+- Export the selected model or the whole scene.
+- Choose how splats become mesh geometry, see a size estimate, and the last
+  choices are remembered.
+
+Panels (dockable; the layout is saved and can be reset)
+-------------------------------------------------------
+- Scene: outliner.
+- Inspector: name, splat count, position, trim.
+- Assets: a .ply browser with filtering that updates when the folder
+  changes.
+- My Models: your web-app models, downloaded to a per-user cache.
+- Console: captures stdout, stderr and Qt logs, colour-coded.
+- Audio: an FMOD player that can play several files at once.
+
+Account
+-------
+- Sign in with your web-app account (server address, email, password,
+  Remember me).
+- Users see their own models; admins see everyone's.
+
+Other
+-----
+- Dark editor theme; Help > Controls and About.
+- Web build: the same loader, renderer, shader and camera compiled to
+  WebAssembly/WebGL2. The web app can call init, load .ply, clear, render
+  mode, splat count, orbit, pan, zoom, reset camera, render and shutdown.
+- Packaging: package.bat makes a portable build, plus a Windows installer if
+  NSIS is installed.
