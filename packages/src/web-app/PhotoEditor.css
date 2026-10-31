@@ -373,6 +373,9 @@
     gap: 10px;
     background: var(--forma-sidebar);
     border-top: 1px solid var(--forma-border);
+    /* Fills the strip kept free for the dock below it, so the page doesn't
+       show through between the footer and the bottom of the screen. */
+    box-shadow: 0 84px 0 var(--forma-sidebar);
     z-index: 5;
 }
 
@@ -450,11 +453,11 @@
 
     /* Panel stays in view while scrolling a long photo grid, and scrolls on
        its own (above the sticky footer) instead of pushing the sliders off
-       the page. */
+       the page. 84px is the room kept for the dock under the page. */
     .photo-editor-panel {
         position: sticky;
         top: 16px;
-        max-height: calc(100dvh - 60px - 32px - 76px);
+        max-height: calc(100dvh - 84px - 32px - 76px);
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
