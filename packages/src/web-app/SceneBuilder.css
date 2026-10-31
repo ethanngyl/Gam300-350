@@ -706,6 +706,8 @@
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     background: var(--forma-sidebar);
     border-top: 1px solid var(--forma-border);
+    /* Fills the strip kept free for the dock below it. */
+    box-shadow: 0 72px 0 var(--forma-sidebar);
 }
 
     .scene-builder-bottom-bar .scene-builder-tool {

@@ -320,7 +320,7 @@ html {
     border: 1px solid transparent;
     border-left: 2px solid transparent;
     background: transparent;
-    color: var(--forma-text-soft);
+    color: #e3d3c3;
     font-family: inherit;
     font-size: 0.84rem;
     text-align: left;
@@ -3161,5 +3161,243 @@ html {
 
     .genesis-login-split .login-logo {
         display: flex;
+    }
+}
+
+/* ============================================================
+   Dock layout (Genesis second layout)
+   No top nav or sidebar: the page fills the screen and a floating
+   dock sits at the bottom centre (Dock.jsx). Items are icons whose
+   labels slide out on hover / focus. On mouse devices the dock fades
+   and slides mostly out of view when idle (.is-idle) and comes back
+   when the pointer reaches the bottom edge (.genesis-dock-reveal).
+   Kept after the sidebar and responsive sections so these rules win.
+   ============================================================ */
+
+.genesis-shell {
+    position: relative;
+}
+
+    .genesis-body,
+    .genesis-shell .genesis-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+/* Room under the last content, so the dock never covers it. */
+.genesis-main {
+    padding-bottom: 84px;
+}
+
+.genesis-dock {
+    position: fixed;
+    left: 50%;
+    bottom: 14px;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 16px);
+    padding: 6px;
+    border-radius: 999px;
+    border: 1px solid var(--forma-border-strong);
+    background: rgba(24, 24, 27, 0.82);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    transform: translateX(-50%);
+    transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease;
+}
+
+    /* Faded: only a sliver shows above the bottom edge. */
+    .genesis-dock.is-idle {
+        opacity: 0.48;
+        transform: translate(-50%, calc(100% + 9px));
+    }
+
+/* Invisible strip along the bottom edge that brings a faded dock back. */
+.genesis-dock-reveal {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    z-index: 69;
+    width: min(640px, 90vw);
+    height: 20px;
+    transform: translateX(-50%);
+}
+
+.genesis-dock-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.genesis-dock-divider {
+    flex: none;
+    width: 1px;
+    height: 24px;
+    margin: 0 3px;
+    background: var(--forma-border-strong);
+}
+
+.genesis-dock-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    height: 40px;
+    min-width: 40px;
+    padding: 0 11px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text-soft);
+    font-family: var(--forma-font);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+    .genesis-dock-item > svg {
+        flex: none;
+    }
+
+    .genesis-dock-item:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+/* The label is hidden until hover / focus, then slides out. */
+.genesis-dock-label {
+    display: inline-block;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-width 0.34s cubic-bezier(0.22, 1, 0.36, 1), margin 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+
+/* Only with a mouse: on touch screens a tapped item keeps hover / focus,
+   so its label would stay open and push the dock wider than the phone. */
+@media (hover: hover) and (pointer: fine) {
+    .genesis-dock-item:hover,
+    .genesis-dock-item:focus-visible {
+        padding-right: 15px;
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+    }
+
+        .genesis-dock-item:hover .genesis-dock-label,
+        .genesis-dock-item:focus-visible .genesis-dock-label {
+            max-width: 150px;
+            margin-left: 9px;
+            opacity: 1;
+        }
+}
+
+/* Current page: blue tint. */
+.genesis-dock-item.is-active {
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    color: var(--forma-teal-text);
+}
+
+    .genesis-dock-item.is-active:hover,
+    .genesis-dock-item.is-active:focus-visible {
+        background: rgba(var(--forma-accent-rgb), 0.22);
+        color: var(--forma-heading);
+    }
+
+/* New model: always solid blue. */
+.genesis-dock-item.is-primary,
+.genesis-dock-item.is-primary.is-active {
+    border-color: rgba(var(--forma-accent-rgb), 0.45);
+    background: var(--forma-blue);
+    color: var(--forma-on-accent);
+}
+
+    .genesis-dock-item.is-primary:hover,
+    .genesis-dock-item.is-primary:focus-visible {
+        background: var(--forma-blue-hover);
+        color: var(--forma-on-accent);
+    }
+
+/* ---------- Signed-in user ---------- */
+
+.genesis-dock-profile {
+    position: relative;
+}
+
+.genesis-dock-item.genesis-dock-avatar {
+    padding: 3px;
+}
+
+    .genesis-dock-item.genesis-dock-avatar[aria-expanded='true'] {
+        background: var(--forma-panel-raised);
+    }
+
+@media (hover: hover) and (pointer: fine) {
+    .genesis-dock-item.genesis-dock-avatar:hover,
+    .genesis-dock-item.genesis-dock-avatar:focus-visible {
+        padding-right: 3px;
+    }
+
+        .genesis-dock-item.genesis-dock-avatar:hover .genesis-dock-label,
+        .genesis-dock-item.genesis-dock-avatar:focus-visible .genesis-dock-label {
+            margin-right: 10px;
+        }
+}
+
+.genesis-dock-avatar-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--forma-accent-rgb), 0.15);
+    border-color: rgba(var(--forma-accent-rgb), 0.35);
+    color: var(--forma-teal-text);
+}
+
+/* The account menu opens upwards, right-aligned with the avatar. */
+.genesis-dock-profile .genesis-profile-menu {
+    left: auto;
+    right: -6px;
+    bottom: calc(100% + 16px);
+    width: 270px;
+    max-width: calc(100vw - 24px);
+}
+
+/* ---------- Phones: smaller items, no fading ---------- */
+
+@media (max-width: 760px) {
+    .genesis-main {
+        padding-bottom: 72px;
+    }
+
+    .genesis-dock {
+        bottom: max(10px, env(safe-area-inset-bottom));
+        gap: 2px;
+        padding: 4px;
+    }
+
+    .genesis-dock-group {
+        gap: 0;
+    }
+
+    .genesis-dock-divider {
+        margin: 0 2px;
+    }
+
+    .genesis-dock-item {
+        height: 36px;
+        min-width: 36px;
+        padding: 0 8px;
+    }
+
+        .genesis-dock-item.genesis-dock-avatar {
+            padding: 2px;
+        }
+
+    .genesis-dock-avatar-icon {
+        width: 30px;
+        height: 30px;
     }
 }
