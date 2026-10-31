@@ -19,6 +19,8 @@ Tables:
   sessions -- one row per logged-in browser (token hash, user, expiry)
   jobs     -- which user created each job folder under jobs/. Jobs with no
               row (made before accounts existed) are visible to admins only.
+  feedback -- messages sent from the website's Feedback page (on the VM:
+              from every machine), with the sender's name and email.
 - hashPassword(password)
 Returns "salt:hash" (hex) using a random 16-byte salt and scrypt.
 - verifyPassword(password, stored)
@@ -72,6 +74,10 @@ On the VM with FILE_STORE=db: finished models are kept in the tables
 job_models (size) and job_model_chunks (the .ply in 4 MiB pieces) instead
 of jobs/<id>_out/result.ply, so a byte range or a download never has to
 load a whole model into memory.
+- addFeedback({ userId, email, name, category, message, origin })
+Stores one feedback message and returns its id.
+- listFeedback({ category, before, limit })
+One page of feedback for the admins' Inbox, newest first.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -304,6 +310,31 @@ const deleteJobModel = db.prepare('DELETE FROM job_models WHERE job_id = ?')
 const selectJobModel = db.prepare('SELECT size, chunk_size, stored_at FROM job_models WHERE job_id = ?')
 const selectModelChunk = db.prepare('SELECT data FROM job_model_chunks WHERE job_id = ? AND seq = ?')
 const selectAnyJobModel = db.prepare('SELECT 1 FROM job_models LIMIT 1')
+
+// Feedback from the website. The sender's email and name are copied in, so
+// a message still says who sent it after their account is deleted.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feedback (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    user_email TEXT NOT NULL,
+    user_name  TEXT NOT NULL,
+    category   TEXT NOT NULL CHECK (category IN ('bug', 'idea', 'other')),
+    message    TEXT NOT NULL,
+    origin     TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`)
+const insertFeedback = db.prepare(
+  'INSERT INTO feedback (user_id, user_email, user_name, category, message, origin) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'
+)
+// Newest first; ?1 = category (NULL: all), ?2 = only ids below this (NULL:
+// from the newest), ?3 = how many rows.
+const selectFeedbackPage = db.prepare(`
+  SELECT id, user_name, user_email, category, message, origin, created_at FROM feedback
+  WHERE (?1 IS NULL OR category = ?1) AND (?2 IS NULL OR id < ?2)
+  ORDER BY id DESC LIMIT ?3
+`)
 
 
 // ----- Start of Functions --------------------------------------------------- //
@@ -926,5 +957,70 @@ export function hasDbModels()
 export function deleteDbModel(jobId)
 {
   deleteJobModel.run(jobId)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Stores one message from the website's Feedback page.
+  \param userId
+  number
+    The sender's user id
+  \param email
+  string
+  \param name
+  string
+  \param category
+  string
+    'bug', 'idea' or 'other'
+  \param message
+  string
+  \param origin
+  string or null
+    The machine it was sent from
+  \return
+    The new feedback id
+*/
+/************************************************************************/
+export function addFeedback({ userId, email, name, category, message, origin })
+{
+  return insertFeedback.get(userId, email, name, category, message, origin ?? null).id
+}
+
+/************************************************************************/
+/*!
+  \brief
+    One page of feedback for the admins' Inbox, newest first.
+  \param category
+  string or null
+    'bug', 'idea' or 'other'; null for all
+  \param before
+  number or null
+    Only messages older than this id (the last one already shown)
+  \param limit
+  number
+    Page size
+  \return
+    { items: [{ id, name, email, category, message, origin, createdAt }],
+      hasMore }, createdAt as an ISO date (UTC)
+*/
+/************************************************************************/
+export function listFeedback({ category = null, before = null, limit = 50 })
+{
+  // One extra row says whether another page exists.
+  const rows = selectFeedbackPage.all(category, before, limit + 1)
+  return {
+    items: rows.slice(0, limit).map((row) => ({
+      id: row.id,
+      name: row.user_name,
+      email: row.user_email,
+      category: row.category,
+      message: row.message,
+      origin: row.origin,
+      // datetime('now') is UTC "YYYY-MM-DD HH:MM:SS"; say so for the browser.
+      createdAt: `${row.created_at.replace(' ', 'T')}Z`,
+    })),
+    hasMore: rows.length > limit,
+  }
 }
 // ----- End of Functions ----------------------------------------------------- //

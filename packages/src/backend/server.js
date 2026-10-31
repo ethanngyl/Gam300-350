@@ -24,9 +24,10 @@ folders that appeared after startup. Returns null if the job doesn't exist.
 Read a cookie from the request / log a user in by setting the HttpOnly
 session cookie (the session itself is stored in db.js). With "Remember me"
 the cookie lasts 7 days; without it the browser drops it on close.
-- loadUser / requireUser (middleware)
+- loadUser / requireUser / requireAdmin (middleware)
 loadUser sets req.user from the session cookie on every request;
-requireUser answers 401 when nobody is logged in.
+requireUser answers 401 when nobody is logged in, requireAdmin 403 when
+the user isn't an admin.
 - canAccessJob(user, jobId) / requireJobAccess (middleware)
 Role check: admins can access every job, users only jobs they created.
 requireJobAccess guards the /jobs/:id routes and answers 404 for someone
@@ -39,6 +40,11 @@ key. On other machines ('client'), callAuthority forwards signup/login to
 the VM (8 s timeout), clientAuthProblem refuses to run without a key or
 over plain http://, and logAuthorityFailure names setup mistakes in the
 log. 'local' keeps accounts on this machine.
+- validateFeedback(body) / POST /feedback / GET /feedback
+Feedback from the website, signed-in accounts only (guests get 401), at
+most 10 per account per hour. Stored in the VM's database: client
+machines forward it to the VM's /library/feedback. GET is the admins'
+read-only Inbox (requireAdmin: 403 for everyone else).
 - validateSignup(body) / checkCredentials(email, password)
 Shared signup rules, and the password check with a per-email limit of 10
 wrong passwords per 15 minutes.
@@ -107,9 +113,9 @@ import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
 import
 {
-  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteDbImages,
+  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, addFeedback, createSession, createUser, deleteDbImages,
   deleteDbModel, deleteSession, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
-  findUserById, getDbImage, getDbModelInfo, getJobOwnerId, isJobSynced, listDbImageNames,
+  findUserById, getDbImage, getDbModelInfo, getJobOwnerId, isJobSynced, listDbImageNames, listFeedback,
   listOwnedJobIds, readDbModelChunk, recordStoredJob, retireLocalAccounts, setJobOwner,
   storeJobImages, storeJobModel, unmarkJobSynced, upsertLocalUser, verifyPassword,
 }
@@ -330,6 +336,21 @@ function loadUser(req, _res, next) {
 /************************************************************************/
 function requireUser(req, res, next) {
     if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+    next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware (after requireUser): rejects the request unless the user
+    is an admin. The role comes from the database on every request, so a
+    promotion or demotion counts straight away.
+  \return
+    403 if not an admin
+*/
+/************************************************************************/
+function requireAdmin(req, res, next) {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Only admins can do this.' })
     next()
 }
 
@@ -1931,6 +1952,124 @@ app.post('/auth/logout', (req, res) => {
     deleteSession(readCookie(req, SESSION_COOKIE))
     res.clearCookie(SESSION_COOKIE, { path: '/' })
     res.status(204).end()
+})
+
+// --- Feedback ------------------------------------------------------------------
+// Kept in step with FeedbackScreen.jsx (its categories and length limits).
+const FEEDBACK_CATEGORIES = new Set(['bug', 'idea', 'other'])
+const MIN_FEEDBACK_LENGTH = 10
+const MAX_FEEDBACK_LENGTH = 1000
+// Per account, so one user can't flood the table.
+const feedbackLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
+
+/************************************************************************/
+/*!
+  \brief
+    Checks a feedback body.
+  \param body
+    { category, message }
+  \return
+    { status, error } if invalid (413 if the message is too long, else
+    400), else { category, message } with the message trimmed
+*/
+/************************************************************************/
+function validateFeedback(body) {
+    const { category, message } = body || {}
+    const trimmed = typeof message === 'string' ? message.trim() : ''
+    if (!FEEDBACK_CATEGORIES.has(category))
+        return { status: 400, error: 'Choose a feedback type: bug report, idea or other.' }
+    if (trimmed.length > MAX_FEEDBACK_LENGTH)
+        return { status: 413, error: `Keep your message under ${MAX_FEEDBACK_LENGTH} characters.` }
+    if (trimmed.length < MIN_FEEDBACK_LENGTH)
+        return { status: 400, error: `Write at least ${MIN_FEEDBACK_LENGTH} characters.` }
+    return { category, message: trimmed }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Send feedback from the website's Feedback page. Body: { category:
+    'bug' | 'idea' | 'other', message }. Signed-in accounts only (users
+    and admins): guests have no session, so they get 401. Feedback always
+    ends up in the VM's database: the VM stores it; a client machine
+    forwards it to the VM's /library/feedback, where the VM looks the
+    sender up in its own database (actAsUser); a 'local' machine (no VM)
+    stores it in its own database. At most 10 per account per hour.
+  \return
+    401 if not logged in, 400 / 413 on a bad body, 429 if sending too
+    often, 503 if the VM can't be reached (client machine), else 201 { id }
+*/
+/************************************************************************/
+app.post(['/feedback', '/library/feedback'], requireUser, async (req, res) => {
+    const checked = validateFeedback(req.body)
+    if (checked.error) return res.status(checked.status).json({ error: checked.error })
+
+    const { allowed, retryAfterSec } = feedbackLimiter.hit(`user:${req.user.id}`)
+    if (!allowed) {
+        res.set('Retry-After', String(retryAfterSec))
+        return res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
+    }
+
+    const fromClientMachine = req.path.startsWith('/library/')
+    if (config.authMode === 'client' && !fromClientMachine) {
+        const unavailable = { error: 'The feedback service is unavailable. Try again shortly.' }
+        if (clientAuthProblem()) return res.status(503).json(unavailable)
+        const { status, data } = await forwardToVm('POST', '/library/feedback', req.user, {
+            ...checked,
+            origin: config.machineName,
+        })
+        if (status === 0) return res.status(503).json(unavailable)
+        return res.status(status).json(data)
+    }
+
+    const origin = fromClientMachine
+        ? (typeof req.body.origin === 'string' ? req.body.origin.slice(0, 100) : null)
+        : config.machineName
+    const id = addFeedback({
+        userId: req.user.id,
+        email: req.user.email,
+        name: req.user.name,
+        category: checked.category,
+        message: checked.message,
+        origin,
+    })
+    console.log(`[backend] feedback #${id} (${checked.category}) from ${req.user.email}${origin ? ` on ${origin}` : ''}`)
+    res.status(201).json({ id })
+})
+
+const FEEDBACK_PAGE_SIZE = 50
+
+/************************************************************************/
+/*!
+  \brief
+    The admins' feedback Inbox: one page of feedback, newest first.
+    Query: category ('bug' | 'idea' | 'other'; anything else means all)
+    and before (an id: only older messages, for "Load more"). Admins only.
+    A client machine asks the VM's /library/feedback, and the VM checks
+    the role again in its own database, so a stale admin copy on a client
+    machine can't read it.
+  \return
+    401 if not logged in, 403 if not an admin, 503 if the VM can't be
+    reached (client machine), else { items, hasMore } (see listFeedback)
+*/
+/************************************************************************/
+app.get(['/feedback', '/library/feedback'], requireUser, requireAdmin, async (req, res) => {
+    const category = FEEDBACK_CATEGORIES.has(req.query.category) ? req.query.category : null
+    const beforeNumber = Number(req.query.before)
+    const before = Number.isInteger(beforeNumber) && beforeNumber > 0 ? beforeNumber : null
+
+    if (config.authMode === 'client' && !req.path.startsWith('/library/')) {
+        const unavailable = { error: 'The feedback service is unavailable. Try again shortly.' }
+        if (clientAuthProblem()) return res.status(503).json(unavailable)
+        const query = new URLSearchParams()
+        if (category) query.set('category', category)
+        if (before) query.set('before', String(before))
+        const { status, data } = await forwardToVm('GET', `/library/feedback?${query}`, req.user)
+        if (status === 0) return res.status(503).json(unavailable)
+        return res.status(status).json(data)
+    }
+
+    res.json(listFeedback({ category, before, limit: FEEDBACK_PAGE_SIZE }))
 })
 
 // /wiki with no page → show Home
