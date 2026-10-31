@@ -38,8 +38,29 @@ void InputManager::CallbackMouseScroll(double yScroll)
 	TriggerCallback(SCROLL, HOLD);
 }
 
+void InputManager::SetToolMode(TOOL_MODE mode)
+{
+	if (mode == m_toolMode)
+		return;
+
+	m_toolMode = mode;
+	if (m_onToolModeChanged)
+		m_onToolModeChanged(mode);
+}
+
 void InputManager::CallbackKeyPress(int key, INPUT_TYPE inputType)
 {
+	//Modes switch on the real press only, not on auto-repeat or release
+	if (inputType == PRESS)
+	{
+		switch (key)
+		{
+		case Qt::Key_Q: SetToolMode(PAN);       return;
+		case Qt::Key_W: SetToolMode(TRANSLATE); return;
+		case Qt::Key_E: SetToolMode(ROTATE);    return;
+		case Qt::Key_R: SetToolMode(SCALE);     return;
+		}
+	}
 
 	switch (key)
 	{

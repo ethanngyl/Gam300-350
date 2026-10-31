@@ -56,6 +56,10 @@ public:
     void SetModelHidden(int index, bool hidden);
     //Moves model
     void TranslateModel(SplatModel* model, const glm::vec3& delta);
+    //Scale model
+    void ScaleModel(SplatModel* model, const glm::vec3& delta);
+    //Rotates model
+    void RotateModel(SplatModel* model, const float deltaAngle, const glm::vec3& deltaAxis);
     //View and projection are passed separately because Gaussian mode needs the view-space
     //position of each splat and the projection's focal lengths, not just their product.
     void Draw(const glm::mat4& view, const glm::mat4& proj, float viewportWidthPixels,

@@ -541,6 +541,16 @@ void SplatRenderer::TranslateModel(SplatModel* model, const glm::vec3& delta) {
     model->Translate(delta); // no buffer rebuild needed -- transform is GPU-side
 }
 
+void SplatRenderer::ScaleModel(SplatModel* model, const glm::vec3& delta)
+{
+    model->Scale(delta);
+}
+
+void SplatRenderer::RotateModel(SplatModel* model, const float deltaAngle, const glm::vec3& deltaAxis)
+{
+    model->Rotate(deltaAngle, deltaAxis);
+}
+
 void SplatRenderer::Draw(const glm::mat4& view, const glm::mat4& proj, float viewportWidthPixels,
                          float viewportHeightPixels, const glm::vec3& camPos) {
 

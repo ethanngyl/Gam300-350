@@ -165,7 +165,10 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     ImGuizmo::BeginFrame();
 
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
-    if (!model || model->GetIsHidden()) {
+
+    //Pan mode has no gizmo, left drag belongs to the camera
+    const InputManager::TOOL_MODE toolMode = m_input.GetToolMode();
+    if (!model || model->GetIsHidden() || toolMode == InputManager::PAN) {
         //Nothing dragged, reset drag vars
         m_gizmoWasUsing = false;
         m_dragModel = nullptr;
@@ -183,11 +186,15 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     const glm::mat4 original = model->GetTransform();
     glm::mat4 transform = original;
 
-    //ImGUIzmo method to move(translate) the transform values around
-    //ImGUIzmo method to move(translate) the transform values around
-    //view, projection, operation type (translate), local/world, transform value
-    if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE,
-                             ImGuizmo::WORLD, glm::value_ptr(transform))) 
+    //Gizmo operation follows the active tool mode
+    ImGuizmo::OPERATION operation = ImGuizmo::TRANSLATE;
+    if (toolMode == InputManager::ROTATE) operation = ImGuizmo::ROTATE;
+    else if (toolMode == InputManager::SCALE) operation = ImGuizmo::SCALE;
+
+    //ImGUIzmo method to edit the transform values
+    //view, projection, operation type, local/world, transform value
+    if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation,
+                             ImGuizmo::WORLD, glm::value_ptr(transform)))
     {
         //Apply transform value
         model->SetTransform(transform);
@@ -228,6 +235,8 @@ void Viewport::DrawImGui(float fps) {
     ImGui::Separator();
     ImGui::Text("Models: %zu / %d", m_renderer->ModelCount(), SplatRenderer::kMaxModels);
     ImGui::Text("Splats: %zu", m_renderer->TotalSplatCount());
+    static const char* const kToolNames[] = { "Pan", "Translate", "Rotate", "Scale" };
+    ImGui::Text("Tool:   %s", kToolNames[m_input.GetToolMode()]);
     ImGui::Text("Mode:   %s", m_renderer->GetRenderMode() == SplatRenderer::RenderMode::GaussianSplat
                                   ? "Gaussian Splat" : "Point Cloud");
     ImGui::End();
