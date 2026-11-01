@@ -468,6 +468,16 @@ export const config = {
     // job_models and job_model_chunks), with no samples copy -- set
     // FILE_STORE=db on the VM only (ignored unless AUTH_MODE=authority).
     fileStore: process.env.FILE_STORE === 'db' ? 'db' : 'disk',
+    // VM clean-up (cleanup.js). Keeps stored jobs (photos + model, in the
+    // database or on disk) under this many GB by deleting the oldest; 0 (the
+    // default) never deletes jobs. Jobs younger than cleanupMinAgeDays, and
+    // running ones, are always kept. Feedback older than feedbackKeepDays is
+    // deleted (0 keeps it forever). Checked every cleanupIntervalMin minutes
+    // and after each new job.
+    storageBudgetGB: Number(process.env.STORAGE_BUDGET_GB) || 0,
+    cleanupMinAgeDays: Number(process.env.CLEANUP_MIN_AGE_DAYS) || 7,
+    feedbackKeepDays: process.env.FEEDBACK_KEEP_DAYS === undefined ? 365 : Number(process.env.FEEDBACK_KEEP_DAYS) || 0,
+    cleanupIntervalMin: Number(process.env.CLEANUP_INTERVAL_MIN) || 60,
 
     // --- Account authority (centralized accounts on the VM) --------------------
     // 'local' (default): accounts live in this machine's own database, as

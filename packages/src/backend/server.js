@@ -92,6 +92,11 @@ database in GET /jobs/:id/result.ply and GET /jobs/:id/images/:name.
 - sendDbModel(req, res, jobId, info)
 Serves a model stored in the database, piece by piece, with byte ranges
 (the viewer reads the first 4 KB), HEAD and ETag (304) like sendFile.
+- Clean-up (VM only, cleanup.js)
+On the VM, startCleanup runs at startup and hourly, and requestCleanup
+after each new job: the oldest jobs are deleted while storage is over
+STORAGE_BUDGET_GB, and feedback older than FEEDBACK_KEEP_DAYS. DELETE
+/jobs/:id/files uses the same deleteJobData.
 - shutdown(reason, exitCode)
 Runs only once. Marks every running job as error and saves it, calls 
 killChildren() to stop the COLMAP/Brush/python processes, then exits.
@@ -113,14 +118,15 @@ import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
 import
 {
-  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, addFeedback, createSession, createUser, deleteDbImages,
-  deleteDbModel, deleteSession, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
+  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, addFeedback, createSession, createUser,
+  deleteSession, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
   findUserById, getDbImage, getDbModelInfo, getJobOwnerId, isJobSynced, listDbImageNames, listFeedback,
   listOwnedJobIds, readDbModelChunk, recordStoredJob, retireLocalAccounts, setJobOwner,
   storeJobImages, storeJobModel, unmarkJobSynced, upsertLocalUser, verifyPassword,
 }
     from './db.js'
 import { migrateToDb, moveImagesToDb, moveModelToDb } from './dbstore.js'
+import { deleteJobData, requestCleanup, startCleanup } from './cleanup.js'
 import { createLimiter } from './ratelimit.js'
 import
 {
@@ -1384,6 +1390,8 @@ async function afterJobEnds(job) {
             if (filesInDb) await moveModelToDb(job)
         }
         if (filesInDb) await moveImagesToDb(job.id)
+        // Storage just grew: the VM checks its budget (cleanup.js).
+        if (config.authMode === 'authority') requestCleanup()
     }
     catch (err) {
         console.error(`[backend] tidying up job ${job.id} failed:`, err)
@@ -1482,23 +1490,17 @@ app.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, asy
     unmarkJobSynced(job.id)
   }
 
-  cancelJob(job) // no-op for a finished job
-  jobs.delete(job.id)
-
-    try {
-        // Retries cover Windows briefly locking files of a tool that was just killed.
-        const rmOpts = { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }
-        await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
-        await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
-        await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
-        // Photos and model kept in the database (VM with FILE_STORE=db). No-op otherwise.
-        deleteDbImages(job.id)
-        deleteDbModel(job.id)
-        res.json({ id: job.id, deleted: true })
-    }
-    catch (err) {
-        next(err)
-    }
+  try
+  {
+    // Cancels it if still running, then removes its folders, samples copy and
+    // database photos / model (the same as the VM's clean-up, cleanup.js).
+    await deleteJobData(job)
+    res.json({ id: job.id, deleted: true })
+  }
+  catch (err)
+  {
+    next(err)
+  }
 })
 
 // --- Shared library: receiving jobs (VM only) --------------------------------
@@ -1723,6 +1725,7 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
     const scanned = await scanJob(id)
     if (scanned) restoreJob(scanned)
     console.log(`[backend] library: stored job ${id} from ${origin ?? 'unknown'} (${(bytes / 1024 ** 2).toFixed(1)} MB, owner ${ownerId ?? 'admin-only'})`)
+    requestCleanup() // storage just grew: check the budget
     res.status(201).json({ id, bytes })
   }
   catch (err)
@@ -2395,6 +2398,13 @@ const server = app.listen(config.port, () =>
     if (!config.authApiKey)
       console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
     console.log(`[backend] files: ${filesInDb ? 'photos and models stored in the database (FILE_STORE=db)' : 'photos and models stored as files in jobs/'}`)
+    // Clean-up (cleanup.js): oldest jobs over the budget, old feedback.
+    const jobRule = config.storageBudgetGB > 0
+      ? `jobs kept under ${config.storageBudgetGB} GB (oldest deleted first, never the last ${config.cleanupMinAgeDays} day(s))`
+      : 'jobs are never deleted (STORAGE_BUDGET_GB not set)'
+    const feedbackRule = config.feedbackKeepDays > 0 ? `feedback kept ${config.feedbackKeepDays} days` : 'feedback kept forever'
+    console.log(`[backend] storage: ${jobRule}; ${feedbackRule}`)
+    startCleanup()
   }
   else if (config.authMode === 'client')
   {

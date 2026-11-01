@@ -78,6 +78,9 @@ load a whole model into memory.
 Stores one feedback message and returns its id.
 - listFeedback({ category, before, limit })
 One page of feedback for the admins' Inbox, newest first.
+- deleteOldFeedback(days) / getDbJobBytes(jobId)
+For the VM's clean-up (cleanup.js): removes feedback older than a number
+of days / how many bytes a job's photos and model take in the database.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -330,6 +333,12 @@ const insertFeedback = db.prepare(
 )
 // Newest first; ?1 = category (NULL: all), ?2 = only ids below this (NULL:
 // from the newest), ?3 = how many rows.
+const deleteFeedbackOlderThan = db.prepare(`DELETE FROM feedback WHERE created_at < datetime('now', ?)`)
+// A job's photos + model in the database, in bytes.
+const selectDbJobBytes = db.prepare(`
+  SELECT (SELECT IFNULL(SUM(size), 0) FROM job_images WHERE job_id = ?1)
+       + IFNULL((SELECT size FROM job_models WHERE job_id = ?1), 0) AS bytes
+`)
 const selectFeedbackPage = db.prepare(`
   SELECT id, user_name, user_email, category, message, origin, created_at FROM feedback
   WHERE (?1 IS NULL OR category = ?1) AND (?2 IS NULL OR id < ?2)
@@ -1022,5 +1031,35 @@ export function listFeedback({ category = null, before = null, limit = 50 })
     })),
     hasMore: rows.length > limit,
   }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Deletes feedback older than a number of days (the VM's clean-up).
+  \param days
+  number
+  \return
+    How many messages were deleted
+*/
+/************************************************************************/
+export function deleteOldFeedback(days)
+{
+  return Number(deleteFeedbackOlderThan.run(`-${Math.floor(days)} days`).changes)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    How much a job takes in the database: its photos plus its model.
+  \param jobId
+  string
+  \return
+    bytes (0 if it has nothing in the database)
+*/
+/************************************************************************/
+export function getDbJobBytes(jobId)
+{
+  return Number(selectDbJobBytes.get(jobId).bytes)
 }
 // ----- End of Functions ----------------------------------------------------- //
