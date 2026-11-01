@@ -19,7 +19,9 @@ through renderer().
 #include <GL/glew.h>
 
 #include "gfx/Camera.h"
+#include "gfx/CropBoxRenderer.h"
 #include "Manager/InputManager.h"
+#include "splat/CropBox.h"
 
 #include <glm/glm.hpp>
 
@@ -52,12 +54,18 @@ public:
     // transform before and after the whole drag (not once per frame).
     std::function<void(SplatModel* model, const glm::mat4& before, const glm::mat4& after)> onTransformEdited;
 
+    // Engine -> Qt UI: same as onTransformEdited but for the crop box.
+    std::function<void(const glm::mat4& before, const glm::mat4& after)> onCropBoxEdited;
+
     // Qt UI -> ImGui: whether the ImGui "Engine Stats" overlay is drawn.
     void setShowImGuiStats(bool show) { m_showImGuiStats = show; }
 
     // The scene renderer the editor panels operate on. Null until the GL
     // context exists (i.e. before the widget is first shown).
     SplatRenderer* renderer() const { return m_renderer.get(); }
+
+    // The crop box. While it is active the gizmo edits it instead of the selected model.
+    CropBox& cropBox() { return m_cropBox; }
 
     // Moves the orbit camera's pan target back to where it started.
     void recenterCamera() { m_camera.ResetPosition(); }
@@ -80,7 +88,7 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
-    //Draws the translate gizmo on the selected model and writes drags back to it.
+    //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
     Camera m_camera;
@@ -100,6 +108,11 @@ private:
     bool m_gizmoWasUsing = false;
     //Model being dragged
     SplatModel* m_dragModel = nullptr;
-    //Orginal location of dragged model
+    //Orginal location of dragged model (or of the crop box if m_dragIsCropBox)
     glm::mat4 m_dragBefore = glm::mat4(1.0f);
+    //The drag in progress is moving the crop box, not a model
+    bool m_dragIsCropBox = false;
+
+    CropBox m_cropBox;
+    std::unique_ptr<CropBoxRenderer> m_cropBoxRenderer; // created once the GL context exists
 };

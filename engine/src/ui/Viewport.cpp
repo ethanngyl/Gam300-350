@@ -50,6 +50,7 @@ Viewport::~Viewport() {
     }
     // GL resources must be released with this widget's context current.
     makeCurrent();
+    m_cropBoxRenderer.reset();
     m_renderer.reset();
     ImGui_ImplOpenGL3_Shutdown();
     ImGuiQtBackend::Shutdown();
@@ -71,6 +72,7 @@ void Viewport::initializeGL() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     m_renderer = std::make_unique<SplatRenderer>();
+    m_cropBoxRenderer = std::make_unique<CropBoxRenderer>();
     BindInputs();
 
     // ImGui setup -- foundation for the sandbox UI in later milestones.
@@ -143,6 +145,11 @@ void Viewport::paintGL() {
     const glm::mat4 proj = m_camera.getProjection(aspect);
     //Draw Splat/Pointcloud models
     m_renderer->Draw(view, proj, static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
+    if (m_cropBox.active) {
+        //Orange for removing the inside, blue when keeping it
+        const glm::vec3 color = m_cropBox.removeInside ? glm::vec3(1.0f, 0.55f, 0.1f) : glm::vec3(0.2f, 0.7f, 1.0f);
+        m_cropBoxRenderer->Draw(proj * view, m_cropBox.transform, color);
+    }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGuiQtBackend::NewFrame(*this, deltaTime);
@@ -166,12 +173,16 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
 
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
 
+    //An active crop box takes over the gizmo from the selected model
+    const bool editingBox = m_cropBox.active;
+
     //Pan mode has no gizmo, left drag belongs to the camera
     const InputManager::TOOL_MODE toolMode = m_input.GetToolMode();
-    if (!model || model->GetIsHidden() || toolMode == InputManager::PAN) {
+    if ((!editingBox && (!model || model->GetIsHidden())) || toolMode == InputManager::PAN) {
         //Nothing dragged, reset drag vars
         m_gizmoWasUsing = false;
         m_dragModel = nullptr;
+        m_dragIsCropBox = false;
         m_dragBefore = glm::mat4(1.0f);
         return;
     }
@@ -181,9 +192,9 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetRect(0.0f, 0.0f, displaySize.x, displaySize.y);
 
-    //Get orginal model transform. Kept separate from the copy ImGuizmo edits, because
+    //Get orginal transform of whatever is being edited. Kept separate from the copy ImGuizmo edits, because
     //the first frame of a drag has already moved it by the time IsUsing() reports true.
-    const glm::mat4 original = model->GetTransform();
+    const glm::mat4 original = editingBox ? m_cropBox.transform : model->GetTransform();
     glm::mat4 transform = original;
 
     //Gizmo operation follows the active tool mode
@@ -191,27 +202,38 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     if (toolMode == InputManager::ROTATE) operation = ImGuizmo::ROTATE;
     else if (toolMode == InputManager::SCALE) operation = ImGuizmo::SCALE;
 
+    //The box rotates and scales along its own axes so it can be fitted to a rotated region
+    const ImGuizmo::MODE space = (editingBox && operation != ImGuizmo::TRANSLATE) ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+
     //ImGUIzmo method to edit the transform values
     //view, projection, operation type, local/world, transform value
     if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation,
-                             ImGuizmo::WORLD, glm::value_ptr(transform)))
+                             space, glm::value_ptr(transform)))
     {
         //Apply transform value
-        model->SetTransform(transform);
+        if (editingBox) m_cropBox.transform = transform;
+        else model->SetTransform(transform);
     }
 
     //A whole drag is one undo ste,: remember where it started and report it once it ends
-    //The model is moved live during the drag, only the finished drag goes to the undo stack.
+    //The target is moved live during the drag, only the finished drag goes to the undo stack.
     const bool isUsing = ImGuizmo::IsUsing();
     if (isUsing && !m_gizmoWasUsing) {
-        m_dragModel = model;
+        m_dragIsCropBox = editingBox;
+        m_dragModel = editingBox ? nullptr : model;
         m_dragBefore = original;
     }
     else if (!isUsing && m_gizmoWasUsing) {
-        if (m_dragModel == model && model->GetTransform() != m_dragBefore && onTransformEdited) {
+        if (m_dragIsCropBox) {
+            if (editingBox && m_cropBox.transform != m_dragBefore && onCropBoxEdited) {
+                onCropBoxEdited(m_dragBefore, m_cropBox.transform);
+            }
+        }
+        else if (m_dragModel == model && model && model->GetTransform() != m_dragBefore && onTransformEdited) {
             onTransformEdited(model, m_dragBefore, model->GetTransform());
         }
         m_dragModel = nullptr;
+        m_dragIsCropBox = false;
     }
     m_gizmoWasUsing = isUsing;
 }

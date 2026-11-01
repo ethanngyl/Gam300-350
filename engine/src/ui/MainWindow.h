@@ -93,6 +93,9 @@ private:
     void selectModel(int index);
     void renameModel(int index, const QString& name);
     void deleteSelectedModel();
+    void toggleCropBox();      // shows the crop box around the selected model
+    void applyCropBox();    // removes the splats the crop box selects from the selected model
+    void cancelCropBox();   // hides the crop box without removing anything
     void toggleModelHidden(int index);
     void setRenderMode(int mode); // SplatRenderer::RenderMode as int
     // Asks for export options and a file name, then writes the selected
@@ -143,6 +146,9 @@ private:
     QAction* m_deselectAction = nullptr;
     QAction* m_toggleVisibilityAction = nullptr;
     QAction* m_resetPositionAction = nullptr;
+    QAction* m_addCropBoxAction = nullptr;
+    QAction* m_applyCropBoxAction = nullptr;
+    QAction* m_cropInsideAction = nullptr;
     QActionGroup* m_renderModeGroup = nullptr;
     QAction* m_pointCloudAction = nullptr;
     QAction* m_gaussianAction = nullptr;

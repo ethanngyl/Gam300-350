@@ -17,6 +17,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/MainWindow.h"
 
 #include "net/BackendClient.h"
+#include "splat/CropBox.h"
 #include "splat/SplatExporter.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
@@ -126,6 +127,9 @@ MainWindow::MainWindow() {
     m_viewport->onTransformEdited = [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after));
     };
+    m_viewport->onCropBoxEdited = [this](const glm::mat4& before, const glm::mat4& after) {
+        m_undo.push(new MoveCropBoxCommand(&m_viewport->cropBox(), before, after));
+    };
 
     // The renderer only exists once the GL context does (first show).
     m_viewport->onInitialized = [this] {
@@ -215,7 +219,30 @@ void MainWindow::createActions() {
     m_deleteAction = new QAction(s->standardIcon(QStyle::SP_TrashIcon), "&Delete", this);
     m_deleteAction->setShortcut(QKeySequence::Delete);
     m_deleteAction->setStatusTip("Remove the selected model from the scene (the file is not touched)");
-    connect(m_deleteAction, &QAction::triggered, this, [this] { deleteSelectedModel(); });
+    connect(m_deleteAction, &QAction::triggered, this, [this] {
+        //With a crop box up, Delete removes the splats in it rather than the whole model
+        if (m_viewport->cropBox().active) applyCropBox();
+        else deleteSelectedModel();
+    });
+
+    //Enable/Disable croping box
+    m_addCropBoxAction = new QAction("Add &Crop Box", this);
+    m_addCropBoxAction->setShortcut(QKeySequence("Ctrl+B"));
+    m_addCropBoxAction->setStatusTip("Toggle a box around the selected model. Move, rotate and scale it, then press Delete or Enter to remove the splats inside");
+    connect(m_addCropBoxAction, &QAction::triggered, this, [this] { toggleCropBox(); });
+
+    m_applyCropBoxAction = new QAction("&Apply Crop Box", this);
+    m_applyCropBoxAction->setShortcut(QKeySequence(Qt::Key_Return));
+    m_applyCropBoxAction->setShortcutContext(Qt::WidgetShortcut);
+    m_applyCropBoxAction->setStatusTip("Remove the splats the crop box selects from the selected model");
+    m_viewport->addAction(m_applyCropBoxAction);
+    connect(m_applyCropBoxAction, &QAction::triggered, this, [this] { applyCropBox(); });
+
+    m_cropInsideAction = new QAction("Crop Box Removes &Inside", this);
+    m_cropInsideAction->setCheckable(true);
+    m_cropInsideAction->setChecked(true);
+    m_cropInsideAction->setStatusTip("Checked removes the splats inside the box, unchecked removes everything outside it");
+    connect(m_cropInsideAction, &QAction::toggled, this, [this](bool on) { m_viewport->cropBox().removeInside = on; });
 
     m_toggleVisibilityAction = new QAction("Hide/Show &Model", this);
     m_toggleVisibilityAction->setShortcut(QKeySequence("Ctrl+H"));
@@ -232,7 +259,12 @@ void MainWindow::createActions() {
     m_deselectAction->setShortcut(QKeySequence(Qt::Key_Escape));
     m_deselectAction->setShortcutContext(Qt::WidgetShortcut);
     m_viewport->addAction(m_deselectAction);
-    connect(m_deselectAction, &QAction::triggered, this, [this] { selectModel(-1); refreshScenePanels(); });
+    connect(m_deselectAction, &QAction::triggered, this, [this] {
+        //Esc closes the crop box first, a second press deselects
+        if (m_viewport->cropBox().active) { cancelCropBox(); return; }
+        selectModel(-1);
+        refreshScenePanels();
+    });
 
     m_resetPositionAction = new QAction("Reset &Position", this);
     connect(m_resetPositionAction, &QAction::triggered, this, [this] {
@@ -341,6 +373,10 @@ void MainWindow::createMenus() {
     editMenu->addSeparator();
     editMenu->addAction(m_resetPositionAction);
     editMenu->addAction(m_deselectAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_addCropBoxAction);
+    editMenu->addAction(m_applyCropBoxAction);
+    editMenu->addAction(m_cropInsideAction);
     editMenu->addSeparator();
     editMenu->addAction(m_trimSettingsAction);
 
@@ -717,6 +753,7 @@ void MainWindow::applyModelTrim(const TrimData& settings) {
 
     const size_t total = source.size();
     const size_t kept = trimmed.size();
+    m_undo.clear(); //Splat removals on the stack refer to the old splat list
     renderer->UpdateModel(model, trimmed);
     model->SetTrimData(settings, kept < total);
     refreshScenePanels();
@@ -739,6 +776,7 @@ void MainWindow::untrimModel() {
 
     // The untrimmed data is kept on the model, so Apply can trim it again later.
     const size_t total = model->SourceSplats().size();
+    m_undo.clear(); //Splat removals on the stack refer to the old splat list
     renderer->UpdateModel(model, model->SourceSplats());
     model->SetTrimData(model->GetTrimData(), false);
     refreshScenePanels();
@@ -793,6 +831,57 @@ void MainWindow::toggleModelHidden(int index) {
     statusBar()->showMessage(QString("%1 %2").arg(QString::fromStdString(model->GetName()),
                                                   model->GetIsHidden() ? "hidden" : "shown"),
                              kStatusMessageMs);
+}
+
+void MainWindow::toggleCropBox() {
+
+    CropBox& box = m_viewport->cropBox();
+    if (box.active)
+        cancelCropBox();
+    else
+    {
+        SplatRenderer* renderer = m_viewport->renderer();
+        SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+        if (!model) {
+            statusBar()->showMessage("Select a model before adding a crop box.", kStatusMessageMs);
+            return;
+        }
+        box.transform = FitCropBoxToSplats(model->splats(), model->GetTransform());
+        box.removeInside = m_cropInsideAction->isChecked();
+        box.active = true;
+        statusBar()->showMessage("Crop box added. Press Delete or Enter to remove the splats, Esc to cancel.", kStatusMessageMs);
+    }
+}
+
+void MainWindow::cancelCropBox() {
+    m_viewport->cropBox().active = false;
+}
+
+void MainWindow::applyCropBox() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+    const CropBox& box = m_viewport->cropBox();
+    if (!box.active || !model) {
+        return;
+    }
+
+    const std::vector<uint8_t> keep = ComputeCropKeepMask(model->splats(), model->GetTransform(), box);
+    auto* command = new RemoveSplatsCommand(renderer, model, keep);
+    if (command->RemovedCount() == 0) {
+        delete command;
+        statusBar()->showMessage("The crop box doesn't select any splats.", kStatusMessageMs);
+        return;
+    }
+
+    const size_t removed = command->RemovedCount();
+    m_undo.push(command); //Runs redo(), which removes the splats
+    refreshScenePanels();
+
+    const QString message = QString("Removed %1 splats from %2")
+                                .arg(QLocale().toString(static_cast<qulonglong>(removed)),
+                                     QString::fromStdString(model->GetName()));
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
 }
 
 void MainWindow::deleteSelectedModel() {
