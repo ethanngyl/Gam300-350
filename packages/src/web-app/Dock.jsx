@@ -13,7 +13,8 @@ picker and hands the chosen photos to the capture page; the workspace
 pages (Home, Media Library, Photo Editor, Scene Builder, YouTube
 Extractor, Model Viewer, Feedback); and the signed-in user, whose menu opens upwards
 and links to the account page, mutes / unmutes sound effects, and signs
-out (or in, for guests). Each item is an icon whose label slides out on
+out (or in, for guests). The avatar shows the user's profile photo if
+they set one on the account page (ProfilePhoto.js). Each item is an icon whose label slides out on
 hover or keyboard focus; the current page is highlighted.
 On devices with a mouse, the dock fades and slides mostly out of view 3s
 after the pointer leaves it, and comes back when the pointer reaches the
@@ -25,6 +26,7 @@ and shows icons only, to save space.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
+import { useProfilePhoto } from './ProfilePhoto.js';
 
 const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', icon: 'home' },
@@ -52,6 +54,7 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isIdle, setIsIdle] = useState(false);
     const { isMuted } = useSoundSettings();
+    const profilePhoto = useProfilePhoto(user.email);
     const isCapturePage = activeTab === 'capture';
 
     const clearIdleTimer = useCallback(() => {
@@ -191,7 +194,7 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
                         <div className="genesis-profile-menu" role="dialog" aria-label="Account overview">
                             <div className="genesis-profile-summary">
                                 <span className="forma-avatar genesis-profile-avatar-large">
-                                    <Icon name="user" size={22} />
+                                    {profilePhoto ? <img src={profilePhoto} alt="" /> : <Icon name="user" size={22} />}
                                 </span>
                                 <div className="genesis-profile-identity">
                                     <strong>{user.name}</strong>
@@ -246,7 +249,9 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
                         aria-expanded={isProfileMenuOpen}
                         aria-label={`${user.name}, account menu`}
                     >
-                        <span className="forma-avatar genesis-dock-avatar-icon"><Icon name="user" size={15} /></span>
+                        <span className="forma-avatar genesis-dock-avatar-icon">
+                            {profilePhoto ? <img src={profilePhoto} alt="" /> : <Icon name="user" size={15} />}
+                        </span>
                         <span className="genesis-dock-label">{user.name}</span>
                     </button>
                 </div>
