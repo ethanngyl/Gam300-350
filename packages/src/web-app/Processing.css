@@ -1,6 +1,6 @@
 /* ============================================================
    Processing - the screen shown while the .ply is being built.
-   Also used inside a card (.processing-embedded) by the YouTube
+   Also used inside a card (.processing-embedded) by the Video
    Extractor, so both progress views look the same.
    Uses the --forma-* variables from AppTheme.css. Mobile-first:
    one column (preview banner, status, steps, full-width Cancel);
@@ -451,7 +451,7 @@
     }
 }
 
-/* ---------- Inside a card (YouTube Extractor) ---------- */
+/* ---------- Inside a card (Video Extractor) ---------- */
 
 /* The card around it already has padding and width. */
 .processing-embedded .processing-card {

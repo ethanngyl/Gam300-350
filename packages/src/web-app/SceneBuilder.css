@@ -721,7 +721,7 @@
 /* ---------- Wider screens ---------- */
 
 @media (min-width: 761px) {
-    /* Same page padding and title size as the Photo Editor and YouTube
+    /* Same page padding and title size as the Photo Editor and Video
        Extractor, so the headings line up across pages. */
     .scene-builder {
         padding: 32px 40px 24px;

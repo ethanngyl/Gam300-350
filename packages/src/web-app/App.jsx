@@ -10,7 +10,7 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (a floating dock at the bottom, laid out like the Genesis second
 layout) with these pages above it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, YouTube Extractor, Feedback, Capture and Account. Capture
+Builder, Model Viewer, Video Extractor, Feedback, Capture and Account. Capture
 opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
 batch to the Photo Editor. The first time each account signs in on this

@@ -72,9 +72,9 @@ const WALKTHROUGH_STEPS = [
         placement: 'above',
     },
     {
-        target: '.genesis-dock [aria-label="YouTube Extractor"]',
+        target: '.genesis-dock [aria-label="Video Extractor"]',
         title: 'Video Extractor',
-        text: 'Turn a video of an object into a 3D model.',
+        text: 'Turn a YouTube link or an .mp4 video of an object into a 3D model.',
         placement: 'above',
     },
     {
