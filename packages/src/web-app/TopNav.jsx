@@ -8,7 +8,7 @@
 \brief
 Top navigation bar: a menu button (phones only) that opens the sidebar
 drawer, the GENESIS logo (click it to go to Home), Library / Photo Editor /
-Scene Builder / YouTube Extractor tabs (with click sound), and the signed-in user's
+Scene Builder / Video Extractor tabs (with click sound), and the signed-in user's
 avatar. (The "Workspace ready" indicator was removed.) Clicking the avatar opens a small account menu with links
 to the account page, a quick mute / unmute for sound effects, and sign
 out.
@@ -23,7 +23,7 @@ const TABS = [
     { id: 'library', label: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
     { id: 'scene', label: 'Scene Builder', icon: 'shield' },
-    { id: 'youtube', label: 'YouTube Extractor', icon: 'play' },
+    { id: 'youtube', label: 'Video Extractor', icon: 'play' },
 ];
 
 function TopNav({ activeTab, onTabChange, user, onOpenAccount, onSignOut, onToggleMenu }) {

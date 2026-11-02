@@ -19,6 +19,8 @@ Tables:
   sessions -- one row per logged-in browser (token hash, user, expiry)
   jobs     -- which user created each job folder under jobs/. Jobs with no
               row (made before accounts existed) are visible to admins only.
+  feedback -- messages sent from the website's Feedback page (on the VM:
+              from every machine), with the sender's name and email.
 - hashPassword(password)
 Returns "salt:hash" (hex) using a random 16-byte salt and scrypt.
 - verifyPassword(password, stored)
@@ -60,6 +62,25 @@ bytes columns.
 - markJobSynced / unmarkJobSynced / isJobSynced(jobId)
 On a client machine: which finished jobs the VM already has (table
 synced_jobs), so each is sent once.
+- backupDatabase()
+A consistent copy of app.db (VACUUM INTO), safe while running.
+- storeJobImages(jobId, imagesDir) / listDbImageNames / getDbImage /
+  deleteDbImages / hasDbImages
+On the VM with FILE_STORE=db: finished jobs' photos are kept in the table
+job_images instead of jobs/<id>/images/ (see dbstore.js).
+- storeJobModel(jobId, filePath) / getDbModelInfo / readDbModelChunk /
+  deleteDbModel / hasDbModels
+On the VM with FILE_STORE=db: finished models are kept in the tables
+job_models (size) and job_model_chunks (the .ply in 4 MiB pieces) instead
+of jobs/<id>_out/result.ply, so a byte range or a download never has to
+load a whole model into memory.
+- addFeedback({ userId, email, name, category, message, origin })
+Stores one feedback message and returns its id.
+- listFeedback({ category, before, limit })
+One page of feedback for the admins' Inbox, newest first.
+- deleteOldFeedback(days) / getDbJobBytes(jobId)
+For the VM's clean-up (cleanup.js): removes feedback older than a number
+of days / how many bytes a job's photos and model take in the database.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -89,6 +110,13 @@ export const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'))
 
 // SQLite ignores REFERENCES / ON DELETE unless this is on (per connection).
 db.exec('PRAGMA foreign_keys = ON')
+// Write-ahead log: reading (e.g. serving photos from job_images) doesn't
+// block writing, or the other way round. Backups must then use VACUUM INTO
+// (or stop the backend first), not a plain copy of app.db.
+db.exec('PRAGMA journal_mode = WAL')
+// Storing a model is one big transaction, which grows app.db-wal to the
+// model's size; shrink it back to at most 64 MB after each checkpoint.
+db.exec('PRAGMA journal_size_limit = 67108864')
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -229,6 +257,93 @@ const upsertStoredJob = db.prepare(`
 const insertSyncedJob = db.prepare('INSERT OR REPLACE INTO synced_jobs (id) VALUES (?)')
 const deleteSyncedJob = db.prepare('DELETE FROM synced_jobs WHERE id = ?')
 const selectSyncedJob = db.prepare('SELECT 1 FROM synced_jobs WHERE id = ?')
+
+// On the VM with FILE_STORE=db: each finished job's photos, stored whole
+// (photos are small enough, and <img> never asks for byte ranges). Deleting
+// the job's jobs row deletes its photos.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS job_images (
+    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    name   TEXT NOT NULL,
+    mime   TEXT NOT NULL,
+    size   INTEGER NOT NULL,
+    data   BLOB NOT NULL,
+    PRIMARY KEY (job_id, name)
+  )
+`)
+
+// The photos need a jobs row (foreign key). OR IGNORE: an existing row keeps
+// its owner; a job with no row (older, ownerless) stays admin-only.
+const ensureJobRow = db.prepare('INSERT OR IGNORE INTO jobs (id) VALUES (?)')
+const insertJobImage = db.prepare('INSERT INTO job_images (job_id, name, mime, size, data) VALUES (?, ?, ?, ?, ?)')
+const deleteJobImages = db.prepare('DELETE FROM job_images WHERE job_id = ?')
+const selectJobImageNames = db.prepare('SELECT name FROM job_images WHERE job_id = ? ORDER BY name')
+const selectJobImage = db.prepare('SELECT mime, size, data FROM job_images WHERE job_id = ? AND name = ?')
+const selectAnyJobImage = db.prepare('SELECT 1 FROM job_images LIMIT 1')
+
+const PHOTO_NAME_RE = /\.(jpe?g|png)$/i
+
+// On the VM with FILE_STORE=db: each finished model (.ply, often hundreds of
+// MB) in fixed-size pieces. SQLite reads a value whole, so pieces let a
+// byte range (the viewer's 4 KB header read) or a download read only what it
+// needs. Deleting the job's jobs row (or its job_models row) deletes them.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS job_models (
+    job_id     TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+    size       INTEGER NOT NULL,
+    chunk_size INTEGER NOT NULL,
+    stored_at  INTEGER NOT NULL
+  )
+`)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS job_model_chunks (
+    job_id TEXT NOT NULL REFERENCES job_models(job_id) ON DELETE CASCADE,
+    seq    INTEGER NOT NULL,
+    data   BLOB NOT NULL,
+    PRIMARY KEY (job_id, seq)
+  )
+`)
+
+// Size of each piece. Stored per model (chunk_size), so changing it later
+// doesn't break models already stored.
+const MODEL_CHUNK_BYTES = 4 * 1024 * 1024
+const insertJobModel = db.prepare('INSERT INTO job_models (job_id, size, chunk_size, stored_at) VALUES (?, ?, ?, ?)')
+const insertModelChunk = db.prepare('INSERT INTO job_model_chunks (job_id, seq, data) VALUES (?, ?, ?)')
+const deleteJobModel = db.prepare('DELETE FROM job_models WHERE job_id = ?')
+const selectJobModel = db.prepare('SELECT size, chunk_size, stored_at FROM job_models WHERE job_id = ?')
+const selectModelChunk = db.prepare('SELECT data FROM job_model_chunks WHERE job_id = ? AND seq = ?')
+const selectAnyJobModel = db.prepare('SELECT 1 FROM job_models LIMIT 1')
+
+// Feedback from the website. The sender's email and name are copied in, so
+// a message still says who sent it after their account is deleted.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feedback (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    user_email TEXT NOT NULL,
+    user_name  TEXT NOT NULL,
+    category   TEXT NOT NULL CHECK (category IN ('bug', 'idea', 'other')),
+    message    TEXT NOT NULL,
+    origin     TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`)
+const insertFeedback = db.prepare(
+  'INSERT INTO feedback (user_id, user_email, user_name, category, message, origin) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'
+)
+// Newest first; ?1 = category (NULL: all), ?2 = only ids below this (NULL:
+// from the newest), ?3 = how many rows.
+const deleteFeedbackOlderThan = db.prepare(`DELETE FROM feedback WHERE created_at < datetime('now', ?)`)
+// A job's photos + model in the database, in bytes.
+const selectDbJobBytes = db.prepare(`
+  SELECT (SELECT IFNULL(SUM(size), 0) FROM job_images WHERE job_id = ?1)
+       + IFNULL((SELECT size FROM job_models WHERE job_id = ?1), 0) AS bytes
+`)
+const selectFeedbackPage = db.prepare(`
+  SELECT id, user_name, user_email, category, message, origin, created_at FROM feedback
+  WHERE (?1 IS NULL OR category = ?1) AND (?2 IS NULL OR id < ?2)
+  ORDER BY id DESC LIMIT ?3
+`)
 
 
 // ----- Start of Functions --------------------------------------------------- //
@@ -489,10 +604,7 @@ export function retireLocalAccounts()
   const { n } = countLocalAccounts.get()
   if (n === 0) return { removed: 0, backupPath: null }
 
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const backupPath = path.join(DATA_DIR, `app.db.bak-${stamp}`)
-  db.prepare('VACUUM INTO ?').run(backupPath)
-
+  const backupPath = backupDatabase()
   const { changes } = deleteLocalAccounts.run()
   return { removed: Number(changes), backupPath }
 }
@@ -610,5 +722,344 @@ export function unmarkJobSynced(jobId)
 export function isJobSynced(jobId)
 {
   return Boolean(selectSyncedJob.get(jobId))
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A consistent copy of the whole database at data/app.db.bak-<time>,
+    safe while the backend is running (VACUUM INTO, not a file copy).
+  \return
+    The backup's path
+*/
+/************************************************************************/
+export function backupDatabase()
+{
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupPath = path.join(DATA_DIR, `app.db.bak-${stamp}`)
+  db.prepare('VACUUM INTO ?').run(backupPath)
+  return backupPath
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Stores every JPEG/PNG in a folder as the job's photos, replacing any
+    it already had. One transaction: either all photos are stored or none
+    (it throws, and the caller keeps the folder). Files are read one at a
+    time, so memory use is one photo at a time.
+  \param jobId
+  string
+  \param imagesDir
+  string
+    The folder holding the photos (jobs/<id>/images or a staging copy)
+  \return
+    { count, bytes }
+*/
+/************************************************************************/
+export function storeJobImages(jobId, imagesDir)
+{
+  const names = fs.readdirSync(imagesDir).filter((n) => PHOTO_NAME_RE.test(n)).sort()
+  let bytes = 0
+  db.exec('BEGIN')
+  try
+  {
+    ensureJobRow.run(jobId)
+    deleteJobImages.run(jobId)
+    for (const name of names)
+    {
+      const data = fs.readFileSync(path.join(imagesDir, name))
+      const mime = /\.png$/i.test(name) ? 'image/png' : 'image/jpeg'
+      insertJobImage.run(jobId, name, mime, data.length, data)
+      bytes += data.length
+    }
+    db.exec('COMMIT')
+  }
+  catch (err)
+  {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return { count: names.length, bytes }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The names of a job's photos in the database, sorted (0000.jpg, ...).
+  \param jobId
+  string
+  \return
+    string[] (empty if none)
+*/
+/************************************************************************/
+export function listDbImageNames(jobId)
+{
+  return selectJobImageNames.all(jobId).map((row) => row.name)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    One photo from the database.
+  \param jobId
+  string
+  \param name
+  string
+  \return
+    { mime, size, data: Buffer }, or null
+*/
+/************************************************************************/
+export function getDbImage(jobId, name)
+{
+  const row = selectJobImage.get(jobId, name)
+  if (!row) return null
+  // node:sqlite returns BLOBs as Uint8Array; wrapped (no copy) as the Buffer
+  // the rest of Node code expects.
+  return { mime: row.mime, size: row.size, data: Buffer.from(row.data.buffer, row.data.byteOffset, row.data.byteLength) }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether any photos are stored in the database yet.
+  \return
+    bool
+*/
+/************************************************************************/
+export function hasDbImages()
+{
+  return Boolean(selectAnyJobImage.get())
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Removes a job's photos from the database (the job is being deleted).
+  \param jobId
+  string
+*/
+/************************************************************************/
+export function deleteDbImages(jobId)
+{
+  deleteJobImages.run(jobId)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Stores a finished model (.ply) as the job's model, replacing any it
+    already had. One transaction: either the whole file is stored or
+    nothing is (it throws, and the caller keeps the file). The file is
+    read MODEL_CHUNK_BYTES at a time, so memory use stays at one piece.
+    Synchronous on purpose: the backend shares this one connection, so an
+    await inside the transaction would let other requests' writes land in
+    it (and be rolled back with it).
+  \param jobId
+  string
+  \param filePath
+  string
+    The model file (jobs/<id>_out/result.ply or a staging copy)
+  \return
+    { size } in bytes
+*/
+/************************************************************************/
+export function storeJobModel(jobId, filePath)
+{
+  const fd = fs.openSync(filePath, 'r')
+  try
+  {
+    const size = fs.fstatSync(fd).size
+    db.exec('BEGIN')
+    try
+    {
+      ensureJobRow.run(jobId)
+      deleteJobModel.run(jobId)
+      insertJobModel.run(jobId, size, MODEL_CHUNK_BYTES, Date.now())
+      let offset = 0
+      for (let seq = 0; offset < size; seq++)
+      {
+        const chunk = Buffer.allocUnsafe(Math.min(MODEL_CHUNK_BYTES, size - offset))
+        let filled = 0
+        while (filled < chunk.length)
+        {
+          const read = fs.readSync(fd, chunk, filled, chunk.length - filled, offset + filled)
+          if (read === 0) throw new Error(`${path.basename(filePath)} got shorter while it was being stored`)
+          filled += read
+        }
+        insertModelChunk.run(jobId, seq, chunk)
+        offset += chunk.length
+      }
+      db.exec('COMMIT')
+      return { size }
+    }
+    catch (err)
+    {
+      db.exec('ROLLBACK')
+      throw err
+    }
+  }
+  finally
+  {
+    fs.closeSync(fd)
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A stored model's details, without its data.
+  \param jobId
+  string
+  \return
+    { size, chunkSize, storedAt }, or null if the job has no stored model
+*/
+/************************************************************************/
+export function getDbModelInfo(jobId)
+{
+  const row = selectJobModel.get(jobId)
+  return row ? { size: row.size, chunkSize: row.chunk_size, storedAt: row.stored_at } : null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    One piece of a stored model: bytes [seq * chunkSize, (seq + 1) *
+    chunkSize) of the .ply.
+  \param jobId
+  string
+  \param seq
+  number
+    The piece's index, from 0
+  \return
+    Buffer, or null if there is no such piece (e.g. the job was deleted)
+*/
+/************************************************************************/
+export function readDbModelChunk(jobId, seq)
+{
+  const row = selectModelChunk.get(jobId, seq)
+  // Wrapped (no copy) as a Buffer, like getDbImage.
+  return row ? Buffer.from(row.data.buffer, row.data.byteOffset, row.data.byteLength) : null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether any models are stored in the database yet.
+  \return
+    bool
+*/
+/************************************************************************/
+export function hasDbModels()
+{
+  return Boolean(selectAnyJobModel.get())
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Removes a job's model from the database (its pieces go with it).
+  \param jobId
+  string
+*/
+/************************************************************************/
+export function deleteDbModel(jobId)
+{
+  deleteJobModel.run(jobId)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Stores one message from the website's Feedback page.
+  \param userId
+  number
+    The sender's user id
+  \param email
+  string
+  \param name
+  string
+  \param category
+  string
+    'bug', 'idea' or 'other'
+  \param message
+  string
+  \param origin
+  string or null
+    The machine it was sent from
+  \return
+    The new feedback id
+*/
+/************************************************************************/
+export function addFeedback({ userId, email, name, category, message, origin })
+{
+  return insertFeedback.get(userId, email, name, category, message, origin ?? null).id
+}
+
+/************************************************************************/
+/*!
+  \brief
+    One page of feedback for the admins' Inbox, newest first.
+  \param category
+  string or null
+    'bug', 'idea' or 'other'; null for all
+  \param before
+  number or null
+    Only messages older than this id (the last one already shown)
+  \param limit
+  number
+    Page size
+  \return
+    { items: [{ id, name, email, category, message, origin, createdAt }],
+      hasMore }, createdAt as an ISO date (UTC)
+*/
+/************************************************************************/
+export function listFeedback({ category = null, before = null, limit = 50 })
+{
+  // One extra row says whether another page exists.
+  const rows = selectFeedbackPage.all(category, before, limit + 1)
+  return {
+    items: rows.slice(0, limit).map((row) => ({
+      id: row.id,
+      name: row.user_name,
+      email: row.user_email,
+      category: row.category,
+      message: row.message,
+      origin: row.origin,
+      // datetime('now') is UTC "YYYY-MM-DD HH:MM:SS"; say so for the browser.
+      createdAt: `${row.created_at.replace(' ', 'T')}Z`,
+    })),
+    hasMore: rows.length > limit,
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Deletes feedback older than a number of days (the VM's clean-up).
+  \param days
+  number
+  \return
+    How many messages were deleted
+*/
+/************************************************************************/
+export function deleteOldFeedback(days)
+{
+  return Number(deleteFeedbackOlderThan.run(`-${Math.floor(days)} days`).changes)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    How much a job takes in the database: its photos plus its model.
+  \param jobId
+  string
+  \return
+    bytes (0 if it has nothing in the database)
+*/
+/************************************************************************/
+export function getDbJobBytes(jobId)
+{
+  return Number(selectDbJobBytes.get(jobId).bytes)
 }
 // ----- End of Functions ----------------------------------------------------- //

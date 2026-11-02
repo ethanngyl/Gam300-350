@@ -8,11 +8,15 @@
 \par Software Engineering Project 5
 \date 08-10-2026
 \brief
-Lets the user submit a YouTube video link, frame-extraction rate and
-model detail (training iteration cap, via TrainingQualitySlider) to the
-backend, then polls job status until reconstruction
-finishes. The link, fps and "Process video" share one box; under it, a
-dashed preview box shows the video's thumbnail once the link is valid
+Lets the user submit a YouTube video link or an .mp4 file (a "YouTube link
+| Video file" switch), frame-extraction rate and model detail (training
+iteration cap, via TrainingQualitySlider) to the backend, then polls job
+status until reconstruction finishes. Both sources get the same frame
+extraction on the server; an uploaded video is deleted there as soon as
+its frames are extracted. The upload uses XMLHttpRequest so its progress
+can be shown (fetch can't report it). The link or file, fps and "Process
+video" share one box; under it, a dashed preview box shows the video's
+thumbnail (or the chosen file, played from the browser) once it is valid
 (before that, how to start), with a note on how frames are picked. While a
 job runs, the dashed box is replaced by a progress card with the same
 design as the photo upload's processing screen (it reuses Processing.css):
@@ -77,8 +81,24 @@ const FINISHED = ['done', 'error', 'cancelled'];
 // How many extracted frames to show once the job is done.
 const FRAME_PREVIEW_COUNT = 24;
 
-async function parseJson(res) {
-    const text = await res.text();
+// Largest .mp4 accepted. Keep in step with the backend's maxVideoSizeMB
+// (config.js, MAX_VIDEO_MB); the server checks again either way.
+const MAX_VIDEO_MB = 1024;
+
+// Why a chosen file can't be sent, or null if it can.
+function videoFileProblem(file) {
+    if (!file) return 'Please choose an .mp4 video file.';
+    if (!/\.mp4$/i.test(file.name)) return 'Only .mp4 videos are supported.';
+    if (file.size > MAX_VIDEO_MB * 1024 * 1024) return `That video is too large -- it must be under ${MAX_VIDEO_MB} MB.`;
+    return null;
+}
+
+// "12.4 MB" for the chosen file.
+function formatFileSize(bytes) {
+    return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
+function parseJsonText(text) {
     try {
         return JSON.parse(text);
     } catch {
@@ -87,6 +107,28 @@ async function parseJson(res) {
             '(cd packages/src/backend && node server.js) on port 5005.',
         );
     }
+}
+
+async function parseJson(res) {
+    return parseJsonText(await res.text());
+}
+
+// Sends the video with XMLHttpRequest, since fetch can't report upload
+// progress. Resolves with { ok, status, text }; rejects with an AbortError
+// if xhrRef.current.abort() is called (Cancel).
+function uploadVideo(formData, onProgress, xhrRef) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhrRef.current = xhr;
+        xhr.open('POST', '/jobs/from-video');
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) onProgress(e.loaded / e.total);
+        };
+        xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, text: xhr.responseText });
+        xhr.onerror = () => reject(new Error("Couldn't upload the video. Check your connection and try again."));
+        xhr.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
+        xhr.send(formData);
+    });
 }
 
 // Same wording as the processing screen (Processing.jsx).
@@ -121,7 +163,15 @@ function formatElapsed(totalSeconds) {
 }
 
 function YoutubeIngest() {
+    // 'youtube' (a link) or 'file' (an .mp4 from this device).
+    const [sourceType, setSourceType] = useState('youtube');
     const [url, setUrl] = useState('');
+    const [videoFile, setVideoFile] = useState(null);
+    // Local preview of the chosen file (an object URL; nothing is uploaded).
+    const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
+    // Upload progress 0..100 while the video is being sent, else null.
+    const [uploadPct, setUploadPct] = useState(null);
+    const uploadRef = useRef(null);
     const [fps, setFps] = useState(2);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(DEFAULT_TRAINING_ITERATIONS);
@@ -166,8 +216,25 @@ function YoutubeIngest() {
         return () => {
             window.removeEventListener('pagehide', killJob);
             killJob();
+            // Leaving mid-upload: stop sending (the server deletes the part sent).
+            uploadRef.current?.abort();
         };
     }, []);
+
+    // Frees the chosen file's preview URL when leaving the page.
+    const previewUrlRef = useRef(null);
+    useEffect(() => () => {
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    }, []);
+
+    // Picks a new video file (or none) and swaps its preview URL.
+    function chooseVideoFile(file) {
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = file ? URL.createObjectURL(file) : null;
+        setVideoFile(file);
+        setVideoPreviewUrl(previewUrlRef.current);
+        setError(file ? videoFileProblem(file) : null);
+    }
 
     // /jobs/:id has no image list, so read this job's frames from /jobs.
     const loadExtractedFrames = useCallback(async (id) => {
@@ -218,6 +285,12 @@ function YoutubeIngest() {
 
     // Stops the running job on the server (kills its tool so the GPU is freed).
     async function handleCancel() {
+        // Still uploading: there is no job yet, so just stop sending.
+        if (uploadRef.current) {
+            playSound('back');
+            uploadRef.current.abort();
+            return;
+        }
         const runningJob = jobRef.current;
         if (!runningJob?.id || FINISHED.includes(runningJob.status)) return;
         playSound('back');
@@ -237,10 +310,59 @@ function YoutubeIngest() {
         }
     }
 
+    // The server made the job: show it running and start polling.
+    function startJob(id, previewVideoId) {
+        setJob({ id, status: 'running', phase: 'extract', progress: 0 });
+        setProcessingVideoId(previewVideoId);
+        pollJob(id);
+    }
+
+    // Uploads the chosen .mp4; the server extracts its frames, then deletes it.
+    async function submitVideoFile() {
+        const problem = videoFileProblem(videoFile);
+        if (problem) {
+            setError(problem);
+            return;
+        }
+
+        const form = new FormData();
+        // Fields before the file, so the server has them before the upload ends.
+        if (Number(fps) > 0) form.append('fps', String(Number(fps)));
+        form.append('trainIters', String(trainIters));
+        form.append('video', videoFile);
+
+        setSubmitting(true);
+        setJob(null);
+        setExtractedFrames([]);
+        setUploadPct(0);
+        setStartedAt(Date.now());
+        setCurrentTime(Date.now());
+        try {
+            const res = await uploadVideo(form, (fraction) => setUploadPct(Math.round(fraction * 100)), uploadRef);
+            const data = parseJsonText(res.text);
+            if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+            startJob(data.id, null);
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                playSound('error');
+                setError(err.message);
+            }
+        } finally {
+            uploadRef.current = null;
+            setUploadPct(null);
+            setSubmitting(false);
+        }
+    }
+
     async function handleSubmit(e) {
         e.preventDefault();
         playSound('confirm');
         setError(null);
+
+        if (sourceType === 'file') {
+            await submitVideoFile();
+            return;
+        }
 
         const trimmed = normalizeYoutubeUrl(url.trim());
         if (!trimmed) {
@@ -259,11 +381,9 @@ function YoutubeIngest() {
             });
             const data = await parseJson(res);
             if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-            setJob({ id: data.id, status: 'running', phase: 'extract', progress: 0 });
-            setProcessingVideoId(youtubeVideoId(trimmed));
             setStartedAt(Date.now());
             setCurrentTime(Date.now());
-            pollJob(data.id);
+            startJob(data.id, youtubeVideoId(trimmed));
         } catch (err) {
             setError(err.message);
         } finally {
@@ -272,22 +392,27 @@ function YoutubeIngest() {
     }
 
     const busy = submitting || (job && !FINISHED.includes(job.status));
-    const pct = job ? Math.round((job.progress || 0) * 100) : 0;
-    const phaseLabel = job ? PHASE_LABELS[job.phase] || job.phase : '';
-    const videoId = youtubeVideoId(url.trim());
+    const isUploading = uploadPct !== null;
+    const pct = isUploading ? uploadPct : job ? Math.round((job.progress || 0) * 100) : 0;
+    const phaseLabel = isUploading ? 'Uploading video' : job ? PHASE_LABELS[job.phase] || job.phase : '';
+    const isFileSource = sourceType === 'file';
+    const videoId = isFileSource ? null : youtubeVideoId(url.trim());
     const isJobDone = job?.status === 'done';
     const isJobCancelled = job?.status === 'cancelled';
     // A job exists on the server and hasn't finished, so it can be cancelled.
     const isJobRunning = Boolean(job?.id) && !FINISHED.includes(job.status);
+    // The progress card shows while the video uploads and while the job runs.
+    const showProgress = isUploading || isJobRunning;
     const elapsedSeconds = startedAt ? Math.max(0, Math.floor((currentTime - startedAt) / 1000)) : 0;
-    const phaseIndex = job ? PHASE_ORDER.indexOf(job.phase) : -1;
+    const phaseIndex = job && !isUploading ? PHASE_ORDER.indexOf(job.phase) : -1;
+    const canSubmit = isFileSource ? Boolean(videoFile) : Boolean(url.trim());
 
     // Ticks the elapsed-time counter once a second while a job runs.
     useEffect(() => {
-        if (!isJobRunning) return;
+        if (!showProgress) return;
         const timerId = setInterval(() => setCurrentTime(Date.now()), 1000);
         return () => clearInterval(timerId);
-    }, [isJobRunning]);
+    }, [showProgress]);
 
     // Which state a step in the tracker is in (display only).
     function stepState(index) {
@@ -301,34 +426,84 @@ function YoutubeIngest() {
             <div className="yt-heading">
                 <div>
                     <div className="eyebrow eyebrow-accent">Frame capture</div>
-                    <h1 className="yt-title">YouTube Extractor</h1>
+                    <h1 className="yt-title">Video Extractor</h1>
                     <p className="yt-subtitle">
-                        Paste a link to a video that orbits an object. We extract evenly spaced
-                        frames and run them through the same reconstruction pipeline, so no
-                        phone capture is needed.
+                        Paste a YouTube link or upload an .mp4 of a video that orbits an object.
+                        We extract evenly spaced frames and run them through the same
+                        reconstruction pipeline, so no phone capture is needed.
                     </p>
                 </div>
             </div>
 
             <div className="yt-layout">
                 <form className="forma-card yt-card yt-source" onSubmit={handleSubmit}>
-                    <label className="eyebrow yt-source-label" htmlFor="yt-url">Video URL</label>
+                    <div className="yt-mode" role="group" aria-label="Video source">
+                        <button
+                            type="button"
+                            className={`yt-mode-btn${isFileSource ? '' : ' is-active'}`}
+                            aria-pressed={!isFileSource}
+                            onClick={() => {
+                                playSound('tap');
+                                setSourceType('youtube');
+                                setError(null);
+                            }}
+                            disabled={busy}
+                        >
+                            <Icon name="link" size={14} /> YouTube link
+                        </button>
+                        <button
+                            type="button"
+                            className={`yt-mode-btn${isFileSource ? ' is-active' : ''}`}
+                            aria-pressed={isFileSource}
+                            onClick={() => {
+                                playSound('tap');
+                                setSourceType('file');
+                                setError(null);
+                            }}
+                            disabled={busy}
+                        >
+                            <Icon name="upload" size={14} /> Video file
+                        </button>
+                    </div>
+
+                    <label className="eyebrow yt-source-label" htmlFor={isFileSource ? 'yt-file' : 'yt-url'}>
+                        {isFileSource ? 'Video file (.mp4)' : 'Video URL'}
+                    </label>
                     <div className="yt-row">
-                        <div className="yt-input-wrap">
-                            <Icon name="link" size={16} />
-                            <input
-                                id="yt-url"
-                                type="url"
-                                className="yt-input"
-                                placeholder="https://youtube.com/watch?v=..."
-                                value={url}
-                                onChange={(e) => {
-                                    setUrl(e.target.value);
-                                    setHasThumbnailFailed(false);
-                                }}
-                                disabled={busy}
-                            />
-                        </div>
+                        {isFileSource ? (
+                            <label className={`yt-input-wrap yt-file${busy ? ' is-disabled' : ''}`}>
+                                <Icon name="upload" size={16} />
+                                <span className={`yt-input yt-file-name${videoFile ? '' : ' is-empty'}`}>
+                                    {videoFile
+                                        ? `${videoFile.name} (${formatFileSize(videoFile.size)})`
+                                        : 'Choose an .mp4 video...'}
+                                </span>
+                                <input
+                                    id="yt-file"
+                                    type="file"
+                                    className="yt-file-input"
+                                    accept="video/mp4,.mp4"
+                                    onChange={(e) => chooseVideoFile(e.target.files?.[0] ?? null)}
+                                    disabled={busy}
+                                />
+                            </label>
+                        ) : (
+                            <div className="yt-input-wrap">
+                                <Icon name="link" size={16} />
+                                <input
+                                    id="yt-url"
+                                    type="url"
+                                    className="yt-input"
+                                    placeholder="https://youtube.com/watch?v=..."
+                                    value={url}
+                                    onChange={(e) => {
+                                        setUrl(e.target.value);
+                                        setHasThumbnailFailed(false);
+                                    }}
+                                    disabled={busy}
+                                />
+                            </div>
+                        )}
                         <label className="yt-fps">
                             <input
                                 type="number"
@@ -342,7 +517,7 @@ function YoutubeIngest() {
                             />
                             <span>fps</span>
                         </label>
-                        <button type="submit" className="forma-btn forma-btn-primary yt-submit" disabled={busy || !url.trim()}>
+                        <button type="submit" className="forma-btn forma-btn-primary yt-submit" disabled={busy || !canSubmit}>
                             <Icon name="playSolid" size={14} /> {busy ? 'Processing...' : 'Process video'}
                         </button>
                     </div>
@@ -352,10 +527,15 @@ function YoutubeIngest() {
                     {error && <p className="yt-error">{error}</p>}
                 </form>
 
-                {/* Shows the video's thumbnail once the link is valid, else how to start.
-                    Hidden while a job runs: the progress card shows the thumbnail then. */}
-                {!isJobRunning && <div className="yt-preview-box">
-                    {videoId && !hasThumbnailFailed ? (
+                {/* Shows the video's thumbnail once the link is valid (or the chosen
+                    file, played from this device), else how to start. Hidden while a
+                    job runs: the progress card shows the thumbnail then. */}
+                {!showProgress && <div className="yt-preview-box">
+                    {isFileSource && videoPreviewUrl ? (
+                        <div className="yt-preview">
+                            <video src={videoPreviewUrl} muted controls preload="metadata" aria-label="Preview of the chosen video" />
+                        </div>
+                    ) : videoId && !hasThumbnailFailed ? (
                         <div className="yt-preview">
                             <img
                                 src={youtubeThumbnailUrl(videoId)}
@@ -363,6 +543,12 @@ function YoutubeIngest() {
                                 onError={() => setHasThumbnailFailed(true)}
                             />
                         </div>
+                    ) : isFileSource ? (
+                        <>
+                            <span className="yt-preview-icon"><Icon name="upload" size={34} /></span>
+                            <p className="yt-preview-title">Choose an .mp4 video above and click Process video</p>
+                            <p className="yt-preview-formats">.mp4 files up to {MAX_VIDEO_MB} MB</p>
+                        </>
                     ) : (
                         <>
                             <span className="yt-preview-icon"><Icon name="video" size={34} /></span>
@@ -374,18 +560,20 @@ function YoutubeIngest() {
                         We pull evenly spaced frames from across the whole video (up to 20 minutes),
                         skip blurry and duplicate ones, and feed them straight into the reconstruction
                         pipeline. Higher fps = more frames = slower, more detailed scans.
+                        {isFileSource && ' The video is deleted from the server as soon as its frames are extracted; only the frames are kept.'}
                     </p>
                 </div>}
 
-                {isJobRunning && (
+                {showProgress && (
                     <div className="forma-card yt-card processing-embedded">
                         <div className="processing-card">
                             <div className="processing-main">
                                 <div className="eyebrow eyebrow-accent">Reconstruction</div>
                                 <h2 className="processing-title">Building your 3D model</h2>
                                 <p className="processing-hint">
-                                    Downloading the video and extracting frames, then running COLMAP and
-                                    Brush on the server. This takes a few minutes depending on the video.
+                                    {isFileSource ? 'Uploading' : 'Downloading'} the video and extracting frames,
+                                    then running COLMAP and Brush on the server. This takes a few minutes
+                                    depending on the video.
                                 </p>
 
                                 <div className="processing-status" aria-live="polite">
@@ -393,7 +581,7 @@ function YoutubeIngest() {
                                         <span className="processing-phase">{phaseLabel || 'Starting'}</span>
                                         <span className="processing-pct">{pct}%</span>
                                     </div>
-                                    {job.detail && <span className="processing-detail">{job.detail}</span>}
+                                    {job?.detail && <span className="processing-detail">{job.detail}</span>}
                                     <div
                                         className="processing-bar"
                                         role="progressbar"
@@ -427,17 +615,21 @@ function YoutubeIngest() {
 
                             <div className="processing-side">
                                 <div className="processing-preview">
-                                    {processingVideoId
-                                        ? <img src={youtubeThumbnailUrl(processingVideoId)} alt="" />
-                                        : <span className="processing-preview-icon"><Icon name="video" size={34} /></span>}
+                                    {isFileSource && videoPreviewUrl
+                                        ? <video src={videoPreviewUrl} muted preload="metadata" aria-hidden="true" />
+                                        : processingVideoId
+                                            ? <img src={youtubeThumbnailUrl(processingVideoId)} alt="" />
+                                            : <span className="processing-preview-icon"><Icon name="video" size={34} /></span>}
                                     <span className="processing-scan" aria-hidden="true"></span>
                                     <span className="processing-corner processing-corner-tl"></span>
                                     <span className="processing-corner processing-corner-tr"></span>
                                     <span className="processing-corner processing-corner-bl"></span>
                                     <span className="processing-corner processing-corner-br"></span>
                                     <span className="processing-chip">
-                                        <Icon name={job.imageCount != null ? 'image' : 'play'} size={12} />
-                                        {job.imageCount != null ? ` ${job.imageCount} frames` : ' YouTube video'}
+                                        <Icon name={job?.imageCount != null ? 'image' : 'play'} size={12} />
+                                        {job?.imageCount != null
+                                            ? ` ${job.imageCount} frames`
+                                            : isFileSource ? ' Video file' : ' YouTube video'}
                                     </span>
                                 </div>
 

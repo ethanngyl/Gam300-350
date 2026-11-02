@@ -1,5 +1,5 @@
 /* ============================================================
-   YoutubeIngest - GENESIS theme
+   YoutubeIngest (Video Extractor) - GENESIS theme
    Uses the --forma-* variables from AppTheme.css.
    Layout is mobile-first and stays one column on every screen size:
    the link form spans the page and the status card appears under it.
@@ -59,6 +59,88 @@
 
 .yt .yt-source-label {
     margin: 0;
+}
+
+/* ---------- Source switch: YouTube link | Video file ---------- */
+
+.yt-mode {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 3px;
+    gap: 3px;
+    background: var(--forma-bg);
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+}
+
+.yt-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+    .yt-mode-btn:hover:not(:disabled) {
+        color: var(--forma-text);
+    }
+
+    .yt-mode-btn.is-active {
+        color: var(--forma-teal-text);
+        background: rgba(var(--forma-accent-rgb), 0.16);
+    }
+
+    .yt-mode-btn:focus-visible {
+        outline: 2px solid var(--forma-blue);
+        outline-offset: 1px;
+    }
+
+    .yt-mode-btn:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+/* ---------- File picker: looks like the link field ---------- */
+
+.yt-file {
+    cursor: pointer;
+}
+
+    .yt-file.is-disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+
+/* The real input stays in the page for keyboard and screen readers. */
+.yt-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.yt-file-name {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+    .yt-file-name.is-empty {
+        color: var(--forma-text-dim);
+    }
+
+.yt-file:focus-within .yt-file-name,
+.yt-file:hover:not(.is-disabled) .yt-file-name {
+    border-color: var(--forma-blue);
 }
 
 /* On phones the link takes its own row; fps and the button share the next. */
@@ -205,6 +287,26 @@
         object-fit: cover;
         display: block;
     }
+
+    /* The chosen file, played from this device (letterboxed, not cropped). */
+    .yt-preview video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        background: #000;
+    }
+
+/* The chosen file in the progress card, styled like its thumbnail image. */
+.processing-embedded .processing-preview video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.55;
+    filter: saturate(0.7);
+}
 
 .yt .yt-hint {
     color: var(--forma-text-dim);

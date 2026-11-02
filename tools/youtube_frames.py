@@ -7,17 +7,20 @@
 # \par Software Engineering Project 5
 # \date 01-10-2026
 # \brief
-# CLI tool that downloads a YouTube video with yt-dlp and extracts sharp,
-# non-duplicate frames spread evenly across it as zero-padded JPEGs, ready
-# to feed into the COLMAP reconstruction pipeline. Reports progress and a
-# JSON summary for the backend server that spawns it.
+# CLI tool that downloads a YouTube video with yt-dlp (or reads a local video
+# file with --file) and extracts sharp, non-duplicate frames spread evenly
+# across it as zero-padded JPEGs, ready to feed into the COLMAP
+# reconstruction pipeline. Reports progress and a JSON summary for the
+# backend server that spawns it.
 # **************************************************************************/
-"""Extract frames from a YouTube video into a folder.
+"""Extract frames from a YouTube video, or a local video file, into a folder.
 
-Downloads a YouTube video with yt-dlp, then walks it with OpenCV and writes
-frames spread evenly across the WHOLE video as zero-padded JPEGs (0000.jpg,
-0001.jpg, ...). The naming matches what the reconstruction pipeline expects for
-uploaded photos, so an extracted folder can be fed straight into COLMAP.
+Downloads a YouTube video with yt-dlp (or opens the file given with --file),
+then walks it with OpenCV and writes frames spread evenly across the WHOLE
+video as zero-padded JPEGs (0000.jpg, 0001.jpg, ...). Both sources go through
+the same frame selection below. The naming matches what the reconstruction
+pipeline expects for uploaded photos, so an extracted folder can be fed
+straight into COLMAP.
 
 Frame selection:
   - The sampling interval comes from --fps / --every, but is widened when needed
@@ -34,6 +37,9 @@ Examples:
     # every 15th decoded frame, at most 120 images
     python youtube_frames.py "https://youtu.be/VIDEO" -o frames --every 15 --max-frames 120
 
+    # a video file already on this machine (it is read, never deleted)
+    python youtube_frames.py --file clip.mp4 -o frames --fps 2
+
 Machine-readable lines for a parent process:
     stderr: "PROGRESS <download|extract> <0..1>" and "ERROR: <message>"
     stdout: a final JSON summary {"frames": N, "output": "<dir>"}
@@ -41,7 +47,7 @@ Machine-readable lines for a parent process:
 Dependencies (see tools/requirements.txt):
     pip install "yt-dlp[default]" opencv-python
     plus a JavaScript runtime for yt-dlp's YouTube support: Node.js (which this
-    project already needs) or Deno.
+    project already needs) or Deno. --file only needs opencv-python.
 """
 
 from __future__ import annotations
@@ -126,13 +132,14 @@ def canonical_youtube_url(url: str) -> str | None:
     return None
 
 
-def require_deps():
+def require_deps(need_ytdlp: bool = True):
     """Import the heavy optional deps, with an actionable message if missing."""
     missing = []
-    try:
-        import yt_dlp  # noqa: F401
-    except ImportError:
-        missing.append("yt-dlp[default]")
+    if need_ytdlp:
+        try:
+            import yt_dlp  # noqa: F401
+        except ImportError:
+            missing.append("yt-dlp[default]")
     try:
         import cv2  # noqa: F401
     except ImportError:
@@ -257,11 +264,7 @@ def download_video(
         if info.get("is_live") or live in ("is_live", "is_upcoming"):
             fail("Live streams and premieres can't be used. Wait until the stream has ended.")
         duration = info.get("duration")
-        if max_duration > 0 and duration and duration > max_duration:
-            fail(
-                f"Video is {duration / 60:.1f} min long; the limit is "
-                f"{max_duration / 60:.0f} min. Use a shorter clip of the object."
-            )
+        check_duration(duration, max_duration)
 
         title = info.get("title", "video")
         eprint(f'Downloading "{title}" ({duration or "?"} s)')
@@ -287,6 +290,42 @@ def download_video(
     vcodec = info.get("vcodec") or "?"
     eprint(f"Downloaded {os.path.basename(path)} ({info.get('height') or '?'}p, {vcodec})")
     return path, duration
+
+
+def check_duration(duration: float | None, max_duration: float) -> None:
+    """Refuse a video longer than max_duration seconds (0 = no limit)."""
+    if max_duration > 0 and duration and duration > max_duration:
+        fail(
+            f"Video is {duration / 60:.1f} min long; the limit is "
+            f"{max_duration / 60:.0f} min. Use a shorter clip of the object."
+        )
+
+
+def local_video_duration(video_path: str, max_duration: float) -> float | None:
+    """Check a local video (--file) before extracting. Returns its duration in s.
+
+    Does the same up-front checks download_video does for YouTube: the file
+    must exist, OpenCV must be able to open it, and it must not be over the
+    length limit. The file itself is only read; whoever passed it owns it.
+    """
+    import cv2
+
+    if not os.path.isfile(video_path):
+        fail("The video file was not found.")
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        cap.release()
+        fail(
+            "OpenCV could not open the video. It may not be a real video file, "
+            "or its codec is not supported by your OpenCV build."
+        )
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+    total = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0.0
+    cap.release()
+    duration = total / src_fps if src_fps > 0 and total > 0 else None
+    check_duration(duration, max_duration)
+    eprint(f'Reading "{os.path.basename(video_path)}" ({f"{duration:.0f}" if duration else "?"} s)')
+    return duration
 
 
 def _sharpness(gray) -> float:
@@ -493,12 +532,17 @@ def extract_frames(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Parse args, validate the URL, download, extract, clean up, print summary."""
+    """Parse args, validate the source, download, extract, clean up, print summary."""
     parser = argparse.ArgumentParser(
-        description="Extract frames from a YouTube video into a folder.",
+        description="Extract frames from a YouTube video, or a local video file, into a folder.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("url", help="YouTube video URL")
+    parser.add_argument("url", nargs="?", help="YouTube video URL (or use --file)")
+    parser.add_argument(
+        "--file",
+        help="Local video file to extract from instead of a YouTube URL. It is "
+        "only read, never deleted",
+    )
     parser.add_argument(
         "-o",
         "--output",
@@ -586,17 +630,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     # Validate cheap things before importing the heavy deps or touching the network.
-    url = canonical_youtube_url(args.url)
-    if not url:
-        fail(
-            "Not a single YouTube video link. Use a youtube.com/watch?v=..., "
-            "youtu.be/..., or youtube.com/shorts/... URL."
-        )
+    if args.url and args.file:
+        fail("Give either a YouTube URL or --file with a video file, not both.")
+    if not args.url and not args.file:
+        fail("Give a YouTube URL, or --file with a video file.")
+    url = None
+    if args.url:
+        url = canonical_youtube_url(args.url)
+        if not url:
+            fail(
+                "Not a single YouTube video link. Use a youtube.com/watch?v=..., "
+                "youtu.be/..., or youtube.com/shorts/... URL."
+            )
     if args.max_frames < 1:
         fail("--max-frames must be at least 1.")
 
-    require_deps()
-    import yt_dlp  # needed here for yt_dlp.utils.DownloadError below
+    require_deps(need_ytdlp=url is not None)
+    if url:
+        import yt_dlp  # needed here for yt_dlp.utils.DownloadError below
 
     # Handle leftover frames from a previous run in the same folder.
     out_dir = os.path.abspath(args.output)
@@ -614,20 +665,25 @@ def main(argv: list[str] | None = None) -> int:
                 "to remove them first."
             )
 
-    # The video is downloaded into a temp dir that is always removed afterwards
-    # (the `finally`), even if extraction fails or fail() exits.
-    tmp_dir = tempfile.mkdtemp(prefix="ytframes_")
+    # A YouTube video is downloaded into a temp dir that is always removed
+    # afterwards (the `finally`), even if extraction fails or fail() exits.
+    # A --file video is read where it is and left for its owner to delete.
+    tmp_dir = tempfile.mkdtemp(prefix="ytframes_") if url else None
     try:
-        try:
-            video_path, duration = download_video(
-                url,
-                tmp_dir,
-                max_height=args.max_height,
-                max_duration=args.max_duration,
-                node_path=args.node_path,
-            )
-        except yt_dlp.utils.DownloadError as err:
-            fail(_clean_ytdl_error(err))
+        if url:
+            try:
+                video_path, duration = download_video(
+                    url,
+                    tmp_dir,
+                    max_height=args.max_height,
+                    max_duration=args.max_duration,
+                    node_path=args.node_path,
+                )
+            except yt_dlp.utils.DownloadError as err:
+                fail(_clean_ytdl_error(err))
+        else:
+            video_path = os.path.abspath(args.file)
+            duration = local_video_duration(video_path, args.max_duration)
 
         count = extract_frames(
             video_path,
@@ -643,7 +699,7 @@ def main(argv: list[str] | None = None) -> int:
             min_change=args.min_change,
         )
 
-        if args.keep_video:
+        if args.keep_video and url:
             kept = os.path.join(
                 os.path.dirname(out_dir),
                 os.path.basename(out_dir) + "_source" + os.path.splitext(video_path)[1],
@@ -651,7 +707,8 @@ def main(argv: list[str] | None = None) -> int:
             shutil.move(video_path, kept)
             eprint(f"Kept video at {kept}")
     finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     if count == 0:
         fail("No frames were extracted.")

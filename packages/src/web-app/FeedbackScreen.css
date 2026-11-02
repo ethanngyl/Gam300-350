@@ -3,7 +3,8 @@
    Uses the --forma-* variables from AppTheme.css.
    Mobile-first: heading, then the form (or the sign-in / thank-you
    card), then the tips, in one column. From 981px the tips sit in a
-   narrower column beside the form.
+   narrower column beside the form. Admins also get the Send | Inbox
+   switch and the Inbox (FeedbackInbox.jsx), which spans the full width.
    ============================================================ */
 
 .feedback-screen {
@@ -295,6 +296,153 @@
     color: var(--forma-text-dim);
 }
 
+/* ---------- Admins: Send feedback | Inbox ---------- */
+
+.feedback-view-switch {
+    max-width: 360px;
+    margin-bottom: 16px;
+}
+
+/* ---------- Admins: Inbox (FeedbackInbox.jsx) ---------- */
+
+.feedback-inbox {
+    gap: 16px;
+}
+
+/* Phones: filter on one row, Refresh under it. */
+.feedback-inbox-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.feedback-inbox-filters {
+    flex: 1;
+    min-width: 0;
+}
+
+.feedback-screen .feedback-inbox-refresh,
+.feedback-screen .feedback-inbox-more {
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 18px;
+}
+
+    .feedback-screen .feedback-inbox-refresh:disabled,
+    .feedback-screen .feedback-inbox-more:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+.feedback-inbox-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.feedback-inbox-item {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--forma-border);
+    background: var(--forma-panel-alt);
+    min-width: 0;
+}
+
+.feedback-inbox-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 12px;
+}
+
+/* The kind of feedback, as a small coloured tag. */
+.feedback-inbox-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: var(--forma-font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid var(--forma-border-strong);
+    color: var(--forma-text-muted);
+}
+
+    .feedback-inbox-kind.is-bug {
+        color: var(--forma-red-text);
+        background: rgba(var(--forma-red-rgb), 0.12);
+        border-color: rgba(var(--forma-red-rgb), 0.4);
+    }
+
+    .feedback-inbox-kind.is-idea {
+        color: var(--forma-teal-text);
+        background: rgba(var(--forma-accent-rgb), 0.14);
+        border-color: rgba(var(--forma-accent-rgb), 0.4);
+    }
+
+.feedback-inbox-time {
+    font-family: var(--forma-font-mono);
+    font-size: 0.7rem;
+    color: var(--forma-text-dim);
+}
+
+/* The message as sent: keep its line breaks, wrap long words and links. */
+.feedback-screen .feedback-inbox-message {
+    color: var(--forma-text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.feedback-inbox-sender {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--forma-border);
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+    min-width: 0;
+}
+
+    .feedback-inbox-sender strong {
+        color: var(--forma-text);
+        font-weight: 600;
+    }
+
+    .feedback-inbox-sender .feedback-sender-email {
+        overflow-wrap: anywhere;
+    }
+
+.feedback-inbox-origin {
+    font-size: 0.74rem;
+    color: var(--forma-text-dim);
+}
+
+.feedback-inbox-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 28px 12px;
+    text-align: center;
+}
+
+.feedback-screen .feedback-inbox-status {
+    padding: 12px 0;
+}
+
 /* Small phones: labels only, so "Bug report" stays on one line. */
 @media (max-width: 380px) {
     .feedback-type svg {
@@ -333,6 +481,20 @@
     .feedback-locked .feedback-action,
     .feedback-sent .feedback-action {
         width: auto;
+    }
+
+    /* Filter and Refresh on one row; Load more not full width. */
+    .feedback-inbox-head {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .feedback-inbox-filters {
+        max-width: 520px;
+    }
+
+    .feedback-screen .feedback-inbox-more {
+        align-self: center;
     }
 }
 

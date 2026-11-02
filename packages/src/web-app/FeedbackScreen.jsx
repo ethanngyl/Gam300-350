@@ -15,8 +15,9 @@ the form, and the server refuses guests too (401).
 After sending, the form is replaced by a thank-you card with "Send more
 feedback". A side card lists what makes feedback useful. Layout: one
 column on phones; on wider screens the tips sit beside the form.
-- FEEDBACK_CATEGORIES
-Kinds of feedback, with the placeholder text shown for each.
+Admins also get a "Send feedback | Inbox" switch; Inbox shows everyone's
+feedback, read-only (FeedbackInbox.jsx). Other users never see it.
+The kinds of feedback are in FeedbackCategories.js.
 - FeedbackScreen({ user, onSignIn })
 React component. onSignIn takes a guest back to the login screen.
 **************************************************************************/
@@ -24,37 +25,21 @@ React component. onSignIn takes a guest back to the login screen.
 import { useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
+import { FEEDBACK_CATEGORIES } from './FeedbackCategories.js';
+import FeedbackInbox from './FeedbackInbox.jsx';
 import './FeedbackScreen.css';
-
-const FEEDBACK_CATEGORIES = [
-    {
-        id: 'bug',
-        label: 'Bug report',
-        icon: 'triangle',
-        placeholder: 'What did you do, what did you expect, and what happened instead?',
-    },
-    {
-        id: 'idea',
-        label: 'Idea',
-        icon: 'sparkle',
-        placeholder: 'What would you like GENESIS to do, and what problem would it solve?',
-    },
-    {
-        id: 'other',
-        label: 'Other',
-        icon: 'message',
-        placeholder: 'Tell us what you think of GENESIS.',
-    },
-];
 
 const MIN_MESSAGE_LENGTH = 10;
 const MAX_MESSAGE_LENGTH = 1000;
 
-// Turns a failed POST /feedback into a message the user can act on.
-function describeSendError(status) {
+// Turns a failed POST /feedback into a message the user can act on. For a
+// bad message (400), sending too often (429) or the VM being unreachable
+// (503) the server's own explanation is shown.
+function describeSendError(status, serverError) {
     if (status === 401) return 'Your session has ended. Sign in again to send feedback.';
     if (status === 404) return 'Feedback is not set up on the server yet. Please try again later.';
     if (status === 413) return `Your message is too long. Keep it under ${MAX_MESSAGE_LENGTH} characters.`;
+    if ([400, 429, 503].includes(status) && serverError) return serverError;
     return `Could not send your feedback (server error ${status}). Please try again.`;
 }
 
@@ -64,6 +49,9 @@ function FeedbackScreen({ user, onSignIn }) {
     const [isSending, setIsSending] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     const [isSent, setIsSent] = useState(false);
+    // Admins only: 'send' (the form) or 'inbox' (everyone's feedback).
+    const [view, setView] = useState('send');
+    const isAdmin = user.role === 'admin' && !user.isGuest;
 
     const selectedCategory = FEEDBACK_CATEGORIES.find((option) => option.id === category);
     const trimmedLength = message.trim().length;
@@ -83,7 +71,8 @@ function FeedbackScreen({ user, onSignIn }) {
                 body: JSON.stringify({ category, message: message.trim() }),
             });
             if (!res.ok) {
-                setErrorMessage(describeSendError(res.status));
+                const data = await res.json().catch(() => ({}));
+                setErrorMessage(describeSendError(res.status, data.error));
                 return;
             }
             setIsSent(true);
@@ -216,7 +205,31 @@ function FeedbackScreen({ user, onSignIn }) {
                 </p>
             </div>
 
-            <div className="feedback-layout">
+            {isAdmin && (
+                <div className="feedback-types feedback-view-switch" role="tablist" aria-label="Feedback view">
+                    {[
+                        { id: 'send', label: 'Send feedback', icon: 'send' },
+                        { id: 'inbox', label: 'Inbox', icon: 'message' },
+                    ].map((option) => (
+                        <button
+                            key={option.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={view === option.id}
+                            className={view === option.id ? 'feedback-type is-active' : 'feedback-type'}
+                            onClick={() => {
+                                playSound('tap');
+                                setView(option.id);
+                            }}
+                        >
+                            <Icon name={option.icon} size={15} />
+                            <span>{option.label}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {isAdmin && view === 'inbox' ? <FeedbackInbox /> : <div className="feedback-layout">
                 {mainCard}
 
                 <aside className="forma-card feedback-tips">
@@ -239,7 +252,7 @@ function FeedbackScreen({ user, onSignIn }) {
                         Your name and email are sent with your feedback so we can reply.
                     </p>
                 </aside>
-            </div>
+            </div>}
         </div>
     );
 }
