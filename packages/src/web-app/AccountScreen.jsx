@@ -11,8 +11,8 @@ menu (the user's photo, name and plan on top, then the sections) and the
 chosen section beside it. On phones the menu becomes a row of tabs above
 the section. Sections:
 - My account: profile photo (saved in this browser, see ProfilePhoto.js),
-  name, email, password, role, member since, and log out. Guests see a
-  sign-in card instead.
+  name, email, password, role, member since, "Show walkthrough" (replays
+  the dock tour), and log out. Guests see a sign-in card instead.
 - Plans: Genesis Free / Plus / Pro compared side by side. A prototype:
   everyone is on Free and paid plans cannot be chosen yet.
 - Usage: workspace stats counted from GET /jobs (models, photos, failed
@@ -20,8 +20,9 @@ the section. Sections:
 - Sound: sound effects on/off and volume, saved in this browser.
 - buildUsageStats(jobs)
 Turns the GET /jobs list into the four usage cards.
-- AccountScreen({ user, onSignOut })
-React component. onSignOut signs out (or, for guests, goes to sign in).
+- AccountScreen({ user, onSignOut, onShowWalkthrough })
+React component. onSignOut signs out (or, for guests, goes to sign in);
+onShowWalkthrough replays the walkthrough.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
@@ -103,7 +104,7 @@ function buildUsageStats(jobs) {
     ];
 }
 
-function AccountScreen({ user, onSignOut }) {
+function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
     const [activeSection, setActiveSection] = useState('account');
     const [jobs, setJobs] = useState([]);
     const [statsStatus, setStatsStatus] = useState('loading');
@@ -289,6 +290,22 @@ function AccountScreen({ user, onSignOut }) {
                         <dd>{user.memberSince}</dd>
                     </div>
                 </dl>
+
+                <div className="forma-card acct-card acct-logout">
+                    <div>
+                        <h2 className="acct-card-title">Walkthrough</h2>
+                        <p className="acct-muted">Take the quick tour of the dock again.</p>
+                    </div>
+                    <button
+                        className="forma-btn"
+                        onClick={() => {
+                            playSound('tap');
+                            onShowWalkthrough();
+                        }}
+                    >
+                        <Icon name="refresh" size={14} /> Show walkthrough
+                    </button>
+                </div>
 
                 <div className="forma-card acct-card acct-logout">
                     <div>

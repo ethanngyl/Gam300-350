@@ -24,7 +24,7 @@ the .ply (or why it failed / that it was cancelled). Sounds: a tick each
 time a step finishes, success when the model is ready, error if it fails
 (none on cancel, since Cancel already plays Back). Also frees an in-progress
 server-side job if the user navigates away or closes the tab before it
-completes. There is no Back button; the sidebar handles navigation.
+completes. There is no Back button; the dock handles navigation.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';

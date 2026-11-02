@@ -13,7 +13,9 @@ layout) with these pages above it: Home, Library, Photo Editor, Scene
 Builder, Model Viewer, YouTube Extractor, Feedback, Capture and Account. Capture
 opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
-batch to the Photo Editor.
+batch to the Photo Editor. The first time each account signs in on this
+browser, the walkthrough (Walkthrough.jsx) tours the dock; "Show
+walkthrough" on the account page or in the account menu replays it.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -36,6 +38,7 @@ import AccountScreen from './AccountScreen.jsx';
 import FeedbackScreen from './FeedbackScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
+import Walkthrough from './Walkthrough.jsx';
 import { useUndoableState } from './useUndoableState.js';
 import { NEW_SCENE_INFO } from './SceneStorage.js';
 import { playSound } from '../audio/Audio.js';
@@ -43,6 +46,26 @@ import './AppTheme.css';
 import './App.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
+// One flag per account (by email; guests share one), set once the
+// walkthrough has been finished or skipped on this browser.
+const WALKTHROUGH_SEEN_KEY_PREFIX = 'genesis-walkthrough-seen:';
+
+function hasSeenWalkthrough(email) {
+    try {
+        return window.localStorage.getItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`) === 'true';
+    } catch {
+        // Storage blocked: count it as seen, or it would show on every visit.
+        return true;
+    }
+}
+
+function markWalkthroughSeen(email) {
+    try {
+        window.localStorage.setItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`, 'true');
+    } catch {
+        // Storage unavailable: nothing to remember it in.
+    }
+}
 
 // Reads the saved session once on first render. Storage can be blocked
 // (private windows, site data off), so every access is wrapped.
@@ -98,6 +121,11 @@ function App() {
         checkSession();
         return () => { cancelled = true; };
     }, []);
+
+    // True while the walkthrough is replaying from the account page.
+    const [isReplayingWalkthrough, setIsReplayingWalkthrough] = useState(false);
+    // Bumped when the walkthrough closes, so the "seen" flag is read again.
+    const [, setWalkthroughCloseCount] = useState(0);
 
     // Page shown inside the shell:
     // home | library | editor | scene | viewer | youtube | capture | account
@@ -249,6 +277,22 @@ function App() {
         setScreen(null);
     }
 
+    // Shown on the dashboard the first time an account signs in here, or on request.
+    const isWalkthroughOpen = Boolean(currentUser)
+        && (isReplayingWalkthrough || !hasSeenWalkthrough(currentUser.email));
+
+    // Replays the walkthrough from step 1, which points at Home's Recent section.
+    function showWalkthroughAgain() {
+        goToTab('home');
+        setIsReplayingWalkthrough(true);
+    }
+
+    function closeWalkthrough() {
+        markWalkthroughSeen(currentUser.email);
+        setIsReplayingWalkthrough(false);
+        setWalkthroughCloseCount((closeCount) => closeCount + 1);
+    }
+
     if (isCheckingSession) {
         return <div className="genesis-page" />;
     }
@@ -388,7 +432,11 @@ function App() {
                         />
                     )}
                     {activeTab === 'account' && (
-                        <AccountScreen user={currentUser} onSignOut={handleSignOut} />
+                        <AccountScreen
+                            user={currentUser}
+                            onSignOut={handleSignOut}
+                            onShowWalkthrough={showWalkthroughAgain}
+                        />
                     )}
                     {activeTab === 'feedback' && (
                         // Guests are sent back to the login screen to sign in.
@@ -397,13 +445,17 @@ function App() {
                 </div>
             </div>
 
+            {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
+
             <Dock
+                isPinned={isWalkthroughOpen}
                 activeTab={activeTab}
                 onNavigate={goToTab}
                 onNewModel={() => goToTab('capture')}
                 onAddPhotos={addPhotosToCapture}
                 user={currentUser}
                 onOpenAccount={() => goToTab('account')}
+                onShowWalkthrough={showWalkthroughAgain}
                 onSignOut={handleSignOut}
             />
         </div>

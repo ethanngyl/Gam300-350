@@ -12,15 +12,16 @@ which opens the camera capture page; "Add photos", which opens the file
 picker and hands the chosen photos to the capture page; the workspace
 pages (Home, Media Library, Photo Editor, Scene Builder, YouTube
 Extractor, Model Viewer, Feedback); and the signed-in user, whose menu opens upwards
-and links to the account page, mutes / unmutes sound effects, and signs
-out (or in, for guests). The avatar shows the user's profile photo if
+and links to the account page, mutes / unmutes sound effects, replays
+the walkthrough, and signs out (or in, for guests). The avatar shows the user's profile photo if
 they set one on the account page (ProfilePhoto.js). Each item is an icon whose label slides out on
 hover or keyboard focus; the current page is highlighted.
 On devices with a mouse, the dock fades and slides mostly out of view 3s
 after the pointer leaves it, and comes back when the pointer reaches the
 bottom of the screen or the dock gets keyboard focus. In the mobile view
 (760px wide or less, or any touch screen) the dock always stays in view
-and shows icons only, to save space.
+and shows icons only, to save space. isPinned (set during the
+walkthrough) also keeps the dock in view.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -47,7 +48,17 @@ function canFadeDock() {
     return window.matchMedia?.('(hover: hover) and (pointer: fine) and (min-width: 761px)').matches ?? false;
 }
 
-function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAccount, onSignOut }) {
+function Dock({
+    activeTab,
+    onNavigate,
+    onNewModel,
+    onAddPhotos,
+    user,
+    onOpenAccount,
+    onShowWalkthrough,
+    onSignOut,
+    isPinned = false,
+}) {
     const fileInputRef = useRef(null);
     const profileRef = useRef(null);
     const idleTimerRef = useRef(null);
@@ -72,7 +83,7 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
     // Starts the countdown to fade the dock (not while its menu is open).
     function scheduleIdle() {
         clearIdleTimer();
-        if (isProfileMenuOpen || !canFadeDock()) return;
+        if (isProfileMenuOpen || isPinned || !canFadeDock()) return;
         idleTimerRef.current = window.setTimeout(() => setIsIdle(true), IDLE_DELAY_MS);
     }
 
@@ -113,7 +124,7 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
         setIsProfileMenuOpen(false);
     }
 
-    const dockClassName = isIdle ? 'genesis-dock is-idle' : 'genesis-dock';
+    const dockClassName = isIdle && !isPinned ? 'genesis-dock is-idle' : 'genesis-dock';
 
     return (
         <>
@@ -224,6 +235,16 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
                             >
                                 <Icon name={isMuted ? 'volume' : 'volumeOff'} size={14} />
                                 {isMuted ? ' Unmute sounds' : ' Mute sounds'}
+                            </button>
+                            <button
+                                className="forma-account-menu-item"
+                                onClick={() => {
+                                    playSound('tap');
+                                    closeProfileMenu();
+                                    onShowWalkthrough();
+                                }}
+                            >
+                                <Icon name="refresh" size={14} /> Show walkthrough
                             </button>
                             <button
                                 className="forma-account-menu-item"

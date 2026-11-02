@@ -61,7 +61,7 @@ function createBatchPhoto(file) {
     };
 }
 
-// addedFiles: photos chosen with the sidebar's Add photos button before
+// addedFiles: photos chosen with the dock's Add photos button before
 // this page opened; they start in the batch. While the page is open,
 // onRegisterAddFiles(handler) hands App a function that adds more.
 // initialPhotos: { files, removeBackground, trainIters } handed back from the Photo
@@ -219,7 +219,7 @@ function CameraCapture({
         return newPhotos.length;
     }, []);
 
-    // While this page is open, the sidebar's Add photos button adds to
+    // While this page is open, the dock's Add photos button adds to
     // this batch through the handler registered here.
     useEffect(() => {
         if (!onRegisterAddFiles) return;

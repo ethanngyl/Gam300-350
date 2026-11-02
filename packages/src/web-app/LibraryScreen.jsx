@@ -14,7 +14,7 @@ jobs are hidden. Each card shows the object cut out of one of its photos,
 or its first photo (see ModelCover.jsx).
 Viewing a model is left to the Model Viewer tab; right-clicking a card
 here renames or deletes it. The active sub-tab is controlled by the parent
-so the sidebar can open either one directly.
+so other pages (such as Home's "View all") can open either one directly.
 **************************************************************************/
 
 import { useCallback, useEffect, useState } from 'react';
@@ -200,7 +200,7 @@ function LibraryScreen({ subTab, onSubTabChange }) {
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use New model in the sidebar to create one.'}
+                                : 'No generated models yet. Use New model in the dock below to create one.'}
                         </p>
                     )}
 
