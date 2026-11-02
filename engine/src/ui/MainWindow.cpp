@@ -122,7 +122,7 @@ MainWindow::MainWindow() {
     m_defaultLayout = saveState(kLayoutVersion);
     restoreSettings();
 
-    // A finished gizmo drag becomes one undo step.
+    //A finished gizmo drag is one undo step
     m_viewport->onTransformEdited = [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after));
     };
@@ -251,6 +251,19 @@ void MainWindow::createActions() {
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_redoAction = m_undo.createRedoAction(this, "&Redo");
     m_redoAction->setShortcut(QKeySequence::Redo);
+
+    //Qt's Singal and shot system, this makes it so that the pannel is refreshed on an undo
+    //m_undo is sender
+    //QUndoStack::indexChanged is the signal thats emmited if the undo stack pos moves
+    //this is reciever
+    connect(&m_undo, &QUndoStack::indexChanged, this, [this] {
+        //0ms delay -> run on next event loop
+        //this -> reciever
+        QTimer::singleShot(0, this, [this] { 
+            //Refesh pannel
+            refreshScenePanels();
+            });
+    });
 
     m_renderModeGroup = new QActionGroup(this);
     m_renderModeGroup->setExclusive(true);
@@ -757,8 +770,9 @@ void MainWindow::selectModel(int index) {
 void MainWindow::renameModel(int index, const QString& name) {
     SplatRenderer* renderer = m_viewport->renderer();
     SplatModel* model = renderer ? renderer->GetModel(index) : nullptr;
-    if (model && !name.isEmpty()) {
-        model->SetName(name.toStdString());
+    if (model && !name.isEmpty() && name.toStdString() != model->GetName()) {
+        //push() runs redo(), which applies the new name
+        m_undo.push(new RenameModelCommand(model, model->GetName(), name.toStdString()));
     }
     // Deferred: this can be reached from the outliner's own edit commit,
     // and rebuilding the tree in the middle of that is unsafe.
@@ -790,7 +804,7 @@ void MainWindow::deleteSelectedModel() {
     const QString name = QString::fromStdString(renderer->GetModelName(index));
 
     m_inspector->setModel(nullptr); // drop the pointer before the model is freed
-    m_undo.clear(); // commands hold model pointers; deleting is not undoable yet
+    m_undo.clear(); //For now clear stack if delete
     renderer->RemoveModel(index);
     refreshScenePanels();
 
@@ -982,12 +996,13 @@ void MainWindow::showControls() {
         "<table cellspacing='6'>"
         "<tr><td colspan='2'><b>Viewport camera</b></td></tr>"
         "<tr><td>Right mouse drag</td><td>Orbit</td></tr>"
-        "<tr><td>Left mouse drag</td><td>Pan</td></tr>"
+        "<tr><td>Left mouse drag</td><td>Pan (when not grabbing a gizmo)</td></tr>"
         "<tr><td>Mouse wheel</td><td>Zoom</td></tr>"
         "<tr><td>Home</td><td>Recenter camera</td></tr>"
         "<tr><td colspan='2'><br><b>Selected model</b> (viewport focused)</td></tr>"
-        "<tr><td>W / S, Up / Down</td><td>Nudge along X</td></tr>"
-        "<tr><td>A / D, Left / Right</td><td>Nudge along Z</td></tr>"
+        "<tr><td>Q / W / E / R</td><td>Pan / Translate / Rotate / Scale tool</td></tr>"
+        "<tr><td>Up / Down</td><td>Nudge along X</td></tr>"
+        "<tr><td>Left / Right</td><td>Nudge along Z</td></tr>"
         "<tr><td>Esc</td><td>Deselect</td></tr>"
         "<tr><td colspan='2'><br><b>Editor</b></td></tr>"
         "<tr><td>Ctrl+O</td><td>Import splat (.ply)</td></tr>"

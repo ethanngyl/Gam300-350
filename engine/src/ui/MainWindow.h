@@ -119,9 +119,7 @@ private:
 
     Viewport* m_viewport = nullptr;
 
-    // Undo history. Edits are pushed as QUndoCommands (see EditCommands.h);
-    // the stack is cleared whenever a model is removed so no command can
-    // hold a dangling model pointer.
+    //Undo history. Edits are pushed as QUndoCommands (see EditCommands.h)
     QUndoStack m_undo;
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
