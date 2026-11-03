@@ -17,17 +17,26 @@ MoveModelCommand::MoveModelCommand(SplatModel* model, const glm::mat4& before, c
 }
 
 
-LoadModelCommand::LoadModelCommand(SplatModel* model, const std::string& before, const std::string& after, QUndoCommand* parent)
-{
-    //Left blank for now
-}
-
 void MoveModelCommand::undo() {
     m_model->SetTransform(m_before);
 }
 
 void MoveModelCommand::redo() {
     m_model->SetTransform(m_after);
+}
+
+LoadModelCommand::LoadModelCommand(SplatModel* model, const std::string& before, const std::string& after, QUndoCommand* parent)
+    : QUndoCommand(parent), m_model(model), m_before(before), m_after(after)
+{
+    //Left blank for now
+}
+
+void LoadModelCommand::undo() {
+    //Left blank for now
+}
+
+void LoadModelCommand::redo() {
+    //Left blank for now
 }
 
 RenameModelCommand::RenameModelCommand(SplatModel* model, const std::string& before, const std::string& after, QUndoCommand* parent)
