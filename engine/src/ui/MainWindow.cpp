@@ -246,6 +246,12 @@ void MainWindow::createActions() {
     m_cropInsideAction->setStatusTip("Checked removes the splats inside the box, unchecked removes everything outside it");
     connect(m_cropInsideAction, &QAction::toggled, this, [this](bool on) { m_viewport->cropBox().removeInside = on; });
 
+    m_cropMoveContentsAction = new QAction("Crop Box Moves &Contents", this);
+    m_cropMoveContentsAction->setCheckable(true);
+    m_cropMoveContentsAction->setShortcut(QKeySequence("Ctrl+Shift+B"));
+    m_cropMoveContentsAction->setStatusTip("Checked makes the gizmo move, rotate and scale the splats inside the box. Unchecked edits the box itself");
+    connect(m_cropMoveContentsAction, &QAction::toggled, this, [this](bool on) { m_viewport->cropBox().moveContents = on; });
+
     m_toggleVisibilityAction = new QAction("Hide/Show &Model", this);
     m_toggleVisibilityAction->setShortcut(QKeySequence("Ctrl+H"));
     m_toggleVisibilityAction->setStatusTip("Hide or show the selected model without removing it");
@@ -379,6 +385,7 @@ void MainWindow::createMenus() {
     editMenu->addAction(m_addCropBoxAction);
     editMenu->addAction(m_applyCropBoxAction);
     editMenu->addAction(m_cropInsideAction);
+    editMenu->addAction(m_cropMoveContentsAction);
     editMenu->addSeparator();
     editMenu->addAction(m_trimSettingsAction);
 

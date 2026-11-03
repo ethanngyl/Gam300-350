@@ -22,6 +22,7 @@ struct CropBox
     glm::mat4 transform = glm::mat4(1.0f); //World-space placement of the unit cube
     bool active = false;                   //Box is shown and the gizmo edits it
     bool removeInside = true;              //true removes splats inside, false removes everything outside
+    bool moveContents = false;             //true makes gizmo drags carry the splats inside the box, false edits the box itself
 };
 
 //One byte per splat, 1 = keep, 0 = remove

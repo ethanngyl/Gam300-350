@@ -149,8 +149,9 @@ void Viewport::paintGL() {
     //Draw Splat/Pointcloud models
     m_renderer->Draw(view, proj, static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
     if (m_cropBox.active) {
-        //Orange for removing the inside, blue when keeping it
-        const glm::vec3 color = m_cropBox.removeInside ? glm::vec3(1.0f, 0.55f, 0.1f) : glm::vec3(0.2f, 0.7f, 1.0f);
+        //Green when the gizmo moves the contents, otherwise orange for removing the inside and blue when keeping it
+        glm::vec3 color = m_cropBox.removeInside ? glm::vec3(1.0f, 0.55f, 0.1f) : glm::vec3(0.2f, 0.7f, 1.0f);
+        if (m_cropBox.moveContents) color = glm::vec3(0.3f, 1.0f, 0.4f);
         m_cropBoxRenderer->Draw(proj * view, m_cropBox.transform, color);
     }
 

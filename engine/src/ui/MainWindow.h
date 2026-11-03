@@ -149,6 +149,7 @@ private:
     QAction* m_addCropBoxAction = nullptr;
     QAction* m_applyCropBoxAction = nullptr;
     QAction* m_cropInsideAction = nullptr;
+    QAction* m_cropMoveContentsAction = nullptr;
     QActionGroup* m_renderModeGroup = nullptr;
     QAction* m_pointCloudAction = nullptr;
     QAction* m_gaussianAction = nullptr;
