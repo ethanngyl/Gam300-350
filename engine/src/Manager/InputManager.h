@@ -14,6 +14,7 @@
 #pragma once
 #include <vector>
 #include <functional>
+#include <utility>
 
 class InputManager
 {
@@ -52,9 +53,22 @@ public:
 		ALL_INPUTS
 	};
 
+	//Active tool, switched with Q/W/E/R
+	enum TOOL_MODE
+	{
+		PAN,
+		TRANSLATE,
+		ROTATE,
+		SCALE
+	};
+
 	InputManager() = default;
 
 	STATE GetState() const { return m_inputState; }
+	TOOL_MODE GetToolMode() const { return m_toolMode; }
+	void SetToolMode(TOOL_MODE mode);
+	//Lets the UI react to a mode change
+	void SetOnToolModeChanged(std::function<void(TOOL_MODE)> callback) { m_onToolModeChanged = std::move(callback); }
 	double GetDx() const { return m_dx; }
 	double GetDy() const { return m_dy; }
 	double GetScrollY() const { return m_scrollY; }
@@ -71,6 +85,8 @@ private:
 	void TriggerCallback(KEY_ACTIONS action, INPUT_TYPE inputType);
 
 	STATE m_inputState = NORMAL;
+	TOOL_MODE m_toolMode = TRANSLATE;
+	std::function<void(TOOL_MODE)> m_onToolModeChanged;
 
 	//Array of vectors, based on each 
 	//- state

@@ -47,6 +47,8 @@ public:
     void SetTransform(const glm::mat4& t) { m_transform = t; }
     const glm::mat4& GetTransform() const { return m_transform; }
     void Translate(const glm::vec3& delta) { m_transform = glm::translate(m_transform, delta); }
+    void Scale(const glm::vec3& delta) { m_transform = glm::scale(m_transform, delta); }
+    void Rotate(const float deltaAngle, const glm::vec3& deltaAxis) { m_transform = glm::rotate(m_transform, deltaAngle, deltaAxis); }
 
     //Use SplatRenderer::SetModelHidden to change this, so the draw buffer gets rebuilt
     void SetHidden(bool hidden) { isHidden = hidden; }

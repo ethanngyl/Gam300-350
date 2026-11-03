@@ -246,6 +246,19 @@
     font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     color: var(--forma-text-muted);
+    max-width: calc(100% - 72px);
+}
+
+    .processing-chip svg {
+        flex: none;
+    }
+
+/* Long video file names are cut short with "..." */
+.processing-chip-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ---------- Step tracker ---------- */

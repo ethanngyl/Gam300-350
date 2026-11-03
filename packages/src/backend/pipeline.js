@@ -42,6 +42,8 @@ Extracts the frames, checks there are at least 8, then runs runPipeline.
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.
+- setSkipSampleCopy(flag)
+Turns off the engine samples copy (the VM keeps models in the database).
 - sampleFileName(job)
 The job's filename in the engine's samples folder.
 - pickSampleFileName(job, name)
@@ -50,10 +52,8 @@ The samples filename to use for a job's display name after a rename.
 Rebuilds an in-memory job from a record scanned off disk (see scan.js).
 - pruneJob(job)
 After a job finishes: deletes COLMAP/Brush working files, keeping only the
-photos, status.json, the final model and metrics.json.
-- setOnJobDone(fn)
-Registers what runs after each successful job (server.js: send it to the
-VM's shared library).
+photos, status.json, the final model, metrics.json and cover.webp. Called by
+server.js (afterJobEnds) once the cover has been made from the masks.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -710,8 +710,11 @@ export async function runPipeline(job) {
         // Best-effort copy into the engine's samples folder, so a finished scan can
         // be opened straight from the native viewer's file browser (main.cpp scans
         // assets/samples/ for *.ply on launch). Never fails the job -- the result is
-        // still servable from resultPath/the Download button either way.
-        try {
+        // still servable from resultPath/the Download button either way. Skipped
+        // on the VM with FILE_STORE=db, which keeps no model files on disk.
+        if (skipSampleCopy) {
+            appendLog(job, 'Model will be stored in the database (no engine samples copy).')
+        } else try {
             fs.mkdirSync(config.engineSamplesDir, { recursive: true })
             const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
             fs.copyFileSync(job.resultPath, enginePath)
@@ -725,15 +728,9 @@ export async function runPipeline(job) {
     job.status = 'done'
     appendLog(job, `\nDone. Result: ${job.resultPath}`)
     saveJob(job)
-
-    // Only the photos and the final model are kept (see pruneJob), then
-    // whoever registered for finished jobs (server.js: send it to the VM).
-    await pruneJob(job)
-    if (onJobDone) {
-      Promise.resolve()
-        .then(() => onJobDone(job))
-        .catch((err) => console.error(`[backend] after-done step failed for job ${job.id}:`, err))
-    }
+    // Tidying up (cover, pruneJob, sending to the VM, moving photos into
+    // the database) is done by server.js once this promise settles, in an
+    // order that keeps the photos and masks until the cover is made.
   } catch (err) {
     if (job.cancelled) return // cancelJob already set status/error
     job.status = 'error'
@@ -741,6 +738,24 @@ export async function runPipeline(job) {
     appendLog(job, `\nERROR: ${err.message}`)
     saveJob(job)
   }
+}
+
+// Set on the VM with FILE_STORE=db (see setSkipSampleCopy).
+let skipSampleCopy = false
+
+/************************************************************************/
+/*!
+  \brief
+    Turns off copying finished models into the engine's samples folder
+    (the VM with FILE_STORE=db keeps models in the database instead).
+  \param flag
+    bool
+  \return
+    nothing
+*/
+/************************************************************************/
+export function setSkipSampleCopy(flag) {
+    skipSampleCopy = flag
 }
 
 // Names Windows won't accept as a filename, with or without an extension.
@@ -791,23 +806,6 @@ export function pickSampleFileName(job, name) {
     const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
     if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
     return `${base}_${shortId}.ply`
-}
-
-// Called with each job that finishes successfully (set by setOnJobDone).
-let onJobDone = null
-
-/************************************************************************/
-/*!
-  \brief
-    Registers a function to run after each job finishes successfully (after
-    pruneJob). server.js uses it to send the job to the VM's shared library.
-    Errors it throws are logged and never affect the job.
-  \param fn
-    function(job), or null to remove it
-*/
-/************************************************************************/
-export function setOnJobDone(fn) {
-  onJobDone = fn
 }
 
 /************************************************************************/

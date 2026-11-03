@@ -48,7 +48,25 @@ public:
     // Cheap enough to call every frame.
     void syncFromModel();
 
+    // The modes the crop box buttons can ask for. The two cut values are the cut button ids.
+    enum CropMode { CropRemoveInside = 0, CropRemoveOutside = 1, CropMoveContents = 2 };
+
+    // Shows the real crop box state in the Crop Box section (the box can also be changed with
+    // shortcuts and menus). `removeInside` is kept while in move mode, so switching back to crop
+    // restores it. `confirmed` is whether move mode has a confirmed selection.
+    // Cheap enough to call every frame.
+    void setCropState(bool active, bool moveContents, bool removeInside, bool confirmed);
+
 signals:
+    // The Show Crop Box button was toggled.
+    void cropBoxToggled(bool on);
+
+    // A cut button or the mode button asked for a mode (a CropMode value).
+    void cropModeSelected(int mode);
+
+    // The action button was pressed: remove the splats, or confirm/release the selection in move-contents mode.
+    void cropApplyRequested();
+
     // The model's name was changed from the inspector.
     void nameChanged(const QString& name);
 
@@ -77,6 +95,17 @@ private:
     QLabel* m_trimStatus = nullptr;
     QPushButton* m_untrimButton = nullptr;
     TrimData m_defaultTrim;
+
+    QPushButton* m_cropToggle = nullptr;
+    std::array<QPushButton*, 2> m_cropCutButtons{}; // Cut Inside, Cut Outside
+    QPushButton* m_cropModeToggle = nullptr;        // shows the mode, click switches Crop <-> Move
+    QPushButton* m_cropApply = nullptr;
+    // Last state shown, so the per-frame setCropState only touches widgets when something changed
+    bool m_cropShown = false; // false until the first setCropState has filled the widgets in
+    bool m_cropActive = false;
+    bool m_cropMove = false;
+    bool m_cropRemoveInside = true;
+    bool m_cropConfirmed = false;
 
     SplatModel* m_model = nullptr;
 };

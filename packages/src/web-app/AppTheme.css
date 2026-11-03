@@ -3322,6 +3322,137 @@ html {
         color: var(--forma-on-accent);
     }
 
+/* ---------- "Show tab labels": every label stays out ---------- */
+
+/* The labelled dock is always one straight row, so it only shows labels
+   where that row fits: from 1160px wide (tighter from 1160 to 1319px).
+   Narrower windows keep the icons-only dock and hide the switch. */
+@media (min-width: 1160px) {
+    .genesis-dock.is-labelled .genesis-dock-item {
+        padding-right: 15px;
+    }
+
+        .genesis-dock.is-labelled .genesis-dock-label {
+            max-width: 150px;
+            margin-left: 9px;
+            opacity: 1;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
+            padding-right: 3px;
+        }
+
+            .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
+                margin-right: 10px;
+            }
+}
+
+@media (min-width: 1160px) and (max-width: 1319px) {
+    .genesis-dock.is-labelled {
+        gap: 4px;
+    }
+
+        .genesis-dock.is-labelled .genesis-dock-group {
+            gap: 2px;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-item {
+            padding-left: 8px;
+            padding-right: 10px;
+            font-size: 0.72rem;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-label {
+            margin-left: 6px;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
+            padding-left: 3px;
+            padding-right: 3px;
+        }
+
+            .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
+                max-width: 110px;
+                margin-right: 8px;
+            }
+}
+
+@media (max-width: 1159px) {
+    .genesis-labels-toggle {
+        display: none;
+    }
+}
+
+/* The switch's own panel, top-right, styled like the dock. */
+.genesis-labels-toggle {
+    position: fixed;
+    top: 14px;
+    right: 16px;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid var(--forma-border-strong);
+    background: rgba(24, 24, 27, 0.82);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    color: var(--forma-text-soft);
+    cursor: pointer;
+    transition: border-color 0.22s ease, color 0.22s ease;
+}
+
+    .genesis-labels-toggle:hover,
+    .genesis-labels-toggle.is-on {
+        color: var(--forma-heading);
+    }
+
+    .genesis-labels-toggle:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+.genesis-labels-toggle-text {
+    font-family: var(--forma-font);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.genesis-labels-toggle-track {
+    position: relative;
+    width: 30px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    transition: background-color 0.22s ease, border-color 0.22s ease;
+}
+
+.genesis-labels-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--forma-text-soft);
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.22s ease;
+}
+
+.genesis-labels-toggle.is-on .genesis-labels-toggle-track {
+    background: var(--forma-blue);
+    border-color: rgba(var(--forma-accent-rgb), 0.45);
+}
+
+.genesis-labels-toggle.is-on .genesis-labels-toggle-thumb {
+    transform: translateX(14px);
+    background: var(--forma-on-accent);
+}
+
 /* ---------- Signed-in user ---------- */
 
 .genesis-dock-profile {
@@ -3356,6 +3487,19 @@ html {
     border-color: rgba(var(--forma-accent-rgb), 0.35);
     color: var(--forma-teal-text);
 }
+
+/* Profile photo (set on the account page) fills the round avatar. */
+.genesis-dock-avatar-icon,
+.genesis-dock-profile .genesis-profile-avatar-large {
+    overflow: hidden;
+}
+
+    .genesis-dock-avatar-icon img,
+    .genesis-dock-profile .genesis-profile-avatar-large img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
 
 /* The account menu opens upwards, right-aligned with the avatar. */
 .genesis-dock-profile .genesis-profile-menu {
@@ -3424,5 +3568,160 @@ html {
     .genesis-dock-avatar-icon {
         width: 28px;
         height: 28px;
+    }
+}
+
+/* ---------- Mobile view: five labelled tabs at a time, with an arrow ---------- */
+
+/* Full-width bar (Dock.jsx renders it only at 760px wide or less). */
+.genesis-dock.genesis-dock-mobile {
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    max-width: none;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 20px;
+    transform: none;
+}
+
+/* The tabs, five to a page. Swipeable; the scrollbar is hidden. */
+.genesis-mdock-scroller {
+    position: relative; /* tabs' offsetLeft is measured from here */
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+
+    .genesis-mdock-scroller::-webkit-scrollbar {
+        display: none;
+    }
+
+.genesis-mdock-item {
+    flex: 0 0 20%;
+    min-width: 0;
+    height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0 2px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text-soft);
+    font-family: var(--forma-font);
+    font-size: 0.64rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease;
+}
+
+    /* Each page of five starts here when snapping. */
+    .genesis-mdock-item:nth-child(5n + 1) {
+        scroll-snap-align: start;
+    }
+
+    .genesis-mdock-item:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+    .genesis-mdock-item.is-active {
+        background: rgba(var(--forma-accent-rgb), 0.16);
+        color: var(--forma-teal-text);
+    }
+
+.genesis-mdock-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 28px;
+    height: 24px;
+}
+
+/* New model: a solid blue circle. */
+.genesis-mdock-item.is-primary {
+    color: var(--forma-heading);
+}
+
+    .genesis-mdock-item.is-primary .genesis-mdock-icon {
+        width: 28px;
+        height: 28px;
+        margin-bottom: -2px;
+        border-radius: 50%;
+        background: var(--forma-blue);
+        color: var(--forma-on-accent);
+    }
+
+.genesis-mdock-item .genesis-mdock-avatar-icon {
+    width: 24px;
+    height: 24px;
+    overflow: hidden;
+    background: rgba(var(--forma-accent-rgb), 0.15);
+    border-color: rgba(var(--forma-accent-rgb), 0.35);
+    color: var(--forma-teal-text);
+}
+
+    .genesis-mdock-avatar-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+/* Long labels are cut short with "..." */
+.genesis-mdock-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Slides to the next five tabs; on the last five it turns to point back. */
+.genesis-mdock-arrow {
+    flex: none;
+    width: 40px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel-raised);
+    color: var(--forma-heading);
+    cursor: pointer;
+}
+
+    .genesis-mdock-arrow svg {
+        transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .genesis-mdock-arrow.is-back svg {
+        transform: rotate(180deg);
+    }
+
+    .genesis-mdock-arrow:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+/* The account menu opens upwards from the bar's right edge. */
+.genesis-dock-mobile .genesis-profile-menu {
+    left: auto;
+    right: 0;
+    bottom: calc(100% + 10px);
+    width: min(300px, 100%);
+}
+
+/* Room under the last content for the taller bar. */
+@media (max-width: 760px) {
+    .genesis-main {
+        padding-bottom: 84px;
     }
 }

@@ -25,7 +25,9 @@ a result card says why. Sounds: a tick each
 time a step finishes, success when the model is ready, error if it fails
 (none on cancel, since Cancel already plays Back). Also frees an in-progress
 server-side job if the user navigates away or closes the tab before it
-completes. There is no Back button; the sidebar handles navigation.
+completes. There is no Back button; the dock handles navigation. While the
+files upload or their job runs, the browser's Back / Forward buttons ask
+before leaving (onRegisterLeaveGuard, see App.jsx).
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -165,7 +167,7 @@ function formatElapsed(totalSeconds) {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function FrameExtractor({ onModelReady }) {
+function FrameExtractor({ onModelReady, onRegisterLeaveGuard = null }) {
     const [mediaItems, setMediaItems] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
     const [fps, setFps] = useState(2);
@@ -377,6 +379,15 @@ function FrameExtractor({ onModelReady }) {
     // The masking step only runs for jobs sent with "Remove background" on.
     const phases = PHASE_ORDER.filter((phase) => phase !== 'masking' || job?.removeBackground);
     const phaseIndex = job ? phases.indexOf(job.phase) : -1;
+
+    // The browser's Back / Forward buttons ask before leaving while the files
+    // upload or their job runs, since leaving cancels it (see the cleanup above).
+    const wouldCancelOnLeave = Boolean(busy);
+    useEffect(() => {
+        if (!onRegisterLeaveGuard || !wouldCancelOnLeave) return;
+        onRegisterLeaveGuard(() => window.confirm('Leave this page? The build will be cancelled.'));
+        return () => onRegisterLeaveGuard(null);
+    }, [onRegisterLeaveGuard, wouldCancelOnLeave]);
 
     // Ticks the elapsed-time counter once a second while a job runs.
     useEffect(() => {

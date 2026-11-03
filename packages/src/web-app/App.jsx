@@ -13,17 +13,24 @@ layout) with these pages above it: Home, Library, Photo Editor, Scene
 Builder, Model Viewer, Frame Extractor, Feedback, Capture and Account. Capture
 opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
-batch to the Photo Editor.
-Polling reconstruction progress, the finished splat result, a local .ply
-opened from the Model Viewer and the legacy image gallery still replace
-the whole screen. Owns the active job id and uploads a finished photo
-batch to the backend to kick off reconstruction.
+batch to the Photo Editor. The first time each account signs in on this
+browser, the walkthrough (Walkthrough.jsx) tours the dock; "Show
+walkthrough" on the account page or in the account menu replays it.
+Opening a model (from Home, the Media Library or the Model Viewer, a .ply
+from the user's computer, or a build that just finished, from photos or
+the Frame Extractor) shows the model page (ModelScreen.jsx) inside the
+dashboard; its back link returns to where it was opened from. Polling
+reconstruction progress and the legacy image gallery still replace the
+whole screen. Owns the active job id and uploads a finished photo batch
+to the backend to kick off reconstruction. Each page has its own
+address-bar hash (AppRoutes.js), so the browser's Back and Forward buttons
+move between pages and a refresh stays on the page; leaving a build in
+progress with Back asks first, since leaving cancels it.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
-import SplatViewer from './SplatViewer.jsx';
 import FrameExtractor from './FrameExtractor.jsx';
 import ImageGallery from './ImageGallery.jsx';
 import Dock from './Dock.jsx';
@@ -35,14 +42,65 @@ import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
 import FeedbackScreen from './FeedbackScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
-import NameModelPrompt from './NameModelPrompt.jsx';
+import ModelScreen from './ModelScreen.jsx';
+import Walkthrough from './Walkthrough.jsx';
 import { useUndoableState } from './useUndoableState.js';
-import { NEW_SCENE_INFO } from './SceneStorage.js';
-import { playSound } from '../audio/Audio.js';
+import { NEW_SCENE_INFO, createSceneObject } from './SceneStorage.js';
+import { hashToView, viewToHash } from './AppRoutes.js';
 import './AppTheme.css';
 import './App.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
+// Names of the pages a model can be opened from, for the model page's back link.
+const TAB_LABELS = {
+    home: 'Home',
+    library: 'Media Library',
+    viewer: 'Model Viewer',
+    scene: 'Scene Builder',
+    extractor: 'Frame Extractor',
+};
+
+// AppRoutes.js names the model page by its old full-page screens: 'result'
+// (a server model, #/model/<jobId>) or 'local-model' (a .ply from this
+// computer, #/viewer/file). These two convert between that and App's state.
+function toRouteView({ activeTab, librarySubTab, screen, jobId, viewedModel }) {
+    if (!screen && activeTab === 'model' && viewedModel) {
+        return viewedModel.jobId
+            ? { activeTab, librarySubTab, screen: 'result', jobId: viewedModel.jobId }
+            : { activeTab: 'viewer', librarySubTab, screen: 'local-model', jobId: null };
+    }
+    return { activeTab, librarySubTab, screen, jobId };
+}
+
+// A route view as App state: the model page is the 'model' tab, with the
+// server model to show (a local .ply can't be reopened from a hash alone).
+function fromRouteView(view) {
+    if (view.screen === 'result') {
+        return { ...view, activeTab: 'model', screen: null, jobId: null, modelJobId: view.jobId };
+    }
+    if (view.screen === 'local-model') return { ...view, screen: null, isLocalModel: true };
+    return view;
+}
+// One flag per account (by email; guests share one), set once the
+// walkthrough has been finished or skipped on this browser.
+const WALKTHROUGH_SEEN_KEY_PREFIX = 'genesis-walkthrough-seen:';
+
+function hasSeenWalkthrough(email) {
+    try {
+        return window.localStorage.getItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`) === 'true';
+    } catch {
+        // Storage blocked: count it as seen, or it would show on every visit.
+        return true;
+    }
+}
+
+function markWalkthroughSeen(email) {
+    try {
+        window.localStorage.setItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`, 'true');
+    } catch {
+        // Storage unavailable: nothing to remember it in.
+    }
+}
 
 // Reads the saved session once on first render. Storage can be blocked
 // (private windows, site data off), so every access is wrapped.
@@ -99,19 +157,42 @@ function App() {
         return () => { cancelled = true; };
     }, []);
 
+    // True while the walkthrough is replaying from the account page.
+    const [isReplayingWalkthrough, setIsReplayingWalkthrough] = useState(false);
+    // Bumped when the walkthrough closes, so the "seen" flag is read again.
+    const [, setWalkthroughCloseCount] = useState(0);
+
+    // The page in the address bar when the app loads (a refresh or a link,
+    // see AppRoutes.js). A .ply opened from this computer can't survive a
+    // reload, so that one opens the Model Viewer instead.
+    const [initialView] = useState(() => {
+        // A local .ply can't survive a reload, so #/viewer/file opens the Model Viewer.
+        return fromRouteView(hashToView(window.location.hash));
+    });
+
     // Page shown inside the shell:
     // home | library | editor | scene | viewer | extractor | capture | account
-    const [activeTab, setActiveTab] = useState('home');
+    // | feedback | model (the model page)
+    const [activeTab, setActiveTab] = useState(initialView.activeTab);
+    // The model the model page shows: { jobId } for a server model, or
+    // { localFile: { url, name, sizeBytes } } for a .ply from this computer.
+    const [viewedModel, setViewedModel] = useState(
+        initialView.modelJobId ? { jobId: initialView.modelJobId } : null);
+    // The tab the model page was opened from, for its back link.
+    const [modelReturnTab, setModelReturnTab] = useState('viewer');
+    // Releases a local .ply's blob URL once another model replaces it.
+    const localModelUrl = viewedModel?.localFile?.url;
+    useEffect(() => () => {
+        if (localModelUrl) URL.revokeObjectURL(localModelUrl);
+    }, [localModelUrl]);
     // Which Library sub-tab is open: models | photos
-    const [librarySubTab, setLibrarySubTab] = useState('models');
+    const [librarySubTab, setLibrarySubTab] = useState(initialView.librarySubTab);
 
     // Full-page screens that replace the whole shell. null shows the shell;
-    // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
-    const [screen, setScreen] = useState(null);
-    const [jobId, setJobId] = useState(null);
-    // A .ply opened from the user's computer in the Model Viewer: { url, name }
-    const [localModel, setLocalModel] = useState(null);
-    // Job whose training just finished; the result screen asks for its name.
+    // otherwise 'processing' | 'gallery'.
+    const [screen, setScreen] = useState(initialView.screen);
+    const [jobId, setJobId] = useState(initialView.jobId);
+    // Job whose training just finished; the model page asks for its name.
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
@@ -137,6 +218,66 @@ function App() {
     // switching tabs (each page remounts when its tab opens).
     const scene = useUndoableState([]);
     const [sceneInfo, setSceneInfo] = useState(NEW_SCENE_INFO);
+
+    // Browser Back / Forward. Every page change gets its own history entry
+    // with the page's hash (AppRoutes.js), so Back and Forward move between
+    // pages instead of leaving the site. Set replaceNextRef before a change
+    // whose page shouldn't come back with Back (a finished or cancelled
+    // build); the first sync only tidies the loaded URL.
+    const replaceNextRef = useRef(true);
+    // The hash of the page on screen, for putting it back when leaving is refused.
+    const currentHashRef = useRef(window.location.hash);
+    // While a page would lose work by being left (a build in progress), its
+    // function that asks the user first; returns true if they may leave.
+    const leaveGuardRef = useRef(null);
+    const registerLeaveGuard = useCallback((guard) => {
+        leaveGuardRef.current = guard;
+    }, []);
+    // The model page's model, for Back / Forward (the listener below is set up once).
+    const viewedModelRef = useRef(viewedModel);
+    useEffect(() => {
+        viewedModelRef.current = viewedModel;
+    }, [viewedModel]);
+
+    useEffect(() => {
+        const hash = viewToHash(toRouteView({ activeTab, librarySubTab, screen, jobId, viewedModel }));
+        const replace = replaceNextRef.current;
+        replaceNextRef.current = false;
+        currentHashRef.current = hash;
+        if (hash === window.location.hash) return;
+        if (replace) window.history.replaceState(null, '', hash);
+        else window.history.pushState(null, '', hash);
+    }, [activeTab, librarySubTab, screen, jobId, viewedModel]);
+
+    useEffect(() => {
+        function handlePopState() {
+            if (leaveGuardRef.current && !leaveGuardRef.current()) {
+                // Stay: put this page back as the newest entry.
+                window.history.pushState(null, '', currentHashRef.current);
+                return;
+            }
+            const view = fromRouteView(hashToView(window.location.hash));
+            if (view.isLocalModel) {
+                if (viewedModelRef.current?.localFile) view.activeTab = 'model';
+                // That file is gone (the page was reloaded): open the Model Viewer.
+                else replaceNextRef.current = true;
+            }
+            if (view.modelJobId && viewedModelRef.current?.jobId !== view.modelJobId) {
+                setViewedModel({ jobId: view.modelJobId });
+            }
+            // Like goToTab: one-off hand-offs between pages don't survive navigation.
+            setUploadError(null);
+            setPhotosForEditor(null);
+            setPhotosForCapture(null);
+            setPhotosToAdd(null);
+            setActiveTab(view.activeTab);
+            if (view.activeTab === 'library') setLibrarySubTab(view.librarySubTab);
+            setScreen(view.screen);
+            if (view.jobId) setJobId(view.jobId);
+        }
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
 
     function handleLogin(user) {
         saveUser(user);
@@ -223,39 +364,61 @@ function App() {
     }
 
     function resetJob() {
+        // The build or model screen being left can't be opened again with Back.
+        replaceNextRef.current = true;
         setJobId(null);
         setUploadError(null);
         setScreen(null);
         setActiveTab('home');
     }
 
-    // Opens a finished model in the full-page splat viewer (the same screen
-    // the reconstruction flow ends on). Back to dashboard returns to the page
-    // it was opened from (Library or Model Viewer).
-    function openModel(modelJobId) {
-        setJobId(modelJobId);
-        setScreen('result');
+    // Shows a model on the model page; its back link returns to returnTab.
+    function showModelPage(model, returnTab) {
+        setViewedModel(model);
+        setModelReturnTab(returnTab);
+        goToTab('model');
     }
 
-    // A model the Frame Extractor just built: opens the same result screen
-    // as the photo upload, asking for its name. activeTab stays 'extractor',
-    // so Back to dashboard returns there.
+    // Opens a finished model from Home, the Media Library or the Model Viewer.
+    function openModel(modelJobId) {
+        showModelPage({ jobId: modelJobId }, activeTab);
+    }
+
+    // A model the Frame Extractor just built: opens the model page, asking
+    // for its name. Its back link returns to the Frame Extractor.
     const showExtractedModel = useCallback((modelJobId) => {
-        setJobId(modelJobId);
         setNamePromptJobId(modelJobId);
-        setScreen('result');
+        setViewedModel({ jobId: modelJobId });
+        setModelReturnTab('extractor');
+        setActiveTab('model');
     }, []);
 
+    // Opens a .ply from the user's computer (Model Viewer's "Open .ply file").
     function openLocalModel(file) {
-        setLocalModel({ url: URL.createObjectURL(file), name: file.name });
-        setScreen('local-model');
+        showModelPage({ localFile: { url: URL.createObjectURL(file), name: file.name, sizeBytes: file.size } }, 'viewer');
     }
 
-    function closeLocalModel() {
-        // Release the file the blob URL holds on to.
-        URL.revokeObjectURL(localModel.url);
-        setLocalModel(null);
-        setScreen(null);
+    // Adds the model to the Scene Builder's scene and opens it there.
+    function addModelToScene(model) {
+        scene.set((objects) => [...objects, createSceneObject(model, objects)]);
+        setSceneInfo((info) => ({ ...info, hasUnsavedChanges: true }));
+        goToTab('scene');
+    }
+
+    // Shown on the dashboard the first time an account signs in here, or on request.
+    const isWalkthroughOpen = Boolean(currentUser)
+        && (isReplayingWalkthrough || !hasSeenWalkthrough(currentUser.email));
+
+    // Replays the walkthrough from step 1, which points at Home's Recent section.
+    function showWalkthroughAgain() {
+        goToTab('home');
+        setIsReplayingWalkthrough(true);
+    }
+
+    function closeWalkthrough() {
+        markWalkthroughSeen(currentUser.email);
+        setIsReplayingWalkthrough(false);
+        setWalkthroughCloseCount((closeCount) => closeCount + 1);
     }
 
     if (isCheckingSession) {
@@ -272,65 +435,14 @@ function App() {
                 jobId={jobId}
                 onDone={() => {
                     setNamePromptJobId(jobId);
-                    setScreen('result');
+                    // The model replaces the build screen, so Back skips the finished build.
+                    replaceNextRef.current = true;
+                    setScreen(null);
+                    showModelPage({ jobId }, 'home');
                 }}
                 onCancel={resetJob}
+                onRegisterLeaveGuard={registerLeaveGuard}
             />
-        );
-    }
-
-    if (screen === 'result' && jobId) {
-        // SplatViewer renders itself full-page (position: fixed, inset: 0), so it
-        // is only used here as a standalone screen, never inside the dashboard.
-        return (
-            <>
-                <SplatViewer url={`/jobs/${jobId}/result.ply`} />
-                {/* Must stay fixed above the full-page viewer, or its canvas covers the buttons. */}
-                <div
-                    className="genesis-overlay"
-                    style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, zIndex: 10 }}
-                >
-                    <button
-                        className="btn btn-primary"
-                        onClick={() => {
-                            playSound('tap');
-                            // A model from the Frame Extractor starts its next scan there too.
-                            const scanTab = activeTab === 'extractor' ? 'extractor' : 'capture';
-                            resetJob();
-                            goToTab(scanTab);
-                        }}
-                    >
-                        New scan
-                    </button>
-                    <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
-                        onClick={() => playSound('tap')}>
-                        Download .ply
-                    </a>
-                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); backToDashboard(); }}>
-                        Back to dashboard
-                    </button>
-                </div>
-                {namePromptJobId === jobId && (
-                    <NameModelPrompt jobId={jobId} onClose={() => setNamePromptJobId(null)} />
-                )}
-            </>
-        );
-    }
-
-    if (screen === 'local-model' && localModel) {
-        return (
-            <>
-                <SplatViewer url={localModel.url} />
-                <div
-                    className="genesis-overlay"
-                    style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, alignItems: 'center', zIndex: 10 }}
-                >
-                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); closeLocalModel(); }}>
-                        Back to dashboard
-                    </button>
-                    <span style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8 }}>{localModel.name}</span>
-                </div>
-            </>
         );
     }
 
@@ -384,7 +496,7 @@ function App() {
                     )}
                     {activeTab === 'extractor' && (
                         // FrameExtractor plays the click sound itself, so none here.
-                        <FrameExtractor onModelReady={showExtractedModel} />
+                        <FrameExtractor onModelReady={showExtractedModel} onRegisterLeaveGuard={registerLeaveGuard} />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
@@ -399,22 +511,44 @@ function App() {
                         />
                     )}
                     {activeTab === 'account' && (
-                        <AccountScreen user={currentUser} onSignOut={handleSignOut} />
+                        <AccountScreen
+                            user={currentUser}
+                            onSignOut={handleSignOut}
+                            onShowWalkthrough={showWalkthroughAgain}
+                        />
                     )}
                     {activeTab === 'feedback' && (
                         // Guests are sent back to the login screen to sign in.
                         <FeedbackScreen user={currentUser} onSignIn={handleSignOut} />
                     )}
+                    {activeTab === 'model' && viewedModel && (
+                        <ModelScreen
+                            jobId={viewedModel.jobId}
+                            localFile={viewedModel.localFile}
+                            backLabel={TAB_LABELS[modelReturnTab] ?? 'Back'}
+                            showNamePrompt={Boolean(viewedModel.jobId) && namePromptJobId === viewedModel.jobId}
+                            onNamePromptClose={() => setNamePromptJobId(null)}
+                            onBack={() => goToTab(modelReturnTab)}
+                            onOpenPhotos={() => openLibrary('photos')}
+                            onAddToScene={addModelToScene}
+                            onDeleted={() => goToTab(modelReturnTab === 'model' ? 'library' : modelReturnTab)}
+                        />
+                    )}
                 </div>
             </div>
 
+            {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
+
             <Dock
-                activeTab={activeTab}
+                isPinned={isWalkthroughOpen}
+                // The model page belongs with the Model Viewer.
+                activeTab={activeTab === 'model' ? 'viewer' : activeTab}
                 onNavigate={goToTab}
                 onNewModel={() => goToTab('capture')}
                 onAddPhotos={addPhotosToCapture}
                 user={currentUser}
                 onOpenAccount={() => goToTab('account')}
+                onShowWalkthrough={showWalkthroughAgain}
                 onSignOut={handleSignOut}
             />
         </div>
