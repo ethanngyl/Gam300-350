@@ -233,12 +233,15 @@ void MainWindow::createActions() {
     m_addCropBoxAction->setStatusTip("Toggle a box around the selected model. Move, rotate and scale it, then press Delete or Enter to remove the splats inside");
     connect(m_addCropBoxAction, &QAction::triggered, this, [this] { toggleCropBox(); });
 
-    m_applyCropBoxAction = new QAction("&Apply Crop Box", this);
+    m_applyCropBoxAction = new QAction("&Apply / Confirm Crop Box", this);
     m_applyCropBoxAction->setShortcut(QKeySequence(Qt::Key_Return));
     m_applyCropBoxAction->setShortcutContext(Qt::WidgetShortcut);
-    m_applyCropBoxAction->setStatusTip("Remove the splats the crop box selects from the selected model");
+    m_applyCropBoxAction->setStatusTip("Removes the splats in the crop box. In contents mode, confirms the splats in the box as the selection to move (press again to release them)");
     m_viewport->addAction(m_applyCropBoxAction);
-    connect(m_applyCropBoxAction, &QAction::triggered, this, [this] { applyCropBox(); });
+    connect(m_applyCropBoxAction, &QAction::triggered, this, [this] {
+        if (m_viewport->cropBox().moveContents) confirmCropRegion();
+        else applyCropBox();
+    });
 
     m_cropInsideAction = new QAction("Crop Box Removes &Inside", this);
     m_cropInsideAction->setCheckable(true);
@@ -249,8 +252,12 @@ void MainWindow::createActions() {
     m_cropMoveContentsAction = new QAction("Crop Box Moves &Contents", this);
     m_cropMoveContentsAction->setCheckable(true);
     m_cropMoveContentsAction->setShortcut(QKeySequence("Ctrl+Shift+B"));
-    m_cropMoveContentsAction->setStatusTip("Checked makes the gizmo move, rotate and scale the splats inside the box. Unchecked edits the box itself");
-    connect(m_cropMoveContentsAction, &QAction::toggled, this, [this](bool on) { m_viewport->cropBox().moveContents = on; });
+    m_cropMoveContentsAction->setStatusTip("Checked: position the box, press Enter to confirm the splats inside it, then the gizmo moves, rotates and scales them. Unchecked edits the box itself");
+    connect(m_cropMoveContentsAction, &QAction::toggled, this, [this](bool on) {
+        m_viewport->cropBox().moveContents = on;
+        //Leaving contents mode drops any confirmed selection
+        if (!on && m_viewport->renderer()) m_viewport->renderer()->ClearSelection();
+    });
 
     m_toggleVisibilityAction = new QAction("Hide/Show &Model", this);
     m_toggleVisibilityAction->setShortcut(QKeySequence("Ctrl+H"));
@@ -763,6 +770,7 @@ void MainWindow::applyModelTrim(const TrimData& settings) {
     const size_t total = source.size();
     const size_t kept = trimmed.size();
     m_undo.clear(); //Splat removals on the stack refer to the old splat list
+    renderer->ClearSelection();
     renderer->UpdateModel(model, trimmed);
     model->SetTrimData(settings, kept < total);
     refreshScenePanels();
@@ -786,6 +794,7 @@ void MainWindow::untrimModel() {
     // The untrimmed data is kept on the model, so Apply can trim it again later.
     const size_t total = model->SourceSplats().size();
     m_undo.clear(); //Splat removals on the stack refer to the old splat list
+    renderer->ClearSelection();
     renderer->UpdateModel(model, model->SourceSplats());
     model->SetTrimData(model->GetTrimData(), false);
     refreshScenePanels();
@@ -802,6 +811,11 @@ void MainWindow::selectModel(int index) {
     SplatRenderer* renderer = m_viewport->renderer();
     if (!renderer) {
         return;
+    }
+    //A confirmed splat selection belongs to one model. refreshScenePanels() re-selects the current model
+    //after every edit, so only drop it when a different model is being selected.
+    if (index != renderer->GetSelectedModel()) {
+        renderer->ClearSelection();
     }
     renderer->SelectModel(index);
     m_inspector->setModel(renderer->GetModel(renderer->GetSelectedModel()));
@@ -871,21 +885,18 @@ void MainWindow::commitCropBoxEdit(const glm::mat4& before, const glm::mat4& aft
     SplatRenderer* renderer = m_viewport->renderer();
     SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
 
-    //Region mode (or nothing to carry): the drag only moved the box
-    if (!box.moveContents || !model) {
+    //Region mode, or no confirmed selection to carry: the drag only moved the box
+    const bool carrying = box.moveContents && model && renderer->HasSelection()
+                          && renderer->SelectionModel() == renderer->GetSelectedModel();
+    if (!carrying) {
         m_undo.push(new MoveCropBoxCommand(&box, before, after));
         return;
     }
 
-    //Whatever was inside the box when the drag started goes along with it
-    const std::vector<uint32_t> inside = CollectSplatsInBox(model->splats(), model->GetTransform(), before);
-    if (inside.empty()) {
-        m_undo.push(new MoveCropBoxCommand(&box, before, after));
-        return;
-    }
-
-    //Box and splats move together as a single undo step
+    //The splats confirmed with Enter go along with the box
+    const std::vector<uint32_t> inside = renderer->Selection();
     const glm::mat4 deltaModel = WorldDeltaToModelSpace(after * glm::inverse(before), model->GetTransform());
+    //Box and splats move together as a single undo step
     auto* step = new MoveCropBoxCommand(&box, before, after);
     step->setText(QString("Move %1 Splats").arg(inside.size()));
     new MoveSplatsCommand(renderer, model, inside, deltaModel, step); //Child of step, runs after it
@@ -895,6 +906,33 @@ void MainWindow::commitCropBoxEdit(const glm::mat4& before, const glm::mat4& aft
 
 void MainWindow::cancelCropBox() {
     m_viewport->cropBox().active = false;
+    if (m_viewport->renderer()) m_viewport->renderer()->ClearSelection();
+}
+
+void MainWindow::confirmCropRegion() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+    const CropBox& box = m_viewport->cropBox();
+    if (!box.active || !model) {
+        return;
+    }
+
+    //Already confirmed: release the splats so the box can be repositioned over a new region
+    if (renderer->HasSelection()) {
+        renderer->ClearSelection();
+        statusBar()->showMessage("Selection released. Position the box and press Enter to confirm a new region.", kStatusMessageMs);
+        return;
+    }
+
+    std::vector<uint32_t> inside = CollectSplatsInBox(model->splats(), model->GetTransform(), box.transform);
+    if (inside.empty()) {
+        statusBar()->showMessage("The crop box doesn't select any splats.", kStatusMessageMs);
+        return;
+    }
+    const size_t count = inside.size();
+    renderer->SetSelection(renderer->GetSelectedModel(), std::move(inside));
+    statusBar()->showMessage(QString("%1 splats confirmed. Drag the gizmo to move them, Enter to release.")
+                                 .arg(QLocale().toString(static_cast<qulonglong>(count))), kStatusMessageMs);
 }
 
 void MainWindow::applyCropBox() {
@@ -905,7 +943,17 @@ void MainWindow::applyCropBox() {
         return;
     }
 
-    const std::vector<uint8_t> keep = ComputeCropKeepMask(model->splats(), model->GetTransform(), box);
+    std::vector<uint8_t> keep;
+    if (renderer->HasSelection() && renderer->SelectionModel() == renderer->GetSelectedModel()) {
+        //A confirmed selection is what gets removed, even if the box has since been moved off it
+        keep.assign(model->splats().size(), 1);
+        for (uint32_t index : renderer->Selection()) {
+            if (index < keep.size()) keep[index] = 0;
+        }
+    }
+    else {
+        keep = ComputeCropKeepMask(model->splats(), model->GetTransform(), box);
+    }
     auto* command = new RemoveSplatsCommand(renderer, model, keep);
     if (command->RemovedCount() == 0) {
         delete command;
@@ -934,6 +982,7 @@ void MainWindow::deleteSelectedModel() {
 
     m_inspector->setModel(nullptr); // drop the pointer before the model is freed
     m_cropBoxModel = nullptr; //The address may be reused by the next model
+    renderer->ClearSelection(); //Model indices shift when one is removed
     m_undo.clear(); //For now clear stack if delete
     renderer->RemoveModel(index);
     refreshScenePanels();

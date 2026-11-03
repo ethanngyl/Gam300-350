@@ -188,6 +188,7 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         m_gizmoWasUsing = false;
         m_dragModel = nullptr;
         m_dragIsCropBox = false;
+        m_dragMovesContents = false;
         m_dragBefore = glm::mat4(1.0f);
         m_renderer->ClearRegionPreview();
         return;
@@ -228,6 +229,8 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         m_dragIsCropBox = editingBox;
         m_dragModel = editingBox ? nullptr : model;
         m_dragBefore = original;
+        //Only a confirmed selection is carried, otherwise the drag just moves the box
+        m_dragMovesContents = editingBox && m_cropBox.moveContents && m_renderer->HasSelection();
     }
     else if (!isUsing && m_gizmoWasUsing) {
         if (m_dragIsCropBox) {
@@ -240,15 +243,15 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         }
         m_dragModel = nullptr;
         m_dragIsCropBox = false;
+        m_dragMovesContents = false;
         m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
     }
     m_gizmoWasUsing = isUsing;
 
-    //While the box is dragged in contents mode, draw the splats inside it moving with it.
+    //While the box is dragged with a confirmed selection, draw the selected splats moving with it.
     //The splat data itself is only changed once the drag ends.
-    if (isUsing && m_dragIsCropBox && m_cropBox.moveContents) {
-        m_renderer->SetRegionPreview(m_renderer->GetSelectedModel(), m_dragBefore,
-                                     m_cropBox.transform * glm::inverse(m_dragBefore));
+    if (isUsing && m_dragMovesContents) {
+        m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_dragBefore));
     }
 }
 

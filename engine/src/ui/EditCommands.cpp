@@ -84,6 +84,7 @@ void RemoveSplatsCommand::redo() {
         }
         kept.push_back(current[i]);
     }
+    m_renderer->ClearSelection(); //Its indices refer to the old list
     m_renderer->UpdateModel(m_model, kept);
 }
 
@@ -103,6 +104,7 @@ void RemoveSplatsCommand::undo() {
             restored.push_back(current[cur++]);
         }
     }
+    m_renderer->ClearSelection(); //Its indices refer to the old list
     m_renderer->UpdateModel(m_model, restored);
 }
 

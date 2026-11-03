@@ -114,6 +114,8 @@ private:
     glm::mat4 m_dragBefore = glm::mat4(1.0f);
     //The drag in progress is moving the crop box, not a model
     bool m_dragIsCropBox = false;
+    //The crop box drag also carries the confirmed splat selection along
+    bool m_dragMovesContents = false;
 
     CropBox m_cropBox;
     std::unique_ptr<CropBoxRenderer> m_cropBoxRenderer; // created once the GL context exists
