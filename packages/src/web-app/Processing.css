@@ -1,8 +1,7 @@
 /* ============================================================
    Processing - the screen shown while the .ply is being built.
-   Used for both photo builds and video builds (Video Extractor).
-   The :is(.processing-page, .processing-embedded) selectors also
-   allow it inside a card, though nothing does that now.
+   Also used inside a card (.processing-embedded) by the Frame
+   Extractor, so both progress views look the same.
    Uses the --forma-* variables from AppTheme.css. Mobile-first:
    one column (preview banner, status, steps, full-width Cancel);
    from 900px the status sits beside the preview and step tracker.
@@ -465,7 +464,7 @@
     }
 }
 
-/* ---------- Inside a card (Video Extractor) ---------- */
+/* ---------- Inside a card (Frame Extractor) ---------- */
 
 /* The card around it already has padding and width. */
 .processing-embedded .processing-card {

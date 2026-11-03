@@ -95,6 +95,8 @@ export default function RunDetail({ record, onClose }) {
             <Fields rows={[
               ['Images', fmtInt(inp.imageCount)],
               ['Sparse models', fmtInt(inp.sparseModels)],
+              ...(inp.media ? [['Extraction fps / max frames', `${inp.media.fps ?? DASH} / ${inp.media.maxFrames ?? DASH}`]] : []),
+              // Runs recorded before the Frame Extractor replaced the YouTube one.
               ...(inp.youtube ? [['YouTube fps / max frames', `${inp.youtube.fps ?? DASH} / ${inp.youtube.maxFrames ?? DASH}`]] : []),
               ['Splats', fmtInt(out.splatCount)],
               ['Properties / splat', fmtInt(out.propertiesPerSplat)],

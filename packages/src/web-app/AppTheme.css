@@ -597,7 +597,7 @@ html {
     background: rgba(var(--forma-green-rgb), 0.12);
 }
 
-.home-tool-icon-youtube {
+.home-tool-icon-extractor {
     color: var(--forma-orange);
     background: rgba(var(--forma-orange-rgb), 0.12);
 }
@@ -2086,8 +2086,8 @@ html {
     margin-top: 8px;
 }
 
-/* ---------- Full-page legacy screens (YouTube, result overlay) ----------
-   Processing.jsx / YoutubeIngest.jsx / SplatViewer.jsx are untouched, so their
+/* ---------- Full-page legacy screens (Frame Extractor, result overlay) ----------
+   Processing.jsx / FrameExtractor.jsx / SplatViewer.jsx are untouched, so their
    old "btn" classes are re-coloured here instead. */
 
 .genesis-page {

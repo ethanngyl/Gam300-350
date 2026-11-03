@@ -21,6 +21,8 @@ Tables:
               row (made before accounts existed) are visible to admins only.
   feedback -- messages sent from the website's Feedback page (on the VM:
               from every machine), with the sender's name and email.
+  user_avatars -- each account's profile photo (on the VM: for every
+              machine's users).
 - hashPassword(password)
 Returns "salt:hash" (hex) using a random 16-byte salt and scrypt.
 - verifyPassword(password, stored)
@@ -81,6 +83,14 @@ One page of feedback for the admins' Inbox, newest first.
 - deleteOldFeedback(days) / getDbJobBytes(jobId)
 For the VM's clean-up (cleanup.js): removes feedback older than a number
 of days / how many bytes a job's photos and model take in the database.
+- getAccount(userId)
+What the account page shows: name, email, role, dates, which sign-in
+methods the account has, and whether it has a photo.
+- updateUserName / setUserPassword / endOtherSessions
+Account page edits: the name; a new password (recording when); logging
+the account out of every other browser after a password change.
+- setUserAvatar / getUserAvatar / deleteUserAvatar
+The profile photo (table user_avatars).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -231,6 +241,42 @@ const linkGoogleToUser = db.prepare(`UPDATE users SET google_sub = ?, password_h
 const deleteSessionsForUser = db.prepare('DELETE FROM sessions WHERE user_id = ?')
 
 const selectUserById = db.prepare('SELECT id, email, name, role, created_at FROM users WHERE id = ?')
+
+// Account page: when the password was last changed (NULL: never, since
+// signup). Added to databases made before the account page existed.
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'password_changed_at'))
+  db.exec('ALTER TABLE users ADD COLUMN password_changed_at TEXT')
+
+// Account page: each user's profile photo (one small image, stored whole).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_avatars (
+    user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    mime       TEXT NOT NULL,
+    data       BLOB NOT NULL,
+    updated_at INTEGER NOT NULL
+  )
+`)
+
+const selectAccount = db.prepare(`
+  SELECT u.id, u.email, u.name, u.role, u.created_at, u.password_hash, u.google_sub,
+         u.password_changed_at, a.updated_at AS avatar_updated_at
+  FROM users u LEFT JOIN user_avatars a ON a.user_id = u.id
+  WHERE u.id = ?
+`)
+const updateUserNameById = db.prepare('UPDATE users SET name = ? WHERE id = ?')
+const updateUserPassword = db.prepare(
+  `UPDATE users SET password_hash = ?, password_changed_at = datetime('now') WHERE id = ?`
+)
+const deleteOtherSessionsForUser = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?')
+const upsertAvatar = db.prepare(`
+  INSERT INTO user_avatars (user_id, mime, data, updated_at) VALUES (?, ?, ?, ?)
+  ON CONFLICT(user_id) DO UPDATE SET mime = excluded.mime, data = excluded.data, updated_at = excluded.updated_at
+`)
+const selectAvatar = db.prepare('SELECT mime, data, updated_at FROM user_avatars WHERE user_id = ?')
+const deleteAvatar = db.prepare('DELETE FROM user_avatars WHERE user_id = ?')
+// password_hash values that aren't a password: Google-only accounts and
+// copies of VM accounts on client machines.
+const NO_PASSWORD_HASHES = new Set(['google-sso', 'remote'])
 
 // Shared library: on the VM, where each stored job came from and how much
 // disk it takes. Added to databases made before the library existed.
@@ -1061,5 +1107,140 @@ export function deleteOldFeedback(days)
 export function getDbJobBytes(jobId)
 {
   return Number(selectDbJobBytes.get(jobId).bytes)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Everything the account page shows about a user. Never includes the
+    password hash, only whether there is a password.
+  \param userId
+  number
+  \return
+    { id, email, name, role, createdAt, hasPassword, hasGoogle,
+    passwordChangedAt, avatarUpdatedAt } (the two dates are null when
+    never changed / no photo), or null if there is no such user
+*/
+/************************************************************************/
+export function getAccount(userId)
+{
+  const row = selectAccount.get(userId)
+  if (!row) return null
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    role: row.role,
+    createdAt: row.created_at,
+    hasPassword: !NO_PASSWORD_HASHES.has(row.password_hash),
+    hasGoogle: Boolean(row.google_sub),
+    passwordChangedAt: row.password_changed_at,
+    avatarUpdatedAt: row.avatar_updated_at ?? null,
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Changes a user's display name.
+  \param userId
+  number
+  \param name
+  string (already checked)
+*/
+/************************************************************************/
+export function updateUserName(userId, name)
+{
+  updateUserNameById.run(name, userId)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Sets a new password (hashed, like createUser) and records when it
+    changed.
+  \param userId
+  number
+  \param password
+  string (already checked)
+*/
+/************************************************************************/
+export async function setUserPassword(userId, password)
+{
+  updateUserPassword.run(await hashPassword(password), userId)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Logs a user out everywhere except one session (after a password
+    change, the browser that changed it stays signed in).
+  \param userId
+  number
+  \param keepToken
+  string | null
+    The raw cookie token of the session to keep; null logs out all of them
+  \return
+    How many sessions were ended
+*/
+/************************************************************************/
+export function endOtherSessions(userId, keepToken)
+{
+  const result = keepToken
+    ? deleteOtherSessionsForUser.run(userId, hashToken(keepToken))
+    : deleteSessionsForUser.run(userId)
+  return Number(result.changes)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Saves (or replaces) a user's profile photo.
+  \param userId
+  number
+  \param mime
+  string ('image/jpeg' or 'image/png', already checked)
+  \param data
+  Buffer
+  \return
+    updated_at (ms), which also serves as the photo's version
+*/
+/************************************************************************/
+export function setUserAvatar(userId, mime, data)
+{
+  // Strictly increasing, so a photo replaced within the same millisecond still gets a new version.
+  const previous = selectAvatar.get(userId)?.updated_at ?? 0
+  const updatedAt = Math.max(Date.now(), previous + 1)
+  upsertAvatar.run(userId, mime, data, updatedAt)
+  return updatedAt
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A user's profile photo.
+  \param userId
+  number
+  \return
+    { mime, data (Buffer), updatedAt }, or null if none is set
+*/
+/************************************************************************/
+export function getUserAvatar(userId)
+{
+  const row = selectAvatar.get(userId)
+  return row ? { mime: row.mime, data: Buffer.from(row.data), updatedAt: row.updated_at } : null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Removes a user's profile photo. Does nothing if there isn't one.
+  \param userId
+  number
+*/
+/************************************************************************/
+export function deleteUserAvatar(userId)
+{
+  deleteAvatar.run(userId)
 }
 // ----- End of Functions ----------------------------------------------------- //

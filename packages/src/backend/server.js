@@ -12,7 +12,7 @@
 \brief
 This source file is the Express backend that serves the built React frontend 
 of the website and exposes a HTTP API for a pipeline to turn either a group
-of photos or a youtube video into Gaussian Splat .ply file, using COLMAP and 
+of photos or uploaded videos into Gaussian Splat .ply file, using COLMAP and 
 Brush. The actual work is done in the other files, "config.js, status.js, 
 scan.js, pipeline.js", this file focuses on startup, shutdown and HTTP 
 matters.
@@ -48,6 +48,14 @@ read-only Inbox (requireAdmin: 403 for everyone else).
 - validateSignup(body) / checkCredentials(email, password)
 Shared signup rules, and the password check with a per-email limit of 10
 wrong passwords per 15 minutes.
+- accountDetails(userId) / GET /auth/me/account / PATCH /auth/me /
+  POST /auth/me/password / GET, PUT, DELETE /auth/me/avatar /
+  GET /auth/me/storage
+The account page: its details (dates, verified email, sign-in methods,
+photo version), changing the name and password (other browsers are
+logged out), the profile photo, and how much the user's jobs take up.
+Accounts live on the VM: client machines pass these to the VM's
+/library/account... twins (askVmAccount).
 - limitByIp(limiter) / tooManyAttempts(retryAfterSec)
 Per-IP request limits for /auth/login and /auth/signup (429 when passed).
 - isRemoteJob(id) / actAsUser (middleware)
@@ -70,15 +78,14 @@ to .jpg.
 - upload(multer instance)
 Applies size and count limits from config and accepts only files whose 
 declared MIME type is JPEG or PNG.
+- mediaUpload(multer instance) / onlyMedia(req, res, next)
+The same for the Frame Extractor's videos and GIFs, saved to the job's media/
+folder until their frames are extracted. onlyMedia also removes the job folder
+if the browser gives up part-way through the upload.
 - onlyImages(req, res, next)
 Reads each uploaded file's bytes and checks the real type with file-type. If 
 any file isn't really a JPEG or PNG, it deletes the whole job folder and 
 returns 400. This guards against a client that lies about the MIME type.
-- videoUpload(multer instance) / onlyMp4(req, res, next)
-The video extractor's .mp4 upload (POST /jobs/from-video): one file, saved
-as the hidden jobs/.video-<id>.mp4, then its real type checked like
-onlyImages. The video is deleted as soon as its frames are extracted
-(runVideoFilePipeline), so only the frames are kept.
 - ensureCover(jobId)
 Makes the job's card cover (<id>_out/cover.webp) with tools/make_cover.py
 the first time it is asked for: the object cut out of a photo with the
@@ -119,14 +126,15 @@ import { marked } from 'marked'
 import
 {
   SESSION_TTL_MS, SHORT_SESSION_TTL_MS, addFeedback, createSession, createUser,
-  deleteSession, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
-  findUserById, getDbImage, getDbModelInfo, getJobOwnerId, isJobSynced, listDbImageNames, listFeedback,
-  listOwnedJobIds, readDbModelChunk, recordStoredJob, retireLocalAccounts, setJobOwner,
-  storeJobImages, storeJobModel, unmarkJobSynced, upsertLocalUser, verifyPassword,
+  deleteSession, deleteUserAvatar, endOtherSessions, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
+  findUserById, getAccount, getDbImage, getDbModelInfo, getJobOwnerId, getUserAvatar, isJobSynced,
+  listDbImageNames, listFeedback, listOwnedJobIds, readDbModelChunk, recordStoredJob, retireLocalAccounts,
+  setJobOwner, setUserAvatar, setUserPassword, storeJobImages, storeJobModel, unmarkJobSynced,
+  updateUserName, upsertLocalUser, verifyPassword,
 }
     from './db.js'
 import { migrateToDb, moveImagesToDb, moveModelToDb } from './dbstore.js'
-import { deleteJobData, requestCleanup, startCleanup } from './cleanup.js'
+import { deleteJobData, jobStoredBytes, requestCleanup, startCleanup } from './cleanup.js'
 import { createLimiter } from './ratelimit.js'
 import
 {
@@ -141,9 +149,9 @@ import
 from './scan.js'
 import 
 { 
-  cancelJob, canonicalYoutubeUrl, jobs,
+  cancelJob, jobs,
   killChildren, makeJob, pickSampleFileName, pruneJob, restoreJob,
-  runPipeline, runVideoFilePipeline, runYoutubePipeline, sampleFileName, setSkipSampleCopy,
+  runMediaPipeline, runPipeline, sampleFileName, setSkipSampleCopy,
 }
     from './pipeline.js'
 
@@ -187,8 +195,8 @@ console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}
 
 // Staging folders left by shared-library uploads cut off mid-way (crash or
 // restart during a PUT /library/jobs/:id). Their jobs are re-sent later.
-// Also uploaded videos whose frame extraction was cut off the same way:
-// videos are never kept (see POST /jobs/from-video).
+// Also videos left by the old Video Extractor's upload (.video-<id>.mp4), which
+// the Frame Extractor replaced; its uploads go in each job's media/ folder.
 for (const entry of fs.readdirSync(config.jobsDir))
 {
   if (entry.startsWith('.incoming-') || entry.startsWith('.video-'))
@@ -214,8 +222,8 @@ if (config.trustProxy) {
     app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value)
 }
 
-// Parse JSON bodies (used by /jobs/from-youtube). Only applies to
-// application/json requests, so the multipart photo and video uploads are unaffected.
+// Parse JSON bodies. Only applies to application/json requests, so the
+// multipart photo and media uploads are unaffected.
 app.use(express.json())
 
 // Serve the built React frontend (run `npm run build` to produce web-app/dist).
@@ -504,6 +512,100 @@ const upload = multer({
     fileFilter: (_req, file, cb) => cb(null, /^image\/(jpe?g|png)$/i.test(file.mimetype))
 })
 
+// What the Frame Extractor accepts. Filtered by extension, because browsers
+// often send no MIME type for formats like .mkv. FrameExtractor.jsx checks the same.
+const MEDIA_EXT_RE = /\.(mp4|m4v|mov|webm|mkv|avi|mpe?g|gif)$/i
+
+/************************************************************************/
+/*!
+  \brief
+    Save the Frame Extractor's files into the job's media/ folder, under
+    ordered names so they are extracted in the order they were sent.
+  \return
+    nothing
+*/
+/************************************************************************/
+const mediaUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, _file, cb) => {
+            const mediaDir = path.join(config.jobsDir, req.jobId, 'media')
+            fs.mkdirSync(mediaDir, { recursive: true })
+            cb(null, mediaDir)
+        },
+        filename: (req, file, cb) => {
+            const ext = path.extname(file.originalname).toLowerCase()
+            cb(null, `${String(req._fileIdx++).padStart(4, '0')}${ext}`)
+        },
+    }),
+    limits: { fileSize: config.maxMediaSizeMB * 1024 * 1024, files: config.maxMediaFiles },
+    fileFilter: (_req, file, cb) => cb(null, MEDIA_EXT_RE.test(file.originalname)),
+})
+
+/************************************************************************/
+/*!
+  \brief
+    A large upload can be abandoned part-way (Cancel, closed tab, lost
+    connection). If the connection closes before a job was made, remove the
+    folder assignJobId created, along with any partial files. Retries because
+    on Windows the partial file can stay locked for a moment. Must run before
+    multer.
+  \param req
+    The request from the user
+  \param res
+    The response from the backend
+  \param next
+    moving on
+  \return
+    nothing
+*/
+/************************************************************************/
+function removeJobIfAborted(req, res, next) {
+    res.on('close', () => {
+        if (jobs.has(req.jobId)) return
+        fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+            .catch(() => {})
+    })
+    next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Content-level guard for the Frame Extractor, like onlyImages: reads the
+    actual bytes of every uploaded file and rejects the whole batch (deleting
+    the job folder) if any isn't really a video or GIF.
+  \param req
+    The request from the user
+  \param res
+    The response from the backend
+  \param next
+    moving on
+  \return
+    400 if a file isn't a video or GIF, and deletes the job folder.
+*/
+/************************************************************************/
+async function onlyMedia(req, res, next) {
+    try {
+        const { fileTypeFromFile } = await import('file-type')
+
+        for (const file of req.files || []) {
+            const type = await fileTypeFromFile(file.path)
+
+            if (!type || !(type.mime.startsWith('video/') || type.mime === 'image/gif')) {
+                await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+                return res.status(400).json({
+                    error: `"${file.originalname}" isn't a video or GIF file.`,
+                    detected: type ? type.mime : 'unknown',
+                })
+            }
+        }
+
+        next()
+    } catch (err) {
+        next(err)
+    }
+}
+
 /************************************************************************/
 /*!
   \brief
@@ -542,66 +644,6 @@ async function onlyImages(req, res, next) {
             }
         }
 
-        next()
-    } catch (err) {
-        next(err)
-    }
-}
-
-/************************************************************************/
-/*!
-  \brief
-    The video extractor's .mp4 upload: one file, saved as the hidden
-    jobs/.video-<jobId>.mp4 (scanJobs ignores dot-names, and startup
-    deletes any left by a crash). req.videoPath is set so it is deleted
-    on every path: by runVideoFilePipeline once the frames are extracted,
-    or by onlyMp4 / the error handler if the upload is refused. The
-    declared type is only a first filter; onlyMp4 checks the bytes.
-  \return
-    nothing
-*/
-/************************************************************************/
-const videoUpload = multer({
-    storage: multer.diskStorage({
-        destination: (_req, _file, cb) => cb(null, config.jobsDir),
-        filename: (req, _file, cb) => {
-            const name = `.video-${req.jobId}.mp4`
-            req.videoPath = path.join(config.jobsDir, name)
-            cb(null, name)
-        },
-    }),
-    limits: { fileSize: config.maxVideoSizeMB * 1024 * 1024, files: 1 },
-    fileFilter: (_req, file, cb) =>
-        cb(null, file.mimetype === 'video/mp4' || path.extname(file.originalname).toLowerCase() === '.mp4'),
-})
-
-/************************************************************************/
-/*!
-  \brief
-    Content-level guard for the video upload, like onlyImages: the file's
-    actual bytes must be an MP4. Otherwise the video and the job folder
-    are deleted.
-  \param req
-    The request from the user
-  \param res
-    The response from the backend
-  \param next
-    moving on
-  \return
-    400 if no video was sent or it isn't a real MP4
-*/
-/************************************************************************/
-async function onlyMp4(req, res, next) {
-    const reject = async (error) => {
-        await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
-        if (req.videoPath) await fs.promises.rm(req.videoPath, { force: true })
-        res.status(400).json({ error })
-    }
-    try {
-        if (!req.file) return await reject('Please choose an .mp4 video file.')
-        const { fileTypeFromFile } = await import('file-type')
-        const type = await fileTypeFromFile(req.file.path)
-        if (type?.ext !== 'mp4') return await reject('Invalid file content -- only real .mp4 videos are accepted.')
         next()
     } catch (err) {
         next(err)
@@ -747,6 +789,9 @@ const loginIpLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 30 })
 const signupIpLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
 const failedLoginLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 10 })
 
+// Shared by signup and the account page's password change.
+const MIN_PASSWORD_LENGTH = 6
+
 /************************************************************************/
 /*!
   \brief
@@ -800,8 +845,8 @@ function validateSignup(body) {
     const trimmedEmail = typeof email === 'string' ? email.trim() : ''
     const trimmedName = typeof name === 'string' ? name.trim() : ''
     if (!EMAIL_RE.test(trimmedEmail)) return { error: 'Enter a valid email address.' }
-    if (typeof password !== 'string' || password.length < 6)
-        return { error: 'Password must be at least 6 characters.' }
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH)
+        return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` }
     if (!trimmedName) return { error: 'Enter your name.' }
     return { name: trimmedName, email: trimmedEmail, password }
 }
@@ -1026,82 +1071,55 @@ app.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJob
 /************************************************************************/
 /*!
   \brief
-    Create a reconstruction job from a YouTube link. Frames are extracted 
-    server side (tools/youtube_frames.py) into the job's images/ folder, 
-    then the same COLMAP + Brush pipeline runs. Body: { url: string, fps?:
-    number, maxFrames?: number, trainIters?: number }. The job is owned by the logged-in user.
+    Create a reconstruction job from uploaded videos / GIFs. Frames are
+    extracted server side (tools/extract_frames.py) into the job's images/
+    folder, then the same COLMAP + Brush pipeline runs. Multipart body: media
+    (the files), and the optional text fields fps, maxFrames, trainIters and
+    removeBackground.
+    The job is owned by the logged-in user. requireUser runs before
+    assignJobId so a logged-out request never creates a folder.
   \return
-    401 if not logged in, 400 if url doesn't work, else 202 and starts a
-    job and runs youtube pipeline
+    401 if not logged in, 400 if no usable files were sent, else 202 and
+    starts a job and runs the media pipeline
 */
 /************************************************************************/
-app.post('/jobs/from-youtube', requireUser, (req, res) => {
-    const { url, fps, maxFrames, trainIters } = req.body || {}
-    // Only single YouTube videos; the canonical form drops any playlist params.
-    const videoUrl = canonicalYoutubeUrl(url)
-    if (!videoUrl) {
-        return res.status(400).json({
-            error: 'Please use a link to a single YouTube video (youtube.com/watch?v=…, youtu.be/…, or youtube.com/shorts/…).',
-        })
+app.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, mediaUpload.array('media', config.maxMediaFiles), onlyMedia, (req, res) => {
+    if (!req.files?.length) {
+        fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
+        return res.status(400).json({ error: 'Please upload at least one video or animated GIF.' })
     }
 
-    const jobId = crypto.randomUUID()
-    fs.mkdirSync(path.join(config.jobsDir, jobId, 'images'), { recursive: true })
-    setJobOwner(jobId, req.user.id)
-    const job = makeJob(jobId)
-    job.source = 'youtube'
-    job.trainIters = parseTrainIters(trainIters)
-    saveJob(job)
-
-    // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
-    runYoutubePipeline(job, videoUrl, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
-    res.status(202).json({ id: job.id })
-})
-
-/************************************************************************/
-/*!
-  \brief
-    Create a reconstruction job from an uploaded .mp4 (multipart field
-    "video", plus optional fps, maxFrames and trainIters fields). Frames
-    are extracted exactly as for a YouTube link, then the same COLMAP +
-    Brush pipeline runs. The video itself is never kept: it is deleted as
-    soon as extraction ends, whether it worked or not. The job is owned by
-    the logged-in user.
-  \return
-    401 if not logged in, 400 if no real .mp4 was sent, 413 if it is over
-    config.maxVideoSizeMB, else 202 and starts the job
-*/
-/************************************************************************/
-app.post('/jobs/from-video', requireUser, assignJobId, videoUpload.single('video'), onlyMp4, (req, res) => {
     const { fps, maxFrames, trainIters } = req.body || {}
     setJobOwner(req.jobId, req.user.id)
     const job = makeJob(req.jobId)
-    job.source = 'video'
+    job.source = 'media'
+    // Mask out the background before COLMAP, see generateMasks in pipeline.js.
+    job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
     job.trainIters = parseTrainIters(trainIters)
     saveJob(job)
 
     // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
-    runVideoFilePipeline(job, req.videoPath, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
+    runMediaPipeline(job, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id })
 })
 
 /************************************************************************/
 /*!
   \brief
-    The frame-extraction options sent with a video job, within the
-    server's limits.
+    The frame-extraction options sent with a Frame Extractor job, within
+    the server's limits.
   \param fps
     Requested frames per second (any type; ignored unless a positive number)
   \param maxFrames
     Requested frame cap (any type; ignored unless a positive number)
   \return
-    { fps?, maxFrames? } for runYoutubePipeline / runVideoFilePipeline
+    { fps?, maxFrames? } for runMediaPipeline
 */
 /************************************************************************/
 function frameOptions(fps, maxFrames) {
     const opts = {}
     if (Number.isFinite(Number(fps)) && Number(fps) > 0) {
-        opts.fps = Math.min(Number(fps), config.ytMaxFps)
+        opts.fps = Math.min(Number(fps), config.frameMaxFps)
     }
     if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
         opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
@@ -1678,7 +1696,8 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
       progress: 1,
       detail: null,
       error: null,
-      source: ['upload', 'youtube', 'video'].includes(sent.source) ? sent.source : null,
+      // 'youtube' and 'video': jobs from the old Video Extractor, still on some machines.
+      source: ['upload', 'media', 'youtube', 'video'].includes(sent.source) ? sent.source : null,
       name: typeof sent.name === 'string' ? sent.name.slice(0, MAX_JOB_NAME_LENGTH) : null,
       sampleFile: null,
       imageCount: images.length,
@@ -1740,22 +1759,37 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/
 /************************************************************************/
 /*!
   \brief
+    A date stored by SQLite's datetime('now') -- UTC without a zone marker,
+    "2026-10-04 08:15:00" -- as an ISO string.
+  \param text
+  string
+  \return
+    "2026-10-04T08:15:00Z"
+*/
+/************************************************************************/
+function sqliteDateToIso(text) {
+    return `${text.replace(' ', 'T')}Z`
+}
+
+/************************************************************************/
+/*!
+  \brief
     Shapes a users row into what the frontend keeps as the session. Never
     includes password_hash.
   \param user
     { email, name, role, createdAt } or a users row
   \return
-    { name, email, role, memberSince }
+    { name, email, role, createdAt (ISO), memberSince ("4 October 2026") }
 */
 /************************************************************************/
 function publicUser(user) {
-    // SQLite datetime('now') is UTC without a zone marker.
-    const created = new Date(`${(user.createdAt ?? user.created_at).replace(' ', 'T')}Z`)
+    const createdAt = sqliteDateToIso(user.createdAt ?? user.created_at)
     return {
         name: user.name,
         email: user.email,
         role: user.role,
-        memberSince: created.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
+        createdAt,
+        memberSince: new Date(createdAt).toLocaleDateString('en-SG', { day: 'numeric', month: 'long', year: 'numeric' }),
     }
 }
 
@@ -1955,6 +1989,324 @@ app.post('/auth/logout', (req, res) => {
     deleteSession(readCookie(req, SESSION_COOKIE))
     res.clearCookie(SESSION_COOKIE, { path: '/' })
     res.status(204).end()
+})
+
+// --- Account page ---------------------------------------------------------------
+// Accounts live on the VM, so on a client machine every route below asks the
+// VM's /library/account... twin (shared key, acting as the user), the same
+// way feedback does. The VM and 'local' machines answer from their own
+// database. Guests have no session, so they get 401 everywhere.
+const MAX_NAME_LENGTH = 80
+// Per account: name and photo changes. Wrong current passwords count
+// against the login limit instead (checkCredentials).
+const accountEditLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 30 })
+const ACCOUNT_UNAVAILABLE = { error: 'The account service is unavailable. Try again shortly.' }
+const AVATAR_TYPES = ['image/jpeg', 'image/png']
+// The photo arrives as the raw image bytes (Content-Type image/jpeg or image/png).
+const avatarBody = express.raw({ type: AVATAR_TYPES, limit: `${config.maxAvatarKB}kb` })
+
+/************************************************************************/
+/*!
+  \brief
+    Everything the account page shows about a user: publicUser plus
+    whether the email is verified (only Google accounts, for now: Google
+    has checked the address), when the password last changed, which ways
+    the account can sign in, and the photo's version.
+  \param userId
+  number
+  \return
+    { name, email, role, createdAt, memberSince, emailVerified,
+    passwordChangedAt (ISO, or null if never changed since signup),
+    signInMethods: { password, google }, photoVersion (null: no photo) },
+    or null if there is no such user
+*/
+/************************************************************************/
+function accountDetails(userId) {
+    const account = getAccount(userId)
+    if (!account) return null
+    return {
+        ...publicUser(account),
+        emailVerified: account.hasGoogle,
+        passwordChangedAt: account.passwordChangedAt ? sqliteDateToIso(account.passwordChangedAt) : null,
+        signInMethods: { password: account.hasPassword, google: account.hasGoogle },
+        photoVersion: account.avatarUpdatedAt,
+    }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether this request should be passed to the VM: a client machine's
+    own /auth/me... routes (not the VM's /library twins).
+  \param req
+    The request
+  \return
+    bool
+*/
+/************************************************************************/
+function isForVm(req) {
+    return config.authMode === 'client' && !req.path.startsWith('/library/')
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Client machine: passes an account request to the VM as the logged-in
+    user. When the VM answers with the account, this machine's copy of it
+    is updated too, so /auth/me shows the new name straight away.
+  \param req
+    The browser's request (req.user is set)
+  \param method
+    'GET' | 'PATCH' | ...
+  \param vmPath
+    string, e.g. '/library/account'
+  \param body
+    object or Buffer, optional (see forwardToVm)
+  \param contentType
+    string, for a Buffer body
+  \return
+    { status, data } -- 503 if the VM can't be reached
+*/
+/************************************************************************/
+async function askVmAccount(req, method, vmPath, body, contentType) {
+    if (clientAuthProblem()) return { status: 503, data: ACCOUNT_UNAVAILABLE }
+    const reply = await forwardToVm(method, vmPath, req.user, body, contentType)
+    if (reply.status === 0) return { status: 503, data: ACCOUNT_UNAVAILABLE }
+    if (reply.status === 200 && reply.data?.email)
+        upsertLocalUser({ id: req.user.id, email: reply.data.email, name: reply.data.name, role: reply.data.role })
+    return reply
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Counts one name or photo change against the account's hourly limit,
+    answering 429 when it is used up.
+  \param req
+    The request (req.user is set)
+  \param res
+    The response
+  \return
+    true if the change may go ahead
+*/
+/************************************************************************/
+function allowAccountEdit(req, res) {
+    const { allowed, retryAfterSec } = accountEditLimiter.hit(`user:${req.user.id}`)
+    if (allowed) return true
+    res.set('Retry-After', String(retryAfterSec))
+    res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
+    return false
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The account page's details (see accountDetails). Signed-in users only.
+  \return
+    401 if not logged in, 503 if the VM can't be reached (client
+    machine), else the details
+*/
+/************************************************************************/
+app.get(['/auth/me/account', '/library/account'], requireUser, async (req, res) => {
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'GET', '/library/account')
+        return res.status(status).json(data)
+    }
+    res.json(accountDetails(req.user.id))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Change the account's display name. Body: { name }. Feedback already
+    sent keeps the old name (it is copied in when sent).
+  \return
+    401 if not logged in, 400 if the name is empty or too long, 429 if
+    changing too often, 503 if the VM can't be reached (client machine),
+    else the account details
+*/
+/************************************************************************/
+app.patch(['/auth/me', '/library/account'], requireUser, async (req, res) => {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+    if (!name) return res.status(400).json({ error: 'Enter your name.' })
+    if (name.length > MAX_NAME_LENGTH)
+        return res.status(400).json({ error: `Keep your name under ${MAX_NAME_LENGTH} characters.` })
+    if (!allowAccountEdit(req, res)) return
+
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'PATCH', '/library/account', { name })
+        return res.status(status).json(data)
+    }
+    updateUserName(req.user.id, name)
+    res.json(accountDetails(req.user.id))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Change the password. Body: { currentPassword, newPassword }. The
+    current password is checked like a login (wrong ones count towards the
+    same 10-per-15-minutes limit). Afterwards every other browser signed
+    in to the account is logged out; this one stays signed in. A change
+    made on a client machine logs out the VM's other sessions and this
+    machine's; other client machines keep theirs until they expire.
+  \return
+    401 if not logged in, 400 if a field is missing, the new password is
+    too short or the same, or the current one is wrong, 409 if the account
+    has no password (Google only), 429 when locked, 503 if the VM can't be
+    reached (client machine), else the account details
+*/
+/************************************************************************/
+app.post(['/auth/me/password', '/library/account/password'], requireUser, async (req, res, next) => {
+    const { currentPassword, newPassword } = req.body || {}
+    if (typeof currentPassword !== 'string' || !currentPassword || typeof newPassword !== 'string')
+        return res.status(400).json({ error: 'Enter your current password and a new password.' })
+    if (newPassword.length < MIN_PASSWORD_LENGTH)
+        return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
+    if (newPassword === currentPassword)
+        return res.status(400).json({ error: 'Choose a new password that is different from your current one.' })
+
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'POST', '/library/account/password', { currentPassword, newPassword })
+        if (status === 200) endOtherSessions(req.user.id, readCookie(req, SESSION_COOKIE))
+        return res.status(status).json(data)
+    }
+
+    try {
+        if (!getAccount(req.user.id)?.hasPassword)
+            return res.status(409).json({ error: 'This account signs in with Google, so it has no password to change.' })
+        const result = await checkCredentials(req.user.email, currentPassword)
+        if (result.status === 'locked') {
+            res.set('Retry-After', String(result.retryAfterSec))
+            return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+        }
+        if (result.status === 'invalid')
+            return res.status(400).json({ error: 'Your current password is incorrect.' })
+
+        await setUserPassword(req.user.id, newPassword)
+        // From a client machine nothing on the VM is the user's own browser, so all go.
+        const keep = req.path.startsWith('/library/') ? null : readCookie(req, SESSION_COOKIE)
+        const ended = endOtherSessions(req.user.id, keep)
+        console.log(`[backend] password changed for ${req.user.email} (${ended} other session(s) signed out)`)
+        res.json(accountDetails(req.user.id))
+    }
+    catch (err) {
+        next(err)
+    }
+})
+
+/************************************************************************/
+/*!
+  \brief
+    The signed-in user's profile photo, with an ETag so an unchanged photo
+    is answered with 304. On a client machine it comes from the VM.
+  \return
+    401 if not logged in, 404 if no photo is set, else the image
+*/
+/************************************************************************/
+app.get(['/auth/me/avatar', '/library/account/avatar'], requireUser, (req, res) => {
+    if (isForVm(req)) return proxyToVm(req, res, '/library/account/avatar')
+    const avatar = getUserAvatar(req.user.id)
+    if (!avatar) return res.status(404).json({ error: 'No profile photo.' })
+    res.set({
+        'Content-Type': avatar.mime,
+        // no-cache: the browser keeps it but checks back, so a new photo shows at once.
+        'Cache-Control': 'private, no-cache',
+        ETag: `"avatar-${req.user.id}-${avatar.updatedAt}"`,
+    })
+    if (req.fresh) return res.status(304).end()
+    res.send(avatar.data)
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Set (or replace) the profile photo. The body is the image itself, sent
+    with Content-Type image/jpeg or image/png, at most config.maxAvatarKB
+    (the website sends a 256 x 256 JPEG). The bytes are checked to really
+    be a JPEG or PNG, like uploaded photos.
+  \return
+    401 if not logged in, 400 if it isn't a real JPEG / PNG, 413 if too
+    large, 429 if changing too often, 503 if the VM can't be reached
+    (client machine), else the account details
+*/
+/************************************************************************/
+app.put(['/auth/me/avatar', '/library/account/avatar'], requireUser, avatarBody, async (req, res, next) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0)
+        return res.status(400).json({ error: 'Send the photo as a JPEG or PNG image.' })
+    try {
+        const { fileTypeFromBuffer } = await import('file-type')
+        const type = await fileTypeFromBuffer(req.body)
+        if (!type || !AVATAR_TYPES.includes(type.mime))
+            return res.status(400).json({ error: 'Invalid file content -- only real JPEG or PNG images are accepted.' })
+        if (!allowAccountEdit(req, res)) return
+
+        if (isForVm(req)) {
+            const { status, data } = await askVmAccount(req, 'PUT', '/library/account/avatar', req.body, type.mime)
+            return res.status(status).json(data)
+        }
+        setUserAvatar(req.user.id, type.mime, req.body)
+        res.json(accountDetails(req.user.id))
+    }
+    catch (err) {
+        next(err)
+    }
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Remove the profile photo (safe when there is none).
+  \return
+    401 if not logged in, 429 if changing too often, 503 if the VM can't
+    be reached (client machine), else the account details
+*/
+/************************************************************************/
+app.delete(['/auth/me/avatar', '/library/account/avatar'], requireUser, async (req, res) => {
+    if (!allowAccountEdit(req, res)) return
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'DELETE', '/library/account/avatar')
+        return res.status(status).json(data)
+    }
+    deleteUserAvatar(req.user.id)
+    res.json(accountDetails(req.user.id))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    How much the signed-in user's own jobs take up (photos, model and the
+    job's other files), for the account page's Storage section. On a
+    client machine this is the VM's count -- the shared library, where
+    every finished job ends up; jobs not sent yet aren't included.
+    Admins see their own jobs only.
+  \return
+    401 if not logged in, 503 if the VM can't be reached (client
+    machine), else { usedBytes, models (finished), jobs (all, including
+    failed and running) }
+*/
+/************************************************************************/
+app.get(['/auth/me/storage', '/library/account/storage'], requireUser, async (req, res, next) => {
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'GET', '/library/account/storage')
+        return res.status(status).json(data)
+    }
+    try {
+        let usedBytes = 0
+        let models = 0
+        let jobCount = 0
+        for (const id of listOwnedJobIds(req.user.id)) {
+            const job = await getJob(id)
+            if (!job) continue // deleted (its ownership row can outlive it)
+            jobCount++
+            if (job.status === 'done') models++
+            usedBytes += await jobStoredBytes(id)
+        }
+        res.json({ usedBytes, models, jobs: jobCount })
+    }
+    catch (err) {
+        next(err)
+    }
 })
 
 // --- Feedback ------------------------------------------------------------------
@@ -2328,32 +2680,34 @@ app.use((err, req, res, _next) => {
       // Already gone.
     }
   }
-  // And a video upload (see videoUpload): videos are never kept.
-  if (req.videoPath) {
-    try {
-      fs.rmSync(req.videoPath, { force: true })
-    } catch {
-      // Already gone.
+
+    // A body over its parser's size limit, e.g. a profile photo over config.maxAvatarKB.
+    if (err.type === 'entity.too.large') {
+        return res.status(413).json({
+            error: req.path.endsWith('/avatar')
+                ? `That photo is too large -- it must be under ${config.maxAvatarKB} KB.`
+                : 'That request is too large.',
+        })
     }
-  }
 
     if (err instanceof multer.MulterError) {
-        // The limits come from config (maxFileSizeMB, maxFiles, maxVideoSizeMB);
-        // keep the messages in sync with those so they stay true if the limits change.
-        const isVideoUpload = req.path === '/jobs/from-video'
+        // The limits come from config (maxFileSizeMB, maxFiles, and the media
+        // versions); keep the messages in sync with those so they stay true if
+        // the limits change.
+        const isMediaUpload = req.path === '/jobs/from-media'
         switch (err.code) {
             case 'LIMIT_FILE_SIZE':
                 return res.status(413).json({
-                    error: isVideoUpload
-                        ? `That video is too large -- it must be under ${config.maxVideoSizeMB} MB.`
+                    error: isMediaUpload
+                        ? `That file is too large -- each file must be under ${config.maxMediaSizeMB} MB.`
                         : `That file is too large -- each photo must be under ${config.maxFileSizeMB} MB.`,
                 })
             case 'LIMIT_FILE_COUNT':
             case 'LIMIT_PART_COUNT':
             case 'LIMIT_UNEXPECTED_FILE':
                 return res.status(400).json({
-                    error: isVideoUpload
-                        ? 'Upload one .mp4 video at a time.'
+                    error: isMediaUpload
+                        ? `Too many files -- upload at most ${config.maxMediaFiles} files at once.`
                         : `Too many files -- upload at most ${config.maxFiles} photos at once.`,
                 })
             default:
