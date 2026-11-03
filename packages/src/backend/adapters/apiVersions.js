@@ -23,11 +23,18 @@ A date in either form as milliseconds / milliseconds as ISO text.
 Data from this backend or the VM, in the v1 shape.
 - userFor / accountFor / feedbackPageFor(req, data)
 v1 data shaped for the version the request asked for.
-- urlFor(req, url)
-A URL the backend hands out (e.g. a photo's), under the request's version.
+- urlFor(req, url) / toUnversionedUrl(url)
+A URL the backend hands out (e.g. a photo's), under the request's version /
+without any version.
+- markLegacy (middleware)
+Marks replies on the legacy paths as deprecated (Deprecation and Link
+headers); the replies themselves don't change.
 **************************************************************************/
 
 export const API_V1_PREFIX = '/api/v1'
+// When the unversioned paths were deprecated (2026-11-03 00:00 UTC), in
+// seconds, for the Deprecation header.
+const LEGACY_DEPRECATED_AT = Date.UTC(2026, 10, 3) / 1000
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -160,6 +167,51 @@ export function feedbackPageFor(req, page)
 {
   if (!isLegacy(req) || !Array.isArray(page?.items)) return page
   return { ...page, items: page.items.map((item) => ({ ...item, createdAt: toIso(item.createdAt) })) }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A backend URL without its version prefix (/api/v1/jobs/... ->
+    /jobs/...), e.g. one in the VM's reply, so urlFor can put it under the
+    version this request asked for.
+  \param url
+    string | null
+  \return
+    string | null
+*/
+/************************************************************************/
+export function toUnversionedUrl(url)
+{
+  return typeof url === 'string' && url.startsWith(`${API_V1_PREFIX}/`) ? url.slice(API_V1_PREFIX.length) : url
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware for the legacy (unversioned) paths only: the reply is
+    unchanged, but says the path is deprecated (RFC 9745 Deprecation
+    header, dated the day /api/v1 was released) and where its successor is
+    (Link rel="successor-version"). Clients still on these paths: the
+    website and the engine (docs/api-changelog.md).
+  \param req
+    The request
+  \param res
+    The response
+  \param next
+    moving on
+*/
+/************************************************************************/
+export function markLegacy(req, res, next)
+{
+  // A versioned path no v1 route matched also passes here on its way to the
+  // 404; it isn't a legacy request.
+  if (!req.path.startsWith('/api/'))
+  {
+    res.set('Deprecation', `@${LEGACY_DEPRECATED_AT}`)
+    res.set('Link', `<${API_V1_PREFIX}${req.path}>; rel="successor-version"`)
+  }
+  next()
 }
 
 /************************************************************************/

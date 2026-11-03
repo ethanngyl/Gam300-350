@@ -68,9 +68,10 @@ import authRoutes from './routes/auth.js'
 import accountRoutes from './routes/account.js'
 import feedbackRoutes from './routes/feedback.js'
 import catalogRoutes from './routes/catalog.js'
+import docsRoutes from './routes/docs.js'
 import sampleJobRoutes from './routes/sampleJobs.js'
 import sceneRoutes from './routes/scenes.js'
-import { API_V1_PREFIX } from './adapters/apiVersions.js'
+import { API_V1_PREFIX, markLegacy } from './adapters/apiVersions.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -169,6 +170,7 @@ api.use('/library', requireAuthorityKey, actAsUser)
 // Each Router holds full paths, so the order only matters where two match
 // the same path: sample jobs answer for their own ids before the job routes.
 api.use(catalogRoutes)
+api.use(docsRoutes)
 api.use(sampleJobRoutes)
 api.use(jobRoutes)
 api.use(libraryStoreRoutes)
@@ -178,7 +180,8 @@ api.use(feedbackRoutes)
 api.use(sceneRoutes)
 
 app.use(API_V1_PREFIX, api)
-app.use(api)
+// Legacy: the same routes, marked deprecated (Deprecation / Link headers).
+app.use(markLegacy, api)
 
 // JSON replies for unknown paths and errors (must be after every route).
 app.use(jsonNotFound)

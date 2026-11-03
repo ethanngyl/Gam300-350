@@ -23,6 +23,7 @@ Names setup mistakes in the log.
 
 // ----- Headers ------------------------------------------------------- //
 import { config } from '../config.js'
+import { API_V1_PREFIX } from '../adapters/apiVersions.js'
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -39,7 +40,7 @@ import { config } from '../config.js'
 */
 /************************************************************************/
 export async function callAuthority(endpoint, body) {
-    const resp = await fetch(`${config.vmAuthUrl}${endpoint}`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Auth-Key': config.authApiKey },
         body: JSON.stringify(body),

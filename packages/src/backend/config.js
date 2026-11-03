@@ -51,9 +51,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Per-machine settings (AUTH_MODE, AUTH_API_KEY, ...) live in an optional,
 // gitignored .env next to this file -- see .env.example. Loaded first so
-// every process.env read below sees it.
-const envFile = path.join(__dirname, '.env')
-if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
+// every process.env read below sees it. ENV_FILE names another file; one
+// that doesn't exist means none is read (the tests do this, so a
+// developer's .env can't leak into them).
+const envFile = process.env.ENV_FILE ?? path.join(__dirname, '.env')
+if (envFile && fs.existsSync(envFile)) process.loadEnvFile(envFile)
 
 // Repo root (this file lives at packages/src/backend/).
 const repoRoot = path.join(__dirname, '..', '..', '..')
@@ -392,6 +394,8 @@ export const config = {
 
     // Where per-job working directories live (uploads, COLMAP db, splat output).
     jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
+    // Where the database (app.db) and its backups live.
+    dataDir: process.env.DATA_DIR || path.join(__dirname, 'data'),
 
     // Every finished job's result.ply is also copied here (see runPipeline), so
     // it shows up in the native engine's samples browser (engine/src/main.cpp)

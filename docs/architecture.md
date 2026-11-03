@@ -11,8 +11,12 @@ backend changes:
 - the curl test client (`packages/api-tests/`);
 - Postman, or a mobile app.
 
-The API is versioned (`/api/v1/...`; the original unversioned paths stay
-for older clients). See [api-changelog.md](api-changelog.md). The data
+The API is versioned (`/api/v1/...`; the original unversioned paths stay,
+deprecated, for older clients). See [api-changelog.md](api-changelog.md).
+The full API reference, with an example request and response for every
+endpoint, is [`packages/src/backend/openapi.yaml`](../packages/src/backend/openapi.yaml)
+(OpenAPI 3.1, also served at `GET /api/v1/openapi.yaml`). Open it in
+[Swagger Editor](https://editor.swagger.io) or Redoc to browse. The data
 formats, tables and naming rules are in [data-schema.md](data-schema.md).
 
 ## Layers
@@ -189,6 +193,17 @@ Any other path answers 404 with a JSON `{ error }`.
 
 ## Testing the API on its own
 
-`packages/api-tests/api-smoke.sh` (or `api-smoke.bat` on Windows) signs in
-and calls the endpoints above with curl, checking each status code. See
-[its README](../packages/api-tests/README.md).
+- **Automated tests:** `npm test` (in `packages/`) runs the backend tests in
+  `packages/src/backend/tests/`. CI runs them on every push
+  (`.github/workflows/ci.yml`). Each one starts real servers on temporary
+  data and covers:
+  - authentication: every protected endpoint answers 401 without a session,
+    passwords and session tokens are stored only as hashes, and the shared
+    key guards the VM routes;
+  - the OpenAPI contract: the document matches the routes, the examples
+    match the schemas, and real replies match the document;
+  - no secrets in the repository;
+  - migrations, saved scenes, API versions and data adapters.
+- **By hand, against a running server:** `packages/api-tests/api-smoke.sh`
+  (or `api-smoke.bat` on Windows) signs in and calls the endpoints with curl,
+  checking each status code. See [its README](../packages/api-tests/README.md).

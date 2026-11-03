@@ -20,6 +20,7 @@ import { config } from '../../config.js'
 import { fetchRemoteJobs } from '../../library.js'
 import { clientAuthProblem } from '../../services/authority.js'
 import { normalizeJobSummary } from './jobSummary.js'
+import { toUnversionedUrl } from '../apiVersions.js'
 
 export const name = 'vmLibrary'
 
@@ -43,6 +44,13 @@ export async function listJobs(user)
   const summaries = remote.map(normalizeJobSummary).filter(Boolean)
   if (summaries.length < remote.length)
     console.warn(`[backend] library: ignored ${remote.length - summaries.length} job(s) from the VM that weren't valid`)
-  return summaries
+  // The VM answers under /api/v1; its URLs lose that so each request gets
+  // its own version's URLs (index.js).
+  return summaries.map((job) => ({
+    ...job,
+    thumbnail: toUnversionedUrl(job.thumbnail),
+    cover: toUnversionedUrl(job.cover),
+    images: job.images.map((image) => ({ ...image, url: toUnversionedUrl(image.url) })),
+  }))
 }
 // ----- End of Functions ----------------------------------------------------- //

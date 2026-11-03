@@ -12,7 +12,9 @@ the VM, which stores it for every machine, and passes Library requests for
 jobs this machine doesn't have on to the VM. Every request carries the
 shared AUTH_API_KEY and the id of the user it is made for; the VM looks the
 user (and their role) up in its own database and applies the normal owner /
-admin rule. The VM side is in server.js (the /library routes).
+admin rule. The VM side is the /library routes (routes/). Every call goes
+to the VM's API v1 (/api/v1/library/...), so the VM must run a build with
+/api/v1 (update the VM first).
 - syncJob(record)
 Sends one finished job to the VM. Returns true once the VM has stored it.
 - syncPendingJobs()
@@ -37,6 +39,7 @@ import { getJobOwnerId, isJobSynced, markJobSynced } from './db.js'
 import { scanJobs } from './scan.js'
 import { STATUS_FILE } from './status.js'
 import { jobs } from './pipeline.js'
+import { API_V1_PREFIX } from './adapters/apiVersions.js'
 
 // Uploads of a whole job can take a while on a slow connection.
 const SYNC_TIMEOUT_MS = 10 * 60 * 1000
@@ -103,7 +106,7 @@ export async function syncJob(record)
     if (fs.existsSync(coverPath))
       form.append('cover', await fs.openAsBlob(coverPath), 'cover.webp')
 
-    const resp = await fetch(`${config.vmAuthUrl}/library/jobs/${record.id}`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}/library/jobs/${record.id}`, {
       method: 'PUT',
       headers: vmHeaders(null),
       body: form,
@@ -194,7 +197,7 @@ export async function fetchRemoteJobs(user)
 {
   try
   {
-    const resp = await fetch(`${config.vmAuthUrl}/library/jobs`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}/library/jobs`, {
       headers: vmHeaders(user),
       signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
     })
@@ -250,7 +253,7 @@ export async function proxyToVm(req, res, vmPath)
 
   try
   {
-    const resp = await fetch(`${config.vmAuthUrl}${vmPath}`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}${vmPath}`, {
       method: req.method,
       headers,
       body,
@@ -310,7 +313,7 @@ export async function forwardToVm(method, vmPath, user, body, contentType)
     const headers = vmHeaders(user)
     const isRaw = Buffer.isBuffer(body)
     if (body) headers['Content-Type'] = isRaw ? contentType : 'application/json'
-    const resp = await fetch(`${config.vmAuthUrl}${vmPath}`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}${vmPath}`, {
       method,
       headers,
       body: body ? (isRaw ? body : JSON.stringify(body)) : undefined,

@@ -8,7 +8,8 @@
 \brief
 This source file owns the SQLite database (node:sqlite, built into Node)
 that stores user accounts, login sessions and who owns each job. The file
-lives at data/app.db next to this file and is created on first run.
+lives at data/app.db next to this file (DATA_DIR can move the folder) and
+is created on first run.
 Passwords are never stored: only a salted scrypt hash. Session tokens are
 never stored either: only their SHA-256, so a copied database can't be used
 to log in.
@@ -108,14 +109,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
-import { fileURLToPath } from 'node:url'
+import { config } from './config.js'
 import { DatabaseSync } from 'node:sqlite'
 import { runMigrations } from './migrate.js'
 
 const scrypt = promisify(crypto.scrypt)
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = path.join(__dirname, 'data')
+// data/ next to this file, unless DATA_DIR says otherwise (config.js).
+const DATA_DIR = config.dataDir
 
 // How long a "Remember me" login lasts before the user has to sign in again.
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000

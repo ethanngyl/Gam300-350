@@ -12,15 +12,42 @@ to the API is recorded here, newest first.
   (`/api/v2/...`) served alongside the old one, which keeps working until no
   client uses it.
 - **Legacy paths:** the original unversioned paths (`/auth/me`, `/jobs`,
-  `/library/...`, ...) are frozen. They keep answering exactly as before, for
-  the current website, the engine (`engine/src/net/BackendClient.cpp`) and
-  team machines on an older build. Machines also talk to each other on the
-  legacy paths, so a team machine works with an older VM and the other way
-  round.
+  `/library/...`, ...) are **deprecated** and frozen. They keep answering
+  exactly as before, with two extra headers: `Deprecation` (RFC 9745) and
+  `Link: </api/v1/...>; rel="successor-version"`. They stay for the clients
+  not moved yet:
+  - the website (to-do list below);
+  - the engine (`engine/src/net/BackendClient.cpp`);
+  - team machines on a build from before 2026-11-03.
+
+  They will only be removed once nothing uses them, and that removal will be
+  listed here.
+- **The contract:** [`packages/src/backend/openapi.yaml`](../packages/src/backend/openapi.yaml)
+  (also served at `GET /api/v1/openapi.yaml`) describes every v1 endpoint,
+  with example requests and responses. CI (`npm test`) checks the server
+  still matches it, so a breaking change can't slip into v1 unnoticed.
 - **Shared code:** both versions run the same route code (`server.js` mounts
   it twice). `adapters/apiVersions.js` holds the only differences.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
+
+## v1 additions: 2026-11-03 (later the same day; nothing breaks)
+
+- `GET /openapi.yaml`: the OpenAPI 3.1 description of the API. Public.
+- Legacy (unversioned) replies carry `Deprecation` and
+  `Link: rel="successor-version"` headers. Their bodies are unchanged.
+- **Team machines now call the VM on `/api/v1/...`** (`/api/v1/register`,
+  `/api/v1/verify-account`, `/api/v1/library/...`). **Update the VM first**:
+  a VM on an older build has no `/api/v1`, so sign-in and the shared library
+  would stop working on updated team machines. Replies are converted with
+  the same adapters, so the website sees no difference.
+- Job URLs from the VM's library (`thumbnail`, `cover`, `images[].url`) are
+  given the version the browser asked for: `/api/v1/jobs/...` in v1,
+  `/jobs/...` on the legacy paths.
+- Google sign-in still returns to whatever `GOOGLE_REDIRECT_URI` names; both
+  `/auth/google/callback` and `/api/v1/auth/google/callback` work. To move
+  it, add the v1 URL in Google Cloud Console, then change
+  `GOOGLE_REDIRECT_URI` in the VM's `.env`.
 
 ## v1: 2026-11-03
 

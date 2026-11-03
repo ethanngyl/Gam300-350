@@ -19,14 +19,14 @@ Never edit a migration that has been committed: add a new one.
 - loadMigrations(dir)
 Async. Reads and checks the migrations folder: numbered 001, 002, ...
 with no gaps.
-- runMigrations(db, { backup, log })
+- runMigrations(db, { backup, log, dir })
 Async. Applies every migration newer than the database's user_version,
 each in its own transaction. Backs the database up first (backup()) when it
 already has tables. Throws, leaving the database at the last good version,
 if a migration fails or the database is newer than this build.
 - CLI: node migrate.js [--db <file>] [--status]
-Migrates the file (default data/app.db), or with --status only prints its
-version and what is pending.
+Migrates the file (default data/app.db, or DATA_DIR's), or with --status
+only prints its version and what is pending.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -34,6 +34,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { config } from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const MIGRATIONS_DIR = path.join(__dirname, 'migrations')
@@ -109,13 +110,15 @@ function countForeignKeyProblems(db)
     migration, when the database already has tables
   \param log
     function, optional: gets one line per migration applied
+  \param dir
+    string, optional: another migrations folder (tests)
   \return
     Promise of the migrations applied ([{ version, file, description }])
 */
 /************************************************************************/
-export async function runMigrations(db, { backup = null, log = () => {} } = {})
+export async function runMigrations(db, { backup = null, log = () => {}, dir = MIGRATIONS_DIR } = {})
 {
-  const migrations = await loadMigrations()
+  const migrations = await loadMigrations(dir)
   const current = db.prepare('PRAGMA user_version').get().user_version
   const newest = migrations.length
   if (current > newest)
@@ -176,7 +179,7 @@ async function main()
 {
   const args = process.argv.slice(2)
   const dbIndex = args.indexOf('--db')
-  const dbPath = path.resolve(dbIndex >= 0 && args[dbIndex + 1] ? args[dbIndex + 1] : path.join(__dirname, 'data', 'app.db'))
+  const dbPath = path.resolve(dbIndex >= 0 && args[dbIndex + 1] ? args[dbIndex + 1] : path.join(config.dataDir, 'app.db'))
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
   const db = new DatabaseSync(dbPath)
   try
