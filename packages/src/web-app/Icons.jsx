@@ -56,6 +56,9 @@ const ICON_PATHS = {
     message: (<><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4v-4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" /><path d="M8 10h8M8 13h5" /></>),
     lock: (<><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>),
     send: (<><path d="M21 3 10 14" /><path d="m21 3-7 18-4-7-7-4z" /></>),
+    arrowLeft: <path d="M19 12H5M11 6l-6 6 6 6" />,
+    download: (<><path d="M12 4v11" /><path d="m7 10 5 5 5-5" /><path d="M5 19h14" /></>),
+    fullscreen: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
 };
 
 function Icon({ name, size = 16 }) {
