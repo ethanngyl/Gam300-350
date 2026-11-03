@@ -22,7 +22,9 @@ the Frame Extractor) shows the model page (ModelScreen.jsx) inside the
 dashboard; its back link returns to where it was opened from. Polling
 reconstruction progress and the legacy image gallery still replace the
 whole screen. Owns the active job id and uploads a finished photo batch
-to the backend to kick off reconstruction. Each page has its own
+to the backend to kick off reconstruction. Frame Extractor builds go
+through the same processing screen: App uploads the media (startMediaBuild)
+while that screen already shows the upload as its first step. Each page has its own
 address-bar hash (AppRoutes.js), so the browser's Back and Forward buttons
 move between pages and a refresh stays on the page; leaving a build in
 progress with Back asks first, since leaving cancels it.
@@ -47,6 +49,8 @@ import Walkthrough from './Walkthrough.jsx';
 import { useUndoableState } from './useUndoableState.js';
 import { NEW_SCENE_INFO, createSceneObject } from './SceneStorage.js';
 import { hashToView, viewToHash } from './AppRoutes.js';
+import { uploadMedia } from './mediaJobs.js';
+import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
 
@@ -192,6 +196,18 @@ function App() {
     // otherwise 'processing' | 'gallery'.
     const [screen, setScreen] = useState(initialView.screen);
     const [jobId, setJobId] = useState(initialView.jobId);
+    // A build from the Frame Extractor, for the processing screen (see
+    // Processing.jsx's mediaBuild), or null for photo builds.
+    const [mediaBuild, setMediaBuild] = useState(null);
+    // Stops the media upload in progress (null when nothing is uploading).
+    const abortMediaUploadRef = useRef(null);
+    // Counts media builds, so a cancelled build's late reply is ignored.
+    const mediaBuildCountRef = useRef(0);
+    // Releases the processing screen's preview of the first file once the build ends.
+    const mediaPreviewUrl = mediaBuild?.previewUrl;
+    useEffect(() => () => {
+        if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    }, [mediaPreviewUrl]);
     // Job whose training just finished; the model page asks for its name.
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
@@ -257,6 +273,8 @@ function App() {
                 return;
             }
             const view = fromRouteView(hashToView(window.location.hash));
+            // Leaving a media build mid-upload: stop sending the files.
+            if (view.screen !== 'processing') stopMediaBuild();
             if (view.isLocalModel) {
                 if (viewedModelRef.current?.localFile) view.activeTab = 'model';
                 // That file is gone (the page was reloaded): open the Model Viewer.
@@ -349,6 +367,7 @@ function App() {
             const res = await fetch('/upload', { method: 'POST', body: form });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
+            setMediaBuild(null);
             setJobId(data.id);
             // The capture page closes once processing starts, so returning
             // from the result screen lands on Home instead of an empty capture.
@@ -363,13 +382,76 @@ function App() {
         setScreen(null);
     }
 
+    // Stops a media upload in progress and forgets the media build.
+    // (Only refs and state setters, so the Back / Forward listener can use it.)
+    function stopMediaBuild() {
+        mediaBuildCountRef.current += 1;
+        abortMediaUploadRef.current?.();
+        abortMediaUploadRef.current = null;
+        setMediaBuild(null);
+    }
+
     function resetJob() {
         // The build or model screen being left can't be opened again with Back.
         replaceNextRef.current = true;
+        // A cancelled media build returns to the Frame Extractor, photos to Home.
+        const returnTab = mediaBuild ? 'extractor' : 'home';
+        stopMediaBuild();
         setJobId(null);
         setUploadError(null);
         setScreen(null);
-        setActiveTab('home');
+        setActiveTab(returnTab);
+    }
+
+    // Starts a Frame Extractor build and shows the processing screen at once,
+    // uploading the files from here (with progress). The job id arrives after.
+    async function startMediaBuild({ files, fps, trainIters, removeBackground }) {
+        mediaBuildCountRef.current += 1;
+        const buildNumber = mediaBuildCountRef.current;
+        const isStillCurrent = () => mediaBuildCountRef.current === buildNumber;
+        const firstFile = files[0];
+
+        setJobId(null);
+        setMediaBuild({
+            label: files.length === 1 ? firstFile.name : `${files.length} files`,
+            fileCount: files.length,
+            fps,
+            removeBackground,
+            previewUrl: URL.createObjectURL(firstFile),
+            isGif: /\.gif$/i.test(firstFile.name),
+            uploadFraction: 0,
+            startError: null,
+        });
+        setScreen('processing');
+
+        try {
+            const newJobId = await uploadMedia(
+                files,
+                { fps, trainIters, removeBackground },
+                (xhr) => {
+                    abortMediaUploadRef.current = () => xhr.abort();
+                },
+                (fraction) => {
+                    if (isStillCurrent()) setMediaBuild((build) => build && { ...build, uploadFraction: fraction });
+                },
+            );
+            if (!isStillCurrent()) {
+                // Cancelled while the upload was finishing: free the job it made.
+                fetch(`/jobs/${newJobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
+                return;
+            }
+            setMediaBuild((build) => build && { ...build, uploadFraction: null });
+            // The build's own address replaces the Frame Extractor's in the history.
+            replaceNextRef.current = true;
+            setJobId(newJobId);
+        } catch (err) {
+            // { aborted: true }: Cancel or Back already left the screen.
+            if (err?.aborted || !isStillCurrent()) return;
+            playSound('error');
+            setMediaBuild((build) => build && { ...build, startError: err.message });
+        } finally {
+            if (isStillCurrent()) abortMediaUploadRef.current = null;
+        }
     }
 
     // Shows a model on the model page; its back link returns to returnTab.
@@ -383,15 +465,6 @@ function App() {
     function openModel(modelJobId) {
         showModelPage({ jobId: modelJobId }, activeTab);
     }
-
-    // A model the Frame Extractor just built: opens the model page, asking
-    // for its name. Its back link returns to the Frame Extractor.
-    const showExtractedModel = useCallback((modelJobId) => {
-        setNamePromptJobId(modelJobId);
-        setViewedModel({ jobId: modelJobId });
-        setModelReturnTab('extractor');
-        setActiveTab('model');
-    }, []);
 
     // Opens a .ply from the user's computer (Model Viewer's "Open .ply file").
     function openLocalModel(file) {
@@ -429,16 +502,20 @@ function App() {
         return <LoginScreen onLogin={handleLogin} />;
     }
 
-    if (screen === 'processing' && jobId) {
+    if (screen === 'processing' && (jobId || mediaBuild)) {
         return (
             <Processing
                 jobId={jobId}
+                mediaBuild={mediaBuild}
                 onDone={() => {
+                    // A media build's model page links back to the Frame Extractor.
+                    const returnTab = mediaBuild ? 'extractor' : 'home';
+                    stopMediaBuild();
                     setNamePromptJobId(jobId);
                     // The model replaces the build screen, so Back skips the finished build.
                     replaceNextRef.current = true;
                     setScreen(null);
-                    showModelPage({ jobId }, 'home');
+                    showModelPage({ jobId }, returnTab);
                 }}
                 onCancel={resetJob}
                 onRegisterLeaveGuard={registerLeaveGuard}
@@ -496,7 +573,7 @@ function App() {
                     )}
                     {activeTab === 'extractor' && (
                         // FrameExtractor plays the click sound itself, so none here.
-                        <FrameExtractor onModelReady={showExtractedModel} onRegisterLeaveGuard={registerLeaveGuard} />
+                        <FrameExtractor onStartBuild={startMediaBuild} />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
