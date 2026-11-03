@@ -7,8 +7,9 @@
 \date 27-10-2026
 \brief
 "Model detail" slider with three stops (Fast / Normal / Detailed) that
-sets the training iteration cap for a new model. The stop labels under
-the slider can also be clicked. iterations is the current cap and
+sets the training iteration cap for a new model. Only the "Model detail"
+heading, the slider and the stop labels show (the iteration count is
+kept out of sight). The stop labels under the slider can also be clicked. iterations is the current cap and
 onChange gets the new one; see TrainingPresets.js for the values.
 **************************************************************************/
 
@@ -17,9 +18,6 @@ import { TRAINING_PRESETS } from './TrainingPresets.js';
 
 // Index of the "Normal" stop, used if iterations matches no preset.
 const NORMAL_PRESET_INDEX = 1;
-
-// The dot between the preset name and the count is written as an escape so
-// this file stays plain ASCII (an editor saving it as ANSI broke the build).
 
 function TrainingQualitySlider({ iterations, onChange, disabled = false }) {
     const matchingIndex = TRAINING_PRESETS.findIndex((preset) => preset.iterations === iterations);
@@ -36,9 +34,6 @@ function TrainingQualitySlider({ iterations, onChange, disabled = false }) {
         <div className={disabled ? 'training-quality is-disabled' : 'training-quality'}>
             <div className="training-quality-head">
                 <span>Model detail</span>
-                <span className="training-quality-value">
-                    {selectedPreset.label}{' \u00B7 '}{selectedPreset.iterations.toLocaleString()} iterations
-                </span>
             </div>
             <input
                 type="range"
@@ -50,7 +45,7 @@ function TrainingQualitySlider({ iterations, onChange, disabled = false }) {
                 onChange={(event) => choosePreset(Number(event.target.value))}
                 disabled={disabled}
                 aria-label="Model detail"
-                aria-valuetext={`${selectedPreset.label}, ${selectedPreset.iterations} iterations`}
+                aria-valuetext={selectedPreset.label}
             />
             <div className="training-quality-stops">
                 {TRAINING_PRESETS.map((preset, index) => (
