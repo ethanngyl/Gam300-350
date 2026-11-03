@@ -141,7 +141,7 @@ function App() {
 
     // Page shown inside the shell:
     // home | library | editor | scene | viewer | extractor | capture | account
-    const [activeTab, setActiveTab] = useState('home');
+    const [activeTab, setActiveTab] = useState(initialView.activeTab);
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState(initialView.librarySubTab);
 
@@ -506,7 +506,7 @@ function App() {
                     )}
                     {activeTab === 'extractor' && (
                         // FrameExtractor plays the click sound itself, so none here.
-                        <FrameExtractor onModelReady={showExtractedModel} />
+                        <FrameExtractor onModelReady={showExtractedModel} onRegisterLeaveGuard={registerLeaveGuard} />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.

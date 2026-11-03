@@ -11,7 +11,7 @@ Forward buttons move between pages (App.jsx keeps the two in step) and a
 refresh stays on the same page. Hash URLs need nothing from the server:
 every page is still served from "/".
   #/home, #/library, #/library/photos, #/editor, #/scene, #/viewer,
-  #/youtube, #/capture, #/account, #/feedback  -- pages in the shell
+  #/extractor, #/capture, #/account, #/feedback  -- pages in the shell
   #/processing/<jobId>  -- a model being built
   #/model/<jobId>       -- a finished model in the full-page viewer
   #/viewer/file         -- a .ply opened from the user's computer
@@ -22,7 +22,7 @@ The view for a hash. Anything unknown or malformed is Home.
 **************************************************************************/
 
 // Pages shown inside the shell (App's activeTab).
-const TABS = ['home', 'library', 'editor', 'scene', 'viewer', 'youtube', 'capture', 'account', 'feedback'];
+const TABS = ['home', 'library', 'editor', 'scene', 'viewer', 'extractor', 'capture', 'account', 'feedback'];
 // Same rule as the backend's job ids (scan.js JOB_ID_RE).
 const JOB_ID_RE = /^[\w-]+$/;
 

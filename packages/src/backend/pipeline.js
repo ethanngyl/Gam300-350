@@ -39,9 +39,6 @@ Runs tools/make_masks.py to write foreground masks for every photo, so COLMAP
 and Brush ignore the background. Only used when job.removeBackground is set.
 - runMediaPipeline(job, opts)
 Extracts the frames, checks there are at least 8, then runs runPipeline.
-- runVideoFilePipeline(job, videoPath, opts)
-The same for an uploaded video file, which is deleted as soon as its frames
-are extracted (before COLMAP starts).
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.

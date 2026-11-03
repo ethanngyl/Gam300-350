@@ -86,11 +86,6 @@ if the browser gives up part-way through the upload.
 Reads each uploaded file's bytes and checks the real type with file-type. If 
 any file isn't really a JPEG or PNG, it deletes the whole job folder and 
 returns 400. This guards against a client that lies about the MIME type.
-- videoUpload(multer instance) / onlyMp4(req, res, next)
-The video extractor's .mp4 upload (POST /jobs/from-video): one file, saved
-as the hidden jobs/.video-<id>.mp4, then its real type checked like
-onlyImages. The video is deleted as soon as its frames are extracted
-(runVideoFilePipeline), so only the frames are kept.
 - ensureCover(jobId)
 Makes the job's card cover (<id>_out/cover.webp) with tools/make_cover.py
 the first time it is asked for: the object cut out of a photo with the
@@ -155,8 +150,8 @@ from './scan.js'
 import 
 { 
   cancelJob, jobs,
-  killChildren, makeJob, pickSampleFileName, restoreJob,
-  runMediaPipeline, runPipeline, sampleFileName, setOnJobDone,
+  killChildren, makeJob, pickSampleFileName, pruneJob, restoreJob,
+  runMediaPipeline, runPipeline, sampleFileName, setSkipSampleCopy,
 }
     from './pipeline.js'
 
@@ -200,8 +195,8 @@ console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}
 
 // Staging folders left by shared-library uploads cut off mid-way (crash or
 // restart during a PUT /library/jobs/:id). Their jobs are re-sent later.
-// Also uploaded videos whose frame extraction was cut off the same way:
-// videos are never kept (see POST /jobs/from-video).
+// Also videos left by the old Video Extractor's upload (.video-<id>.mp4), which
+// the Frame Extractor replaced; its uploads go in each job's media/ folder.
 for (const entry of fs.readdirSync(config.jobsDir))
 {
   if (entry.startsWith('.incoming-') || entry.startsWith('.video-'))
@@ -649,66 +644,6 @@ async function onlyImages(req, res, next) {
             }
         }
 
-        next()
-    } catch (err) {
-        next(err)
-    }
-}
-
-/************************************************************************/
-/*!
-  \brief
-    The video extractor's .mp4 upload: one file, saved as the hidden
-    jobs/.video-<jobId>.mp4 (scanJobs ignores dot-names, and startup
-    deletes any left by a crash). req.videoPath is set so it is deleted
-    on every path: by runVideoFilePipeline once the frames are extracted,
-    or by onlyMp4 / the error handler if the upload is refused. The
-    declared type is only a first filter; onlyMp4 checks the bytes.
-  \return
-    nothing
-*/
-/************************************************************************/
-const videoUpload = multer({
-    storage: multer.diskStorage({
-        destination: (_req, _file, cb) => cb(null, config.jobsDir),
-        filename: (req, _file, cb) => {
-            const name = `.video-${req.jobId}.mp4`
-            req.videoPath = path.join(config.jobsDir, name)
-            cb(null, name)
-        },
-    }),
-    limits: { fileSize: config.maxVideoSizeMB * 1024 * 1024, files: 1 },
-    fileFilter: (_req, file, cb) =>
-        cb(null, file.mimetype === 'video/mp4' || path.extname(file.originalname).toLowerCase() === '.mp4'),
-})
-
-/************************************************************************/
-/*!
-  \brief
-    Content-level guard for the video upload, like onlyImages: the file's
-    actual bytes must be an MP4. Otherwise the video and the job folder
-    are deleted.
-  \param req
-    The request from the user
-  \param res
-    The response from the backend
-  \param next
-    moving on
-  \return
-    400 if no video was sent or it isn't a real MP4
-*/
-/************************************************************************/
-async function onlyMp4(req, res, next) {
-    const reject = async (error) => {
-        await fs.promises.rm(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
-        if (req.videoPath) await fs.promises.rm(req.videoPath, { force: true })
-        res.status(400).json({ error })
-    }
-    try {
-        if (!req.file) return await reject('Please choose an .mp4 video file.')
-        const { fileTypeFromFile } = await import('file-type')
-        const type = await fileTypeFromFile(req.file.path)
-        if (type?.ext !== 'mp4') return await reject('Invalid file content -- only real .mp4 videos are accepted.')
         next()
     } catch (err) {
         next(err)
@@ -1164,48 +1099,21 @@ app.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, media
     saveJob(job)
 
     // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
-    runYoutubePipeline(job, videoUrl, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
+    runMediaPipeline(job, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id })
 })
 
 /************************************************************************/
 /*!
   \brief
-    Create a reconstruction job from an uploaded .mp4 (multipart field
-    "video", plus optional fps, maxFrames and trainIters fields). Frames
-    are extracted exactly as for a YouTube link, then the same COLMAP +
-    Brush pipeline runs. The video itself is never kept: it is deleted as
-    soon as extraction ends, whether it worked or not. The job is owned by
-    the logged-in user.
-  \return
-    401 if not logged in, 400 if no real .mp4 was sent, 413 if it is over
-    config.maxVideoSizeMB, else 202 and starts the job
-*/
-/************************************************************************/
-app.post('/jobs/from-video', requireUser, assignJobId, videoUpload.single('video'), onlyMp4, (req, res) => {
-    const { fps, maxFrames, trainIters } = req.body || {}
-    setJobOwner(req.jobId, req.user.id)
-    const job = makeJob(req.jobId)
-    job.source = 'video'
-    job.trainIters = parseTrainIters(trainIters)
-    saveJob(job)
-
-    // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
-    runVideoFilePipeline(job, req.videoPath, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
-    res.status(202).json({ id: job.id })
-})
-
-/************************************************************************/
-/*!
-  \brief
-    The frame-extraction options sent with a video job, within the
-    server's limits.
+    The frame-extraction options sent with a Frame Extractor job, within
+    the server's limits.
   \param fps
     Requested frames per second (any type; ignored unless a positive number)
   \param maxFrames
     Requested frame cap (any type; ignored unless a positive number)
   \return
-    { fps?, maxFrames? } for runYoutubePipeline / runVideoFilePipeline
+    { fps?, maxFrames? } for runMediaPipeline
 */
 /************************************************************************/
 function frameOptions(fps, maxFrames) {
@@ -1216,9 +1124,7 @@ function frameOptions(fps, maxFrames) {
     if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
         opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
     }
-
-    runMediaPipeline(job, opts) // fire-and-forget; the frontend polls /jobs/:id
-    res.status(202).json({ id: job.id })
+    return opts
 }
 
 /************************************************************************/
@@ -1790,7 +1696,8 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
       progress: 1,
       detail: null,
       error: null,
-      source: ['upload', 'media', 'youtube'].includes(sent.source) ? sent.source : null,
+      // 'youtube' and 'video': jobs from the old Video Extractor, still on some machines.
+      source: ['upload', 'media', 'youtube', 'video'].includes(sent.source) ? sent.source : null,
       name: typeof sent.name === 'string' ? sent.name.slice(0, MAX_JOB_NAME_LENGTH) : null,
       sampleFile: null,
       imageCount: images.length,
@@ -2769,14 +2676,6 @@ app.use((err, req, res, _next) => {
   if (req.storeDir) {
     try {
       fs.rmSync(req.storeDir, { recursive: true, force: true })
-    } catch {
-      // Already gone.
-    }
-  }
-  // And a video upload (see videoUpload): videos are never kept.
-  if (req.videoPath) {
-    try {
-      fs.rmSync(req.videoPath, { force: true })
     } catch {
       // Already gone.
     }

@@ -119,6 +119,8 @@ function CameraCapture({
     const streamRef = useRef(null);
     // Id of the photo currently being checked, so only one runs at a time.
     const analyzingPhotoIdRef = useRef(null);
+    // Latest photo list, read by the auto-capture timer.
+    const photosRef = useRef([]);
     // Photos grabbed but still encoding, not yet counted in the batch.
     const capturesInFlightRef = useRef(0);
 
@@ -282,13 +284,9 @@ function CameraCapture({
         photosRef.current = photos;
     }, [photos]);
 
-    // Release every thumbnail URL when the page closes. (Removed photos
-    // release theirs in removePhoto.)
-    useEffect(() => {
-        return () => {
-            photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url));
-        };
-    }, []);
+    // Small copies for the thumbnails: showing the original photos made the
+    // page lag with large batches (see PhotoThumbnails.js).
+    const thumbnailUrls = usePhotoThumbnails(photos);
 
     // Check pending photos one at a time, same as the Photo Editor. Each
     // finished check updates the list, which starts the next one.

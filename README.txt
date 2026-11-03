@@ -102,7 +102,7 @@ Uploading existing photos instead of scanning live:
 Training a 3D model:
 
 Model detail (training iterations):
-The "Model detail" slider (on the capture screen, the Photo Editor and the Video Extractor) sets how many training iterations Brush runs for the model. Fewer iterations are faster; more give a sharper, more detailed model.
+The "Model detail" slider (on the capture screen, the Photo Editor and the Frame Extractor) sets how many training iterations Brush runs for the model. Fewer iterations are faster; more give a sharper, more detailed model.
 - Fast: 5,000 iterations
 - Normal: 7,000 iterations (the website's default)
 - Detailed: 10,000 iterations
