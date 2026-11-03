@@ -18,6 +18,9 @@ new jobs, but the file doesn't shrink, so free disk space wouldn't go up.
 - deleteJobData(job)
 Deletes a job everywhere: its folders, its engine samples copy, and its
 photos and model in the database. Also used by DELETE /jobs/:id/files.
+- jobStoredBytes(jobId)
+How much storage a job takes (database + disk). Also used by the account
+page's storage figure (GET /auth/me/storage).
 - runCleanup()
 One clean-up pass. Calls made while a pass is running share it.
 - requestCleanup()
@@ -116,7 +119,7 @@ async function folderBytes(dir)
     bytes
 */
 /************************************************************************/
-async function jobStoredBytes(jobId)
+export async function jobStoredBytes(jobId)
 {
   return getDbJobBytes(jobId) +
     await folderBytes(path.join(config.jobsDir, jobId)) +

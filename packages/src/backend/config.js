@@ -500,6 +500,9 @@ export const config = {
     // Caddy forwards from the same machine, so req.ip is the real client
     // address (for rate limits) and req.secure reflects HTTPS (for cookies).
     trustProxy: process.env.TRUST_PROXY || null,
+    // Largest profile photo accepted (PUT /auth/me/avatar). The website
+    // shrinks photos to a 256 x 256 JPEG first, which is far smaller.
+    maxAvatarKB: 256,
     // --- Google SSO (authority only) -------------------------------------------
     // From the Google Cloud Console OAuth client (step 6). Secrets: put them in
     // .env, never commit them. Empty = Google sign-in is disabled.
