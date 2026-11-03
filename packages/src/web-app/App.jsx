@@ -16,6 +16,8 @@ chosen photos already in the batch; its "Review photos first" hands the
 batch to the Photo Editor. The first time each account signs in on this
 browser, the walkthrough (Walkthrough.jsx) tours the dock; "Show
 walkthrough" on the account page or in the account menu replays it.
+Video Extractor builds go through the same processing screen: App starts
+them (startVideoBuild), uploading an .mp4 while that screen already shows.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
@@ -42,6 +44,7 @@ import Walkthrough from './Walkthrough.jsx';
 import { useUndoableState } from './useUndoableState.js';
 import { NEW_SCENE_INFO } from './SceneStorage.js';
 import { playSound } from '../audio/Audio.js';
+import { startVideoFileJob, startYoutubeJob, youtubeVideoId } from './VideoJobs.js';
 import './AppTheme.css';
 import './App.css';
 
@@ -137,6 +140,13 @@ function App() {
     // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
     const [screen, setScreen] = useState(null);
     const [jobId, setJobId] = useState(null);
+    // A build from the Video Extractor, for the processing screen (see
+    // Processing.jsx's videoBuild), or null for photo builds.
+    const [videoBuild, setVideoBuild] = useState(null);
+    // Stops the .mp4 upload in progress (null when nothing is uploading).
+    const abortVideoUploadRef = useRef(null);
+    // Counts video builds, so a cancelled build's late reply is ignored.
+    const videoBuildCountRef = useRef(0);
     // A .ply opened from the user's computer in the Model Viewer: { url, name }
     const [localModel, setLocalModel] = useState(null);
     // Job whose training just finished; the result screen asks for its name.
@@ -236,6 +246,7 @@ function App() {
             const res = await fetch('/upload', { method: 'POST', body: form });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
+            setVideoBuild(null);
             setJobId(data.id);
             // The capture page closes once processing starts, so returning
             // from the result screen lands on Home instead of an empty capture.
@@ -250,7 +261,61 @@ function App() {
         setScreen(null);
     }
 
+    // Starts a Video Extractor build and shows the processing screen at once.
+    // An .mp4 is uploaded from here (with progress); a YouTube link is sent
+    // and the server downloads the video. The job id arrives afterwards.
+    async function startVideoBuild({ sourceType, url, file, fps, trainIters }) {
+        videoBuildCountRef.current += 1;
+        const buildNumber = videoBuildCountRef.current;
+        const isStillCurrent = () => videoBuildCountRef.current === buildNumber;
+
+        setJobId(null);
+        setVideoBuild({
+            sourceType,
+            label: sourceType === 'file' ? file.name : 'YouTube video',
+            fps: Number(fps) || null,
+            videoId: sourceType === 'youtube' ? youtubeVideoId(url) : null,
+            uploadFraction: sourceType === 'file' ? 0 : null,
+            startError: null,
+        });
+        // Returning from the result screen lands on Home, like photo builds.
+        setActiveTab('home');
+        setScreen('processing');
+
+        try {
+            let newJobId;
+            if (sourceType === 'file') {
+                const upload = startVideoFileJob({ file, fps, trainIters }, (fraction) => {
+                    if (isStillCurrent()) setVideoBuild((build) => build && { ...build, uploadFraction: fraction });
+                });
+                abortVideoUploadRef.current = upload.abort;
+                newJobId = await upload.promise;
+            } else {
+                newJobId = await startYoutubeJob({ url, fps, trainIters });
+            }
+            if (!isStillCurrent()) {
+                // Cancelled while the request was on its way: free the job it made.
+                fetch(`/jobs/${newJobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
+                return;
+            }
+            setVideoBuild((build) => build && { ...build, uploadFraction: null });
+            setJobId(newJobId);
+        } catch (err) {
+            // AbortError: Cancel already left the screen.
+            if (err.name === 'AbortError' || !isStillCurrent()) return;
+            playSound('error');
+            setVideoBuild((build) => build && { ...build, startError: err.message });
+        } finally {
+            if (isStillCurrent()) abortVideoUploadRef.current = null;
+        }
+    }
+
     function resetJob() {
+        // Stop any video upload and forget the video build.
+        videoBuildCountRef.current += 1;
+        abortVideoUploadRef.current?.();
+        abortVideoUploadRef.current = null;
+        setVideoBuild(null);
         setJobId(null);
         setUploadError(null);
         setScreen(null);
@@ -301,11 +366,13 @@ function App() {
         return <LoginScreen onLogin={handleLogin} />;
     }
 
-    if (screen === 'processing' && jobId) {
+    if (screen === 'processing' && (jobId || videoBuild)) {
         return (
             <Processing
                 jobId={jobId}
+                videoBuild={videoBuild}
                 onDone={() => {
+                    setVideoBuild(null);
                     setNamePromptJobId(jobId);
                     setScreen('result');
                 }}
@@ -417,7 +484,7 @@ function App() {
                     )}
                     {activeTab === 'youtube' && (
                         // YoutubeIngest plays the click sound itself, so none here.
-                        <YoutubeIngest />
+                        <YoutubeIngest onStartBuild={startVideoBuild} />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
