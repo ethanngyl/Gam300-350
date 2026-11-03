@@ -30,7 +30,7 @@ const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Media Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shield' },
+    { id: 'scene', label: 'Scene Builder', icon: 'shapes' },
     { id: 'extractor', label: 'Frame Extractor', icon: 'play' },
     { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
     { id: 'feedback', label: 'Feedback', icon: 'message' },
@@ -138,7 +138,7 @@ function Dock({ activeTab, onNavigate, onNewModel, onAddPhotos, user, onOpenAcco
                         aria-label="New model"
                         aria-current={isCapturePage ? 'page' : undefined}
                     >
-                        <Icon name="camera" size={17} />
+                        <Icon name="cubePlus" size={17} />
                         <span className="genesis-dock-label">New model</span>
                     </button>
                     <button
