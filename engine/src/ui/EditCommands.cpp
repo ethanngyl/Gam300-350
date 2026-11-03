@@ -47,11 +47,13 @@ MoveCropBoxCommand::MoveCropBoxCommand(CropBox* box, const glm::mat4& before, co
 }
 
 void MoveCropBoxCommand::undo() {
+    QUndoCommand::undo(); //Undoes any child commands (the splats carried along with the box)
     m_box->transform = m_before;
 }
 
 void MoveCropBoxCommand::redo() {
     m_box->transform = m_after;
+    QUndoCommand::redo(); //Redoes any child commands
 }
 
 RemoveSplatsCommand::RemoveSplatsCommand(SplatRenderer* renderer, SplatModel* model, const std::vector<uint8_t>& keepMask, QUndoCommand* parent)
@@ -102,4 +104,36 @@ void RemoveSplatsCommand::undo() {
         }
     }
     m_renderer->UpdateModel(m_model, restored);
+}
+
+MoveSplatsCommand::MoveSplatsCommand(SplatRenderer* renderer, SplatModel* model, const std::vector<uint32_t>& indices,
+                                     const glm::mat4& deltaModel, QUndoCommand* parent)
+    : QUndoCommand(parent), m_renderer(renderer), m_model(model), m_indices(indices)
+{
+    const std::vector<SplatVertex>& splats = model->splats();
+    m_before.reserve(indices.size());
+    m_after.reserve(indices.size());
+    for (uint32_t index : indices) {
+        m_before.push_back(splats[index]);
+        m_after.push_back(TransformSplat(splats[index], deltaModel));
+    }
+    setText(QString("Move %1 Splats").arg(indices.size()));
+}
+
+void MoveSplatsCommand::Write(const std::vector<SplatVertex>& values) {
+    std::vector<SplatVertex> splats = m_model->splats();
+    //The splat list changed under us, don't index out of range
+    if (!m_indices.empty() && m_indices.back() >= splats.size()) return;
+    for (size_t i = 0; i < m_indices.size(); ++i) {
+        splats[m_indices[i]] = values[i];
+    }
+    m_renderer->UpdateModel(m_model, splats);
+}
+
+void MoveSplatsCommand::undo() {
+    Write(m_before);
+}
+
+void MoveSplatsCommand::redo() {
+    Write(m_after);
 }

@@ -96,6 +96,7 @@ private:
     void toggleCropBox();      // shows the crop box around the selected model
     void applyCropBox();    // removes the splats the crop box selects from the selected model
     void cancelCropBox();   // hides the crop box without removing anything
+    void commitCropBoxEdit(const glm::mat4& before, const glm::mat4& after); //Finished box drag, moves box and the splats inside it in contents mode
     void toggleModelHidden(int index);
     void setRenderMode(int mode); // SplatRenderer::RenderMode as int
     // Asks for export options and a file name, then writes the selected

@@ -104,4 +104,24 @@ private:
     std::vector<SplatVertex> m_removed; //The removed splats, in the same order as m_indices
 };
 
+//Replaces some of a model's splats with edited versions (moved, rotated or scaled)
+//Stores the affected splats before and after, so undo restores them exactly
+//The model and renderer must outlive the command
+class MoveSplatsCommand : public QUndoCommand {
+public:
+    //Applies deltaModel (a model-space transform) to the splats at the given ascending indices when redone
+    MoveSplatsCommand(SplatRenderer* renderer, SplatModel* model, const std::vector<uint32_t>& indices,
+                      const glm::mat4& deltaModel, QUndoCommand* parent = nullptr);
 
+    void undo() override;
+    void redo() override;
+
+private:
+    void Write(const std::vector<SplatVertex>& values);
+
+    SplatRenderer* m_renderer;
+    SplatModel* m_model;
+    std::vector<uint32_t> m_indices;
+    std::vector<SplatVertex> m_before;
+    std::vector<SplatVertex> m_after;
+};

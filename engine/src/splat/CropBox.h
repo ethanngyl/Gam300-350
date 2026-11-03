@@ -33,3 +33,13 @@ std::vector<uint8_t> ComputeCropKeepMask(const std::vector<SplatVertex>& splats,
 //Worldspace transform of a box that fits roughly the middle half of the splats, used as the starting box
 //Returns identity if there are no splats
 glm::mat4 FitCropBoxToSplats(const std::vector<SplatVertex>& splats, const glm::mat4& modelTransform);
+
+//Indices of the splats whose position lies inside the box, ascending
+std::vector<uint32_t> CollectSplatsInBox(const std::vector<SplatVertex>& splats, const glm::mat4& modelTransform, const glm::mat4& boxTransform);
+
+//Converts a world-space change (newBox * inverse(oldBox)) into the equivalent change in a model's own space
+glm::mat4 WorldDeltaToModelSpace(const glm::mat4& deltaWorld, const glm::mat4& modelTransform);
+
+//Applies a model-space transform to one splat: position moves, the orientation is rotated and the size is scaled
+//Size uses the average scale factor of the transform, so a non-uniform scale is only approximated
+SplatVertex TransformSplat(const SplatVertex& splat, const glm::mat4& deltaModel);

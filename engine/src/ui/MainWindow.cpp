@@ -128,7 +128,7 @@ MainWindow::MainWindow() {
         m_undo.push(new MoveModelCommand(model, before, after));
     };
     m_viewport->onCropBoxEdited = [this](const glm::mat4& before, const glm::mat4& after) {
-        m_undo.push(new MoveCropBoxCommand(&m_viewport->cropBox(), before, after));
+        commitCropBoxEdit(before, after);
     };
 
     // The renderer only exists once the GL context does (first show).
@@ -860,6 +860,33 @@ void MainWindow::toggleCropBox() {
         box.active = true;
         statusBar()->showMessage("Crop box added. Press Delete or Enter to remove the splats, Esc to cancel.", kStatusMessageMs);
     }
+}
+
+void MainWindow::commitCropBoxEdit(const glm::mat4& before, const glm::mat4& after) {
+    CropBox& box = m_viewport->cropBox();
+    SplatRenderer* renderer = m_viewport->renderer();
+    SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
+
+    //Region mode (or nothing to carry): the drag only moved the box
+    if (!box.moveContents || !model) {
+        m_undo.push(new MoveCropBoxCommand(&box, before, after));
+        return;
+    }
+
+    //Whatever was inside the box when the drag started goes along with it
+    const std::vector<uint32_t> inside = CollectSplatsInBox(model->splats(), model->GetTransform(), before);
+    if (inside.empty()) {
+        m_undo.push(new MoveCropBoxCommand(&box, before, after));
+        return;
+    }
+
+    //Box and splats move together as a single undo step
+    const glm::mat4 deltaModel = WorldDeltaToModelSpace(after * glm::inverse(before), model->GetTransform());
+    auto* step = new MoveCropBoxCommand(&box, before, after);
+    step->setText(QString("Move %1 Splats").arg(inside.size()));
+    new MoveSplatsCommand(renderer, model, inside, deltaModel, step); //Child of step, runs after it
+    m_undo.push(step);
+    refreshScenePanels();
 }
 
 void MainWindow::cancelCropBox() {
