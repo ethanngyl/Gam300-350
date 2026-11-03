@@ -21,7 +21,7 @@ Accounts and sign-in
 
 Navigation
 ----------
-- Top bar (Library / Photo Editor / Scene Builder / YouTube Extractor tabs,
+- Top bar (Library / Photo Editor / Scene Builder / Frame Extractor tabs,
   account menu with a quick mute).
 - Collapsible sidebar ("New model", "Add photos", all pages, user menu); it
   becomes a slide-in drawer on phones.
@@ -36,8 +36,8 @@ Home
 
 Camera Capture
 --------------
-- Live camera preview, with manual capture or timed auto-capture up to a
-  photo limit you set; Space takes a photo.
+- Live camera preview, with manual capture or timed auto-capture (every 0.5s
+  to 5s) up to a photo limit you set; Space takes a photo.
 - Add photos by drag-and-drop, file picker, or from the library; remove any
   photo from the batch.
 - Each photo is checked in the background for blur, bad exposure and
@@ -59,10 +59,12 @@ Photo Editor
   iterations).
 - "Back to camera" / "Go to camera" moves the photos to the capture page.
 
-YouTube Extractor
------------------
-- Paste a link, set the frame rate and model detail, see a thumbnail
-  preview, then "Process video".
+Frame Extractor
+---------------
+- Upload videos or animated GIFs by drag-and-drop or file picker (up to 10
+  files, 2 GB each), set the frame rate, Remove background (on by default)
+  and model detail, then "Process media".
+- Upload progress bar, with Cancel.
 - Live progress card while it runs, with Cancel.
 - Result card with the extracted frames and a .ply download.
 
@@ -116,7 +118,7 @@ Backend
 -------
 - Upload -> optional background masks -> COLMAP -> Brush training ->
   normalized .ply -> copy into the engine's samples folder.
-- YouTube frame extraction (needs at least 8 frames).
+- Frame extraction from uploaded media (needs at least 8 frames).
 - Jobs and their status survive a server restart.
 - Cancel kills the whole process tree; working files are cleaned up after a
   job finishes.

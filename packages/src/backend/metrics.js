@@ -417,7 +417,7 @@ export async function recordPlyMetrics(job, { rawPly, finalPly, normalized, log 
       input: {
         imageCount: job.imageCount ?? null,
         sparseModels: m.sparseModels ?? null,
-        youtube: job.source === 'youtube' ? { fps: m.ytFps ?? null, maxFrames: m.ytMaxFrames ?? null } : undefined,
+        media: job.source === 'media' ? { fps: m.frameFps ?? null, maxFrames: m.frameMaxFrames ?? null } : undefined,
       },
       output: {
         splatCount: header?.vertexCount ?? null,

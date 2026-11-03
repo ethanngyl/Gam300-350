@@ -110,12 +110,10 @@ if [ "$NEED_TOOLS" = "1" ]; then
         fail "Could not install COLMAP / Brush. Check your internet connection, then run tools/get-tools-linux.sh by hand to see the full error."
 fi
 
-# Python packages for the YouTube frame extractor (yt-dlp, OpenCV). Not fatal:
-# photo uploads still work without them. Recent Ubuntu/Debian mark the system
-# Python "externally managed" and refuse system-wide pip installs, so they go
-# into a virtualenv at tools/.venv, and PYTHON_BIN points the backend at it.
-# yt-dlp is upgraded every run because YouTube changes regularly break older
-# releases.
+# Python packages for the frame extractor (OpenCV). Not fatal: photo uploads
+# still work without them. Recent Ubuntu/Debian mark the system Python
+# "externally managed" and refuse system-wide pip installs, so they go into a
+# virtualenv at tools/.venv, and PYTHON_BIN points the backend at it.
 PY=""
 for candidate in python3 python3.14 python3.13 python3.12 python3.11 python3.10; do
     if command -v "$candidate" >/dev/null 2>&1 &&
@@ -127,7 +125,7 @@ done
 
 VENV="$TOOLS/.venv"
 if [ -z "$PY" ]; then
-    echo "    Python 3.10+ not found - YouTube import will not work until it is installed"
+    echo "    Python 3.10+ not found - the Frame Extractor will not work until it is installed"
     echo "    (sudo apt install python3 python3-venv)."
 else
     # Recreate the venv if it's missing or its interpreter was removed
@@ -136,16 +134,27 @@ else
         echo "    Creating Python virtualenv in tools/.venv ..."
         rm -rf "$VENV"
         if ! "$PY" -m venv "$VENV"; then
-            echo "    *** Could not create the virtualenv - YouTube import may not work."
+            echo "    *** Could not create the virtualenv - the Frame Extractor may not work."
             echo "    *** On Ubuntu the venv module is a separate package: sudo apt install python3-venv"
         fi
     fi
     if [ -x "$VENV/bin/python" ]; then
         export PYTHON_BIN="$VENV/bin/python"
-        echo "    Installing Python packages for the YouTube extractor..."
+        echo "    Installing Python packages for the Frame Extractor..."
+        # onnxruntime for background removal: the CUDA build on NVIDIA cards,
+        # else the CPU build. Both install the same "onnxruntime" module, so if
+        # the other build is there remove both first.
+        if nvidia-smi -L >/dev/null 2>&1; then
+            ORT_WANT="onnxruntime-gpu[cuda,cudnn]"; ORT_OTHER="onnxruntime"
+        else
+            ORT_WANT="onnxruntime"; ORT_OTHER="onnxruntime-gpu"
+        fi
+        if "$PYTHON_BIN" -m pip show -q "$ORT_OTHER" >/dev/null 2>&1; then
+            "$PYTHON_BIN" -m pip uninstall -y -q onnxruntime onnxruntime-gpu
+        fi
         if ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q -r "$TOOLS/requirements.txt" ||
-            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]"; then
-            echo "    *** pip install failed - YouTube import may not work. Run by hand to see why:"
+            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q "$ORT_WANT"; then
+            echo "    *** pip install failed - the Frame Extractor may not work. Run by hand to see why:"
             echo "    ***   tools/.venv/bin/python -m pip install -r tools/requirements.txt"
         fi
     fi

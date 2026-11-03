@@ -10,7 +10,7 @@ Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
 dashboard (a floating dock at the bottom, laid out like the Genesis second
 layout) with these pages above it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, Video Extractor, Feedback, Capture and Account. Capture
+Builder, Model Viewer, Frame Extractor, Feedback, Capture and Account. Capture
 opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
 batch to the Photo Editor. The first time each account signs in on this
@@ -29,7 +29,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
 import SplatViewer from './SplatViewer.jsx';
-import YoutubeIngest from './YoutubeIngest.jsx';
+import FrameExtractor from './FrameExtractor.jsx';
 import ImageGallery from './ImageGallery.jsx';
 import Dock from './Dock.jsx';
 import HomeScreen from './HomeScreen.jsx';
@@ -140,8 +140,8 @@ function App() {
     });
 
     // Page shown inside the shell:
-    // home | library | editor | scene | viewer | youtube | capture | account
-    const [activeTab, setActiveTab] = useState(initialView.activeTab);
+    // home | library | editor | scene | viewer | extractor | capture | account
+    const [activeTab, setActiveTab] = useState('home');
     // Which Library sub-tab is open: models | photos
     const [librarySubTab, setLibrarySubTab] = useState(initialView.librarySubTab);
 
@@ -340,6 +340,15 @@ function App() {
         setScreen('result');
     }
 
+    // A model the Frame Extractor just built: opens the same result screen
+    // as the photo upload, asking for its name. activeTab stays 'extractor',
+    // so Back to dashboard returns there.
+    const showExtractedModel = useCallback((modelJobId) => {
+        setJobId(modelJobId);
+        setNamePromptJobId(modelJobId);
+        setScreen('result');
+    }, []);
+
     function openLocalModel(file) {
         setLocalModel({ url: URL.createObjectURL(file), name: file.name });
         setScreen('local-model');
@@ -407,8 +416,10 @@ function App() {
                         className="btn btn-primary"
                         onClick={() => {
                             playSound('tap');
+                            // A model from the Frame Extractor starts its next scan there too.
+                            const scanTab = activeTab === 'extractor' ? 'extractor' : 'capture';
                             resetJob();
-                            goToTab('capture');
+                            goToTab(scanTab);
                         }}
                     >
                         New scan
@@ -493,9 +504,9 @@ function App() {
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}
-                    {activeTab === 'youtube' && (
-                        // YoutubeIngest plays the click sound itself, so none here.
-                        <YoutubeIngest onRegisterLeaveGuard={registerLeaveGuard} />
+                    {activeTab === 'extractor' && (
+                        // FrameExtractor plays the click sound itself, so none here.
+                        <FrameExtractor onModelReady={showExtractedModel} />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
