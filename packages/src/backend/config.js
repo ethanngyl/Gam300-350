@@ -466,6 +466,9 @@ export const config = {
     // job_models and job_model_chunks), with no samples copy -- set
     // FILE_STORE=db on the VM only (ignored unless AUTH_MODE=authority).
     fileStore: process.env.FILE_STORE === 'db' ? 'db' : 'disk',
+    // Whether photos and models really are kept in the database: FILE_STORE=db
+    // only counts on the VM (other machines build from files on disk).
+    filesInDb: process.env.FILE_STORE === 'db' && authMode === 'authority',
     // VM clean-up (cleanup.js). Keeps stored jobs (photos + model, in the
     // database or on disk) under this many GB by deleting the oldest; 0 (the
     // default) never deletes jobs. Jobs younger than cleanupMinAgeDays, and
@@ -484,9 +487,10 @@ export const config = {
     //   /register and /verify-account, and its /auth/* routes use db.js directly.
     // 'client': this instance forwards signup/login to the authority.
     authMode,
-    // Where the authority lives (only used in 'client' mode). No trailing slash.
-    // Must be https:// (passwords are sent to it) unless allowInsecureAuth.
-    vmAuthUrl: (process.env.VM_AUTH_URL || 'https://51-79-240-131.sslip.io').replace(/\/+$/, ''),
+    // Where the authority lives (client mode; other machines also send Google
+    // sign-in there). No trailing slash. Must be https:// (passwords are sent
+    // to it) unless allowInsecureAuth. No default: set VM_AUTH_URL in .env.
+    vmAuthUrl: (process.env.VM_AUTH_URL || '').trim().replace(/\/+$/, ''),
     // Shared secret between clients and the authority. MUST be set (same value)
     // on the VM and every client via AUTH_API_KEY. Empty means signup/login
     // refuse to run rather than silently accepting anything.
@@ -506,7 +510,10 @@ export const config = {
     // .env, never commit them. Empty = Google sign-in is disabled.
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    // Must EXACTLY match an Authorized redirect URI registered in the console.
-    googleRedirectUri:
-        process.env.GOOGLE_REDIRECT_URI || 'https://51-79-240-131.sslip.io/auth/google/callback',
+    // Must EXACTLY match an Authorized redirect URI registered in the console
+    // (https://<the VM>/auth/google/callback). Empty = Google sign-in is off.
+    googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
+    // Google's OAuth 2.0 endpoints (fixed by Google, see services/google.js).
+    googleAuthUrl: process.env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
+    googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
 }

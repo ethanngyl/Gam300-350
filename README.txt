@@ -22,7 +22,6 @@ Web app + backend (npm -- packages/package.json):
 - @mkkellogg/gaussian-splats-3d ^0.4.7
 - express ^5.2.1
 - file-type ^22.1.0
-- marked ^18.0.14
 - multer ^2.3.0
 - react ^19.2.8
 - react-dom ^19.2.8
@@ -51,6 +50,11 @@ External tools (downloaded automatically into tools/ on first run):
 - COLMAP (structure-from-motion / multi-view stereo)
 - Brush (Gaussian splatting trainer)
 - cloudflared (public tunnel for sharing the web app)
+
+Architecture and API:
+docs/architecture.md: how the frontend, backend layers and database fit together, and every API endpoint.
+packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
+packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
 
 To run (For Windows):
 run-all.bat: Double clicking this will install all required packages and run both the web application as well as the engine
