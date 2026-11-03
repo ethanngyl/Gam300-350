@@ -375,7 +375,18 @@ if (!AUTH_MODES.includes(authMode)) {
     process.exit(1)
 }
 
+// Where GET /jobs lists jobs from (adapters/jobSources/): 'live' (default),
+// 'sample' or 'live,sample'. A typo stops startup, like AUTH_MODE.
+const JOB_SOURCE_NAMES = ['live', 'sample']
+const jobSources = (process.env.JOB_SOURCES || 'live').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+if (jobSources.length === 0 || jobSources.some((s) => !JOB_SOURCE_NAMES.includes(s))) {
+    console.error(`[backend] JOB_SOURCES="${process.env.JOB_SOURCES}" must list one or more of: ${JOB_SOURCE_NAMES.join(', ')}`)
+    process.exit(1)
+}
+
 export const config = {
+    // The repository's root folder (sample data paths are relative to it).
+    repoRoot,
     // HTTP port the API listens on (Vite proxies /api here in dev).
     port: Number(process.env.PORT) || 5005,
 
@@ -413,6 +424,13 @@ export const config = {
     // when COLMAP_STRICT=0.
     colmapStrictMatcherArgs,
     colmapStrictMapperArgs,
+
+    // Reference data (feedback categories, training presets, the photo
+    // minimum): see catalog.js.
+    catalogFile: process.env.CATALOG_FILE || path.join(__dirname, 'catalog', 'catalog.json'),
+    // Job sources for GET /jobs (see above) and the sample jobs' description.
+    jobSources,
+    sampleDataFile: process.env.SAMPLE_DATA_FILE || path.join(__dirname, 'sample-data', 'jobs.json'),
 
     // Upload limits.
     maxFiles: 300,

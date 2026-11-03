@@ -33,6 +33,7 @@ import { limitByIp, tooManyAttempts } from '../middleware/limits.js'
 import { checkCredentials, publicUser, validateSignup } from '../services/accounts.js'
 import { callAuthority, clientAuthProblem, logAuthorityFailure } from '../services/authority.js'
 import { googleConsentUrl, googleSignInReady, readGoogleSignIn, safeEqual } from '../services/google.js'
+import { userFor } from '../adapters/apiVersions.js'
 
 const router = express.Router()
 
@@ -73,7 +74,7 @@ router.post('/auth/signup', limitByIp(signupIpLimiter), async (req, res, next) =
         try {
             const user = await createUser(input)
             startSession(res, user.id, remember === true)
-            return res.status(201).json(publicUser(user))
+            return res.status(201).json(userFor(req, publicUser(user)))
         }
         catch (err) {
             if (err.code === 'EMAIL_TAKEN')
@@ -95,7 +96,7 @@ router.post('/auth/signup', limitByIp(signupIpLimiter), async (req, res, next) =
             upsertLocalUser(data)                 // mirror VM id -> local users
             startSession(res, data.id, remember === true)
             // The mirrored row, so memberSince comes from a real stored date.
-            return res.status(201).json(publicUser(findUserByEmail(data.email)))
+            return res.status(201).json(userFor(req, publicUser(findUserByEmail(data.email))))
         }
         // The user's own mistakes (bad input, email taken, too many tries) pass through.
         if (status === 400 || status === 409 || status === 429)
@@ -136,7 +137,7 @@ router.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) => 
             if (result.status === 'invalid')
                 return res.status(401).json({ error: 'Incorrect email or password.' })
             startSession(res, result.user.id, remember === true)
-            return res.json(publicUser(result.user))
+            return res.json(userFor(req, publicUser(result.user)))
         }
         catch (err) { return next(err) }
     }
@@ -153,7 +154,7 @@ router.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) => 
             upsertLocalUser(data)
             startSession(res, data.id, remember === true)
             // The mirrored row, so memberSince comes from a real stored date.
-            return res.json(publicUser(findUserByEmail(data.email)))
+            return res.json(userFor(req, publicUser(findUserByEmail(data.email))))
         }
         if (status === 200)
             return res.status(401).json({ error: 'Incorrect email or password.' })
@@ -178,7 +179,7 @@ router.post('/auth/login', limitByIp(loginIpLimiter), async (req, res, next) => 
 */
 /************************************************************************/
 router.get('/auth/me', requireUser, (req, res) => {
-    res.json(publicUser(req.user))
+    res.json(userFor(req, publicUser(req.user)))
 })
 
 /************************************************************************/

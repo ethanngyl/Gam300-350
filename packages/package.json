@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "migrate": "node src/backend/migrate.js",
     "metrics:dev": "vite --config vite.metrics.config.js",
     "metrics:build": "vite build --config vite.metrics.config.js",
     "metrics:server": "node src/metrics-dashboard/server.js",
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",
+    "ajv": "8.17.1",
     "express": "^5.2.1",
     "file-type": "^22.1.0",
     "multer": "^2.3.0",

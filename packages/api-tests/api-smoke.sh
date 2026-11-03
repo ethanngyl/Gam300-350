@@ -10,7 +10,9 @@
 #    API_BASE_URL   the backend, e.g. http://localhost:5005
 #    API_EMAIL      an existing account's email
 #    API_PASSWORD   its password
-#  Optional (off by default):
+#  Optional:
+#    API_PREFIX         the API version to test (default /api/v1; empty
+#                       tests the legacy unversioned paths)
 #    API_UPLOAD_DIR     a folder with 8+ .jpg/.png photos: uploads them
 #                       (POST /upload), then cancels the job straight away
 #    API_SEND_FEEDBACK  1 = send a feedback message (POST /feedback)
@@ -42,6 +44,8 @@ if [ -z "${API_BASE_URL:-}" ] || [ -z "${API_EMAIL:-}" ] || [ -z "${API_PASSWORD
     exit 2
 fi
 BASE="${API_BASE_URL%/}"
+# Every path below is under this API version (docs/api-changelog.md).
+PREFIX="${API_PREFIX-/api/v1}"
 
 WORK="$(mktemp -d)"
 JAR="$WORK/cookies.txt"
@@ -51,7 +55,13 @@ PASSED=0
 FAILED=0
 
 # call METHOD PATH [curl options...] -> sets STATUS; the reply is in $BODY.
+# PATH is under $PREFIX; call_legacy uses the unversioned path instead.
 call() {
+    local method="$1" path="$2"
+    shift 2
+    STATUS="$(curl -s -o "$BODY" -w '%{http_code}' -X "$method" -b "$JAR" -c "$JAR" "$@" "$BASE$PREFIX$path")"
+}
+call_legacy() {
     local method="$1" path="$2"
     shift 2
     STATUS="$(curl -s -o "$BODY" -w '%{http_code}' -X "$method" -b "$JAR" -c "$JAR" "$@" "$BASE$path")"
@@ -79,8 +89,14 @@ json_escape() {
     printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
-echo "Testing $BASE"
+echo "Testing $BASE$PREFIX"
 echo "--- signed out"
+call GET /catalog
+check "GET /catalog (reference data, public)" 200
+if ! grep -q '"feedbackCategories"' "$BODY"; then
+    echo "FAIL  ...the catalog has no feedbackCategories"
+    FAILED=$((FAILED + 1))
+fi
 call GET /auth/me
 check "GET /auth/me as a guest is refused" 401
 call GET /jobs
@@ -108,6 +124,19 @@ fi
 echo "--- signed in"
 call GET /auth/me
 check "GET /auth/me" 200
+if [ -n "$PREFIX" ]; then
+    # API v1 sends dates as milliseconds; the legacy paths keep their ISO text.
+    if ! grep -qE '"createdAt":[0-9]+' "$BODY"; then
+        echo "FAIL  ...v1 createdAt is not a number: $(head -c 200 "$BODY")"
+        FAILED=$((FAILED + 1))
+    fi
+    call_legacy GET /auth/me
+    check "GET /auth/me on the legacy path still works" 200
+    if ! grep -qE '"createdAt":"[0-9-]+T[0-9:]+Z"' "$BODY"; then
+        echo "FAIL  ...legacy createdAt is not ISO text: $(head -c 200 "$BODY")"
+        FAILED=$((FAILED + 1))
+    fi
+fi
 call GET /auth/me/account
 check "GET /auth/me/account" 200
 call GET /auth/me/storage
@@ -121,7 +150,7 @@ JOB_ID="$(grep -oE '\{"id":"[0-9a-f-]{36}"[^{]*' "$BODY" | grep '"hasResult":tru
 if [ -n "$JOB_ID" ]; then
     call GET "/jobs/$JOB_ID"
     check "GET /jobs/:id (finished job $JOB_ID)" 200
-    STATUS="$(curl -s -o /dev/null -w '%{http_code}' -I -b "$JAR" "$BASE/jobs/$JOB_ID/result.ply")"
+    STATUS="$(curl -s -o /dev/null -w '%{http_code}' -I -b "$JAR" "$BASE$PREFIX/jobs/$JOB_ID/result.ply")"
     check "HEAD /jobs/:id/result.ply" 200
     call GET "/jobs/$JOB_ID/result.ply" -H 'Range: bytes=0-4095'
     check "GET /jobs/:id/result.ply, first 4 KB (byte range)" 206
@@ -136,6 +165,32 @@ call GET /jobs/00000000-0000-0000-0000-000000000000
 check "GET /jobs/:id for a job that doesn't exist" 404
 call PATCH /jobs/00000000-0000-0000-0000-000000000000 -H 'Content-Type: application/json' --data '{"name":"x"}'
 check "PATCH /jobs/:id for a job that doesn't exist" 404
+
+echo "--- a scene: save, load, delete"
+# An older (version 0) scene: the server saves it as format version 1.
+SCENE='{"name":"API smoke test scene","background":"#18181b","renderMode":"splats","objects":[{"objectId":"o1","jobId":"sample-fox","name":"Fox","position":[1,0,-2],"rotation":[0,90,0],"scale":[1,1,1]}]}'
+call POST /scenes -H 'Content-Type: application/json' --data "$SCENE"
+if check "POST /scenes (a version 0 scene)" 201; then
+    cp "$BODY" "$WORK/saved-scene"
+    SCENE_ID="$(sed -E 's/.*"id":"([0-9a-f-]{36})".*/\1/' "$BODY")"
+    if ! grep -q '"format":"genesis.scene","version":1' "$BODY"; then
+        echo "FAIL  ...not saved as genesis.scene version 1: $(head -c 200 "$BODY")"
+        FAILED=$((FAILED + 1))
+    fi
+    call GET "/scenes/$SCENE_ID"
+    check "GET /scenes/:id" 200
+    if cmp -s "$BODY" "$WORK/saved-scene"; then
+        echo "PASS  ...loads exactly what was saved"
+        PASSED=$((PASSED + 1))
+    else
+        echo "FAIL  ...what loaded differs from what was saved"
+        FAILED=$((FAILED + 1))
+    fi
+    call DELETE "/scenes/$SCENE_ID"
+    check "DELETE /scenes/:id" 204
+    call GET "/scenes/$SCENE_ID"
+    check "GET /scenes/:id after deleting it" 404
+fi
 
 if [ -n "${API_UPLOAD_DIR:-}" ]; then
     echo "--- upload (API_UPLOAD_DIR)"

@@ -14,6 +14,9 @@ that uses the same API as the website, alongside the engine's
 
    `.env` is gitignored. Environment variables with the same names work too,
    and take priority over `.env`.
+3. Optional: `API_PREFIX` sets the API version tested. The default is
+   `/api/v1`; an empty value (`API_PREFIX=`) tests the old unversioned
+   paths.
 
 ## Run
 
@@ -26,8 +29,11 @@ only when everything passes.
 
 ## What it checks
 
+All paths are under `API_PREFIX` (`/api/v1`).
+
 | Request | Expected |
 |---|---|
+| `GET /catalog` | 200 with `feedbackCategories` |
 | `GET /auth/me`, `GET /jobs`, `POST /feedback` signed out | 401 |
 | An unknown path | 404 with a JSON `{ error }` |
 | `POST /auth/login`, wrong password / right password | 401 / 200 (session cookie kept) |
@@ -35,7 +41,9 @@ only when everything passes.
 | `GET /jobs/:id` for the account's first finished model | 200 |
 | `HEAD /jobs/:id/result.ply` | 200 |
 | `GET /jobs/:id/result.ply` with `Range: bytes=0-4095` | 206, starts with `ply` |
+| `GET /auth/me`: v1 `createdAt` is a number; the legacy `/auth/me` still answers with ISO text | 200 |
 | `GET` / `PATCH /jobs/:id` for a job that doesn't exist | 404 |
+| `POST /scenes` with an older (version 0) scene, `GET /scenes/:id`, `DELETE`, `GET` again | 201 (saved as version 1), 200 with exactly the same JSON, 204, 404 |
 | `POST /auth/logout`, then `GET /auth/me` | 204, then 401 |
 
 Optional checks, off by default:

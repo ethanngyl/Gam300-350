@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "job-summary.schema.json",
+  "title": "JobSummary (one item of GET /api/v1/jobs)",
+  "description": "The common format every job source converts into (adapters/jobSources/jobSummary.js). A job is a photo batch and the 3D model made from it. Dates are UTC epoch milliseconds. URLs are under the API version the list was asked for (/api/v1/jobs/... or the legacy /jobs/...).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "status", "phase", "progress", "detail", "error", "createdAt", "updatedAt", "imageCount", "hasResult", "thumbnail", "cover", "images"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[\\w-]+$" },
+    "name": { "type": ["string", "null"], "description": "The user's name for it; null shows the default name." },
+    "status": { "enum": ["queued", "running", "done", "error", "cancelled"] },
+    "phase": { "type": ["string", "null"] },
+    "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+    "detail": { "type": ["string", "null"] },
+    "error": { "type": ["string", "null"] },
+    "createdAt": { "type": "number" },
+    "updatedAt": { "type": "number" },
+    "imageCount": { "type": "integer", "minimum": 0 },
+    "hasResult": { "type": "boolean", "description": "true when the model (.ply) can be downloaded." },
+    "thumbnail": { "type": ["string", "null"] },
+    "cover": { "type": ["string", "null"] },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "url"],
+        "properties": {
+          "name": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    }
+  }
+}

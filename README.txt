@@ -20,6 +20,7 @@ engine is configured.
 
 Web app + backend (npm -- packages/package.json):
 - @mkkellogg/gaussian-splats-3d ^0.4.7
+- ajv 8.17.1 (checks data against the JSON schemas in packages/src/backend/schemas)
 - express ^5.2.1
 - file-type ^22.1.0
 - multer ^2.3.0
@@ -53,6 +54,9 @@ External tools (downloaded automatically into tools/ on first run):
 
 Architecture and API:
 docs/architecture.md: how the frontend, backend layers and database fit together, and every API endpoint.
+docs/data-schema.md: the database tables (diagram), naming / date / unit rules, and every saved file format with its version.
+docs/api-changelog.md: API versions (/api/v1 and the old unversioned paths), every API change and every database migration.
+Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
 packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
 packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
 

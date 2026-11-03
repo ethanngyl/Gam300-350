@@ -109,7 +109,7 @@ export function startSession(res, userId, remember) {
 /*!
   \brief
     Middleware: sets req.user to the logged-in user ({ id, email, name,
-    role, created_at }) or null. Never rejects; requireUser does that.
+    role, createdAt }) or null. Never rejects; requireUser does that.
   \param req
     The request from the user
   \param _res

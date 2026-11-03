@@ -29,6 +29,7 @@ import { requireAdmin, requireUser } from '../middleware/session.js'
 import { tooManyAttempts } from '../middleware/limits.js'
 import { clientAuthProblem } from '../services/authority.js'
 import { FEEDBACK_CATEGORIES, validateFeedback } from '../services/feedback.js'
+import { feedbackPageFor, toV1FeedbackPage } from '../adapters/apiVersions.js'
 
 const router = express.Router()
 
@@ -118,10 +119,10 @@ router.get(['/feedback', '/library/feedback'], requireUser, requireAdmin, async 
         if (before) query.set('before', String(before))
         const { status, data } = await forwardToVm('GET', `/library/feedback?${query}`, req.user)
         if (status === 0) return res.status(503).json(unavailable)
-        return res.status(status).json(data)
+        return res.status(status).json(feedbackPageFor(req, toV1FeedbackPage(data)))
     }
 
-    res.json(listFeedback({ category, before, limit: FEEDBACK_PAGE_SIZE }))
+    res.json(feedbackPageFor(req, listFeedback({ category, before, limit: FEEDBACK_PAGE_SIZE })))
 })
 
 export default router

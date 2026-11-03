@@ -35,6 +35,7 @@ import { tooManyAttempts } from '../middleware/limits.js'
 import { MIN_PASSWORD_LENGTH, accountDetails, checkCredentials } from '../services/accounts.js'
 import { clientAuthProblem } from '../services/authority.js'
 import { getJob } from '../services/jobs.js'
+import { accountFor, toV1Account } from '../adapters/apiVersions.js'
 
 const router = express.Router()
 
@@ -86,7 +87,9 @@ function isForVm(req) {
   \param contentType
     string, for a Buffer body
   \return
-    { status, data } -- 503 if the VM can't be reached
+    { status, data } -- 503 if the VM can't be reached. Account details
+    come back in the v1 shape (adapters/apiVersions.js), whichever version
+    the VM answered in.
 */
 /************************************************************************/
 async function askVmAccount(req, method, vmPath, body, contentType) {
@@ -95,7 +98,7 @@ async function askVmAccount(req, method, vmPath, body, contentType) {
     if (reply.status === 0) return { status: 503, data: ACCOUNT_UNAVAILABLE }
     if (reply.status === 200 && reply.data?.email)
         upsertLocalUser({ id: req.user.id, email: reply.data.email, name: reply.data.name, role: reply.data.role })
-    return reply
+    return { status: reply.status, data: toV1Account(reply.data) }
 }
 
 /************************************************************************/
@@ -133,9 +136,9 @@ function allowAccountEdit(req, res) {
 router.get(['/auth/me/account', '/library/account'], requireUser, async (req, res) => {
     if (isForVm(req)) {
         const { status, data } = await askVmAccount(req, 'GET', '/library/account')
-        return res.status(status).json(data)
+        return res.status(status).json(accountFor(req, data))
     }
-    res.json(accountDetails(req.user.id))
+    res.json(accountFor(req, accountDetails(req.user.id)))
 })
 
 /************************************************************************/
@@ -158,10 +161,10 @@ router.patch(['/auth/me', '/library/account'], requireUser, async (req, res) => 
 
     if (isForVm(req)) {
         const { status, data } = await askVmAccount(req, 'PATCH', '/library/account', { name })
-        return res.status(status).json(data)
+        return res.status(status).json(accountFor(req, data))
     }
     updateUserName(req.user.id, name)
-    res.json(accountDetails(req.user.id))
+    res.json(accountFor(req, accountDetails(req.user.id)))
 })
 
 /************************************************************************/
@@ -192,7 +195,7 @@ router.post(['/auth/me/password', '/library/account/password'], requireUser, asy
     if (isForVm(req)) {
         const { status, data } = await askVmAccount(req, 'POST', '/library/account/password', { currentPassword, newPassword })
         if (status === 200) endOtherSessions(req.user.id, readCookie(req, SESSION_COOKIE))
-        return res.status(status).json(data)
+        return res.status(status).json(accountFor(req, data))
     }
 
     try {
@@ -211,7 +214,7 @@ router.post(['/auth/me/password', '/library/account/password'], requireUser, asy
         const keep = req.path.startsWith('/library/') ? null : readCookie(req, SESSION_COOKIE)
         const ended = endOtherSessions(req.user.id, keep)
         console.log(`[backend] password changed for ${req.user.email} (${ended} other session(s) signed out)`)
-        res.json(accountDetails(req.user.id))
+        res.json(accountFor(req, accountDetails(req.user.id)))
     }
     catch (err) {
         next(err)
@@ -266,10 +269,10 @@ router.put(['/auth/me/avatar', '/library/account/avatar'], requireUser, avatarBo
 
         if (isForVm(req)) {
             const { status, data } = await askVmAccount(req, 'PUT', '/library/account/avatar', req.body, type.mime)
-            return res.status(status).json(data)
+            return res.status(status).json(accountFor(req, data))
         }
         setUserAvatar(req.user.id, type.mime, req.body)
-        res.json(accountDetails(req.user.id))
+        res.json(accountFor(req, accountDetails(req.user.id)))
     }
     catch (err) {
         next(err)
@@ -289,10 +292,10 @@ router.delete(['/auth/me/avatar', '/library/account/avatar'], requireUser, async
     if (!allowAccountEdit(req, res)) return
     if (isForVm(req)) {
         const { status, data } = await askVmAccount(req, 'DELETE', '/library/account/avatar')
-        return res.status(status).json(data)
+        return res.status(status).json(accountFor(req, data))
     }
     deleteUserAvatar(req.user.id)
-    res.json(accountDetails(req.user.id))
+    res.json(accountFor(req, accountDetails(req.user.id)))
 })
 
 /************************************************************************/
@@ -312,7 +315,7 @@ router.delete(['/auth/me/avatar', '/library/account/avatar'], requireUser, async
 router.get(['/auth/me/storage', '/library/account/storage'], requireUser, async (req, res, next) => {
     if (isForVm(req)) {
         const { status, data } = await askVmAccount(req, 'GET', '/library/account/storage')
-        return res.status(status).json(data)
+        return res.status(status).json(accountFor(req, data))
     }
     try {
         let usedBytes = 0

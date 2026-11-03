@@ -11,6 +11,10 @@ backend changes:
 - the curl test client (`packages/api-tests/`);
 - Postman, or a mobile app.
 
+The API is versioned (`/api/v1/...`; the original unversioned paths stay
+for older clients). See [api-changelog.md](api-changelog.md). The data
+formats, tables and naming rules are in [data-schema.md](data-schema.md).
+
 ## Layers
 
 ```mermaid
@@ -23,23 +27,30 @@ flowchart TB
 
     subgraph backend["Backend: packages/src/backend"]
         server["server.js<br/>startup, wiring, shutdown"]
-        subgraph api["API layer"]
-            routes["routes/<br/>jobs, libraryStore, auth, account, feedback"]
+        subgraph api["API layer (/api/v1 and legacy paths)"]
+            routes["routes/<br/>jobs, sampleJobs, libraryStore, auth,<br/>account, feedback, scenes, catalog"]
             middleware["middleware/<br/>session, limits, uploads, sendDbModel, errors"]
         end
+        subgraph adapters["Adapters"]
+            versions["adapters/apiVersions.js<br/>v1 / legacy reply shapes"]
+            sources["adapters/jobSources/<br/>folders, vmLibrary, sample -> JobSummary"]
+        end
         subgraph logic["Business logic layer"]
-            services["services/<br/>jobs, accounts, authority, feedback, google"]
+            services["services/<br/>jobs, accounts, authority, feedback, google, scenes"]
             pipeline["pipeline.js<br/>COLMAP + Brush pipeline"]
-            support["library.js (sync to VM), cleanup.js,<br/>metrics.js, scan.js, status.js, ratelimit.js"]
+            support["library.js (sync to VM), cleanup.js, catalog.js,<br/>metrics.js, scan.js, status.js, schemas.js, ratelimit.js"]
         end
         subgraph data["Data layer"]
             dbjs["db.js / dbstore.js<br/>the only files with SQL"]
+            migrations["migrations/ + migrate.js<br/>every table change"]
         end
         config["config.js<br/>settings from .env / environment"]
     end
 
     sqlite[("data/app.db<br/>SQLite")]
-    jobs[("jobs/<br/>photos, models")]
+    jobs[("jobs/<br/>photos, models, status.json")]
+    files[("catalog/, sample-data/, schemas/<br/>reference data, sample jobs, formats")]
+    vm["VM's shared library<br/>(team machines)"]
     tools["COLMAP, Brush,<br/>tools/*.py"]
 
     web -- "HTTP + JSON" --> routes
@@ -48,14 +59,21 @@ flowchart TB
     server --> routes
     server --> middleware
     routes --> middleware
+    routes --> versions
+    routes --> sources
     routes --> services
     routes --> dbjs
+    sources --> support
+    sources --> vm
+    sources --> files
     services --> pipeline
     services --> support
     services --> dbjs
+    support --> files
     pipeline --> tools
     pipeline --> jobs
     support --> dbjs
+    migrations --> sqlite
     dbjs --> sqlite
     config -.-> backend
 ```
@@ -64,8 +82,10 @@ flowchart TB
 |---|---|---|---|
 | Presentation | `packages/src/web-app/` | Screens, 3D viewing, user input. Calls the API with relative URLs (`/jobs`, `/auth/login`, ...). | Database access, holding secrets. |
 | API | `backend/routes/`, `backend/middleware/` | Reads requests, checks sign-in and access, validates input, replies with JSON or file data. | SQL, HTML pages. |
-| Business logic | `backend/services/`, `pipeline.js`, `library.js`, `cleanup.js`, `metrics.js`, `scan.js`, `status.js`, `ratelimit.js` | Account rules, job life cycle, the COLMAP / Brush pipeline, sync to the VM, clean-up. `services/` never sees `req` / `res`. | HTTP replies, SQL. |
-| Data | `backend/db.js`, `backend/dbstore.js` | Every SQL statement: users, sessions, job ownership, stored photos and models, feedback. | HTTP, UI. |
+| Adapters | `backend/adapters/` | `apiVersions.js` turns the one internal shape into each API version's shape. `jobSources/` has one adapter per place jobs come from (job folders, the VM's library, sample data), each converting into the common JobSummary; `JOB_SOURCES` picks them. | Business rules, SQL. |
+| Business logic | `backend/services/`, `pipeline.js`, `library.js`, `cleanup.js`, `catalog.js`, `metrics.js`, `scan.js`, `status.js`, `schemas.js`, `ratelimit.js` | Account rules, job life cycle, the COLMAP / Brush pipeline, sync to the VM, clean-up, the scene format, reading and checking the data files. `services/` never sees `req` / `res`. | HTTP replies, SQL. |
+| Data | `backend/db.js`, `backend/dbstore.js`, `backend/migrations/` + `migrate.js` | Every SQL statement and every table change: users, sessions, job ownership, stored photos and models, feedback, scenes. | HTTP, UI. |
+| Data files | `backend/catalog/`, `backend/sample-data/`, `backend/schemas/` | Reference data (feedback categories, training presets), sample jobs, and the JSON Schema of every format the backend saves or sends. | Code. |
 | Configuration | `backend/config.js`, `backend/.env` (from `.env.example`) | Every server address, port, key and feature flag, read from environment variables. | Hard-coded secrets or server addresses. |
 
 ## Machines
@@ -88,6 +108,12 @@ flowchart LR
   - one machine on its own, with its own accounts.
 
 ## Endpoints
+
+Every path below is served under **`/api/v1`** (for example
+`/api/v1/auth/login`), and also at the same path without the prefix (legacy,
+unchanged for older clients). v1 sends every date as UTC epoch
+milliseconds; the legacy paths keep ISO text for users, the account and
+feedback ([api-changelog.md](api-changelog.md)).
 
 All replies are JSON unless the table says otherwise. "User" means signed in
 (the `genesis_session` cookie). "Owner" means the job's owner or an admin;
@@ -117,7 +143,7 @@ needs the shared key.
 |---|---|---|---|
 | POST | `/upload` | user | 202 `{ id, imageCount }`. Multipart `images` (8+ JPEG / PNG), optional `trainIters`, `removeBackground` |
 | POST | `/jobs/from-media` | user | 202 `{ id }`. Multipart `media` (videos / GIFs), optional `fps`, `maxFrames`, `trainIters`, `removeBackground` |
-| GET | `/jobs` | user | 200 list of the user's jobs (admins: all) |
+| GET | `/jobs` | user | 200 JobSummary list of the user's jobs (admins: all), from the sources in `JOB_SOURCES` |
 | GET | `/jobs/:id` | owner | 200 status, phase, progress, log tail |
 | PATCH | `/jobs/:id` | owner | 200 `{ id, name, sampleFile }` (rename) |
 | DELETE | `/jobs/:id` | owner | 200 cancelled; 409 if already finished |
@@ -131,8 +157,19 @@ needs the shared key.
 
 | Method | Path | Who | Reply |
 |---|---|---|---|
-| POST | `/feedback` | user | 201 `{ id }`. Body `{ category: 'bug' \| 'idea' \| 'other', message }` |
+| POST | `/feedback` | user | 201 `{ id }`. Body `{ category, message }`; category is a catalog id (`bug`, `idea`, `other`) |
 | GET | `/feedback` | admin | 200 `{ items, hasMore }`. Query `category`, `before` |
+
+### Scenes and reference data
+
+| Method | Path | Who | Reply |
+|---|---|---|---|
+| GET | `/scenes` | user | 200 `[{ id, name, updatedAt, objectCount }]`, the user's scenes, newest first |
+| POST | `/scenes` | user | 201 the scene as saved. Body: a scene of any format version (older ones are converted) |
+| GET | `/scenes/:id` | user (own scenes) | 200 the scene exactly as saved; 404 |
+| PUT | `/scenes/:id` | user (own scenes) | 200 the scene as saved; creates it under that id if new; 400 invalid, 422 newer format |
+| DELETE | `/scenes/:id` | user (own scenes) | 204; 404 |
+| GET | `/catalog` | anyone | 200 feedback categories, training presets, photo minimum and upload limits |
 
 Any other path answers 404 with a JSON `{ error }`.
 

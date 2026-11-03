@@ -28,17 +28,18 @@ import fs from 'node:fs'
 import path from 'node:path'
 import express from 'express'
 import { config } from '../config.js'
-import { getDbImage, getDbModelInfo, isJobSynced, listOwnedJobIds, setJobOwner, unmarkJobSynced } from '../db.js'
+import { getDbImage, getDbModelInfo, isJobSynced, setJobOwner, unmarkJobSynced } from '../db.js'
 import { deleteJobData } from '../cleanup.js'
-import { fetchRemoteJobs, forwardToVm, proxyToVm } from '../library.js'
-import { cancelJob, jobs, makeJob, pickSampleFileName, restoreJob, runMediaPipeline, runPipeline, sampleFileName } from '../pipeline.js'
-import { IMAGE_EXT_RE, JOB_ID_RE, scanJobs } from '../scan.js'
+import { forwardToVm, proxyToVm } from '../library.js'
+import { cancelJob, makeJob, pickSampleFileName, runMediaPipeline, runPipeline, sampleFileName } from '../pipeline.js'
+import { IMAGE_EXT_RE, JOB_ID_RE } from '../scan.js'
 import { saveJob } from '../status.js'
 import { requireJobAccess, requireUser } from '../middleware/session.js'
 import { assignJobId, mediaUpload, onlyImages, onlyMedia, removeJobIfAborted, upload } from '../middleware/uploads.js'
 import { sendDbModel } from '../middleware/sendDbModel.js'
-import { clientAuthProblem } from '../services/authority.js'
 import { MAX_JOB_NAME_LENGTH, afterJobEnds, ensureCover, frameOptions, getJob, parseTrainIters } from '../services/jobs.js'
+import { listJobs } from '../adapters/jobSources/index.js'
+import { catalog } from '../catalog.js'
 
 const router = express.Router()
 const filesInDb = config.filesInDb
@@ -53,17 +54,18 @@ const filesInDb = config.filesInDb
     polls for status. The job is owned by the logged-in user. requireUser
     runs before assignJobId so a logged-out request never creates a folder.
   \return
-    401 if not logged in, 400 if less than 8 photos given, 202 if successful
+    401 if not logged in, 400 if fewer than catalog.minPhotos (8) photos
+    given, 202 if successful
 */
 /************************************************************************/
 router.post('/upload', requireUser, assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => {
     const files = req.files || []
-    if (files.length < 8) {
+    if (files.length < catalog.minPhotos) {
         // Reject cleanly: remove the job folder assignJobId created up front so a
         // too-small batch doesn't leave an orphan folder behind (same as onlyImages).
         fs.rmSync(path.join(config.jobsDir, req.jobId), { recursive: true, force: true })
         return res.status(400).json({
-            error: `Need at least 8 photos (got ${files.length}). More overlapping photos = better reconstruction.`,
+            error: `Need at least ${catalog.minPhotos} photos (got ${files.length}). More overlapping photos = better reconstruction.`,
         })
     }
     setJobOwner(req.jobId, req.user.id)
@@ -85,63 +87,20 @@ router.post('/upload', requireUser, assignJobId, upload.array('images', config.m
 /************************************************************************/
 /*!
   \brief
-    List every job folder that has images, newest first. The folders on 
-    disk are scanned on each call (see scan.js), so photos and results from 
-    before a restart -- or dropped in by hand -- show up. A job that is 
-    live in memory keeps its live status: the disk can't tell "running"
-    from "interrupted". Admins get every job; other users only the jobs
-    they created. On a client machine the user's jobs in the VM's shared
-    library are added (a local copy wins; if the VM can't be reached, only
-    local jobs are listed). Also served on the VM as /library/jobs.
+    List the user's jobs, newest first, in the common JobSummary format
+    (schemas/job-summary.schema.json). Where they come from is up to the
+    job sources set by JOB_SOURCES (adapters/jobSources/): this machine's
+    job folders, the VM's shared library on a team machine (a local copy
+    wins; if the VM can't be reached, only local jobs are listed), and / or
+    sample jobs. Admins get every job; other users only the jobs they
+    created. Also served on the VM as /library/jobs.
   \return
-    401 if not logged in, else a record of every visible job's details
+    401 if not logged in, else JobSummary[]
 */
 /************************************************************************/
 router.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
 {
-  let records = await scanJobs(config.jobsDir)
-  if (req.user.role !== 'admin')
-  {
-    const owned = listOwnedJobIds(req.user.id)
-    records = records.filter((record) => owned.has(record.id))
-  }
-  const list = records.map((record) =>
-  {
-    const job = jobs.get(record.id) ?? restoreJob(record);
-    return {
-      id: record.id,
-      name: job.name ?? null,
-      status: job.status,
-      phase: job.phase,
-      progress: job.progress,
-      detail: job.detail,
-      error: job.error,
-      createdAt: record.createdAt,
-      updatedAt: job.updatedAt ?? record.updatedAt,
-      imageCount: record.imageCount,
-      hasResult: job.status === 'done' && !!job.resultPath,
-      thumbnail: record.thumbnail,
-      // Cut-out cover for the cards: already made, or can still be made
-      // from the job's background masks (see ensureCover).
-      cover: fs.existsSync(path.join(config.jobsDir, `${record.id}_out`, 'cover.webp')) ||
-        fs.existsSync(path.join(config.jobsDir, record.id, 'masks'))
-        ? `/jobs/${record.id}/cover.webp`
-        : null,
-      images: record.images,
-    }
-  })
-
-  if (config.authMode === 'client' && !clientAuthProblem())
-  {
-    const remote = await fetchRemoteJobs(req.user)
-    if (remote)
-    {
-      const localIds = new Set(list.map((job) => job.id))
-      list.push(...remote.filter((job) => !localIds.has(job.id)))
-      list.sort((a, b) => b.createdAt - a.createdAt)
-    }
-  }
-  res.json(list)
+  res.json(await listJobs(req))
 })
 
 /************************************************************************/

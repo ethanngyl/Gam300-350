@@ -15,9 +15,13 @@ serves the built React frontend and the HTTP API the website (and the
 engine) use to turn photos or videos into a Gaussian Splat .ply with COLMAP
 and Brush. The backend is split into layers (see docs/architecture.md):
 - routes/ (API layer)
-jobs.js, libraryStore.js, auth.js, account.js and feedback.js: one Express
-Router each. They read the request, call the layers below and reply with
-JSON or file data only.
+jobs.js, sampleJobs.js, libraryStore.js, auth.js, account.js, feedback.js,
+scenes.js and catalog.js: one Express Router each. They read the request,
+call the layers below and reply with JSON or file data only. All of them
+are served at /api/v1/... and at the old unversioned paths.
+- adapters/ (between the API and the data)
+apiVersions.js (v1 vs legacy reply shapes) and jobSources/ (one adapter per
+place jobs come from, set by JOB_SOURCES).
 - middleware/ (API layer)
 session.js (who is calling, access rules), limits.js (429s), uploads.js
 (multer and file checks), sendDbModel.js and errors.js (JSON 404s and the
@@ -27,7 +31,9 @@ jobs.js, accounts.js, authority.js, feedback.js and google.js; with
 pipeline.js (COLMAP / Brush), library.js (sending jobs to the VM),
 cleanup.js, metrics.js, scan.js and status.js.
 - db.js and dbstore.js (data)
-The only files with SQL.
+The only files with SQL. The tables come from migrations/ (migrate.js).
+- catalog/, schemas/, sample-data/ (data files)
+Reference data, the JSON Schema of every saved / sent format, sample jobs.
 - config.js
 Every setting, from environment variables (.env, see .env.example).
 At startup this file rebuilds the job list from disk, removes leftovers
@@ -61,6 +67,10 @@ import libraryStoreRoutes from './routes/libraryStore.js'
 import authRoutes from './routes/auth.js'
 import accountRoutes from './routes/account.js'
 import feedbackRoutes from './routes/feedback.js'
+import catalogRoutes from './routes/catalog.js'
+import sampleJobRoutes from './routes/sampleJobs.js'
+import sceneRoutes from './routes/scenes.js'
+import { API_V1_PREFIX } from './adapters/apiVersions.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -145,18 +155,30 @@ app.use(express.static(path.join(__dirname, '../web-app/dist')))
 // Work out who is calling (from the session cookie) before any route runs.
 app.use(loadUser)
 
+// The API (routes/), built once and served twice (docs/api-changelog.md):
+// at /api/v1/... and at the old unversioned paths, which stay as they were
+// for the website, the engine and older machines. Routes tell the two apart
+// with adapters/apiVersions.js.
+const api = express.Router()
+
 // Shared library (VM only): client machines reach the same job routes under
 // /library/..., with the shared key instead of a cookie, acting as the user
 // they name. 503 on any machine that isn't the account authority.
-app.use('/library', requireAuthorityKey, actAsUser)
+api.use('/library', requireAuthorityKey, actAsUser)
 
-// The API (routes/). Each Router holds full paths, so the order only matters
-// for the middleware above, which runs first.
-app.use(jobRoutes)
-app.use(libraryStoreRoutes)
-app.use(authRoutes)
-app.use(accountRoutes)
-app.use(feedbackRoutes)
+// Each Router holds full paths, so the order only matters where two match
+// the same path: sample jobs answer for their own ids before the job routes.
+api.use(catalogRoutes)
+api.use(sampleJobRoutes)
+api.use(jobRoutes)
+api.use(libraryStoreRoutes)
+api.use(authRoutes)
+api.use(accountRoutes)
+api.use(feedbackRoutes)
+api.use(sceneRoutes)
+
+app.use(API_V1_PREFIX, api)
+app.use(api)
 
 // JSON replies for unknown paths and errors (must be after every route).
 app.use(jsonNotFound)

@@ -38,7 +38,8 @@ written.
 Runs tools/make_masks.py to write foreground masks for every photo, so COLMAP
 and Brush ignore the background. Only used when job.removeBackground is set.
 - runMediaPipeline(job, opts)
-Extracts the frames, checks there are at least 8, then runs runPipeline.
+Extracts the frames, checks there are at least catalog.minPhotos (8), then
+runs runPipeline.
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.
@@ -61,6 +62,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { catalog } from './catalog.js'
 import { config } from './config.js'
 import { recordPlyMetrics, startGpuSampler, startPhase } from './metrics.js'
 import { highestRawPly, IMAGE_EXT_RE } from './scan.js'
@@ -435,8 +437,8 @@ export async function extractMediaFrames(job, { fps, maxFrames } = {}) {
     object
     Optional { fps, maxFrames }, passed to extractMediaFrames
   \return
-    nothing; sets the job to error if fewer than 8 frames were extracted
-    or extraction failed
+    nothing; sets the job to error if fewer than catalog.minPhotos frames
+    were extracted or extraction failed
 */
 /************************************************************************/
 export async function runMediaPipeline(job, opts = {}) {
@@ -444,9 +446,9 @@ export async function runMediaPipeline(job, opts = {}) {
         const count = await extractMediaFrames(job, opts)
         job.imageCount = count
         saveJob(job)
-        if (count < 8) {
+        if (count < catalog.minPhotos) {
             throw new Error(
-                `Extracted only ${count} frame(s). Need at least 8 for a reconstruction — ` +
+                `Extracted only ${count} frame(s). Need at least ${catalog.minPhotos} for a reconstruction — ` +
                 'try a longer clip or a higher fps.',
             )
         }

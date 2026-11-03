@@ -85,7 +85,7 @@ export async function checkCredentials(email, password) {
     if (!lock.allowed) return { status: 'locked', retryAfterSec: lock.retryAfterSec }
 
     const user = findUserByEmail(email.trim())
-    if (!user || !(await verifyPassword(password, user.password_hash))) {
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
         failedLoginLimiter.hit(key)
         return { status: 'invalid' }
     }
@@ -96,37 +96,22 @@ export async function checkCredentials(email, password) {
 /************************************************************************/
 /*!
   \brief
-    A date stored by SQLite's datetime('now') -- UTC without a zone marker,
-    "2026-10-04 08:15:00" -- as an ISO string.
-  \param text
-  string
-  \return
-    "2026-10-04T08:15:00Z"
-*/
-/************************************************************************/
-export function sqliteDateToIso(text) {
-    return `${text.replace(' ', 'T')}Z`
-}
-
-/************************************************************************/
-/*!
-  \brief
-    Shapes a users row into what the frontend keeps as the session. Never
-    includes password_hash.
+    Shapes a user (from db.js) into what the frontend keeps as the session.
+    Never includes the password hash. This is the API v1 shape; the
+    legacy API turns createdAt into ISO text (adapters/apiVersions.js).
   \param user
-    { email, name, role, createdAt } or a users row
+    { email, name, role, createdAt (ms) }
   \return
-    { name, email, role, createdAt (ISO), memberSince ("4 October 2026") }
+    { name, email, role, createdAt (ms), memberSince ("4 October 2026") }
 */
 /************************************************************************/
 export function publicUser(user) {
-    const createdAt = sqliteDateToIso(user.createdAt ?? user.created_at)
     return {
         name: user.name,
         email: user.email,
         role: user.role,
-        createdAt,
-        memberSince: new Date(createdAt).toLocaleDateString('en-SG', { day: 'numeric', month: 'long', year: 'numeric' }),
+        createdAt: user.createdAt,
+        memberSince: new Date(user.createdAt).toLocaleDateString('en-SG', { day: 'numeric', month: 'long', year: 'numeric' }),
     }
 }
 
@@ -141,7 +126,7 @@ export function publicUser(user) {
   number
   \return
     { name, email, role, createdAt, memberSince, emailVerified,
-    passwordChangedAt (ISO, or null if never changed since signup),
+    passwordChangedAt (ms, or null if never changed since signup),
     signInMethods: { password, google }, photoVersion (null: no photo) },
     or null if there is no such user
 */
@@ -152,7 +137,7 @@ export function accountDetails(userId) {
     return {
         ...publicUser(account),
         emailVerified: account.hasGoogle,
-        passwordChangedAt: account.passwordChangedAt ? sqliteDateToIso(account.passwordChangedAt) : null,
+        passwordChangedAt: account.passwordChangedAt ?? null,
         signInMethods: { password: account.hasPassword, google: account.hasGoogle },
         photoVersion: account.avatarUpdatedAt,
     }
