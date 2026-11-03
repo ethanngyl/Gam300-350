@@ -99,6 +99,11 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     auto* resetButton = new QPushButton("Reset Position", page);
     layout->addWidget(resetButton, 0, Qt::AlignRight);
 
+    QFrame* linePosition = new QFrame(this);
+    linePosition->setFrameShape(QFrame::HLine); //QFrame::VLine for vertical
+    linePosition->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(linePosition);
+
     //---BOUNDING BOX---
     auto* cropHeader = new QLabel("Crop Box", page);
     cropHeader->setObjectName("SectionHeader");
@@ -130,8 +135,6 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     }
     layout->addLayout(cutRow);
 
-
-
     m_cropApply = new QPushButton(page);
     m_cropApply->setToolTip("Enter, with the viewport focused");
     layout->addWidget(m_cropApply);
@@ -146,6 +149,12 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     connect(m_cropApply, &QPushButton::clicked, this, [this] { emit cropApplyRequested(); });
     setCropState(false, false, true, false);
 
+    QFrame* lineCrop = new QFrame(this);
+    lineCrop->setFrameShape(QFrame::HLine); //QFrame::VLine for vertical
+    lineCrop->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(lineCrop);
+
+    //---TRIMMING---
     auto* trimHeader = new QLabel("Trim", page);
     trimHeader->setObjectName("SectionHeader");
     layout->addWidget(trimHeader);
