@@ -116,20 +116,49 @@ if "%NEED_TOOLS%"=="1" (
 REM Python packages for the YouTube frame extractor (yt-dlp, OpenCV). Not fatal:
 REM photo uploads still work without them. yt-dlp is upgraded every run because
 REM YouTube changes regularly break older releases.
-where python >nul 2>nul
-if errorlevel 1 (
+REM
+REM The first python.exe on PATH is often Windows' Microsoft Store stub in
+REM ...\WindowsApps, which only prints "Python was not found". Skip it the same
+REM way config.js's findPython does, and hand the result to the backend as
+REM PYTHON_BIN so the packages land in the Python it actually runs.
+if not defined PYTHON_BIN (
+    for /f "delims=" %%P in ('where python 2^>nul') do (
+        if not defined PYTHON_BIN (
+            echo %%P| findstr /i /l "WindowsApps" >nul || set "PYTHON_BIN=%%P"
+        )
+    )
+)
+if defined PYTHON_BIN "%PYTHON_BIN%" -c "" >nul 2>nul || set "PYTHON_BIN="
+if not defined PYTHON_BIN (
     echo     Python not found - YouTube import will not work until Python 3.10+ is installed.
     goto :after_python
 )
-echo     Installing Python packages for the YouTube extractor...
-python -m pip install --disable-pip-version-check -q -r "%TOOLS%\requirements.txt"
+echo     Installing Python packages for the YouTube extractor - using %PYTHON_BIN%
+"%PYTHON_BIN%" -m pip install --disable-pip-version-check -q -r "%TOOLS%\requirements.txt"
 if errorlevel 1 goto :pip_failed
-python -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]"
+"%PYTHON_BIN%" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]"
+if errorlevel 1 goto :pip_failed
+
+REM onnxruntime for background removal: the CUDA build (with NVIDIA's CUDA /
+REM cuDNN libraries from pip, about 1 GB) on NVIDIA cards, else the CPU build.
+REM Both install the same "onnxruntime" module, so if the other build is there
+REM remove both first - uninstalling one afterwards would break the other.
+if defined NO_CUDA (
+    set "ORT_WANT=onnxruntime"
+    set "ORT_OTHER=onnxruntime-gpu"
+) else (
+    set "ORT_WANT=onnxruntime-gpu[cuda,cudnn]"
+    set "ORT_OTHER=onnxruntime"
+)
+"%PYTHON_BIN%" -m pip show -q %ORT_OTHER% >nul 2>nul
+if not errorlevel 1 "%PYTHON_BIN%" -m pip uninstall -y -q onnxruntime onnxruntime-gpu
+if not defined NO_CUDA echo     Installing GPU background removal - first time about 1 GB...
+"%PYTHON_BIN%" -m pip install --disable-pip-version-check -q "%ORT_WANT%"
 if errorlevel 1 goto :pip_failed
 goto :after_python
 :pip_failed
 echo     *** pip install failed - YouTube import may not work. Run by hand to see why:
-echo     ***   python -m pip install -r tools\requirements.txt
+echo     ***   "%PYTHON_BIN%" -m pip install -r tools\requirements.txt
 :after_python
 
 REM cloudflared: single-file exe from GitHub, saved as tools\cloudflared.exe.

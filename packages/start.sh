@@ -136,8 +136,10 @@ else
     if [ -x "$VENV/bin/python" ]; then
         export PYTHON_BIN="$VENV/bin/python"
         echo "    Installing Python packages for the YouTube extractor..."
+        # onnxruntime (CPU build) for background removal; there is no CUDA on macOS.
         if ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q -r "$TOOLS/requirements.txt" ||
-            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]"; then
+            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]" ||
+            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q onnxruntime; then
             echo "    *** pip install failed - YouTube import may not work. Run by hand to see why:"
             echo "    ***   tools/.venv/bin/python -m pip install -r tools/requirements.txt"
         fi

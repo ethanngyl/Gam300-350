@@ -143,8 +143,20 @@ else
     if [ -x "$VENV/bin/python" ]; then
         export PYTHON_BIN="$VENV/bin/python"
         echo "    Installing Python packages for the YouTube extractor..."
+        # onnxruntime for background removal: the CUDA build on NVIDIA cards,
+        # else the CPU build. Both install the same "onnxruntime" module, so if
+        # the other build is there remove both first.
+        if nvidia-smi -L >/dev/null 2>&1; then
+            ORT_WANT="onnxruntime-gpu[cuda,cudnn]"; ORT_OTHER="onnxruntime"
+        else
+            ORT_WANT="onnxruntime"; ORT_OTHER="onnxruntime-gpu"
+        fi
+        if "$PYTHON_BIN" -m pip show -q "$ORT_OTHER" >/dev/null 2>&1; then
+            "$PYTHON_BIN" -m pip uninstall -y -q onnxruntime onnxruntime-gpu
+        fi
         if ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q -r "$TOOLS/requirements.txt" ||
-            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]"; then
+            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]" ||
+            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q "$ORT_WANT"; then
             echo "    *** pip install failed - YouTube import may not work. Run by hand to see why:"
             echo "    ***   tools/.venv/bin/python -m pip install -r tools/requirements.txt"
         fi

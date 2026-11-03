@@ -56,7 +56,7 @@ RUN mkdir -p /opt/brush \
 # Python deps in a venv (Ubuntu's system pip is externally managed).
 COPY tools/requirements.txt /app/tools/requirements.txt
 RUN python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir -r /app/tools/requirements.txt
+    && /opt/venv/bin/pip install --no-cache-dir -r /app/tools/requirements.txt onnxruntime
 
 # App: same layout as the repo so config.js resolves tools/ correctly.
 COPY tools/youtube_frames.py tools/normalize_ply.py /app/tools/
