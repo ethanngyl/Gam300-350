@@ -93,6 +93,12 @@ private:
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
+    //Arrow key nudge of the selected model. A burst of nudges (a key held down, or several keys) is one undo step
+    using NudgeFunction = void (SplatRenderer::*)(InputManager&, InputManager::INPUT_TYPE);
+    void Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge);
+    //Reports the finished burst to onTransformEdited
+    void FinishNudge();
+
     Camera m_camera;
     InputManager m_input;
     std::unique_ptr<SplatRenderer> m_renderer; // created once the GL context exists
@@ -116,6 +122,11 @@ private:
     bool m_dragIsCropBox = false;
     //The crop box drag also carries the confirmed splat selection along
     bool m_dragMovesContents = false;
+
+    //Nudge burst in progress: the model and where it started, and how many nudge keys are down
+    SplatModel* m_nudgeModel = nullptr;
+    glm::mat4 m_nudgeBefore = glm::mat4(1.0f);
+    int m_nudgeKeysDown = 0;
 
     CropBox m_cropBox;
     std::unique_ptr<CropBoxRenderer> m_cropBoxRenderer; // created once the GL context exists

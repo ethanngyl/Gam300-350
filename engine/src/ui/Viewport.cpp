@@ -115,20 +115,55 @@ void Viewport::BindInputs() {
     //Movmeent test
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::FORWARD,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatForward(manager, type);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatForward);
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::BACKSWARD,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatBackwards(manager, type);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatBackwards);
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatLeft(manager, type);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatLeft);
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatRight(manager, type);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatRight);
         });
+}
+
+void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge) {
+    SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
+
+    if (type == InputManager::RELEASE) {
+        //The last nudge key coming up ends the burst
+        if (m_nudgeKeysDown > 0 && --m_nudgeKeysDown == 0) FinishNudge();
+        return;
+    }
+    if (!model) return;
+
+    //A different model got selected mid-burst, close the old one first
+    if (m_nudgeModel && m_nudgeModel != model) {
+        FinishNudge();
+        m_nudgeKeysDown = 0;
+    }
+    if (!m_nudgeModel) {
+        m_nudgeModel = model;
+        m_nudgeBefore = model->GetTransform();
+    }
+    //Key repeat arrives as HOLD, only the real press counts as a key going down
+    if (type == InputManager::PRESS) ++m_nudgeKeysDown;
+
+    (m_renderer.get()->*nudge)(manager, type);
+}
+
+void Viewport::FinishNudge() {
+    SplatModel* model = m_nudgeModel;
+    m_nudgeModel = nullptr;
+    //Only report if the model is still there and actually moved
+    if (model && model == m_renderer->GetModel(m_renderer->GetSelectedModel())
+        && model->GetTransform() != m_nudgeBefore && onTransformEdited) {
+        onTransformEdited(model, m_nudgeBefore, model->GetTransform());
+    }
 }
 
 void Viewport::paintGL() {
@@ -381,4 +416,9 @@ void Viewport::focusOutEvent(QFocusEvent* event) {
     if (m_glInitialized) ImGuiQtBackend::ProcessFocus(false);
     m_leftHeld = false;
     m_rightHeld = false;
+    //The key release will never arrive, so close any nudge burst here
+    if (m_glInitialized) {
+        m_nudgeKeysDown = 0;
+        FinishNudge();
+    }
 }
