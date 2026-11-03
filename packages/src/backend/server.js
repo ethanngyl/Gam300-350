@@ -24,9 +24,10 @@ folders that appeared after startup. Returns null if the job doesn't exist.
 Read a cookie from the request / log a user in by setting the HttpOnly
 session cookie (the session itself is stored in db.js). With "Remember me"
 the cookie lasts 7 days; without it the browser drops it on close.
-- loadUser / requireUser (middleware)
+- loadUser / requireUser / requireAdmin (middleware)
 loadUser sets req.user from the session cookie on every request;
-requireUser answers 401 when nobody is logged in.
+requireUser answers 401 when nobody is logged in, requireAdmin 403 when
+the user isn't an admin.
 - canAccessJob(user, jobId) / requireJobAccess (middleware)
 Role check: admins can access every job, users only jobs they created.
 requireJobAccess guards the /jobs/:id routes and answers 404 for someone
@@ -39,9 +40,22 @@ key. On other machines ('client'), callAuthority forwards signup/login to
 the VM (8 s timeout), clientAuthProblem refuses to run without a key or
 over plain http://, and logAuthorityFailure names setup mistakes in the
 log. 'local' keeps accounts on this machine.
+- validateFeedback(body) / POST /feedback / GET /feedback
+Feedback from the website, signed-in accounts only (guests get 401), at
+most 10 per account per hour. Stored in the VM's database: client
+machines forward it to the VM's /library/feedback. GET is the admins'
+read-only Inbox (requireAdmin: 403 for everyone else).
 - validateSignup(body) / checkCredentials(email, password)
 Shared signup rules, and the password check with a per-email limit of 10
 wrong passwords per 15 minutes.
+- accountDetails(userId) / GET /auth/me/account / PATCH /auth/me /
+  POST /auth/me/password / GET, PUT, DELETE /auth/me/avatar /
+  GET /auth/me/storage
+The account page: its details (dates, verified email, sign-in methods,
+photo version), changing the name and password (other browsers are
+logged out), the profile photo, and how much the user's jobs take up.
+Accounts live on the VM: client machines pass these to the VM's
+/library/account... twins (askVmAccount).
 - limitByIp(limiter) / tooManyAttempts(retryAfterSec)
 Per-IP request limits for /auth/login and /auth/signup (429 when passed).
 - isRemoteJob(id) / actAsUser (middleware)
@@ -76,6 +90,20 @@ returns 400. This guards against a client that lies about the MIME type.
 Makes the job's card cover (<id>_out/cover.webp) with tools/make_cover.py
 the first time it is asked for: the object cut out of a photo with the
 job's background masks. Concurrent requests share one run.
+- afterJobEnds(job)
+Runs once a job is done, failed or cancelled: makes the cover while the
+photos and masks exist, tidies up working files (pruneJob), sends the job
+to the VM (client machines) and, on the VM with FILE_STORE=db, moves its
+model and photos into the database (dbstore.js). They then come from the
+database in GET /jobs/:id/result.ply and GET /jobs/:id/images/:name.
+- sendDbModel(req, res, jobId, info)
+Serves a model stored in the database, piece by piece, with byte ranges
+(the viewer reads the first 4 KB), HEAD and ETag (304) like sendFile.
+- Clean-up (VM only, cleanup.js)
+On the VM, startCleanup runs at startup and hourly, and requestCleanup
+after each new job: the oldest jobs are deleted while storage is over
+STORAGE_BUDGET_GB, and feedback older than FEEDBACK_KEEP_DAYS. DELETE
+/jobs/:id/files uses the same deleteJobData.
 - shutdown(reason, exitCode)
 Runs only once. Marks every running job as error and saves it, calls 
 killChildren() to stop the COLMAP/Brush/python processes, then exits.
@@ -97,13 +125,16 @@ import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
 import
 {
-  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, createSession, createUser, deleteSession,
-  findOrCreateGoogleUser, findSessionUser, findUserByEmail, findUserById,
-  getJobOwnerId, isJobSynced, listOwnedJobIds, recordStoredJob,
-  retireLocalAccounts, setJobOwner, unmarkJobSynced, upsertLocalUser,
-  verifyPassword,
+  SESSION_TTL_MS, SHORT_SESSION_TTL_MS, addFeedback, createSession, createUser,
+  deleteSession, deleteUserAvatar, endOtherSessions, findOrCreateGoogleUser, findSessionUser, findUserByEmail,
+  findUserById, getAccount, getDbImage, getDbModelInfo, getJobOwnerId, getUserAvatar, isJobSynced,
+  listDbImageNames, listFeedback, listOwnedJobIds, readDbModelChunk, recordStoredJob, retireLocalAccounts,
+  setJobOwner, setUserAvatar, setUserPassword, storeJobImages, storeJobModel, unmarkJobSynced,
+  updateUserName, upsertLocalUser, verifyPassword,
 }
     from './db.js'
+import { migrateToDb, moveImagesToDb, moveModelToDb } from './dbstore.js'
+import { deleteJobData, jobStoredBytes, requestCleanup, startCleanup } from './cleanup.js'
 import { createLimiter } from './ratelimit.js'
 import
 {
@@ -112,15 +143,15 @@ import
 from './library.js'
 import
 { 
-  IMAGE_EXT_RE, JOB_ID_RE, scanJob, 
-  scanJobs
-} 
+  IMAGE_EXT_RE, JOB_ID_RE, scanJob,
+  scanJobs, setImageNameSource, setModelSource,
+}
 from './scan.js'
 import 
 { 
   cancelJob, jobs,
-  killChildren, makeJob, pickSampleFileName, restoreJob,
-  runMediaPipeline, runPipeline, sampleFileName, setOnJobDone,
+  killChildren, makeJob, pickSampleFileName, pruneJob, restoreJob,
+  runMediaPipeline, runPipeline, sampleFileName, setSkipSampleCopy,
 }
     from './pipeline.js'
 
@@ -128,6 +159,23 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 fs.mkdirSync(config.jobsDir, { recursive: true })
+
+// Photos and models in the database (FILE_STORE=db) is for the VM only:
+// other machines (localhost) build models from files on disk, keep them
+// there, and send them to the VM.
+const filesInDb = config.fileStore === 'db' && config.authMode === 'authority'
+if (config.fileStore === 'db' && !filesInDb)
+  console.warn('[backend] FILE_STORE=db is ignored: it only applies with AUTH_MODE=authority (the VM).')
+if (filesInDb)
+{
+  // Jobs whose photos / model have moved into the database are still listed
+  // (and stay done), and any still on disk (first start, or after a crash)
+  // move in now. No model copies go into the engine's samples folder.
+  setImageNameSource(listDbImageNames)
+  setModelSource((jobId) => Boolean(getDbModelInfo(jobId)))
+  setSkipSampleCopy(true)
+  await migrateToDb()
+}
 
 // Jobs live in memory, so rebuild them from the job folders on disk. Without
 // this, everything finished before a restart 404s on /jobs/:id and result.ply.
@@ -147,9 +195,11 @@ console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}
 
 // Staging folders left by shared-library uploads cut off mid-way (crash or
 // restart during a PUT /library/jobs/:id). Their jobs are re-sent later.
+// Also videos left by the old Video Extractor's upload (.video-<id>.mp4), which
+// the Frame Extractor replaced; its uploads go in each job's media/ folder.
 for (const entry of fs.readdirSync(config.jobsDir))
 {
-  if (entry.startsWith('.incoming-'))
+  if (entry.startsWith('.incoming-') || entry.startsWith('.video-'))
     fs.rmSync(path.join(config.jobsDir, entry), { recursive: true, force: true })
 }
 
@@ -300,6 +350,21 @@ function loadUser(req, _res, next) {
 /************************************************************************/
 function requireUser(req, res, next) {
     if (!req.user) return res.status(401).json({ error: 'Please sign in first.' })
+    next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Middleware (after requireUser): rejects the request unless the user
+    is an admin. The role comes from the database on every request, so a
+    promotion or demotion counts straight away.
+  \return
+    403 if not an admin
+*/
+/************************************************************************/
+function requireAdmin(req, res, next) {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Only admins can do this.' })
     next()
 }
 
@@ -724,6 +789,9 @@ const loginIpLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 30 })
 const signupIpLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
 const failedLoginLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 10 })
 
+// Shared by signup and the account page's password change.
+const MIN_PASSWORD_LENGTH = 6
+
 /************************************************************************/
 /*!
   \brief
@@ -777,8 +845,8 @@ function validateSignup(body) {
     const trimmedEmail = typeof email === 'string' ? email.trim() : ''
     const trimmedName = typeof name === 'string' ? name.trim() : ''
     if (!EMAIL_RE.test(trimmedEmail)) return { error: 'Enter a valid email address.' }
-    if (typeof password !== 'string' || password.length < 6)
-        return { error: 'Password must be at least 6 characters.' }
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH)
+        return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` }
     if (!trimmedName) return { error: 'Enter your name.' }
     return { name: trimmedName, email: trimmedEmail, password }
 }
@@ -896,7 +964,9 @@ app.post('/upload', requireUser, assignJobId, upload.array('images', config.maxF
     // Optional multipart text field: training iteration cap (Fast / Normal / Detailed).
     job.trainIters = parseTrainIters(req.body?.trainIters)
     saveJob(job) // gives upload-only jobs a status record from the start
-    runPipeline(job) // fire-and-forget; do not await
+    // fire-and-forget; do not await. Settles once the job is done, failed
+    // or cancelled (never rejects), then its files are tidied up.
+    runPipeline(job).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
@@ -939,6 +1009,12 @@ app.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
       imageCount: record.imageCount,
       hasResult: job.status === 'done' && !!job.resultPath,
       thumbnail: record.thumbnail,
+      // Cut-out cover for the cards: already made, or can still be made
+      // from the job's background masks (see ensureCover).
+      cover: fs.existsSync(path.join(config.jobsDir, `${record.id}_out`, 'cover.webp')) ||
+        fs.existsSync(path.join(config.jobsDir, record.id, 'masks'))
+        ? `/jobs/${record.id}/cover.webp`
+        : null,
       images: record.images,
     }
   })
@@ -962,7 +1038,8 @@ app.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
     Serve a single uploaded image. id/name are whitelisted to plain filename
     characters so a request can't use `..` or slashes to escape the jobs
     folder. Only the job's owner or an admin can load it. A job only in
-    the VM's shared library is fetched from there.
+    the VM's shared library is fetched from there. On the VM with
+    FILE_STORE=db, a photo no longer on disk is served from the database.
   \return
     401 if not logged in, 404 if image doesn't exist or isn't theirs, else
     the image itself
@@ -972,11 +1049,20 @@ app.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJob
 {
   if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const { id, name } = req.params
-  if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) 
+  if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name))
   {
     return res.status(404).json({ error: 'image not found' })
   }
-  res.sendFile(path.join(config.jobsDir, id, 'images', name), (err) => 
+  const filePath = path.join(config.jobsDir, id, 'images', name)
+  if (!fs.existsSync(filePath) && filesInDb)
+  {
+    const image = getDbImage(id, name)
+    if (!image) return res.status(404).json({ error: 'image not found' })
+    res.type(image.mime)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    return res.send(image.data)
+  }
+  res.sendFile(filePath, (err) =>
   {
     if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
   })
@@ -1012,6 +1098,25 @@ app.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, media
     job.trainIters = parseTrainIters(trainIters)
     saveJob(job)
 
+    // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
+    runMediaPipeline(job, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
+    res.status(202).json({ id: job.id })
+})
+
+/************************************************************************/
+/*!
+  \brief
+    The frame-extraction options sent with a Frame Extractor job, within
+    the server's limits.
+  \param fps
+    Requested frames per second (any type; ignored unless a positive number)
+  \param maxFrames
+    Requested frame cap (any type; ignored unless a positive number)
+  \return
+    { fps?, maxFrames? } for runMediaPipeline
+*/
+/************************************************************************/
+function frameOptions(fps, maxFrames) {
     const opts = {}
     if (Number.isFinite(Number(fps)) && Number(fps) > 0) {
         opts.fps = Math.min(Number(fps), config.frameMaxFps)
@@ -1019,10 +1124,8 @@ app.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, media
     if (Number.isFinite(Number(maxFrames)) && Number(maxFrames) > 0) {
         opts.maxFrames = Math.min(Number(maxFrames), config.maxFiles)
     }
-
-    runMediaPipeline(job, opts) // fire-and-forget; the frontend polls /jobs/:id
-    res.status(202).json({ id: job.id })
-})
+    return opts
+}
 
 /************************************************************************/
 /*!
@@ -1084,7 +1187,9 @@ app.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res
 /************************************************************************/
 /*!
   \brief
-    Download / stream the finished splat .ply. Owner or admin only.
+    Download / stream the finished splat .ply. Owner or admin only. On
+    the VM with FILE_STORE=db, a model no longer on disk is served from
+    the database (sendDbModel).
   \return
     401 if not logged in, 404 if result is not ready or isn't theirs
 */
@@ -1093,13 +1198,118 @@ app.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobAcce
 {
   if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
-  if (!job || job.status !== 'done' || !job.resultPath) 
+  if (!job || job.status !== 'done' || !job.resultPath)
   {
     return res.status(404).json({ error: 'result not ready' })
+  }
+  if (filesInDb && !fs.existsSync(job.resultPath))
+  {
+    const info = getDbModelInfo(job.id)
+    if (!info) return res.status(404).json({ error: 'result not ready' })
+    return sendDbModel(req, res, job.id, info)
   }
   res.setHeader('Content-Type', 'application/octet-stream')
   res.sendFile(job.resultPath)
 })
+
+/************************************************************************/
+/*!
+  \brief
+    Waits until a response can take more data, or the client has gone.
+  \param res
+    The response
+  \return
+    Promise that resolves on 'drain' or 'close'
+*/
+/************************************************************************/
+function waitForDrain(res)
+{
+  return new Promise((resolve) =>
+  {
+    const done = () =>
+    {
+      res.off('drain', done)
+      res.off('close', done)
+      resolve()
+    }
+    res.on('drain', done)
+    res.on('close', done)
+  })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Serves a model stored in the database the way sendFile serves a file:
+    a single byte range (206; the viewer first reads bytes 0-4095), HEAD,
+    and an ETag so an unchanged model answers 304. Only the pieces the
+    range covers are read, one at a time, waiting whenever the client is
+    slower than the database, so a whole model is never in memory.
+  \param req
+    The request
+  \param res
+    The response
+  \param jobId
+    string
+  \param info
+    { size, chunkSize, storedAt } from getDbModelInfo
+  \return
+    nothing; the response is sent (or destroyed if the model was deleted
+    part-way through)
+*/
+/************************************************************************/
+async function sendDbModel(req, res, jobId, info)
+{
+  const etag = `"${jobId}-${info.size}-${info.storedAt}"`
+  res.setHeader('Content-Type', 'application/octet-stream')
+  res.setHeader('Accept-Ranges', 'bytes')
+  res.setHeader('ETag', etag)
+  res.setHeader('Cache-Control', 'private, no-cache')
+  if (req.fresh) return res.status(304).end()
+
+  let start = 0
+  let end = info.size - 1
+  // If-Range: only honour the range if the client's copy is this model.
+  const ifRange = req.headers['if-range']
+  const ranges = req.headers.range && (!ifRange || ifRange === etag) ? req.range(info.size, { combine: true }) : undefined
+  if (ranges === -1)
+  {
+    res.setHeader('Content-Range', `bytes */${info.size}`)
+    return res.status(416).end()
+  }
+  // A single range is served as asked; a malformed one (-2) or several
+  // ranges get the whole file, as sendFile does.
+  if (Array.isArray(ranges) && ranges.type === 'bytes' && ranges.length === 1)
+  {
+    start = ranges[0].start
+    end = ranges[0].end
+    res.status(206)
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`)
+  }
+  res.setHeader('Content-Length', String(end - start + 1))
+  if (req.method === 'HEAD' || end < start) return res.end()
+
+  let clientGone = false
+  res.on('close', () => { clientGone = true })
+  try
+  {
+    for (let seq = Math.floor(start / info.chunkSize); seq * info.chunkSize <= end; seq++)
+    {
+      if (clientGone) return
+      const chunk = readDbModelChunk(jobId, seq)
+      if (!chunk) throw new Error(`piece ${seq} is missing (deleted while being sent?)`)
+      const chunkStart = seq * info.chunkSize
+      const piece = chunk.subarray(Math.max(0, start - chunkStart), Math.min(chunk.length, end - chunkStart + 1))
+      if (!res.write(piece)) await waitForDrain(res)
+    }
+    res.end()
+  }
+  catch (err)
+  {
+    console.warn(`[backend] stopped sending the model of job ${jobId}: ${err.message}`)
+    res.destroy()
+  }
+}
 
 const execFileAsync = promisify(execFile)
 // Covers being made right now, by job id, so cards asking at the same
@@ -1150,10 +1360,12 @@ function ensureCover(jobId) {
   \return
     401 if not logged in, 404 if the job isn't theirs, has no background
     masks or the cover couldn't be made (the cards then show the first
-    photo), else the WebP image
+    photo), else the WebP image. A job only in the VM's shared library is
+    fetched from there.
 */
 /************************************************************************/
-app.get('/jobs/:id/cover.webp', requireJobAccess, async (req, res) => {
+app.get(['/jobs/:id/cover.webp', '/library/jobs/:id/cover.webp'], requireJobAccess, async (req, res) => {
+    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
     try {
         const coverPath = await ensureCover(req.params.id)
         res.setHeader('Cache-Control', 'private, max-age=86400')
@@ -1164,6 +1376,45 @@ app.get('/jobs/:id/cover.webp', requireJobAccess, async (req, res) => {
         res.status(404).json({ error: 'no cover' })
     }
 })
+
+/************************************************************************/
+/*!
+  \brief
+    Tidies up a job once it has ended (done, failed or cancelled), in an
+    order that keeps what each step needs:
+      1. done + background masks: make the cover now, while the photos
+         and masks still exist (ensureCover);
+      2. done: delete COLMAP/Brush working files and the masks (pruneJob);
+      3. done, client machine: send it to the VM's shared library;
+      4. done, VM with FILE_STORE=db: move its model into the database;
+      5. VM with FILE_STORE=db: move its photos into the database (also
+         for failed / cancelled jobs, so their photos are kept).
+    Never throws: each step logs its own problems.
+  \param job
+    The job whose pipeline just settled
+  \return
+    nothing
+*/
+/************************************************************************/
+async function afterJobEnds(job) {
+    try {
+        if (job.status === 'done') {
+            if (fs.existsSync(path.join(config.jobsDir, job.id, 'masks'))) {
+                await ensureCover(job.id).catch((err) =>
+                    console.warn(`[backend] no cover for ${job.id}: ${err.stderr?.trim() || err.message}`))
+            }
+            await pruneJob(job)
+            if (config.authMode === 'client' && !clientAuthProblem()) syncPendingJobs()
+            if (filesInDb) await moveModelToDb(job)
+        }
+        if (filesInDb) await moveImagesToDb(job.id)
+        // Storage just grew: the VM checks its budget (cleanup.js).
+        if (config.authMode === 'authority') requestCleanup()
+    }
+    catch (err) {
+        console.error(`[backend] tidying up job ${job.id} failed:`, err)
+    }
+}
 
 const MAX_JOB_NAME_LENGTH = 80
 
@@ -1257,20 +1508,17 @@ app.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, asy
     unmarkJobSynced(job.id)
   }
 
-  cancelJob(job) // no-op for a finished job
-  jobs.delete(job.id)
-
-    try {
-        // Retries cover Windows briefly locking files of a tool that was just killed.
-        const rmOpts = { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }
-        await fs.promises.rm(path.join(config.jobsDir, job.id), rmOpts)
-        await fs.promises.rm(path.join(config.jobsDir, `${job.id}_out`), rmOpts)
-        await fs.promises.rm(path.join(config.engineSamplesDir, sampleFileName(job)), { force: true })
-        res.json({ id: job.id, deleted: true })
-    }
-    catch (err) {
-        next(err)
-    }
+  try
+  {
+    // Cancels it if still running, then removes its folders, samples copy and
+    // database photos / model (the same as the VM's clean-up, cleanup.js).
+    await deleteJobData(job)
+    res.json({ id: job.id, deleted: true })
+  }
+  catch (err)
+  {
+    next(err)
+  }
 })
 
 // --- Shared library: receiving jobs (VM only) --------------------------------
@@ -1328,7 +1576,8 @@ function prepareStore(req, res, next)
 }
 
 // Photos keep the client's names (0000.jpg, ...) so their URLs stay the same;
-// the model and metrics get fixed names. Anything else is dropped.
+// the model, metrics and cover get fixed names. Anything else is dropped.
+const STORE_FILE_NAMES = { result: 'result.ply', metrics: 'metrics.json', cover: 'cover.webp' }
 const storeUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) =>
@@ -1336,27 +1585,55 @@ const storeUpload = multer({
         ? path.join(req.storeDir, req.params.id, 'images')
         : path.join(req.storeDir, `${req.params.id}_out`)),
     filename: (_req, file, cb) =>
-      cb(null, file.fieldname === 'images' ? file.originalname
-        : file.fieldname === 'result' ? 'result.ply' : 'metrics.json'),
+      cb(null, file.fieldname === 'images' ? file.originalname : STORE_FILE_NAMES[file.fieldname]),
   }),
-  limits: { fileSize: config.maxResultSizeMB * 1024 * 1024, files: config.maxFiles + 2 },
+  limits: { fileSize: config.maxResultSizeMB * 1024 * 1024, files: config.maxFiles + 3 },
   fileFilter: (_req, file, cb) => cb(null,
     file.fieldname === 'images'
       ? /^[\w.-]+$/.test(file.originalname) && IMAGE_EXT_RE.test(file.originalname)
-      : ['result', 'metrics'].includes(file.fieldname)),
+      : Object.hasOwn(STORE_FILE_NAMES, file.fieldname)),
 })
 
 /************************************************************************/
 /*!
   \brief
+    Reads the first bytes of a file (to check what it really is).
+  \param filePath
+  string
+  \param count
+  number
+  \return
+    Buffer of up to count bytes
+*/
+/************************************************************************/
+async function readFileHead(filePath, count)
+{
+  const handle = await fs.promises.open(filePath)
+  try
+  {
+    const head = Buffer.alloc(count)
+    const { bytesRead } = await handle.read(head, 0, count, 0)
+    return head.subarray(0, bytesRead)
+  }
+  finally
+  {
+    await handle.close()
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
     VM only: store a finished job sent by a client machine. Multipart
-    fields: images (photos), result (the .ply), metrics (optional),
-    status (the job's status.json as text), ownerId (the VM user id, or
-    empty) and origin (the sending machine's name). Checks the photos are
-    real JPEG/PNG, each under the photo size limit, and the model is a
-    .ply. Writes a fresh status record (never trusting the sent paths),
-    moves the job into jobs/ (replacing an earlier copy) and records its
-    owner, origin and size. An owner id the VM doesn't know becomes
+    fields: images (photos), result (the .ply), metrics and cover
+    (optional), status (the job's status.json as text), ownerId (the VM
+    user id, or empty) and origin (the sending machine's name). Checks the
+    photos are real JPEG/PNG, each under the photo size limit, the model is
+    a .ply and the cover a WebP (a bad cover is just dropped). Writes a
+    fresh status record (never trusting the sent paths), moves the job
+    into jobs/ (replacing an earlier copy) and records its owner, origin
+    and size. With FILE_STORE=db the photos and model go straight into the
+    database instead of jobs/. An owner id the VM doesn't know becomes
     admin-only.
   \return
     400 on bad content, 409 if a job with this id is running on the VM,
@@ -1364,7 +1641,12 @@ const storeUpload = multer({
 */
 /************************************************************************/
 app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
-  storeUpload.fields([{ name: 'images' }, { name: 'result', maxCount: 1 }, { name: 'metrics', maxCount: 1 }]),
+  storeUpload.fields([
+    { name: 'images' },
+    { name: 'result', maxCount: 1 },
+    { name: 'metrics', maxCount: 1 },
+    { name: 'cover', maxCount: 1 },
+  ]),
   async (req, res, next) =>
 {
   const { id } = req.params
@@ -1390,11 +1672,17 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
       if (!type || !['image/jpeg', 'image/png'].includes(type.mime))
         return reject(400, `Photo ${image.originalname} is not a real JPEG or PNG.`)
     }
-    const handle = await fs.promises.open(result.path)
-    const head = Buffer.alloc(3)
-    await handle.read(head, 0, 3, 0)
-    await handle.close()
-    if (head.toString('latin1') !== 'ply') return reject(400, 'result.ply is not a .ply file.')
+    if ((await readFileHead(result.path, 3)).toString('latin1') !== 'ply')
+      return reject(400, 'result.ply is not a .ply file.')
+
+    // The cover is optional, so a bad one is dropped rather than refusing the job.
+    const cover = req.files?.cover?.[0]
+    if (cover)
+    {
+      const head = await readFileHead(cover.path, 12)
+      const isWebp = head.subarray(0, 4).toString('latin1') === 'RIFF' && head.subarray(8, 12).toString('latin1') === 'WEBP'
+      if (!isWebp) await fs.promises.rm(cover.path, { force: true })
+    }
 
     // A fresh status record: only harmless fields are taken from the client,
     // and the result path is always this job's own result.ply.
@@ -1408,7 +1696,8 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
       progress: 1,
       detail: null,
       error: null,
-      source: ['upload', 'media', 'youtube'].includes(sent.source) ? sent.source : null,
+      // 'youtube' and 'video': jobs from the old Video Extractor, still on some machines.
+      source: ['upload', 'media', 'youtube', 'video'].includes(sent.source) ? sent.source : null,
       name: typeof sent.name === 'string' ? sent.name.slice(0, MAX_JOB_NAME_LENGTH) : null,
       sampleFile: null,
       imageCount: images.length,
@@ -1424,6 +1713,19 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
     if (live && !['done', 'error', 'cancelled'].includes(live.status))
       return reject(409, 'A job with this id is still running on the VM.')
 
+    // FILE_STORE=db: the photos and the model go into the database (replacing
+    // any earlier copy's) instead of moving into jobs/ with the rest. The
+    // status record still names <id>_out/result.ply, which is then served
+    // from the database.
+    if (filesInDb)
+    {
+      const stagedImages = path.join(req.storeDir, id, 'images')
+      storeJobImages(id, stagedImages)
+      await fs.promises.rm(stagedImages, rmOpts)
+      storeJobModel(id, result.path)
+      await fs.promises.rm(result.path, { force: true })
+    }
+
     // Replace any earlier copy, then move the checked job into place.
     jobs.delete(id)
     await fs.promises.rm(path.join(config.jobsDir, id), rmOpts)
@@ -1435,12 +1737,14 @@ app.put('/library/jobs/:id', requireFreeDisk, prepareStore,
     const ownerNumber = Number(req.body?.ownerId)
     const ownerId = Number.isInteger(ownerNumber) && findUserById(ownerNumber) ? ownerNumber : null
     const origin = typeof req.body?.origin === 'string' ? req.body.origin.slice(0, 100) : null
-    const bytes = [...images, result, ...(req.files?.metrics ?? [])].reduce((sum, f) => sum + f.size, 0)
+    const bytes = [...images, result, ...(req.files?.metrics ?? []), ...(req.files?.cover ?? [])]
+      .reduce((sum, f) => sum + f.size, 0)
     recordStoredJob(id, ownerId, origin, bytes)
 
     const scanned = await scanJob(id)
     if (scanned) restoreJob(scanned)
     console.log(`[backend] library: stored job ${id} from ${origin ?? 'unknown'} (${(bytes / 1024 ** 2).toFixed(1)} MB, owner ${ownerId ?? 'admin-only'})`)
+    requestCleanup() // storage just grew: check the budget
     res.status(201).json({ id, bytes })
   }
   catch (err)
@@ -1455,22 +1759,37 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/
 /************************************************************************/
 /*!
   \brief
+    A date stored by SQLite's datetime('now') -- UTC without a zone marker,
+    "2026-10-04 08:15:00" -- as an ISO string.
+  \param text
+  string
+  \return
+    "2026-10-04T08:15:00Z"
+*/
+/************************************************************************/
+function sqliteDateToIso(text) {
+    return `${text.replace(' ', 'T')}Z`
+}
+
+/************************************************************************/
+/*!
+  \brief
     Shapes a users row into what the frontend keeps as the session. Never
     includes password_hash.
   \param user
     { email, name, role, createdAt } or a users row
   \return
-    { name, email, role, memberSince }
+    { name, email, role, createdAt (ISO), memberSince ("4 October 2026") }
 */
 /************************************************************************/
 function publicUser(user) {
-    // SQLite datetime('now') is UTC without a zone marker.
-    const created = new Date(`${(user.createdAt ?? user.created_at).replace(' ', 'T')}Z`)
+    const createdAt = sqliteDateToIso(user.createdAt ?? user.created_at)
     return {
         name: user.name,
         email: user.email,
         role: user.role,
-        memberSince: created.toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
+        createdAt,
+        memberSince: new Date(createdAt).toLocaleDateString('en-SG', { day: 'numeric', month: 'long', year: 'numeric' }),
     }
 }
 
@@ -1670,6 +1989,442 @@ app.post('/auth/logout', (req, res) => {
     deleteSession(readCookie(req, SESSION_COOKIE))
     res.clearCookie(SESSION_COOKIE, { path: '/' })
     res.status(204).end()
+})
+
+// --- Account page ---------------------------------------------------------------
+// Accounts live on the VM, so on a client machine every route below asks the
+// VM's /library/account... twin (shared key, acting as the user), the same
+// way feedback does. The VM and 'local' machines answer from their own
+// database. Guests have no session, so they get 401 everywhere.
+const MAX_NAME_LENGTH = 80
+// Per account: name and photo changes. Wrong current passwords count
+// against the login limit instead (checkCredentials).
+const accountEditLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 30 })
+const ACCOUNT_UNAVAILABLE = { error: 'The account service is unavailable. Try again shortly.' }
+const AVATAR_TYPES = ['image/jpeg', 'image/png']
+// The photo arrives as the raw image bytes (Content-Type image/jpeg or image/png).
+const avatarBody = express.raw({ type: AVATAR_TYPES, limit: `${config.maxAvatarKB}kb` })
+
+/************************************************************************/
+/*!
+  \brief
+    Everything the account page shows about a user: publicUser plus
+    whether the email is verified (only Google accounts, for now: Google
+    has checked the address), when the password last changed, which ways
+    the account can sign in, and the photo's version.
+  \param userId
+  number
+  \return
+    { name, email, role, createdAt, memberSince, emailVerified,
+    passwordChangedAt (ISO, or null if never changed since signup),
+    signInMethods: { password, google }, photoVersion (null: no photo) },
+    or null if there is no such user
+*/
+/************************************************************************/
+function accountDetails(userId) {
+    const account = getAccount(userId)
+    if (!account) return null
+    return {
+        ...publicUser(account),
+        emailVerified: account.hasGoogle,
+        passwordChangedAt: account.passwordChangedAt ? sqliteDateToIso(account.passwordChangedAt) : null,
+        signInMethods: { password: account.hasPassword, google: account.hasGoogle },
+        photoVersion: account.avatarUpdatedAt,
+    }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether this request should be passed to the VM: a client machine's
+    own /auth/me... routes (not the VM's /library twins).
+  \param req
+    The request
+  \return
+    bool
+*/
+/************************************************************************/
+function isForVm(req) {
+    return config.authMode === 'client' && !req.path.startsWith('/library/')
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Client machine: passes an account request to the VM as the logged-in
+    user. When the VM answers with the account, this machine's copy of it
+    is updated too, so /auth/me shows the new name straight away.
+  \param req
+    The browser's request (req.user is set)
+  \param method
+    'GET' | 'PATCH' | ...
+  \param vmPath
+    string, e.g. '/library/account'
+  \param body
+    object or Buffer, optional (see forwardToVm)
+  \param contentType
+    string, for a Buffer body
+  \return
+    { status, data } -- 503 if the VM can't be reached
+*/
+/************************************************************************/
+async function askVmAccount(req, method, vmPath, body, contentType) {
+    if (clientAuthProblem()) return { status: 503, data: ACCOUNT_UNAVAILABLE }
+    const reply = await forwardToVm(method, vmPath, req.user, body, contentType)
+    if (reply.status === 0) return { status: 503, data: ACCOUNT_UNAVAILABLE }
+    if (reply.status === 200 && reply.data?.email)
+        upsertLocalUser({ id: req.user.id, email: reply.data.email, name: reply.data.name, role: reply.data.role })
+    return reply
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Counts one name or photo change against the account's hourly limit,
+    answering 429 when it is used up.
+  \param req
+    The request (req.user is set)
+  \param res
+    The response
+  \return
+    true if the change may go ahead
+*/
+/************************************************************************/
+function allowAccountEdit(req, res) {
+    const { allowed, retryAfterSec } = accountEditLimiter.hit(`user:${req.user.id}`)
+    if (allowed) return true
+    res.set('Retry-After', String(retryAfterSec))
+    res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
+    return false
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The account page's details (see accountDetails). Signed-in users only.
+  \return
+    401 if not logged in, 503 if the VM can't be reached (client
+    machine), else the details
+*/
+/************************************************************************/
+app.get(['/auth/me/account', '/library/account'], requireUser, async (req, res) => {
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'GET', '/library/account')
+        return res.status(status).json(data)
+    }
+    res.json(accountDetails(req.user.id))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Change the account's display name. Body: { name }. Feedback already
+    sent keeps the old name (it is copied in when sent).
+  \return
+    401 if not logged in, 400 if the name is empty or too long, 429 if
+    changing too often, 503 if the VM can't be reached (client machine),
+    else the account details
+*/
+/************************************************************************/
+app.patch(['/auth/me', '/library/account'], requireUser, async (req, res) => {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+    if (!name) return res.status(400).json({ error: 'Enter your name.' })
+    if (name.length > MAX_NAME_LENGTH)
+        return res.status(400).json({ error: `Keep your name under ${MAX_NAME_LENGTH} characters.` })
+    if (!allowAccountEdit(req, res)) return
+
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'PATCH', '/library/account', { name })
+        return res.status(status).json(data)
+    }
+    updateUserName(req.user.id, name)
+    res.json(accountDetails(req.user.id))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Change the password. Body: { currentPassword, newPassword }. The
+    current password is checked like a login (wrong ones count towards the
+    same 10-per-15-minutes limit). Afterwards every other browser signed
+    in to the account is logged out; this one stays signed in. A change
+    made on a client machine logs out the VM's other sessions and this
+    machine's; other client machines keep theirs until they expire.
+  \return
+    401 if not logged in, 400 if a field is missing, the new password is
+    too short or the same, or the current one is wrong, 409 if the account
+    has no password (Google only), 429 when locked, 503 if the VM can't be
+    reached (client machine), else the account details
+*/
+/************************************************************************/
+app.post(['/auth/me/password', '/library/account/password'], requireUser, async (req, res, next) => {
+    const { currentPassword, newPassword } = req.body || {}
+    if (typeof currentPassword !== 'string' || !currentPassword || typeof newPassword !== 'string')
+        return res.status(400).json({ error: 'Enter your current password and a new password.' })
+    if (newPassword.length < MIN_PASSWORD_LENGTH)
+        return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
+    if (newPassword === currentPassword)
+        return res.status(400).json({ error: 'Choose a new password that is different from your current one.' })
+
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'POST', '/library/account/password', { currentPassword, newPassword })
+        if (status === 200) endOtherSessions(req.user.id, readCookie(req, SESSION_COOKIE))
+        return res.status(status).json(data)
+    }
+
+    try {
+        if (!getAccount(req.user.id)?.hasPassword)
+            return res.status(409).json({ error: 'This account signs in with Google, so it has no password to change.' })
+        const result = await checkCredentials(req.user.email, currentPassword)
+        if (result.status === 'locked') {
+            res.set('Retry-After', String(result.retryAfterSec))
+            return res.status(429).json({ error: tooManyAttempts(result.retryAfterSec) })
+        }
+        if (result.status === 'invalid')
+            return res.status(400).json({ error: 'Your current password is incorrect.' })
+
+        await setUserPassword(req.user.id, newPassword)
+        // From a client machine nothing on the VM is the user's own browser, so all go.
+        const keep = req.path.startsWith('/library/') ? null : readCookie(req, SESSION_COOKIE)
+        const ended = endOtherSessions(req.user.id, keep)
+        console.log(`[backend] password changed for ${req.user.email} (${ended} other session(s) signed out)`)
+        res.json(accountDetails(req.user.id))
+    }
+    catch (err) {
+        next(err)
+    }
+})
+
+/************************************************************************/
+/*!
+  \brief
+    The signed-in user's profile photo, with an ETag so an unchanged photo
+    is answered with 304. On a client machine it comes from the VM.
+  \return
+    401 if not logged in, 404 if no photo is set, else the image
+*/
+/************************************************************************/
+app.get(['/auth/me/avatar', '/library/account/avatar'], requireUser, (req, res) => {
+    if (isForVm(req)) return proxyToVm(req, res, '/library/account/avatar')
+    const avatar = getUserAvatar(req.user.id)
+    if (!avatar) return res.status(404).json({ error: 'No profile photo.' })
+    res.set({
+        'Content-Type': avatar.mime,
+        // no-cache: the browser keeps it but checks back, so a new photo shows at once.
+        'Cache-Control': 'private, no-cache',
+        ETag: `"avatar-${req.user.id}-${avatar.updatedAt}"`,
+    })
+    if (req.fresh) return res.status(304).end()
+    res.send(avatar.data)
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Set (or replace) the profile photo. The body is the image itself, sent
+    with Content-Type image/jpeg or image/png, at most config.maxAvatarKB
+    (the website sends a 256 x 256 JPEG). The bytes are checked to really
+    be a JPEG or PNG, like uploaded photos.
+  \return
+    401 if not logged in, 400 if it isn't a real JPEG / PNG, 413 if too
+    large, 429 if changing too often, 503 if the VM can't be reached
+    (client machine), else the account details
+*/
+/************************************************************************/
+app.put(['/auth/me/avatar', '/library/account/avatar'], requireUser, avatarBody, async (req, res, next) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0)
+        return res.status(400).json({ error: 'Send the photo as a JPEG or PNG image.' })
+    try {
+        const { fileTypeFromBuffer } = await import('file-type')
+        const type = await fileTypeFromBuffer(req.body)
+        if (!type || !AVATAR_TYPES.includes(type.mime))
+            return res.status(400).json({ error: 'Invalid file content -- only real JPEG or PNG images are accepted.' })
+        if (!allowAccountEdit(req, res)) return
+
+        if (isForVm(req)) {
+            const { status, data } = await askVmAccount(req, 'PUT', '/library/account/avatar', req.body, type.mime)
+            return res.status(status).json(data)
+        }
+        setUserAvatar(req.user.id, type.mime, req.body)
+        res.json(accountDetails(req.user.id))
+    }
+    catch (err) {
+        next(err)
+    }
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Remove the profile photo (safe when there is none).
+  \return
+    401 if not logged in, 429 if changing too often, 503 if the VM can't
+    be reached (client machine), else the account details
+*/
+/************************************************************************/
+app.delete(['/auth/me/avatar', '/library/account/avatar'], requireUser, async (req, res) => {
+    if (!allowAccountEdit(req, res)) return
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'DELETE', '/library/account/avatar')
+        return res.status(status).json(data)
+    }
+    deleteUserAvatar(req.user.id)
+    res.json(accountDetails(req.user.id))
+})
+
+/************************************************************************/
+/*!
+  \brief
+    How much the signed-in user's own jobs take up (photos, model and the
+    job's other files), for the account page's Storage section. On a
+    client machine this is the VM's count -- the shared library, where
+    every finished job ends up; jobs not sent yet aren't included.
+    Admins see their own jobs only.
+  \return
+    401 if not logged in, 503 if the VM can't be reached (client
+    machine), else { usedBytes, models (finished), jobs (all, including
+    failed and running) }
+*/
+/************************************************************************/
+app.get(['/auth/me/storage', '/library/account/storage'], requireUser, async (req, res, next) => {
+    if (isForVm(req)) {
+        const { status, data } = await askVmAccount(req, 'GET', '/library/account/storage')
+        return res.status(status).json(data)
+    }
+    try {
+        let usedBytes = 0
+        let models = 0
+        let jobCount = 0
+        for (const id of listOwnedJobIds(req.user.id)) {
+            const job = await getJob(id)
+            if (!job) continue // deleted (its ownership row can outlive it)
+            jobCount++
+            if (job.status === 'done') models++
+            usedBytes += await jobStoredBytes(id)
+        }
+        res.json({ usedBytes, models, jobs: jobCount })
+    }
+    catch (err) {
+        next(err)
+    }
+})
+
+// --- Feedback ------------------------------------------------------------------
+// Kept in step with FeedbackScreen.jsx (its categories and length limits).
+const FEEDBACK_CATEGORIES = new Set(['bug', 'idea', 'other'])
+const MIN_FEEDBACK_LENGTH = 10
+const MAX_FEEDBACK_LENGTH = 1000
+// Per account, so one user can't flood the table.
+const feedbackLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
+
+/************************************************************************/
+/*!
+  \brief
+    Checks a feedback body.
+  \param body
+    { category, message }
+  \return
+    { status, error } if invalid (413 if the message is too long, else
+    400), else { category, message } with the message trimmed
+*/
+/************************************************************************/
+function validateFeedback(body) {
+    const { category, message } = body || {}
+    const trimmed = typeof message === 'string' ? message.trim() : ''
+    if (!FEEDBACK_CATEGORIES.has(category))
+        return { status: 400, error: 'Choose a feedback type: bug report, idea or other.' }
+    if (trimmed.length > MAX_FEEDBACK_LENGTH)
+        return { status: 413, error: `Keep your message under ${MAX_FEEDBACK_LENGTH} characters.` }
+    if (trimmed.length < MIN_FEEDBACK_LENGTH)
+        return { status: 400, error: `Write at least ${MIN_FEEDBACK_LENGTH} characters.` }
+    return { category, message: trimmed }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Send feedback from the website's Feedback page. Body: { category:
+    'bug' | 'idea' | 'other', message }. Signed-in accounts only (users
+    and admins): guests have no session, so they get 401. Feedback always
+    ends up in the VM's database: the VM stores it; a client machine
+    forwards it to the VM's /library/feedback, where the VM looks the
+    sender up in its own database (actAsUser); a 'local' machine (no VM)
+    stores it in its own database. At most 10 per account per hour.
+  \return
+    401 if not logged in, 400 / 413 on a bad body, 429 if sending too
+    often, 503 if the VM can't be reached (client machine), else 201 { id }
+*/
+/************************************************************************/
+app.post(['/feedback', '/library/feedback'], requireUser, async (req, res) => {
+    const checked = validateFeedback(req.body)
+    if (checked.error) return res.status(checked.status).json({ error: checked.error })
+
+    const { allowed, retryAfterSec } = feedbackLimiter.hit(`user:${req.user.id}`)
+    if (!allowed) {
+        res.set('Retry-After', String(retryAfterSec))
+        return res.status(429).json({ error: tooManyAttempts(retryAfterSec) })
+    }
+
+    const fromClientMachine = req.path.startsWith('/library/')
+    if (config.authMode === 'client' && !fromClientMachine) {
+        const unavailable = { error: 'The feedback service is unavailable. Try again shortly.' }
+        if (clientAuthProblem()) return res.status(503).json(unavailable)
+        const { status, data } = await forwardToVm('POST', '/library/feedback', req.user, {
+            ...checked,
+            origin: config.machineName,
+        })
+        if (status === 0) return res.status(503).json(unavailable)
+        return res.status(status).json(data)
+    }
+
+    const origin = fromClientMachine
+        ? (typeof req.body.origin === 'string' ? req.body.origin.slice(0, 100) : null)
+        : config.machineName
+    const id = addFeedback({
+        userId: req.user.id,
+        email: req.user.email,
+        name: req.user.name,
+        category: checked.category,
+        message: checked.message,
+        origin,
+    })
+    console.log(`[backend] feedback #${id} (${checked.category}) from ${req.user.email}${origin ? ` on ${origin}` : ''}`)
+    res.status(201).json({ id })
+})
+
+const FEEDBACK_PAGE_SIZE = 50
+
+/************************************************************************/
+/*!
+  \brief
+    The admins' feedback Inbox: one page of feedback, newest first.
+    Query: category ('bug' | 'idea' | 'other'; anything else means all)
+    and before (an id: only older messages, for "Load more"). Admins only.
+    A client machine asks the VM's /library/feedback, and the VM checks
+    the role again in its own database, so a stale admin copy on a client
+    machine can't read it.
+  \return
+    401 if not logged in, 403 if not an admin, 503 if the VM can't be
+    reached (client machine), else { items, hasMore } (see listFeedback)
+*/
+/************************************************************************/
+app.get(['/feedback', '/library/feedback'], requireUser, requireAdmin, async (req, res) => {
+    const category = FEEDBACK_CATEGORIES.has(req.query.category) ? req.query.category : null
+    const beforeNumber = Number(req.query.before)
+    const before = Number.isInteger(beforeNumber) && beforeNumber > 0 ? beforeNumber : null
+
+    if (config.authMode === 'client' && !req.path.startsWith('/library/')) {
+        const unavailable = { error: 'The feedback service is unavailable. Try again shortly.' }
+        if (clientAuthProblem()) return res.status(503).json(unavailable)
+        const query = new URLSearchParams()
+        if (category) query.set('category', category)
+        if (before) query.set('before', String(before))
+        const { status, data } = await forwardToVm('GET', `/library/feedback?${query}`, req.user)
+        if (status === 0) return res.status(503).json(unavailable)
+        return res.status(status).json(data)
+    }
+
+    res.json(listFeedback({ category, before, limit: FEEDBACK_PAGE_SIZE }))
 })
 
 // /wiki with no page → show Home
@@ -1926,6 +2681,15 @@ app.use((err, req, res, _next) => {
     }
   }
 
+    // A body over its parser's size limit, e.g. a profile photo over config.maxAvatarKB.
+    if (err.type === 'entity.too.large') {
+        return res.status(413).json({
+            error: req.path.endsWith('/avatar')
+                ? `That photo is too large -- it must be under ${config.maxAvatarKB} KB.`
+                : 'That request is too large.',
+        })
+    }
+
     if (err instanceof multer.MulterError) {
         // The limits come from config (maxFileSizeMB, maxFiles, and the media
         // versions); keep the messages in sync with those so they stay true if
@@ -1974,7 +2738,7 @@ process.on('unhandledRejection', (err) => {
 // process.exit elsewhere). killChildren() is synchronous, so it works here.
 process.on('exit', () => killChildren())
 
-app.listen(config.port, () =>
+const server = app.listen(config.port, () =>
 {
   console.log(`[backend] http://localhost:${config.port}`)
   console.log(`[backend] COLMAP: ${config.colmapBin}`)
@@ -1987,6 +2751,14 @@ app.listen(config.port, () =>
     console.log('[backend] accounts: authority (this machine holds the account database)')
     if (!config.authApiKey)
       console.warn('[backend] *** AUTH_API_KEY is not set: other machines cannot sign up or log in. ***')
+    console.log(`[backend] files: ${filesInDb ? 'photos and models stored in the database (FILE_STORE=db)' : 'photos and models stored as files in jobs/'}`)
+    // Clean-up (cleanup.js): oldest jobs over the budget, old feedback.
+    const jobRule = config.storageBudgetGB > 0
+      ? `jobs kept under ${config.storageBudgetGB} GB (oldest deleted first, never the last ${config.cleanupMinAgeDays} day(s))`
+      : 'jobs are never deleted (STORAGE_BUDGET_GB not set)'
+    const feedbackRule = config.feedbackKeepDays > 0 ? `feedback kept ${config.feedbackKeepDays} days` : 'feedback kept forever'
+    console.log(`[backend] storage: ${jobRule}; ${feedbackRule}`)
+    startCleanup()
   }
   else if (config.authMode === 'client')
   {
@@ -1995,12 +2767,9 @@ app.listen(config.port, () =>
     if (problem) console.warn(`[backend] *** sign up / log in will not work: ${problem} ***`)
     else if (config.allowInsecureAuth && new URL(config.vmAuthUrl).protocol !== 'https:')
       console.warn('[backend] *** AUTH_ALLOW_HTTP=1: passwords are sent to the VM unencrypted. Testing only. ***')
-    // Shared library: send each finished job to the VM, now and as they finish.
-    if (!problem)
-    {
-      setOnJobDone(() => syncPendingJobs())
-      startLibrarySync()
-    }
+    // Shared library: send finished jobs to the VM now, then as they finish
+    // (afterJobEnds) and on a timer for retries.
+    if (!problem) startLibrarySync()
     else console.warn('[backend] *** finished jobs will not be sent to the shared library until that is fixed. ***')
   }
   else
@@ -2011,3 +2780,6 @@ app.listen(config.port, () =>
   getHardwareInfo().then((hw) =>
     console.log(`[backend] GPU:    ${hw.gpus?.map((g) => g.name).join(', ') || 'none detected'}`))
 })
+// Node cuts off any request that takes over 5 minutes, which a large video
+// upload (or a shared-library job) on a slow connection can. Allow 30.
+server.requestTimeout = 30 * 60_000

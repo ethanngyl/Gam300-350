@@ -3357,6 +3357,19 @@ html {
     color: var(--forma-teal-text);
 }
 
+/* Profile photo (set on the account page) fills the round avatar. */
+.genesis-dock-avatar-icon,
+.genesis-dock-profile .genesis-profile-avatar-large {
+    overflow: hidden;
+}
+
+    .genesis-dock-avatar-icon img,
+    .genesis-dock-profile .genesis-profile-avatar-large img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
 /* The account menu opens upwards, right-aligned with the avatar. */
 .genesis-dock-profile .genesis-profile-menu {
     left: auto;

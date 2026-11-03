@@ -101,6 +101,13 @@ Uploading existing photos instead of scanning live:
 
 Training a 3D model:
 
+Model detail (training iterations):
+The "Model detail" slider (on the capture screen, the Photo Editor and the Frame Extractor) sets how many training iterations Brush runs for the model. Fewer iterations are faster; more give a sharper, more detailed model.
+- Fast: 5,000 iterations
+- Normal: 7,000 iterations (the website's default)
+- Detailed: 10,000 iterations
+The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
+
 10. With fewer than the minimum required photos in the batch, confirm the "Train model" button is disabled and a message tells you how many more photos are needed.
 11. Add enough photos to pass the minimum, then click "Train model."
 12. Confirm the app moves to a processing screen showing live progress (phase name and percentage) as the backend runs COLMAP and trains the Gaussian splat.

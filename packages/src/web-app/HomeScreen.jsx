@@ -8,7 +8,7 @@
 \brief
 Dashboard landing screen, laid out like the Genesis wireframe and focused
 on the user's own work: a welcome line and subtitle (plus a "New model"
-button on phones, where the sidebar is a drawer), then "Recent" with two
+button on phones, as a bigger target than the dock's), then "Recent" with two
 tabs and a "View all" button. "Your files" shows the latest photo batches and opens the Photo
 Library; "Generated models" shows the latest finished models and opens one
 in the full-page viewer. Both come from GET /jobs. With nothing made yet,
@@ -118,7 +118,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     <h1>Welcome back, {userName}</h1>
                     <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
                 </div>
-                {/* Phones only: on wider screens New model is in the sidebar. */}
+                {/* Phones only: a bigger New model button than the dock's camera icon. */}
                 <button className="forma-btn forma-btn-primary home-new-model" onClick={startNewModel}>
                     <Icon name="camera" size={15} /> New model
                 </button>

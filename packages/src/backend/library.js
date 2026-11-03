@@ -70,8 +70,8 @@ function vmHeaders(user)
 /************************************************************************/
 /*!
   \brief
-    Sends one finished job to the VM: its photos, final model, metrics and
-    status record, plus its owner (the VM's user id -- on a client machine
+    Sends one finished job to the VM: its photos, final model, metrics,
+    card cover and status record, plus its owner (the VM's user id -- on a client machine
     local ids are the VM's) and this machine's name. Marks it synced once
     the VM confirms. Logs and returns false on any failure, so the next
     sync round tries again.
@@ -98,6 +98,10 @@ export async function syncJob(record)
     const metricsPath = path.join(config.jobsDir, `${record.id}_out`, 'metrics.json')
     if (fs.existsSync(metricsPath))
       form.append('metrics', await fs.openAsBlob(metricsPath), 'metrics.json')
+    // The card cover (made from the background masks before they were tidied up).
+    const coverPath = path.join(config.jobsDir, `${record.id}_out`, 'cover.webp')
+    if (fs.existsSync(coverPath))
+      form.append('cover', await fs.openAsBlob(coverPath), 'cover.webp')
 
     const resp = await fetch(`${config.vmAuthUrl}/library/jobs/${record.id}`, {
       method: 'PUT',
@@ -291,21 +295,25 @@ export async function proxyToVm(req, res, vmPath)
   \param user
     req.user
   \param body
-    object, optional
+    object (sent as JSON) or Buffer (sent as is, e.g. a profile photo),
+    optional
+  \param contentType
+    string, the Content-Type of a Buffer body
   \return
     { status, data } -- status 0 if the VM couldn't be reached
 */
 /************************************************************************/
-export async function forwardToVm(method, vmPath, user, body)
+export async function forwardToVm(method, vmPath, user, body, contentType)
 {
   try
   {
     const headers = vmHeaders(user)
-    if (body) headers['Content-Type'] = 'application/json'
+    const isRaw = Buffer.isBuffer(body)
+    if (body) headers['Content-Type'] = isRaw ? contentType : 'application/json'
     const resp = await fetch(`${config.vmAuthUrl}${vmPath}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isRaw ? body : JSON.stringify(body)) : undefined,
       signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
     })
     const data = await resp.json().catch(() => ({}))
