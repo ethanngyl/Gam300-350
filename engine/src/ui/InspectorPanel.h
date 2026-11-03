@@ -57,6 +57,7 @@ public:
     // Cheap enough to call every frame.
     void setCropState(bool active, bool moveContents, bool removeInside, bool confirmed);
 
+//QT's events
 signals:
     // The Show Crop Box button was toggled.
     void cropBoxToggled(bool on);

@@ -109,6 +109,10 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     m_cropToggle->setToolTip("Show a box around this model to select splats (Ctrl+B). Esc hides it");
     layout->addWidget(m_cropToggle);
 
+    //Shows the current mode, clicking it switches to the other one
+    m_cropModeToggle = new QPushButton(page);
+    layout->addWidget(m_cropModeToggle);
+
     //Which side of the box a crop removes. Only matters in Crop mode, so they are exclusive
     auto* cutRow = new QHBoxLayout();
     cutRow->setSpacing(4);
@@ -126,9 +130,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     }
     layout->addLayout(cutRow);
 
-    //Shows the current mode, clicking it switches to the other one
-    m_cropModeToggle = new QPushButton(page);
-    layout->addWidget(m_cropModeToggle);
+
 
     m_cropApply = new QPushButton(page);
     m_cropApply->setToolTip("Enter, with the viewport focused");
