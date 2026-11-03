@@ -2,7 +2,7 @@
 
 > Team CoDefine - Real World Object Scanning to 3D Model Conversion
 
-Capture/Takes in real-world object images and turns it into an interactable 3D model. The front-end scans an object either via a camera, uploaded files or a youtube video from multiple angles; the Python back-end will then reconstruct it with photogrammetry + Gaussian splatting pipeline; the custom renderer displays the final result.
+Capture/Takes in real-world object images and turns it into an interactable 3D model. The front-end scans an object either via a camera, uploaded photos or uploaded videos from multiple angles; the Python back-end will then reconstruct it with photogrammetry + Gaussian splatting pipeline; the custom renderer displays the final result.
 
 ---
 
@@ -39,7 +39,7 @@ Application Installations:
 - Ubuntu / Linux (x86_64): Open a terminal in the packages folder and enter "./start-linux.sh" (the first run installs COLMAP via apt, so it will ask for your sudo password)
 
 ## Run with Docker
-Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
+Runs the web app + reconstruction backend (COLMAP, Brush, frame extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
 - Docker files live in the `docker/` folder. Open a terminal in the repo root
 - Start: `docker compose -f docker/docker-compose.yml up -d --build`, then open http://localhost:5005
 - Logs: `docker compose -f docker/docker-compose.yml logs -f app`
@@ -103,12 +103,12 @@ The engine uses the same accounts as the web app, so models made through the web
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
 - Capable of generating a downloadable .ply file from uploaded images
-- Youtube frame image extractor, images per frame can be modified
+- Frame extractor for uploaded videos and GIFs, frames per second can be modified
 - Accounts shared by the web app and the desktop engine: users only see, rename and delete their own models; admins can access all of them
 
 ## Current Issues
 -  The model used for training is taxing and requires a strong GPU, the model training is reliant on a CUDA GPU meaning the host system will always need to remain online, other options are being explored at the moment.
--  The youtube frame extractor can extract images but the quality and kind of images captured might not be compatible with colmap's requirements.
+-  The frame extractor can extract images but the quality and kind of images captured might not be compatible with colmap's requirements.
 
 ## Team
 

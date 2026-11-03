@@ -107,11 +107,10 @@ if [ "$NEED_TOOLS" = "1" ]; then
         fail "Could not download COLMAP / Brush. Check your internet connection, then run tools/get-tools.sh by hand to see the full error."
 fi
 
-# Python packages for the YouTube frame extractor (yt-dlp, OpenCV). Not fatal:
-# photo uploads still work without them. macOS Python (Homebrew / python.org)
-# refuses system-wide pip installs, so they go into a virtualenv at
-# tools/.venv, and PYTHON_BIN points the backend at it. yt-dlp is upgraded
-# every run because YouTube changes regularly break older releases.
+# Python packages for the frame extractor (OpenCV). Not fatal: photo uploads
+# still work without them. macOS Python (Homebrew / python.org) refuses
+# system-wide pip installs, so they go into a virtualenv at tools/.venv, and
+# PYTHON_BIN points the backend at it.
 PY=""
 for candidate in python3 python3.14 python3.13 python3.12 python3.11 python3.10; do
     if command -v "$candidate" >/dev/null 2>&1 &&
@@ -123,7 +122,7 @@ done
 
 VENV="$TOOLS/.venv"
 if [ -z "$PY" ]; then
-    echo "    Python 3.10+ not found - YouTube import will not work until it is installed"
+    echo "    Python 3.10+ not found - the Frame Extractor will not work until it is installed"
     echo "    (https://www.python.org/downloads/ or: brew install python)."
 else
     # Recreate the venv if it's missing or its interpreter was removed
@@ -131,16 +130,15 @@ else
     if ! "$VENV/bin/python" -c '' >/dev/null 2>&1; then
         echo "    Creating Python virtualenv in tools/.venv ..."
         rm -rf "$VENV"
-        "$PY" -m venv "$VENV" || echo "    *** Could not create the virtualenv - YouTube import may not work."
+        "$PY" -m venv "$VENV" || echo "    *** Could not create the virtualenv - the Frame Extractor may not work."
     fi
     if [ -x "$VENV/bin/python" ]; then
         export PYTHON_BIN="$VENV/bin/python"
-        echo "    Installing Python packages for the YouTube extractor..."
+        echo "    Installing Python packages for the Frame Extractor..."
         # onnxruntime (CPU build) for background removal; there is no CUDA on macOS.
         if ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q -r "$TOOLS/requirements.txt" ||
-            ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]" ||
             ! "$PYTHON_BIN" -m pip install --disable-pip-version-check -q onnxruntime; then
-            echo "    *** pip install failed - YouTube import may not work. Run by hand to see why:"
+            echo "    *** pip install failed - the Frame Extractor may not work. Run by hand to see why:"
             echo "    ***   tools/.venv/bin/python -m pip install -r tools/requirements.txt"
         fi
     fi

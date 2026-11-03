@@ -9,7 +9,7 @@
 The model detail choices shown by TrainingQualitySlider. Each one is the
 cap on how many training iterations Brush runs: fewer is faster but
 blurrier, more is slower but sharper. The chosen number is sent to the
-backend as trainIters (POST /upload and POST /jobs/from-youtube), which
+backend as trainIters (POST /upload and POST /jobs/from-media), which
 clamps it to its own min / max.
 **************************************************************************/
 

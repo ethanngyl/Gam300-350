@@ -113,9 +113,8 @@ if "%NEED_TOOLS%"=="1" (
     )
 )
 
-REM Python packages for the YouTube frame extractor (yt-dlp, OpenCV). Not fatal:
-REM photo uploads still work without them. yt-dlp is upgraded every run because
-REM YouTube changes regularly break older releases.
+REM Python packages for the frame extractor (OpenCV) and background removal
+REM (rembg + onnxruntime). Not fatal: photo uploads still work without them.
 REM
 REM The first python.exe on PATH is often Windows' Microsoft Store stub in
 REM ...\WindowsApps, which only prints "Python was not found". Skip it the same
@@ -130,13 +129,11 @@ if not defined PYTHON_BIN (
 )
 if defined PYTHON_BIN "%PYTHON_BIN%" -c "" >nul 2>nul || set "PYTHON_BIN="
 if not defined PYTHON_BIN (
-    echo     Python not found - YouTube import will not work until Python 3.10+ is installed.
+    echo     Python not found - the Frame Extractor will not work until Python 3.10+ is installed.
     goto :after_python
 )
-echo     Installing Python packages for the YouTube extractor - using %PYTHON_BIN%
+echo     Installing Python packages for the Frame Extractor - using %PYTHON_BIN%
 "%PYTHON_BIN%" -m pip install --disable-pip-version-check -q -r "%TOOLS%\requirements.txt"
-if errorlevel 1 goto :pip_failed
-"%PYTHON_BIN%" -m pip install --disable-pip-version-check -q --upgrade "yt-dlp[default]"
 if errorlevel 1 goto :pip_failed
 
 REM onnxruntime for background removal: the CUDA build (with NVIDIA's CUDA /
@@ -157,7 +154,7 @@ if not defined NO_CUDA echo     Installing GPU background removal - first time a
 if errorlevel 1 goto :pip_failed
 goto :after_python
 :pip_failed
-echo     *** pip install failed - YouTube import may not work. Run by hand to see why:
+echo     *** pip install failed - the Frame Extractor may not work. Run by hand to see why:
 echo     ***   "%PYTHON_BIN%" -m pip install -r tools\requirements.txt
 :after_python
 
