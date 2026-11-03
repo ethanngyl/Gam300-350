@@ -125,12 +125,12 @@ private:
 
     Viewport* m_viewport = nullptr;
 
-    //Undo history. Edits are pushed as QUndoCommands (see EditCommands.h)
+    //Undo history, edits pushed as QUndoCommands (in EditCommands.h)
     QUndoStack m_undo;
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
 
-    // Panels (owned by their docks).
+    //Panels (owned by their docks).
     OutlinerPanel* m_outliner = nullptr;
     InspectorPanel* m_inspector = nullptr;
     AssetBrowserPanel* m_assets = nullptr;
@@ -140,7 +140,7 @@ private:
     QList<QDockWidget*> m_docks;
     QToolBar* m_toolBar = nullptr;
 
-    // Actions.
+    //Actions.
     QAction* m_importAction = nullptr;
     QAction* m_exportAction = nullptr;
     QAction* m_exitAction = nullptr;
@@ -153,7 +153,7 @@ private:
     QAction* m_applyCropBoxAction = nullptr;
     QAction* m_cropInsideAction = nullptr;
     QAction* m_cropMoveContentsAction = nullptr;
-    SplatModel* m_cropBoxModel = nullptr; // model the crop box was last fitted to, only compared never dereferenced
+    SplatModel* m_cropBoxModel = nullptr; //model the crop box was last fitted to, only compared never dereferenced
     QActionGroup* m_renderModeGroup = nullptr;
     QAction* m_pointCloudAction = nullptr;
     QAction* m_gaussianAction = nullptr;
