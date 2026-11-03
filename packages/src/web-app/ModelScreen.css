@@ -179,6 +179,24 @@
     border-radius: 8px;
 }
 
+/* Phones: no splat count in the viewer (Details lists it), and Gaussian,
+   Point cloud and Reset view stay on one line. */
+@media (max-width: 760px) {
+    .model-viewer .engine-viewer-count {
+        display: none;
+    }
+
+    .model-viewer .engine-viewer-controls {
+        flex-wrap: nowrap;
+        gap: 6px !important; /* beats the inline gap */
+    }
+
+        .model-viewer .engine-viewer-controls .btn {
+            padding: 7px 10px;
+            white-space: nowrap;
+        }
+}
+
 /* ---------- Side cards ---------- */
 
 .model-side {

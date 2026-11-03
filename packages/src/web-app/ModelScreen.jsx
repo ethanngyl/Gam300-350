@@ -14,7 +14,7 @@ many photos it used, then Download .ply and Add to scene. Below, the 3D
 viewer fills a large card (SplatViewer, embedded, with its renderer and
 view controls, plus a full-screen button); beside it on wider screens, and
 under it on phones: Details (photos, background removal, splat count, file
-size), Source photos (with "Open in Media Library") and Manage (Rename,
+size, file format), Source photos (with "Open in Media Library") and Manage (Rename,
 Delete). Rename and delete use the Library's dialog and calls (mediaApi).
 A .ply opened from the user's computer uses the same page with only the
 viewer and its file details.
@@ -255,8 +255,9 @@ function ModelScreen({
                                 <><dt>Splats</dt><dd>{plyInfo.splatCount.toLocaleString()}</dd></>
                             )}
                             {fileSizeText && (
-                                <><dt>File size</dt><dd>{fileSizeText} .ply</dd></>
+                                <><dt>File size</dt><dd>{fileSizeText}</dd></>
                             )}
+                            <dt>File format</dt><dd>.ply</dd>
                             {!jobId && (
                                 <><dt>File</dt><dd className="model-file-name">{localFile?.name}</dd></>
                             )}
