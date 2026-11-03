@@ -20,10 +20,13 @@ tracker. On phones everything stacks in one column, with the preview as
 a short banner on top and a full-width Cancel button at the bottom.
 - PHASE_LABELS
 Maps the backend's phase names to the labels shown to the user.
-- Processing({ jobId, onDone, onCancel })
+- Processing({ jobId, onDone, onCancel, onRegisterLeaveGuard })
 React component. Polls /jobs/:id every 1.5s until the job is done, failed or
 cancelled. Calls onDone() when the splat is ready and onCancel() when the
-user leaves. Shows an error message with tips if the reconstruction fails.
+user leaves (or finds the build already cancelled). Shows an error message
+with tips if the reconstruction fails. onRegisterLeaveGuard(guard) hands
+App a function the browser's Back / Forward buttons call first: while the
+build runs it asks whether to leave and cancel it.
 - killJob()
 Inner helper. Sends DELETE /jobs/:id (keepalive) on pagehide or unmount,
 unless the job already finished so its result stays downloadable.
@@ -76,7 +79,7 @@ function formatElapsed(totalSeconds) {
  * asks the server to kill the job's tool process so training doesn't keep
  * hogging the GPU for a job nobody is watching.
  */
-export default function Processing({ jobId, onDone, onCancel }) {
+export default function Processing({ jobId, onDone, onCancel, onRegisterLeaveGuard = null }) {
     const [job, setJob] = useState(null)
     const [failed, setFailed] = useState(null)
     // The job's first photo and photo count, for the preview (from GET /jobs,
@@ -115,7 +118,12 @@ export default function Processing({ jobId, onDone, onCancel }) {
                     setFailed(data.error || 'Reconstruction failed')
                     return
                 }
-                if (data.status === 'cancelled') return // cancel() already navigated away
+                // Pressing Cancel already left this screen. Otherwise the build was
+                // cancelled while away (Back, then Forward, or a reload): leave too.
+                if (data.status === 'cancelled') {
+                    onCancel()
+                    return
+                }
             } catch (err) {
                 if (!stopped) {
                     playSound('error')
@@ -131,7 +139,16 @@ export default function Processing({ jobId, onDone, onCancel }) {
             stopped = true
             clearTimeout(timer)
         }
-    }, [jobId, onDone])
+    }, [jobId, onDone, onCancel])
+
+    // The browser's Back / Forward buttons ask before leaving a build in
+    // progress, since leaving cancels it (see the cleanup below).
+    useEffect(() => {
+        if (!onRegisterLeaveGuard) return
+        onRegisterLeaveGuard(() => Boolean(failed) || doneRef.current ||
+            window.confirm('Leave this page? The build will be cancelled.'))
+        return () => onRegisterLeaveGuard(null)
+    }, [onRegisterLeaveGuard, failed])
 
     // Load the preview photo once. Failing is fine: the preview shows an icon.
     useEffect(() => {

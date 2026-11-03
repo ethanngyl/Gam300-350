@@ -28,7 +28,9 @@ the .ply (or why it failed / that it was cancelled). Sounds: a tick each
 time a step finishes, success when the model is ready, error if it fails
 (none on cancel, since Cancel already plays Back). Also frees an in-progress
 server-side job if the user navigates away or closes the tab before it
-completes. There is no Back button; the dock handles navigation.
+completes. There is no Back button; the dock handles navigation. While a
+video uploads or its job runs, the browser's Back / Forward buttons ask
+before leaving (onRegisterLeaveGuard, see App.jsx).
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -162,7 +164,7 @@ function formatElapsed(totalSeconds) {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function YoutubeIngest() {
+function YoutubeIngest({ onRegisterLeaveGuard = null }) {
     // 'youtube' (a link) or 'file' (an .mp4 from this device).
     const [sourceType, setSourceType] = useState('youtube');
     const [url, setUrl] = useState('');
@@ -403,6 +405,15 @@ function YoutubeIngest() {
     const isJobRunning = Boolean(job?.id) && !FINISHED.includes(job.status);
     // The progress card shows while the video uploads and while the job runs.
     const showProgress = isUploading || isJobRunning;
+
+    // The browser's Back / Forward buttons ask before leaving while a video
+    // uploads or its job runs, since leaving cancels it (see the cleanup above).
+    const wouldCancelOnLeave = Boolean(busy) || isUploading;
+    useEffect(() => {
+        if (!onRegisterLeaveGuard || !wouldCancelOnLeave) return;
+        onRegisterLeaveGuard(() => window.confirm('Leave this page? The build will be cancelled.'));
+        return () => onRegisterLeaveGuard(null);
+    }, [onRegisterLeaveGuard, wouldCancelOnLeave]);
     const elapsedSeconds = startedAt ? Math.max(0, Math.floor((currentTime - startedAt) / 1000)) : 0;
     const phaseIndex = job && !isUploading ? PHASE_ORDER.indexOf(job.phase) : -1;
     const canSubmit = isFileSource ? Boolean(videoFile) : Boolean(url.trim());

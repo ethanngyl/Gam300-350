@@ -19,7 +19,10 @@ walkthrough" on the account page or in the account menu replays it.
 Polling reconstruction progress, the finished splat result, a local .ply
 opened from the Model Viewer and the legacy image gallery still replace
 the whole screen. Owns the active job id and uploads a finished photo
-batch to the backend to kick off reconstruction.
+batch to the backend to kick off reconstruction. Each page has its own
+address-bar hash (AppRoutes.js), so the browser's Back and Forward buttons
+move between pages and a refresh stays on the page; leaving a build in
+progress with Back asks first, since leaving cancels it.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -41,6 +44,7 @@ import NameModelPrompt from './NameModelPrompt.jsx';
 import Walkthrough from './Walkthrough.jsx';
 import { useUndoableState } from './useUndoableState.js';
 import { NEW_SCENE_INFO } from './SceneStorage.js';
+import { hashToView, viewToHash } from './AppRoutes.js';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
@@ -127,16 +131,24 @@ function App() {
     // Bumped when the walkthrough closes, so the "seen" flag is read again.
     const [, setWalkthroughCloseCount] = useState(0);
 
+    // The page in the address bar when the app loads (a refresh or a link,
+    // see AppRoutes.js). A .ply opened from this computer can't survive a
+    // reload, so that one opens the Model Viewer instead.
+    const [initialView] = useState(() => {
+        const view = hashToView(window.location.hash);
+        return view.screen === 'local-model' ? { ...view, screen: null } : view;
+    });
+
     // Page shown inside the shell:
     // home | library | editor | scene | viewer | youtube | capture | account
-    const [activeTab, setActiveTab] = useState('home');
+    const [activeTab, setActiveTab] = useState(initialView.activeTab);
     // Which Library sub-tab is open: models | photos
-    const [librarySubTab, setLibrarySubTab] = useState('models');
+    const [librarySubTab, setLibrarySubTab] = useState(initialView.librarySubTab);
 
     // Full-page screens that replace the whole shell. null shows the shell;
     // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
-    const [screen, setScreen] = useState(null);
-    const [jobId, setJobId] = useState(null);
+    const [screen, setScreen] = useState(initialView.screen);
+    const [jobId, setJobId] = useState(initialView.jobId);
     // A .ply opened from the user's computer in the Model Viewer: { url, name }
     const [localModel, setLocalModel] = useState(null);
     // Job whose training just finished; the result screen asks for its name.
@@ -165,6 +177,67 @@ function App() {
     // switching tabs (each page remounts when its tab opens).
     const scene = useUndoableState([]);
     const [sceneInfo, setSceneInfo] = useState(NEW_SCENE_INFO);
+
+    // Browser Back / Forward. Every page change gets its own history entry
+    // with the page's hash (AppRoutes.js), so Back and Forward move between
+    // pages instead of leaving the site. Set replaceNextRef before a change
+    // whose page shouldn't come back with Back (a finished or cancelled
+    // build); the first sync only tidies the loaded URL.
+    const replaceNextRef = useRef(true);
+    // The hash of the page on screen, for putting it back when leaving is refused.
+    const currentHashRef = useRef(window.location.hash);
+    // While a page would lose work by being left (a build in progress), its
+    // function that asks the user first; returns true if they may leave.
+    const leaveGuardRef = useRef(null);
+    const registerLeaveGuard = useCallback((guard) => {
+        leaveGuardRef.current = guard;
+    }, []);
+    // The local model, for revoking its blob URL when Back leaves it.
+    const localModelRef = useRef(null);
+    useEffect(() => {
+        localModelRef.current = localModel;
+    }, [localModel]);
+
+    useEffect(() => {
+        const hash = viewToHash({ activeTab, librarySubTab, screen, jobId });
+        const replace = replaceNextRef.current;
+        replaceNextRef.current = false;
+        currentHashRef.current = hash;
+        if (hash === window.location.hash) return;
+        if (replace) window.history.replaceState(null, '', hash);
+        else window.history.pushState(null, '', hash);
+    }, [activeTab, librarySubTab, screen, jobId]);
+
+    useEffect(() => {
+        function handlePopState() {
+            if (leaveGuardRef.current && !leaveGuardRef.current()) {
+                // Stay: put this page back as the newest entry.
+                window.history.pushState(null, '', currentHashRef.current);
+                return;
+            }
+            let view = hashToView(window.location.hash);
+            if (view.screen === 'local-model' && !localModelRef.current) {
+                // That file is gone (closed, or the page was reloaded): open the Model Viewer.
+                view = { ...view, screen: null };
+                replaceNextRef.current = true;
+            }
+            if (view.screen !== 'local-model' && localModelRef.current) {
+                URL.revokeObjectURL(localModelRef.current.url);
+                setLocalModel(null);
+            }
+            // Like goToTab: one-off hand-offs between pages don't survive navigation.
+            setUploadError(null);
+            setPhotosForEditor(null);
+            setPhotosForCapture(null);
+            setPhotosToAdd(null);
+            setActiveTab(view.activeTab);
+            if (view.activeTab === 'library') setLibrarySubTab(view.librarySubTab);
+            setScreen(view.screen);
+            if (view.jobId) setJobId(view.jobId);
+        }
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
 
     function handleLogin(user) {
         saveUser(user);
@@ -251,6 +324,8 @@ function App() {
     }
 
     function resetJob() {
+        // The build or model screen being left can't be opened again with Back.
+        replaceNextRef.current = true;
         setJobId(null);
         setUploadError(null);
         setScreen(null);
@@ -307,9 +382,12 @@ function App() {
                 jobId={jobId}
                 onDone={() => {
                     setNamePromptJobId(jobId);
+                    // The model replaces the build screen, so Back skips the finished build.
+                    replaceNextRef.current = true;
                     setScreen('result');
                 }}
                 onCancel={resetJob}
+                onRegisterLeaveGuard={registerLeaveGuard}
             />
         );
     }
@@ -417,7 +495,7 @@ function App() {
                     )}
                     {activeTab === 'youtube' && (
                         // YoutubeIngest plays the click sound itself, so none here.
-                        <YoutubeIngest />
+                        <YoutubeIngest onRegisterLeaveGuard={registerLeaveGuard} />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
