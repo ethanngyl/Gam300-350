@@ -106,10 +106,15 @@ function Dock({
     const profileRef = useRef(null);
     const idleTimerRef = useRef(null);
     const mobileScrollerRef = useRef(null);
+    const labelsToggleRef = useRef(null);
+    // Whether the last press on the tab labels switch was a finger (touch screens can't hover).
+    const wasLabelsTogglePressedByTouchRef = useRef(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isIdle, setIsIdle] = useState(false);
     // Every item shows its full label, not just the icon (desktop view only).
     const [showLabels, setShowLabels] = useState(loadShowLabels);
+    // Touch screens: the tab labels switch was tapped open (a mouse opens it by hovering).
+    const [isLabelsToggleOpen, setIsLabelsToggleOpen] = useState(false);
     // Mobile view: whether the last tabs are showing, so the arrow points back.
     const [isAtLastMobileTabs, setIsAtLastMobileTabs] = useState(false);
     const isMobile = useSyncExternalStore(subscribeToMobileView, isMobileView);
@@ -172,6 +177,18 @@ function Dock({
         };
     }, [isProfileMenuOpen]);
 
+    // Touch screens: close the tab labels switch on a tap anywhere else.
+    useEffect(() => {
+        if (!isLabelsToggleOpen) return;
+
+        function closeWhenTappingOutside(event) {
+            if (!labelsToggleRef.current?.contains(event.target)) setIsLabelsToggleOpen(false);
+        }
+
+        document.addEventListener('pointerdown', closeWhenTappingOutside);
+        return () => document.removeEventListener('pointerdown', closeWhenTappingOutside);
+    }, [isLabelsToggleOpen]);
+
     // Mobile view: show the five tabs that hold the current page.
     useEffect(() => {
         if (!isMobile) return;
@@ -203,6 +220,16 @@ function Dock({
         if (key === 'capture') onNewModel();
         else if (key === 'add') openFilePicker();
         else onNavigate(key);
+    }
+
+    function handleLabelsToggleClick() {
+        // Touch screens: the first tap only opens it, so the user can see what it does.
+        if (wasLabelsTogglePressedByTouchRef.current && !isLabelsToggleOpen) {
+            playSound('tap');
+            setIsLabelsToggleOpen(true);
+            return;
+        }
+        toggleShowLabels();
     }
 
     function toggleShowLabels() {
@@ -456,9 +483,17 @@ function Dock({
 
             {/* Its own small panel in the top-right corner, apart from the dock. */}
             <button
+                ref={labelsToggleRef}
                 type="button"
-                className={showLabels ? 'genesis-labels-toggle is-on' : 'genesis-labels-toggle'}
-                onClick={toggleShowLabels}
+                className={[
+                    'genesis-labels-toggle',
+                    showLabels && 'is-on',
+                    isLabelsToggleOpen && 'is-open',
+                ].filter(Boolean).join(' ')}
+                onPointerDown={(event) => {
+                    wasLabelsTogglePressedByTouchRef.current = event.pointerType === 'touch';
+                }}
+                onClick={handleLabelsToggleClick}
                 role="switch"
                 aria-checked={showLabels}
                 aria-label="Show tab labels"
@@ -471,6 +506,7 @@ function Dock({
                 <span className="genesis-labels-toggle-track" aria-hidden="true">
                     <span className="genesis-labels-toggle-thumb" />
                 </span>
+                {showLabels && <span className="genesis-labels-toggle-dot" aria-hidden="true" />}
             </button>
         </>
     );

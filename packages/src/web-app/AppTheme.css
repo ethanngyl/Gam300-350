@@ -3332,19 +3332,19 @@ html {
         padding-right: 15px;
     }
 
-        .genesis-dock.is-labelled .genesis-dock-label {
-            max-width: 150px;
-            margin-left: 9px;
-            opacity: 1;
-        }
+    .genesis-dock.is-labelled .genesis-dock-label {
+        max-width: 150px;
+        margin-left: 9px;
+        opacity: 1;
+    }
 
-        .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
-            padding-right: 3px;
-        }
+    .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
+        padding-right: 3px;
+    }
 
-            .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
-                margin-right: 10px;
-            }
+    .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
+        margin-right: 10px;
+    }
 }
 
 @media (min-width: 1160px) and (max-width: 1319px) {
@@ -3371,29 +3371,28 @@ html {
             padding-right: 3px;
         }
 
-            .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
-                max-width: 110px;
-                margin-right: 8px;
-            }
+        .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
+            max-width: 110px;
+            margin-right: 8px;
+        }
 }
 
-@media (max-width: 1159px) {
-    .genesis-labels-toggle {
-        display: none;
-    }
-}
-
-/* The switch's own panel, top-right, styled like the dock. */
+/* The switch's own panel, top-right, styled like the dock. Just a small
+   round icon button until it is hovered, focused with the keyboard or
+   tapped (.is-open), then it slides open to the left to show its text and
+   switch, so it doesn't cover the pages' own buttons. */
 .genesis-labels-toggle {
     position: fixed;
-    top: 14px;
-    right: 16px;
+    top: 8px;
+    right: 12px;
     z-index: 70;
     display: flex;
     align-items: center;
-    gap: 8px;
-    height: 40px;
-    padding: 0 12px;
+    gap: 10px;
+    height: 32px;
+    max-width: 32px; /* only the icon shows */
+    padding: 0 0 0 7.5px; /* centres the 15px icon in the 32px circle */
+    overflow: hidden;
     border-radius: 999px;
     border: 1px solid var(--forma-border-strong);
     background: rgba(24, 24, 27, 0.82);
@@ -3402,8 +3401,12 @@ html {
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     color: var(--forma-text-soft);
     cursor: pointer;
-    transition: border-color 0.22s ease, color 0.22s ease;
+    transition: max-width 0.28s cubic-bezier(0.22, 1, 0.36, 1), padding 0.28s ease, border-color 0.22s ease, color 0.22s ease;
 }
+
+    .genesis-labels-toggle > svg {
+        flex: none;
+    }
 
     .genesis-labels-toggle:hover,
     .genesis-labels-toggle.is-on {
@@ -3414,6 +3417,78 @@ html {
         outline: none;
         border-color: var(--forma-blue);
     }
+
+    /* Open. Hover only counts with a mouse; a tap sets .is-open instead. */
+    .genesis-labels-toggle:focus-visible,
+    .genesis-labels-toggle.is-open {
+        max-width: 240px;
+        padding-right: 12px;
+    }
+
+@media (hover: hover) {
+    .genesis-labels-toggle:hover {
+        max-width: 240px;
+        padding-right: 12px;
+    }
+}
+
+/* Text and switch fade in as it opens. */
+.genesis-labels-toggle .genesis-labels-toggle-text,
+.genesis-labels-toggle .genesis-labels-toggle-track {
+    flex: none;
+    opacity: 0;
+    transition: opacity 0.18s ease, background-color 0.22s ease, border-color 0.22s ease;
+}
+
+.genesis-labels-toggle:focus-visible :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track),
+.genesis-labels-toggle.is-open :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track) {
+    opacity: 1;
+}
+
+@media (hover: hover) {
+    .genesis-labels-toggle:hover :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track) {
+        opacity: 1;
+    }
+}
+
+/* Blue dot on the icon while labels are on, so the setting shows when closed. */
+.genesis-labels-toggle-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--forma-blue);
+    box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.95);
+    transition: opacity 0.18s ease;
+}
+
+.genesis-labels-toggle:focus-visible .genesis-labels-toggle-dot,
+.genesis-labels-toggle.is-open .genesis-labels-toggle-dot {
+    opacity: 0;
+}
+
+@media (hover: hover) {
+    .genesis-labels-toggle:hover .genesis-labels-toggle-dot {
+        opacity: 0;
+    }
+}
+
+/* Model Viewer's Open .ply file reaches the top-right corner, so its row
+   leaves room for the switch (shown from 1160px wide). */
+@media (min-width: 1160px) {
+    .library-toolbar.model-viewer-toolbar {
+        padding-right: 56px;
+    }
+}
+
+/* Hidden below 1160px wide. After the rules above so display: none wins. */
+@media (max-width: 1159px) {
+    .genesis-labels-toggle {
+        display: none;
+    }
+}
 
 .genesis-labels-toggle-text {
     font-family: var(--forma-font);
@@ -3669,11 +3744,11 @@ html {
     color: var(--forma-teal-text);
 }
 
-    .genesis-mdock-avatar-icon img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
+.genesis-mdock-avatar-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
 
 /* Long labels are cut short with "..." */
 .genesis-mdock-label {
