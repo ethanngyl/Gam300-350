@@ -19,8 +19,9 @@ progress card with the same design as the photo upload's processing screen (it
 reuses Processing.css): current step, iteration counter, progress bar, elapsed
 time, a preview of the first file with a scanning line, the step tracker, and a
 Cancel button that stops the job on the server (DELETE /jobs/:id) and frees the
-GPU. When it ends, a result card shows the extracted frames and a download link
-for the .ply (or why it failed / that it was cancelled). Sounds: a tick each
+GPU. When the model is ready, onModelReady(jobId) opens it in the same
+full-page 3D viewer the photo upload ends on; if the job fails or is cancelled,
+a result card says why. Sounds: a tick each
 time a step finishes, success when the model is ready, error if it fails
 (none on cancel, since Cancel already plays Back). Also frees an in-progress
 server-side job if the user navigates away or closes the tab before it
@@ -30,7 +31,6 @@ completes. There is no Back button; the sidebar handles navigation.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSound } from '../audio/Audio.js';
 import Icon from './Icons.jsx';
-import NameModelPrompt from './NameModelPrompt.jsx';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import './Processing.css';
@@ -45,9 +45,6 @@ const MAX_MEDIA_SIZE_MB = 2048;
 const MEDIA_ACCEPT = 'video/*,image/gif,.mkv,.avi';
 
 const FINISHED = ['done', 'error', 'cancelled'];
-
-// How many extracted frames to show once the job is done.
-const FRAME_PREVIEW_COUNT = 24;
 
 const SERVER_UNREACHABLE =
     "Couldn't reach the reconstruction server. Make sure it's running " +
@@ -168,7 +165,7 @@ function formatElapsed(totalSeconds) {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function FrameExtractor() {
+function FrameExtractor({ onModelReady }) {
     const [mediaItems, setMediaItems] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
     const [fps, setFps] = useState(2);
@@ -184,12 +181,9 @@ function FrameExtractor() {
     const [isCancelling, setIsCancelling] = useState(false);
     const [error, setError] = useState(null);
     const [job, setJob] = useState(null);
-    const [extractedFrames, setExtractedFrames] = useState([]);
     // When the job started, for the elapsed-time counter.
     const [startedAt, setStartedAt] = useState(null);
     const [currentTime, setCurrentTime] = useState(() => Date.now());
-    // Set when training finishes, to ask for the model's name.
-    const [namePromptJobId, setNamePromptJobId] = useState(null);
     const fileInputRef = useRef(null);
     const progressCardRef = useRef(null);
     // The upload in progress, so Cancel or leaving the page can abort it.
@@ -239,19 +233,6 @@ function FrameExtractor() {
         };
     }, []);
 
-    // /jobs/:id has no image list, so read this job's frames from /jobs.
-    const loadExtractedFrames = useCallback(async (id) => {
-        try {
-            const res = await fetch('/jobs');
-            if (!res.ok) return;
-            const allJobs = await parseJson(res);
-            const finishedJob = Array.isArray(allJobs) ? allJobs.find((listedJob) => listedJob.id === id) : null;
-            setExtractedFrames(finishedJob?.images ?? []);
-        } catch {
-            // The frames are only a preview; the download still works without them.
-        }
-    }, []);
-
     const pollJob = useCallback(
         (id) => {
             stopPolling();
@@ -271,8 +252,7 @@ function FrameExtractor() {
                         stopPolling();
                         if (data.status === 'done') {
                             playSound('success');
-                            setNamePromptJobId(id);
-                            loadExtractedFrames(id);
+                            onModelReady(id);
                         }
                         if (data.status === 'error') playSound('error');
                     }
@@ -283,7 +263,7 @@ function FrameExtractor() {
                 }
             }, 1500);
         },
-        [stopPolling, loadExtractedFrames],
+        [stopPolling, onModelReady],
     );
 
     function addFiles(fileList) {
@@ -366,7 +346,6 @@ function FrameExtractor() {
         setSubmitting(true);
         setUploadProgress(0);
         setJob(null);
-        setExtractedFrames([]);
         try {
             const id = await uploadMedia(
                 mediaItems.map((item) => item.file),
@@ -391,7 +370,6 @@ function FrameExtractor() {
     const pct = job ? Math.round((job.progress || 0) * 100) : 0;
     const uploadPct = Math.round(uploadProgress * 100);
     const phaseLabel = job ? PHASE_LABELS[job.phase] || job.phase : '';
-    const isJobDone = job?.status === 'done';
     const isJobCancelled = job?.status === 'cancelled';
     // A job exists on the server and hasn't finished, so it can be cancelled.
     const isJobRunning = Boolean(job?.id) && !FINISHED.includes(job.status);
@@ -648,18 +626,19 @@ function FrameExtractor() {
                     </div>
                 )}
 
-                {job && !isJobRunning && (
+                {/* A finished model opens in the 3D viewer, so this only shows failures. */}
+                {job && !isJobRunning && job.status !== 'done' && (
                     <div className="forma-card fx-card">
                         <div>
                             <div className="eyebrow">Progress</div>
-                            <h2 className="fx-card-title">{isJobDone ? 'Extracted frames' : isJobCancelled ? 'Cancelled' : 'Something went wrong'}</h2>
+                            <h2 className="fx-card-title">{isJobCancelled ? 'Cancelled' : 'Something went wrong'}</h2>
                         </div>
 
                         <div className="fx-status">
                             <div className="fx-status-head">
                                 <span className={`fx-badge fx-badge-${job.status}`}>{job.status}</span>
                                 <span className="fx-phase">
-                                    {isJobDone ? 'Done' : isJobCancelled ? 'Cancelled. Press Process media to start again.' : job.detail || phaseLabel}
+                                    {isJobCancelled ? 'Cancelled. Press Process media to start again.' : job.detail || phaseLabel}
                                 </span>
                                 {job.imageCount != null && (
                                     <span className="fx-frames">{job.imageCount} frames</span>
@@ -667,32 +646,10 @@ function FrameExtractor() {
                             </div>
 
                             {job.error && <p className="fx-error">{job.error}</p>}
-
-                            {isJobDone && extractedFrames.length > 0 && (
-                                <div className="fx-frame-grid">
-                                    {extractedFrames.slice(0, FRAME_PREVIEW_COUNT).map((frame) => (
-                                        <img key={frame.name} src={frame.url} alt={frame.name} loading="lazy" />
-                                    ))}
-                                </div>
-                            )}
-                            {isJobDone && extractedFrames.length > FRAME_PREVIEW_COUNT && (
-                                <p className="fx-hint">
-                                    Showing {FRAME_PREVIEW_COUNT} of {extractedFrames.length} frames. The rest are in the Media Library.
-                                </p>
-                            )}
-
-                            {isJobDone && (
-                                <a className="forma-btn forma-btn-primary fx-download" href={`/jobs/${job.id}/result.ply`}>
-                                    Download result (.ply)
-                                </a>
-                            )}
                         </div>
                     </div>
                 )}
             </div>
-            {namePromptJobId && (
-                <NameModelPrompt jobId={namePromptJobId} onClose={() => setNamePromptJobId(null)} />
-            )}
         </div>
     );
 }

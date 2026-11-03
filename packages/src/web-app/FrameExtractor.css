@@ -348,31 +348,6 @@
     color: var(--forma-text-muted);
 }
 
-/* Extracted frames, shown in place of the bar once the job is done. */
-.fx-frame-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-    gap: 8px;
-    max-height: 320px;
-    overflow-y: auto;
-}
-
-    .fx-frame-grid img {
-        width: 100%;
-        aspect-ratio: 4 / 3;
-        object-fit: cover;
-        display: block;
-        border-radius: 6px;
-        border: 1px solid var(--forma-border);
-        background: var(--forma-panel-alt);
-    }
-
-.fx-download {
-    align-self: stretch;
-    justify-content: center;
-    text-decoration: none;
-}
-
 /* The first file's frame fills the progress card's preview box. */
 .processing-embedded .processing-preview video {
     width: 100%;
@@ -403,9 +378,5 @@
     /* The fps box sits beside the button, which keeps its natural width. */
     .fx-submit {
         flex: none;
-    }
-
-    .fx-download {
-        align-self: flex-start;
     }
 }

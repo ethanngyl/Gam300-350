@@ -237,6 +237,15 @@ function App() {
         setScreen('result');
     }
 
+    // A model the Frame Extractor just built: opens the same result screen
+    // as the photo upload, asking for its name. activeTab stays 'extractor',
+    // so Back to dashboard returns there.
+    const showExtractedModel = useCallback((modelJobId) => {
+        setJobId(modelJobId);
+        setNamePromptJobId(modelJobId);
+        setScreen('result');
+    }, []);
+
     function openLocalModel(file) {
         setLocalModel({ url: URL.createObjectURL(file), name: file.name });
         setScreen('local-model');
@@ -285,8 +294,10 @@ function App() {
                         className="btn btn-primary"
                         onClick={() => {
                             playSound('tap');
+                            // A model from the Frame Extractor starts its next scan there too.
+                            const scanTab = activeTab === 'extractor' ? 'extractor' : 'capture';
                             resetJob();
-                            goToTab('capture');
+                            goToTab(scanTab);
                         }}
                     >
                         New scan
@@ -373,7 +384,7 @@ function App() {
                     )}
                     {activeTab === 'extractor' && (
                         // FrameExtractor plays the click sound itself, so none here.
-                        <FrameExtractor />
+                        <FrameExtractor onModelReady={showExtractedModel} />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
