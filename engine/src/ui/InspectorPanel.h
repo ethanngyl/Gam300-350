@@ -87,6 +87,7 @@ signals:
 private:
     void writePosition();
     void writeScale();
+    void writeRotation();
     //Fills the trim fields and status from the model
     void loadTrim();
     void loadTrimFields(const TrimData& trim);
@@ -98,6 +99,7 @@ private:
 
     //Transform to display in inspect
     std::array<QDoubleSpinBox*, 3> m_position{};
+    std::array<QDoubleSpinBox*, 3> m_rotation{}; // Euler angles in degrees
     std::array<QDoubleSpinBox*, 3> m_scale{};
 
     QDoubleSpinBox* m_minAlpha = nullptr;
