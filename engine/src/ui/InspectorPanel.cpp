@@ -36,6 +36,13 @@ namespace {
     constexpr double kPositionStep = 0.1;  // matches the viewport's WASD nudge
     constexpr int kPositionDecimals = 3;
 
+    // Scale can't reach 0 or go negative: the scale is read back as the length of each matrix column,
+    // and a zero length column has no direction left to rebuild it from.
+    constexpr double kScaleMin = 0.001;
+    constexpr double kScaleMax = 1000.0;
+    constexpr double kScaleStep = 0.1;
+    constexpr int kScaleDecimals = 3;
+
     // Axis label colours, the usual X = red, Y = green, Z = blue convention.
     constexpr const char* kAxisNames[3] = { "X", "Y", "Z" };
     constexpr const char* kAxisColours[3] = { "#e0605a", "#7cc35a", "#5a8fe0" };
@@ -75,6 +82,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     transformHeader->setObjectName("SectionHeader");
     layout->addWidget(transformHeader);
 
+    //<<POSITION>>
     auto* positionRow = new QHBoxLayout();
     positionRow->setSpacing(4);
     for (int axis = 0; axis < 3; ++axis) {
@@ -95,6 +103,29 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     positionForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
     positionForm->addRow("Position", positionRow);
     layout->addLayout(positionForm);
+
+    //<<SCALE>>
+    auto* scaleRow = new QHBoxLayout();
+    scaleRow->setSpacing(4);
+    for (int axis = 0; axis < 3; ++axis) {
+        auto* label = new QLabel(kAxisNames[axis], page);
+        label->setStyleSheet(QString("color: %1; font-weight: bold;").arg(kAxisColours[axis]));
+        auto* spin = new QDoubleSpinBox(page);
+        spin->setRange(kScaleMin, kScaleMax);
+        spin->setSingleStep(kScaleStep);
+        spin->setDecimals(kScaleDecimals);
+        spin->setValue(1.0);
+        spin->setKeyboardTracking(false); // apply on Enter / focus out / arrows, not every keystroke
+        spin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_scale[axis] = spin;
+        scaleRow->addWidget(label);
+        scaleRow->addWidget(spin, 1);
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] { writeScale(); });
+    }
+    auto* scaleForm = new QFormLayout();
+    scaleForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    scaleForm->addRow("Scale", scaleRow);
+    layout->addLayout(scaleForm);
 
     auto* resetButton = new QPushButton("Reset Position", page);
     layout->addWidget(resetButton, 0, Qt::AlignRight);
@@ -318,6 +349,19 @@ void InspectorPanel::syncFromModel() {
         const QSignalBlocker block(spin);
         spin->setValue(translation[axis]);
     }
+
+    // The scale of each axis is the length of its matrix column.
+    const glm::mat4 transform = m_model->GetTransform();
+    for (int axis = 0; axis < 3; ++axis) {
+        QDoubleSpinBox* spin = m_scale[axis];
+        const double scale = glm::length(glm::vec3(transform[axis]));
+        const double tolerance = 0.5 * std::pow(10.0, -kScaleDecimals);
+        if (spin->hasFocus() || std::abs(spin->value() - scale) < tolerance) {
+            continue; // being edited, or already current
+        }
+        const QSignalBlocker block(spin);
+        spin->setValue(scale); // clamped to the spin box range, so a model scaled below 0.001 shows 0.001
+    }
 }
 
 void InspectorPanel::setCropState(bool active, bool moveContents, bool removeInside, bool confirmed) {
@@ -370,8 +414,33 @@ void InspectorPanel::writePosition() {
     const glm::mat4 before = m_model->GetTransform();
     glm::mat4 after = before;
     after[3] = glm::vec4(static_cast<float>(m_position[0]->value()),
-                         static_cast<float>(m_position[1]->value()),
-                         static_cast<float>(m_position[2]->value()), 1.0f);
+        static_cast<float>(m_position[1]->value()),
+        static_cast<float>(m_position[2]->value()), 1.0f);
+    //Not applied here, listener pushes it onto the undo stack
+    if (after != before) emit transformEdited(m_model, before, after);
+}
+
+void InspectorPanel::writeScale()
+{
+    if (!m_model) {
+        return;
+    }
+    const glm::mat4 before = m_model->GetTransform();
+    glm::mat4 after = before;
+
+    //The scale of an axis is the length of its matrix column, set it by giving the column thewanted length in the same direction.
+    //Leaves the rotation and the translation alone.
+    const double tolerance = 0.5 * std::pow(10.0, -kScaleDecimals);
+    for (int axis = 0; axis < 3; ++axis) {
+        const glm::vec3 column(before[axis]);
+        const float length = glm::length(column);
+        const double wanted = m_scale[axis]->value();
+        //Skip untouched axes and columns with no direction left
+        if (length < 1e-8f || std::abs(wanted - length) < tolerance) {
+            continue;
+        }
+        after[axis] = glm::vec4(column / length * static_cast<float>(wanted), 0.0f);
+    }
     //Not applied here, listener pushes it onto the undo stack
     if (after != before) emit transformEdited(m_model, before, after);
 }

@@ -86,14 +86,19 @@ signals:
 
 private:
     void writePosition();
-    void loadTrim();            // fills the trim fields and status from the model
+    void writeScale();
+    //Fills the trim fields and status from the model
+    void loadTrim();
     void loadTrimFields(const TrimData& trim);
     TrimData currentTrim() const;
 
     QStackedWidget* m_stack = nullptr; // "nothing selected" vs. the properties
     QLineEdit* m_name = nullptr;
     QLabel* m_splatCount = nullptr;
+
+    //Transform to display in inspect
     std::array<QDoubleSpinBox*, 3> m_position{};
+    std::array<QDoubleSpinBox*, 3> m_scale{};
 
     QDoubleSpinBox* m_minAlpha = nullptr;
     QDoubleSpinBox* m_cropPct = nullptr;
