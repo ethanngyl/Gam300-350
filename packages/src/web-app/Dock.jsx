@@ -113,9 +113,20 @@ function Dock({
     // Mobile view: whether the last tabs are showing, so the arrow points back.
     const [isAtLastMobileTabs, setIsAtLastMobileTabs] = useState(false);
     const isMobile = useSyncExternalStore(subscribeToMobileView, isMobileView);
+    // The view the dock last rendered, to notice switching between mobile and desktop.
+    const [lastRenderedIsMobile, setLastRenderedIsMobile] = useState(isMobile);
     const { isMuted } = useSoundSettings();
     const profilePhoto = useProfilePhoto(user.email);
     const isCapturePage = activeTab === 'capture';
+
+    // Switched between mobile and desktop (window resized): the mobile tabs
+    // start again from the first five, so the arrow points forward again,
+    // and the profile menu closes (it sits somewhere else in the other view).
+    if (lastRenderedIsMobile !== isMobile) {
+        setLastRenderedIsMobile(isMobile);
+        setIsAtLastMobileTabs(false);
+        setIsProfileMenuOpen(false);
+    }
 
     const clearIdleTimer = useCallback(() => {
         if (idleTimerRef.current !== null) {
