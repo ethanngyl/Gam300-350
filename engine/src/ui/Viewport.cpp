@@ -36,6 +36,9 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 namespace {
     // Qt reports a wheel notch as 120 units of angle delta.
     constexpr double kWheelNotch = 120.0;
+    // Overlay layout, shared so the stats window can sit below the tool buttons.
+    constexpr float kOverlayPad = 10.0f;
+    constexpr float kToolButtonHeight = 26.0f;
 }
 
 Viewport::Viewport(QWidget* parent)
@@ -155,6 +158,7 @@ void Viewport::paintGL() {
     ImGuiQtBackend::NewFrame(*this, deltaTime);
     ImGui::NewFrame();
     DrawGizmo(view, proj); //Draw Gizmos (Movement arrows, etc.)
+    DrawToolButtons();
     DrawImGui(fps);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -238,16 +242,44 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     m_gizmoWasUsing = isUsing;
 }
 
+void Viewport::DrawToolButtons() {
+    static const char* const kLabels[] = { "Pan", "Move", "Rotate", "Scale" };
+    static const char* const kTooltips[] = { "Pan (Q)", "Translate (W)", "Rotate (E)", "Scale (R)" };
+    constexpr int kModeCount = 4;
+    constexpr float kButtonWidth = 60.0f;
+
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x, kOverlayPad), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.45f);
+    //Unlike the stats overlay this one takes input, so ImGui captures clicks on it and they never reach the camera
+    ImGui::Begin("Tool Buttons", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                 ImGuiWindowFlags_NoNav);
+    for (int i = 0; i < kModeCount; ++i) {
+        const auto mode = static_cast<InputManager::TOOL_MODE>(i);
+        const bool active = m_input.GetToolMode() == mode;
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.45f, 0.8f, 1.0f));
+        if (ImGui::Button(kLabels[i], ImVec2(kButtonWidth, kToolButtonHeight))) {
+            m_input.SetToolMode(mode);
+        }
+        if (active) ImGui::PopStyleColor();
+        ImGui::SetItemTooltip("%s", kTooltips[i]);
+        if (i < kModeCount - 1) ImGui::SameLine();
+    }
+    ImGui::End();
+}
+
 void Viewport::DrawImGui(float fps) {
     if (!m_showImGuiStats) {
         return;
     }
 
-    // Read-only stats overlay pinned to the top-right corner. NoInputs keeps
-    // it from ever capturing the mouse, so it never blocks camera drags.
-    constexpr float kPad = 10.0f;
+    // Read-only stats overlay pinned to the top-right corner, below the tool buttons.
+    // NoInputs keeps it from ever capturing the mouse, so it never blocks camera drags.
     const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos(ImVec2(displaySize.x - kPad, kPad), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    const float buttonsBottom = kOverlayPad + kToolButtonHeight + ImGui::GetStyle().WindowPadding.y * 2.0f;
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x - kOverlayPad, buttonsBottom + 6.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.45f);
     ImGui::Begin("Engine Stats", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |

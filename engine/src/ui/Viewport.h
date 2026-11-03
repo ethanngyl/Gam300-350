@@ -88,6 +88,8 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
+    //Top right row of tool buttons, active tool is highlighted
+    void DrawToolButtons();
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
