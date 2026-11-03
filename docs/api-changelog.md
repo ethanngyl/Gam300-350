@@ -100,7 +100,9 @@ The website keeps working unchanged on the legacy paths. To move it to v1:
 1. Prefix every API call with `/api/v1` (one helper, for example
    `apiUrl(path)`), including the URLs built by hand: `App.jsx` (lines 409
    and 427) and `SceneBuilderScreen.jsx` (line 115) build
-   `/jobs/<id>/result.ply`. Add `/api` to the Vite proxy in `vite.config.js`.
+   `/jobs/<id>/result.ply`. (`vite.config.js` already forwards `/api` in
+   development, and the account page's password change already uses
+   `/api/v1/auth/me/account` and `/api/v1/auth/me/password`.)
 2. Fix the "Last edited" sort in `LibraryScreen.jsx:37` and
    `ImageGallery.jsx:159`. They call `Date.parse(job.updatedAt)`, but job
    dates are numbers, so the result is `NaN` and the sort does nothing (this

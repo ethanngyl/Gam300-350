@@ -24,6 +24,8 @@ export default defineConfig({
       '/jobs': 'http://localhost:5005',
       '/auth': 'http://localhost:5005',
       '/feedback': 'http://localhost:5005',
+      // API v1 (/api/v1/...), e.g. the account page's password change.
+      '/api': 'http://localhost:5005',
     },
   },
 })
