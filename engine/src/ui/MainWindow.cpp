@@ -217,10 +217,12 @@ void MainWindow::createActions() {
     });
 
     m_deleteAction = new QAction(s->standardIcon(QStyle::SP_TrashIcon), "&Delete", this);
-    m_deleteAction->setShortcut(QKeySequence::Delete);
+    QList<QKeySequence> deleteShortcuts;
+    deleteShortcuts << QKeySequence(Qt::Key_Backspace) << QKeySequence(Qt::Key_Backspace);
+    m_deleteAction->setShortcuts(deleteShortcuts);
     m_deleteAction->setStatusTip("Remove the selected model from the scene (the file is not touched)");
     connect(m_deleteAction, &QAction::triggered, this, [this] {
-        //With a crop box up, Delete removes the splats in it rather than the whole model
+        //With a crop box up, Delete/Backspace removes the splats in it rather than the whole model
         if (m_viewport->cropBox().active) applyCropBox();
         else deleteSelectedModel();
     });
