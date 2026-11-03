@@ -118,7 +118,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     <h1>Welcome back, {userName}</h1>
                     <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
                 </div>
-                {/* Phones only: a bigger New model button than the dock's camera icon. */}
+                {/* Phones only: a bigger New model button than the dock's icon. */}
                 <button className="forma-btn forma-btn-primary home-new-model" onClick={startNewModel}>
                     <Icon name="cubePlus" size={15} /> New model
                 </button>
