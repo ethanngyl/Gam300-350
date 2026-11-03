@@ -16,6 +16,8 @@ elsewhere (e.g. WASD nudges in the viewport) back into the fields.
 
 #include "splat/SplatTrimmer.h"
 
+#include <glm/glm.hpp>
+
 #include <QWidget>
 
 #include <array>
@@ -70,6 +72,10 @@ signals:
 
     // The model's name was changed from the inspector.
     void nameChanged(const QString& name);
+
+    //The position fields or Reset Position asked to change the model transform
+    //The inspector panel does not apply it, the listener does, so it can be an undo step,
+    void transformEdited(SplatModel* model, const glm::mat4& before, const glm::mat4& after);
 
     // Apply was pressed in the Trim section; the model should be re-trimmed
     // from its original data with these values.

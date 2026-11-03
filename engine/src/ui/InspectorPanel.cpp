@@ -216,7 +216,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     connect(m_name, &QLineEdit::editingFinished, this, [this] {
         const QString name = m_name->text().trimmed();
         if (!m_model || name.isEmpty() || name.toStdString() == m_model->GetName()) {
-            if (m_model) m_name->setText(QString::fromStdString(m_model->GetName())); // undo blank names
+            if (m_model) m_name->setText(QString::fromStdString(m_model->GetName())); //undo blank names
             return;
         }
         emit nameChanged(name);
@@ -232,10 +232,11 @@ InspectorPanel::InspectorPanel(QWidget* parent)
 
     connect(resetButton, &QPushButton::clicked, this, [this] {
         if (!m_model) return;
-        glm::mat4 transform = m_model->GetTransform();
-        transform[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        m_model->SetTransform(transform);
-        syncFromModel();
+        const glm::mat4 before = m_model->GetTransform();
+        glm::mat4 after = before;
+        after[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        if (after != before) 
+            emit transformEdited(m_model, before, after);
     });
 
     setModel(nullptr);
@@ -366,9 +367,11 @@ void InspectorPanel::writePosition() {
     if (!m_model) {
         return;
     }
-    glm::mat4 transform = m_model->GetTransform();
-    transform[3] = glm::vec4(static_cast<float>(m_position[0]->value()),
-                             static_cast<float>(m_position[1]->value()),
-                             static_cast<float>(m_position[2]->value()), 1.0f);
-    m_model->SetTransform(transform);
+    const glm::mat4 before = m_model->GetTransform();
+    glm::mat4 after = before;
+    after[3] = glm::vec4(static_cast<float>(m_position[0]->value()),
+                         static_cast<float>(m_position[1]->value()),
+                         static_cast<float>(m_position[2]->value()), 1.0f);
+    //Not applied here, listener pushes it onto the undo stack
+    if (after != before) emit transformEdited(m_model, before, after);
 }
