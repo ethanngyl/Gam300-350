@@ -93,9 +93,11 @@ private:
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
-    //Arrow key nudge of the selected model. A burst of nudges (a key held down, or several keys) is one undo step
+    //Arrow key nudge of the crop box while it is up, otherwise of the selected model.
+    //A burst of nudges (a key held down, or several keys) is one undo step.
+    //boxDirection is the world-space direction the same key moves the crop box
     using NudgeFunction = void (SplatRenderer::*)(InputManager&, InputManager::INPUT_TYPE);
-    void Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge);
+    void Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection);
     //Reports the finished burst to onTransformEdited
     void FinishNudge();
 
@@ -123,9 +125,12 @@ private:
     //The crop box drag also carries the confirmed splat selection along
     bool m_dragMovesContents = false;
 
-    //Nudge burst in progress: the model and where it started, and how many nudge keys are down
+    //Nudge burst in progress: what is being nudged and where it started, and how many nudge keys are down
+    bool m_nudgeActive = false;
+    bool m_nudgeIsCropBox = false;       //The burst moves the crop box, not m_nudgeModel
+    bool m_nudgeMovesContents = false;   //...and carries the confirmed splat selection with it
     SplatModel* m_nudgeModel = nullptr;
-    glm::mat4 m_nudgeBefore = glm::mat4(1.0f);
+    glm::mat4 m_nudgeBefore = glm::mat4(1.0f); //Transform of the model (or crop box) when the burst started
     int m_nudgeKeysDown = 0;
 
     CropBox m_cropBox;
