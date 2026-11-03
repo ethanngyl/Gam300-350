@@ -11,7 +11,9 @@ the GENESIS theme: a camera panel (live preview, manual or interval-based
 auto-capture with a user-adjustable photo cap, and the Space key as a
 shortcut for both) beside a batch panel
 (drag-and-drop and file-picker uploads, live thumbnails with per-photo
-removal, and the button that sends the batch for reconstruction).
+removal, and the button that sends the batch for reconstruction). The
+thumbnails are small copies (PhotoThumbnails.js), so large batches scroll
+smoothly; the original photos are what get uploaded.
 Each photo is checked in the background for blur, bad exposure and
 near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
@@ -29,6 +31,7 @@ import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
+import { usePhotoThumbnails } from './PhotoThumbnails.js';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 
@@ -54,7 +57,6 @@ const ISSUE_SUMMARY_PHRASES = {
 function createBatchPhoto(file) {
     return {
         id: `${file.name}-${file.lastModified}-${Math.random()}`,
-        url: URL.createObjectURL(file),
         file,
         analysisStatus: 'pending',
         analysis: null,
@@ -79,8 +81,6 @@ function CameraCapture({
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
     const streamRef = useRef(null);
-    // Latest photo list, read when the page closes to release preview URLs.
-    const photosRef = useRef([]);
     // Id of the photo currently being checked, so only one runs at a time.
     const analyzingPhotoIdRef = useRef(null);
 
@@ -159,17 +159,9 @@ function CameraCapture({
         setCameraRequestCount((count) => count + 1);
     }
 
-    useEffect(() => {
-        photosRef.current = photos;
-    }, [photos]);
-
-    // Release every thumbnail URL when the page closes. (Removed photos
-    // release theirs in removePhoto.)
-    useEffect(() => {
-        return () => {
-            photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url));
-        };
-    }, []);
+    // Small copies for the thumbnails: showing the original photos made the
+    // page lag with large batches (see PhotoThumbnails.js).
+    const thumbnailUrls = usePhotoThumbnails(photos);
 
     // Check pending photos one at a time, same as the Photo Editor. Each
     // finished check updates the list, which starts the next one.
@@ -350,8 +342,6 @@ function CameraCapture({
     }
 
     function removePhoto(id) {
-        const removedPhoto = photos.find((p) => p.id === id);
-        if (removedPhoto) URL.revokeObjectURL(removedPhoto.url);
         setPhotos((prev) => prev.filter((p) => p.id !== id));
     }
 
@@ -594,7 +584,10 @@ function CameraCapture({
                                     className={issuesById[photo.id]?.length > 0 ? 'capture-thumb has-issue' : 'capture-thumb'}
                                     title={issuesById[photo.id]?.length > 0 ? 'Flagged: open Review photos first to see why' : undefined}
                                 >
-                                    <img src={photo.url} alt="" />
+                                    {/* Until its thumbnail is ready, the tile's background shows. */}
+                                    {thumbnailUrls[photo.id] && (
+                                        <img src={thumbnailUrls[photo.id]} alt="" decoding="async" />
+                                    )}
                                     <button
                                         className="capture-thumb-remove"
                                         onClick={() => {

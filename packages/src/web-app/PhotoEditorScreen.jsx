@@ -23,7 +23,9 @@ simpler, batch-only set of tools. "Review photos first" in Camera Capture
 opens the editor with that batch already loaded (initialPhotos); its
 "Back to camera" button returns the photos to the capture page. Opened
 on its own, the same button reads "Go to camera" and takes any photos
-added here to the capture page, so more can be taken.
+added here to the capture page, so more can be taken. The grid shows small
+copies of the photos (PhotoThumbnails.js), so large batches scroll
+smoothly; checks, edits and uploads use the original files.
 **************************************************************************/
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -52,6 +54,7 @@ import {
     renderEditedCanvas,
     sampleColor,
 } from './PhotoEdits.js';
+import { usePhotoThumbnails } from './PhotoThumbnails.js';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import './PhotoEditor.css';
@@ -100,7 +103,6 @@ function createEditorPhoto(file) {
     return {
         id: `photo-${nextPhotoNumber++}`,
         file,
-        url: URL.createObjectURL(file),
         analysisStatus: 'pending',
         analysis: null,
         isExcluded: false,
@@ -243,8 +245,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     const previewCanvasRef = useRef(null);
     // Id of the photo currently being checked, so only one runs at a time.
     const analyzingPhotoIdRef = useRef(null);
-    // Latest photo list, read when the screen closes to release preview URLs.
-    const photosRef = useRef([]);
 
     const [photos, setPhotos] = useState(() =>
         (initialPhotos?.files ?? []).filter(isImageFile).map(createEditorPhoto)
@@ -278,16 +278,9 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // How many photos have been prepared for upload; null when not uploading.
     const [preparedCount, setPreparedCount] = useState(null);
 
-    useEffect(() => {
-        photosRef.current = photos;
-    }, [photos]);
-
-    // Release every thumbnail URL when the editor closes.
-    useEffect(() => {
-        return () => {
-            photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url));
-        };
-    }, []);
+    // Small copies for the grid: showing the original photos made the page
+    // lag with large batches (see PhotoThumbnails.js).
+    const thumbnailUrls = usePhotoThumbnails(photos);
 
     // Check pending photos one at a time. Each finished check updates the
     // list, which re-runs this effect and starts the next one.
@@ -472,8 +465,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
 
     function removePhoto(photoId) {
         playSound('tap');
-        const photoToRemove = photos.find((photo) => photo.id === photoId);
-        if (photoToRemove) URL.revokeObjectURL(photoToRemove.url);
         setPhotos((currentPhotos) => currentPhotos.filter((photo) => photo.id !== photoId));
         if (selectedPhotoId === photoId) {
             setSelectedPhotoId(null);
@@ -840,12 +831,16 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                             onClick={() => handleThumbnailClick(photo.id)}
                                             aria-label={isPhone ? 'Keep or leave out this photo' : 'Preview this photo'}
                                         >
-                                            <img
-                                                src={photo.url}
-                                                alt=""
-                                                loading="lazy"
-                                                style={{ filter: filterForPhoto(photo) }}
-                                            />
+                                            {/* Until its thumbnail is ready, the tile's background shows. */}
+                                            {thumbnailUrls[photo.id] && (
+                                                <img
+                                                    src={thumbnailUrls[photo.id]}
+                                                    alt=""
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    style={{ filter: filterForPhoto(photo) }}
+                                                />
+                                            )}
                                             {photo.customEdits && !useOriginals && (
                                                 <span className="photo-editor-edited-badge">Edited</span>
                                             )}
