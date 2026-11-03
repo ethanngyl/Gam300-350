@@ -13,10 +13,12 @@ Usage: <Icon name="layers" size={16} />
 
 const ICON_PATHS = {
     cube: (<><path d="m12 2 9 5v10l-9 5-9-5V7z" /><path d="m12 12-9-5M12 12l9-5M12 12v10" /></>),
+    cubePlus: (<><path d="m10 5 7 4v8l-7 4-7-4V9z" /><path d="m10 13-7-4M10 13l7-4M10 13v8" /><path d="M19 2v6M16 5h6" /></>),
     home: (<><path d="M3 11 12 3l9 8" /><path d="M5 10v10h5v-6h4v6h5V10" /></>),
     layers: (<><path d="M12 3 21 8 12 13 3 8z" /><path d="M3 12l9 5 9-5" /><path d="M3 16l9 5 9-5" /></>),
     edit: (<><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>),
     shield: <path d="M12 3 4 6v6c0 4.5 3.2 8 8 9 4.8-1 8-4.5 8-9V6z" />,
+    shapes: (<><path d="M12 3 16.5 10.5h-9z" /><rect x="3.5" y="13.5" width="7" height="7" rx="1" /><circle cx="17" cy="17" r="3.5" /></>),
     play: (<><rect x="3" y="6" width="18" height="12" rx="3" /><path d="m10 9.5 4.5 2.5-4.5 2.5z" /></>),
     folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
     image: (<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="m21 16-5-5-8 9" /></>),

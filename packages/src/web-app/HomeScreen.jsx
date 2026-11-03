@@ -118,9 +118,9 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     <h1>Welcome back, {userName}</h1>
                     <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
                 </div>
-                {/* Phones only: a bigger New model button than the dock's camera icon. */}
+                {/* Phones only: a bigger New model button than the dock's icon. */}
                 <button className="forma-btn forma-btn-primary home-new-model" onClick={startNewModel}>
-                    <Icon name="camera" size={15} /> New model
+                    <Icon name="cubePlus" size={15} /> New model
                 </button>
             </div>
 
@@ -164,7 +164,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     <h3>Create your first 3D model</h3>
                     <p>Take or upload photos of an object from every angle, and GENESIS builds the model for you.</p>
                     <button className="forma-btn forma-btn-primary" onClick={startNewModel}>
-                        <Icon name="plus" size={14} /> New model
+                        <Icon name="cubePlus" size={14} /> New model
                     </button>
                 </div>
             )}

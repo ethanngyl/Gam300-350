@@ -22,7 +22,7 @@ import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 const TABS = [
     { id: 'library', label: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shield' },
+    { id: 'scene', label: 'Scene Builder', icon: 'shapes' },
     { id: 'extractor', label: 'Frame Extractor', icon: 'play' },
 ];
 

@@ -40,7 +40,7 @@ const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', shortLabel: 'Home', icon: 'home' },
     { id: 'library', label: 'Media Library', shortLabel: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', shortLabel: 'Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', shortLabel: 'Scene', icon: 'shield' },
+    { id: 'scene', label: 'Scene Builder', shortLabel: 'Scene', icon: 'shapes' },
     { id: 'extractor', label: 'Frame Extractor', shortLabel: 'Frames', icon: 'play' },
     { id: 'viewer', label: 'Model Viewer', shortLabel: 'Viewer', icon: 'cube' },
     { id: 'feedback', label: 'Feedback', shortLabel: 'Feedback', icon: 'message' },
@@ -290,7 +290,7 @@ function Dock({
     if (isMobile) {
         // aria-labels match the desktop dock's, so the walkthrough finds the same items.
         const mobileItems = [
-            { key: 'capture', label: 'New model', shortLabel: 'New', icon: 'camera', isActive: isCapturePage, isPrimary: true },
+            { key: 'capture', label: 'New model', shortLabel: 'New', icon: 'cubePlus', isActive: isCapturePage, isPrimary: true },
             ...MOBILE_WORKSPACE_ORDER.map((id) => {
                 const item = WORKSPACE_ITEMS.find((workspaceItem) => workspaceItem.id === id);
                 return { key: id, label: item.label, shortLabel: item.shortLabel, icon: item.icon, isActive: activeTab === id };
@@ -382,7 +382,7 @@ function Dock({
                         aria-label="New model"
                         aria-current={isCapturePage ? 'page' : undefined}
                     >
-                        <Icon name="camera" size={17} />
+                        <Icon name="cubePlus" size={17} />
                         <span className="genesis-dock-label">New model</span>
                     </button>
                     <button
