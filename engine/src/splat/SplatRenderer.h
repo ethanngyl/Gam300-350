@@ -54,6 +54,10 @@ public:
     void UpdateModel(SplatModel* model, const std::vector<SplatVertex>& splats);
     //Shows or hides a model without removing it; out-of-range indices are ignored
     void SetModelHidden(int index, bool hidden);
+    //Live preview of a crop box drag: the splats of the model that lie inside the starting box are drawn moved
+    //by deltaWorld (newBox * inverse(startBox)) without touching the splat data. Cleared once the drag is baked.
+    void SetRegionPreview(int modelIndex, const glm::mat4& startBoxTransform, const glm::mat4& deltaWorld);
+    void ClearRegionPreview() { m_regionModel = -1; }
     //Moves model
     void TranslateModel(SplatModel* model, const glm::vec3& delta);
     //Scale model
@@ -85,6 +89,8 @@ public:
 
 private:
     void RebuildCombinedBuffer();
+    //Sends the region preview uniforms to the shader that is currently in use
+    void SetRegionUniforms(const Shader& shader) const;
 
     //The original flat point sprite path
     void DrawPointCloud(const glm::mat4& viewProj, float viewportHeightPixels, const glm::vec3& camPos);
@@ -148,6 +154,12 @@ private:
     size_t m_totalCreatedCount = 0; //Total number of models ever created
 
     int m_selectedModelIndex = -1;
+
+    //Region preview (see SetRegionPreview), off while the model index is -1
+    int m_regionModel = -1;
+    glm::mat4 m_regionInverse = glm::mat4(1.0f); //World -> start box space
+    glm::mat4 m_regionDelta = glm::mat4(1.0f);   //Applied to the splat position
+    glm::mat4 m_regionLinear = glm::mat4(1.0f);  //Rotation * average scale of the delta, applied to the splat's shape
 
     bool m_modified = true;
 

@@ -189,6 +189,7 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         m_dragModel = nullptr;
         m_dragIsCropBox = false;
         m_dragBefore = glm::mat4(1.0f);
+        m_renderer->ClearRegionPreview();
         return;
     }
 
@@ -239,8 +240,16 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         }
         m_dragModel = nullptr;
         m_dragIsCropBox = false;
+        m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
     }
     m_gizmoWasUsing = isUsing;
+
+    //While the box is dragged in contents mode, draw the splats inside it moving with it.
+    //The splat data itself is only changed once the drag ends.
+    if (isUsing && m_dragIsCropBox && m_cropBox.moveContents) {
+        m_renderer->SetRegionPreview(m_renderer->GetSelectedModel(), m_dragBefore,
+                                     m_cropBox.transform * glm::inverse(m_dragBefore));
+    }
 }
 
 void Viewport::DrawToolButtons() {

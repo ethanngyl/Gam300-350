@@ -13,6 +13,7 @@
  * All rights reserved.
  ******************************************************************************/
 #include "SplatRenderer.h"
+#include "CropBox.h"
 
 #ifdef CODEFINE_GLES
 #include <GLES3/gl3.h>
@@ -40,6 +41,11 @@ layout(location = 4) in float aModelId;
 uniform mat4 uViewProj;
 uniform float uPixelsPerUnit;
 uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
+//Live preview of a crop box drag: splats of model uRegionModel that start inside the box are moved
+uniform int uRegionModel;    // -1 = off
+uniform mat4 uRegionInverse; // world -> start box space
+uniform mat4 uRegionDelta;   // world-space move applied to the splat position
+uniform mat4 uRegionLinear;  // rotation * average scale of that move, applied to the splat's shape
 
 out vec3 vColor;
 out float vAlpha;
@@ -47,11 +53,21 @@ out float vAlpha;
 void main() {
     mat4 model = uModelTransforms[int(aModelId)];
     vec4 worldPos = model * vec4(aPosition, 1.0);
+    float pointSize = aPointSize;
+
+    //Crop box drag preview
+    if (int(aModelId) == uRegionModel) {
+        vec3 local = (uRegionInverse * worldPos).xyz;
+        if (all(lessThanEqual(abs(local), vec3(0.5)))) {
+            worldPos = uRegionDelta * worldPos;
+            pointSize *= length(uRegionLinear[0].xyz);
+        }
+    }
 
     vColor = aColor;
     vAlpha = aAlpha;
     gl_Position = uViewProj * worldPos;
-    gl_PointSize = max(aPointSize * uPixelsPerUnit / gl_Position.w, 1.0);
+    gl_PointSize = max(pointSize * uPixelsPerUnit / gl_Position.w, 1.0);
 }
 )";
 
@@ -94,6 +110,11 @@ uniform mat4 uView;
 uniform mat4 uProj;
 uniform vec2 uViewport; // framebuffer size in pixels
 uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
+//Live preview of a crop box drag: splats of model uRegionModel that start inside the box are moved
+uniform int uRegionModel;    // -1 = off
+uniform mat4 uRegionInverse; // world -> start box space
+uniform mat4 uRegionDelta;   // world-space move applied to the splat position
+uniform mat4 uRegionLinear;  // rotation * average scale of that move, applied to the splat's shape
 
 out vec3 vColor;
 out float vAlpha;
@@ -117,8 +138,19 @@ void main() {
     vValid = 1.0;
 
     //Step 1: splat center in view space (camera looks down -z, so visible t.z < 0)
-    mat4 modelView = uView * uModelTransforms[int(aModelId)];
-    vec4 t = modelView * vec4(aPosition, 1.0);
+    mat4 model = uModelTransforms[int(aModelId)];
+    vec4 worldPos = model * vec4(aPosition, 1.0);
+    mat3 regionLinear = mat3(1.0);
+
+    //Crop box drag preview
+    if (int(aModelId) == uRegionModel) {
+        vec3 local = (uRegionInverse * worldPos).xyz;
+        if (all(lessThanEqual(abs(local), vec3(0.5)))) {
+            worldPos = uRegionDelta * worldPos;
+            regionLinear = mat3(uRegionLinear);
+        }
+    }
+    vec4 t = uView * worldPos;
 
     //Cull splats behind the camera
     if (t.z > -0.01) {
@@ -143,7 +175,7 @@ void main() {
     mat3 S = mat3(aScale.x, 0.0, 0.0,
                   0.0, aScale.y, 0.0,
                   0.0, 0.0, aScale.z);
-    mat3 A = mat3(modelView) * quatToMat3(normalize(aRotation)) * S;
+    mat3 A = mat3(uView) * regionLinear * mat3(model) * quatToMat3(normalize(aRotation)) * S;
 
     //Step 3: Jacobian of the perspective projection at the splat center.
     //Focal lengths in pixels come straight from the projection matrix.
@@ -288,6 +320,11 @@ uniform mat4 uView;
 uniform mat4 uProj;
 uniform vec2 uViewport; // framebuffer size in pixels
 uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
+//Live preview of a crop box drag: splats of model uRegionModel that start inside the box are moved
+uniform int uRegionModel;    // -1 = off
+uniform mat4 uRegionInverse; // world -> start box space
+uniform mat4 uRegionDelta;   // world-space move applied to the splat position
+uniform mat4 uRegionLinear;  // rotation * average scale of that move, applied to the splat's shape
 
 out vec3 gColor;
 out float gAlpha;
@@ -328,8 +365,20 @@ void main() {
     vec2 sigmaOffset = aCorner * 3.0;
     gOffset = sigmaOffset;
 
-    mat4 modelView = uView * uModelTransforms[int(t2.x + 0.5)];
-    vec4 t = modelView * vec4(aPosition, 1.0);
+    int modelId = int(t2.x + 0.5);
+    mat4 model = uModelTransforms[modelId];
+    vec4 worldPos = model * vec4(aPosition, 1.0);
+    mat3 regionLinear = mat3(1.0);
+
+    //Crop box drag preview
+    if (modelId == uRegionModel) {
+        vec3 local = (uRegionInverse * worldPos).xyz;
+        if (all(lessThanEqual(abs(local), vec3(0.5)))) {
+            worldPos = uRegionDelta * worldPos;
+            regionLinear = mat3(uRegionLinear);
+        }
+    }
+    vec4 t = uView * worldPos;
 
     //Cull splats behind the camera
     if (t.z > -0.01) { cull(); return; }
@@ -342,7 +391,7 @@ void main() {
     mat3 S = mat3(aScale.x, 0.0, 0.0,
                   0.0, aScale.y, 0.0,
                   0.0, 0.0, aScale.z);
-    mat3 A = mat3(modelView) * quatToMat3(normalize(aRotation)) * S;
+    mat3 A = mat3(uView) * regionLinear * mat3(model) * quatToMat3(normalize(aRotation)) * S;
 
     float fx = uProj[0][0] * uViewport.x * 0.5;
     float fy = uProj[1][1] * uViewport.y * 0.5;
@@ -541,6 +590,29 @@ void SplatRenderer::TranslateModel(SplatModel* model, const glm::vec3& delta) {
     model->Translate(delta); // no buffer rebuild needed -- transform is GPU-side
 }
 
+void SplatRenderer::SetRegionPreview(int modelIndex, const glm::mat4& startBoxTransform, const glm::mat4& deltaWorld) {
+    //A box with no volume selects nothing
+    if (modelIndex < 0 || std::abs(glm::determinant(startBoxTransform)) < 1e-12f) {
+        m_regionModel = -1;
+        return;
+    }
+    glm::mat3 rotation;
+    float factor;
+    DecomposeRegionDelta(deltaWorld, rotation, factor);
+
+    m_regionModel = modelIndex;
+    m_regionInverse = glm::inverse(startBoxTransform);
+    m_regionDelta = deltaWorld;
+    m_regionLinear = glm::mat4(rotation * factor);
+}
+
+void SplatRenderer::SetRegionUniforms(const Shader& shader) const {
+    shader.setInt("uRegionModel", m_regionModel);
+    shader.setMat4("uRegionInverse", m_regionInverse);
+    shader.setMat4("uRegionDelta", m_regionDelta);
+    shader.setMat4("uRegionLinear", m_regionLinear);
+}
+
 void SplatRenderer::ScaleModel(SplatModel* model, const glm::vec3& delta)
 {
     model->Scale(delta);
@@ -583,6 +655,7 @@ void SplatRenderer::DrawGaussian(const glm::mat4& view, const glm::mat4& proj,
     m_gaussianShader->setMat4("uView", view);
     m_gaussianShader->setMat4("uProj", proj);
     m_gaussianShader->setVec2("uViewport", glm::vec2(viewportWidthPixels, viewportHeightPixels));
+    SetRegionUniforms(*m_gaussianShader);
 
     std::vector<glm::mat4> transforms;
     transforms.reserve(m_models.size());
@@ -754,6 +827,7 @@ void SplatRenderer::DrawPointCloud(const glm::mat4& viewProj, float viewportHeig
     m_shader->use();
     m_shader->setMat4("uViewProj", viewProj);
     m_shader->setFloat("uPixelsPerUnit", viewportHeightPixels * 0.5f);
+    SetRegionUniforms(*m_shader);
 
     std::vector<glm::mat4> transforms;
     transforms.reserve(m_models.size());

@@ -74,27 +74,40 @@ glm::mat4 WorldDeltaToModelSpace(const glm::mat4& deltaWorld, const glm::mat4& m
     return glm::inverse(modelTransform) * deltaWorld * modelTransform;
 }
 
+bool DecomposeRegionDelta(const glm::mat4& delta, glm::mat3& rotation, float& factor)
+{
+    rotation = glm::mat3(1.0f);
+    factor = 1.0f;
+
+    const glm::vec3 col0(delta[0]);
+    const glm::vec3 col1(delta[1]);
+    const glm::vec3 col2(delta[2]);
+    const float sx = glm::length(col0);
+    const float sy = glm::length(col1);
+    const float sz = glm::length(col2);
+    if (sx < 1e-8f || sy < 1e-8f || sz < 1e-8f)
+        return false;
+
+    rotation = glm::mat3(col0 / sx, col1 / sy, col2 / sz);
+    factor = std::cbrt(sx * sy * sz);
+    return true;
+}
+
 SplatVertex TransformSplat(const SplatVertex& splat, const glm::mat4& deltaModel)
 {
     SplatVertex out = splat;
     out.position = glm::vec3(deltaModel * glm::vec4(splat.position, 1.0f));
 
-    //Split the linear part into per-axis scale factors and a pure rotation
-    const glm::vec3 col0(deltaModel[0]);
-    const glm::vec3 col1(deltaModel[1]);
-    const glm::vec3 col2(deltaModel[2]);
-    const float sx = glm::length(col0);
-    const float sy = glm::length(col1);
-    const float sz = glm::length(col2);
-    if (sx < 1e-8f || sy < 1e-8f || sz < 1e-8f)
+    glm::mat3 rotation;
+    float factor;
+    if (!DecomposeRegionDelta(deltaModel, rotation, factor))
         return out; //Squashed flat, leave the orientation and size alone
 
-    const glm::quat delta = glm::quat_cast(glm::mat3(col0 / sx, col1 / sy, col2 / sz));
+    const glm::quat delta = glm::quat_cast(rotation);
     const glm::quat current(splat.rotation.x, splat.rotation.y, splat.rotation.z, splat.rotation.w); //Stored as (w, x, y, z)
     const glm::quat combined = glm::normalize(delta * current);
     out.rotation = glm::vec4(combined.w, combined.x, combined.y, combined.z);
 
-    const float factor = std::cbrt(sx * sy * sz);
     out.scale = splat.scale * factor;
     out.pointSize = splat.pointSize * factor;
     return out;

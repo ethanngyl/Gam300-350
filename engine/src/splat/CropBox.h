@@ -43,3 +43,7 @@ glm::mat4 WorldDeltaToModelSpace(const glm::mat4& deltaWorld, const glm::mat4& m
 //Applies a model-space transform to one splat: position moves, the orientation is rotated and the size is scaled
 //Size uses the average scale factor of the transform, so a non-uniform scale is only approximated
 SplatVertex TransformSplat(const SplatVertex& splat, const glm::mat4& deltaModel);
+
+//Splits the linear part of a transform into a pure rotation and one average scale factor (cube root of the volume change)
+//Returns false if an axis is squashed flat, in which case the outputs are left as identity
+bool DecomposeRegionDelta(const glm::mat4& delta, glm::mat3& rotation, float& factor);
