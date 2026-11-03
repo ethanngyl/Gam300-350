@@ -147,6 +147,12 @@ MainWindow::MainWindow() {
         // Picks up WASD nudges made in the viewport. Cheap, so every frame.
         m_inspector->syncFromModel();
 
+        //Shortcuts and menus also change the crop box, so the inspector buttons follow its real state
+        const CropBox& cropBox = m_viewport->cropBox();
+        const SplatRenderer* cropRenderer = m_viewport->renderer();
+        m_inspector->setCropState(cropBox.active, cropBox.moveContents, cropBox.removeInside,
+                                  cropRenderer && cropRenderer->HasSelection());
+
         if (m_statsTimer.elapsed() < kStatsRefreshMs) {
             return;
         }
@@ -511,6 +517,15 @@ void MainWindow::createDocks() {
     });
     connect(m_inspector, &InspectorPanel::trimApplyRequested, this, &MainWindow::applyModelTrim);
     connect(m_inspector, &InspectorPanel::untrimRequested, this, &MainWindow::untrimModel);
+    connect(m_inspector, &InspectorPanel::cropBoxToggled, this, [this](bool) { toggleCropBox(); });
+    //Go through the menu actions so the menu checkmarks and the viewport stay in step with the buttons
+    connect(m_inspector, &InspectorPanel::cropModeSelected, this, [this](int mode) {
+        m_cropMoveContentsAction->setChecked(mode == InspectorPanel::CropMoveContents);
+        if (mode != InspectorPanel::CropMoveContents) {
+            m_cropInsideAction->setChecked(mode == InspectorPanel::CropRemoveInside);
+        }
+    });
+    connect(m_inspector, &InspectorPanel::cropApplyRequested, this, [this] { m_applyCropBoxAction->trigger(); });
     connect(m_inspector, &InspectorPanel::nameChanged, this, [this](const QString& name) {
         if (SplatRenderer* renderer = m_viewport->renderer()) {
             renameModel(renderer->GetSelectedModel(), name);
