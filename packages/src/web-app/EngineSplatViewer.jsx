@@ -307,7 +307,7 @@ export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = fal
                 style={{ position: overlayPosition, bottom: isEmbedded ? 12 : 16, right: isEmbedded ? 12 : 16, display: 'flex', gap: 8, alignItems: 'center', zIndex: 10 }}
             >
                 {status.phase === 'ready' && (
-                    <span style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8, marginRight: 4 }}>
+                    <span className="engine-viewer-count" style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8, marginRight: 4 }}>
                         {status.count.toLocaleString()} splats
                     </span>
                 )}
