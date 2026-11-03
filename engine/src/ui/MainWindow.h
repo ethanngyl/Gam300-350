@@ -38,6 +38,7 @@ class QToolBar;
 #include "splat/SplatTrimmer.h"
 
 struct SplatVertex;
+class SplatModel;
 
 class AssetBrowserPanel;
 class AudioPanel;
@@ -93,6 +94,11 @@ private:
     void selectModel(int index);
     void renameModel(int index, const QString& name);
     void deleteSelectedModel();
+    void toggleCropBox();      // shows the crop box around the selected model
+    void applyCropBox();    // removes the splats the crop box selects from the selected model
+    void cancelCropBox();   // hides the crop box without removing anything
+    void confirmCropRegion(); // contents mode: locks the splats inside the box as the selection, or releases it
+    void commitCropBoxEdit(const glm::mat4& before, const glm::mat4& after); //Finished box drag, moves box and the splats inside it in contents mode
     void toggleModelHidden(int index);
     void setRenderMode(int mode); // SplatRenderer::RenderMode as int
     // Asks for export options and a file name, then writes the selected
@@ -119,9 +125,7 @@ private:
 
     Viewport* m_viewport = nullptr;
 
-    // Undo history. Edits are pushed as QUndoCommands (see EditCommands.h);
-    // the stack is cleared whenever a model is removed so no command can
-    // hold a dangling model pointer.
+    //Undo history. Edits are pushed as QUndoCommands (see EditCommands.h)
     QUndoStack m_undo;
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
@@ -145,6 +149,11 @@ private:
     QAction* m_deselectAction = nullptr;
     QAction* m_toggleVisibilityAction = nullptr;
     QAction* m_resetPositionAction = nullptr;
+    QAction* m_addCropBoxAction = nullptr;
+    QAction* m_applyCropBoxAction = nullptr;
+    QAction* m_cropInsideAction = nullptr;
+    QAction* m_cropMoveContentsAction = nullptr;
+    SplatModel* m_cropBoxModel = nullptr; // model the crop box was last fitted to, only compared never dereferenced
     QActionGroup* m_renderModeGroup = nullptr;
     QAction* m_pointCloudAction = nullptr;
     QAction* m_gaussianAction = nullptr;

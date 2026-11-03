@@ -6,8 +6,8 @@
 \par Software Engineering Project 5
 \date 15-10-2026
 \brief
-Implements OutlinerPanel: the model list, its empty state, inline rename,
-and the right-click Rename / Delete menu.
+Implements OutlinerPanel: the model list, its empty state, inline rename
+(F2, double-click or the right-click menu), and the right-click Rename/Delete menu.
 **************************************************************************/
 #include "ui/OutlinerPanel.h"
 
@@ -18,6 +18,7 @@ and the right-click Rename / Delete menu.
 #include <QLocale>
 #include <QMenu>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -79,6 +80,22 @@ OutlinerPanel::OutlinerPanel(QWidget* parent)
         emit renameRequested(item->data(kNameColumn, kIndexRole).toInt(), item->text(kNameColumn).trimmed());
     });
 
+    //Double-click the name to rename
+    //Done here rather than with the DoubleClicked edit trigger, which would also open an editor on the Splats column.
+    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int column) {
+        if (column != kNameColumn) {
+            return;
+        }
+        //Opened on the next event loop pass, not here
+        //Bug where a preselected row would have closed it after opening
+        const QPersistentModelIndex index = m_tree->indexFromItem(item, kNameColumn);
+        QTimer::singleShot(0, this, [this, index] {
+            if (index.isValid()) {
+                m_tree->edit(index);
+            }
+        });
+    });
+
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         QTreeWidgetItem* item = m_tree->itemAt(pos);
         if (!item) {
@@ -90,7 +107,7 @@ OutlinerPanel::OutlinerPanel(QWidget* parent)
         const bool hidden = item->data(kNameColumn, kHiddenRole).toBool();
 
         QMenu menu(this);
-        menu.addAction("Rename", this, [this] { editSelectedName(); });
+        menu.addAction("Rename (F2)", this, [this] { editSelectedName(); });
         menu.addAction(hidden ? "Show" : "Hide", this, [this, index] { emit toggleHiddenRequested(index); });
         menu.addAction("Export...", this, [this, index] { emit exportRequested(index); });
         menu.addSeparator();
