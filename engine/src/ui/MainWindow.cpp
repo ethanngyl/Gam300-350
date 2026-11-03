@@ -855,7 +855,11 @@ void MainWindow::toggleCropBox() {
             statusBar()->showMessage("Select a model before adding a crop box.", kStatusMessageMs);
             return;
         }
+        //Keep the box where and how big it was left. Only fit it the first time, or for a different model
+    if (m_cropBoxModel != model) {
         box.transform = FitCropBoxToSplats(model->splats(), model->GetTransform());
+        m_cropBoxModel = model;
+    }
         box.removeInside = m_cropInsideAction->isChecked();
         box.active = true;
         statusBar()->showMessage("Crop box added. Press Delete or Enter to remove the splats, Esc to cancel.", kStatusMessageMs);
@@ -929,6 +933,7 @@ void MainWindow::deleteSelectedModel() {
     const QString name = QString::fromStdString(renderer->GetModelName(index));
 
     m_inspector->setModel(nullptr); // drop the pointer before the model is freed
+    m_cropBoxModel = nullptr; //The address may be reused by the next model
     m_undo.clear(); //For now clear stack if delete
     renderer->RemoveModel(index);
     refreshScenePanels();

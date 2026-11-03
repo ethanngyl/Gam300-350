@@ -38,6 +38,7 @@ class QToolBar;
 #include "splat/SplatTrimmer.h"
 
 struct SplatVertex;
+class SplatModel;
 
 class AssetBrowserPanel;
 class AudioPanel;
@@ -151,6 +152,7 @@ private:
     QAction* m_applyCropBoxAction = nullptr;
     QAction* m_cropInsideAction = nullptr;
     QAction* m_cropMoveContentsAction = nullptr;
+    SplatModel* m_cropBoxModel = nullptr; // model the crop box was last fitted to, only compared never dereferenced
     QActionGroup* m_renderModeGroup = nullptr;
     QAction* m_pointCloudAction = nullptr;
     QAction* m_gaussianAction = nullptr;
