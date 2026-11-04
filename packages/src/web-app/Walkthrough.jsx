@@ -12,6 +12,9 @@ Recent section, then each dock item from left to right), with a tooltip
 beside it: step count, title, a short line of text, and Skip / Next
 (Finish on the last step). Escape skips. If a step's item is not on the
 screen, its tooltip is shown in the middle of the page instead.
+In the mobile view the dock shows five tabs at a time, so each step slides
+the tabs to the five that hold its item, and finishing slides back to the
+five that hold the current page.
 App.jsx shows it the first time each account signs in on a browser, and
 again when the user presses "Show walkthrough" (account page or account
 menu). Guests can't save work, so their last step suggests signing in.
@@ -105,6 +108,18 @@ const TOOLTIP_GAP = 14;
 const TOOLTIP_WIDTH = 276;
 // Closest the tooltip may come to the sides of the screen.
 const SCREEN_MARGIN = 12;
+// The mobile dock's tabs (Dock.jsx), five to a page.
+const MOBILE_DOCK_SCROLLER = '.genesis-mdock-scroller';
+
+// Mobile dock: slide its tabs to the five that hold tabElement. Instant, so
+// the spotlight can be measured straight after.
+function showMobileDockPageWith(tabElement) {
+    const scroller = tabElement?.closest(MOBILE_DOCK_SCROLLER);
+    if (!scroller || scroller.clientWidth === 0) return false;
+    const page = Math.floor(tabElement.offsetLeft / scroller.clientWidth);
+    scroller.scrollTo({ left: page * scroller.clientWidth, behavior: 'instant' });
+    return true;
+}
 
 function Walkthrough({ isGuest = false, onClose }) {
     const [stepIndex, setStepIndex] = useState(0);
@@ -117,6 +132,8 @@ function Walkthrough({ isGuest = false, onClose }) {
     const stepText = isGuest && step.guestText ? step.guestText : step.text;
 
     const finish = useCallback(() => {
+        // Mobile dock: back to the tabs that hold the current page.
+        showMobileDockPageWith(document.querySelector(`${MOBILE_DOCK_SCROLLER} [aria-current="page"]`));
         onClose();
     }, [onClose]);
 
@@ -134,7 +151,8 @@ function Walkthrough({ isGuest = false, onClose }) {
         }
 
         const targetElement = document.querySelector(step.target);
-        targetElement?.scrollIntoView({ block: 'nearest' });
+        // The mobile dock snaps to pages of five, which would undo scrollIntoView.
+        if (!showMobileDockPageWith(targetElement)) targetElement?.scrollIntoView({ block: 'nearest' });
         const frameId = requestAnimationFrame(measureTarget);
         window.addEventListener('resize', measureTarget);
         // true: also hear scrolling inside the page's own scroll area.
