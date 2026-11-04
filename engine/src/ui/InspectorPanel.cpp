@@ -15,6 +15,7 @@ to a SplatModel.
 #include "splat/SplatModel.h"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <QButtonGroup>
 #include <QDoubleSpinBox>
@@ -29,12 +30,52 @@ to a SplatModel.
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
     constexpr double kPositionRange = 1000.0;
     constexpr double kPositionStep = 0.1;  // matches the viewport's WASD nudge
     constexpr int kPositionDecimals = 3;
+
+    // Scale can't reach 0 or go negative: the scale is read back as the length of each matrix column,
+    // and a zero length column has no direction left to rebuild it from.
+    constexpr double kScaleMin = 0.001;
+    constexpr double kScaleMax = 1000.0;
+    constexpr double kScaleStep = 0.1;
+    constexpr int kScaleDecimals = 3;
+
+    constexpr double kRotationRange = 360.0; // degrees
+    constexpr double kRotationStep = 1.0;
+    constexpr int kRotationDecimals = 2;
+
+    // The pure rotation of a model matrix: its three axis columns with the scale divided out.
+    // False if an axis has collapsed to nothing, which leaves no direction to read.
+    bool ExtractRotation(const glm::mat4& transform, glm::mat3& rotation) {
+        for (int axis = 0; axis < 3; ++axis) {
+            const glm::vec3 column(transform[axis]);
+            const float length = glm::length(column);
+            if (length < 1e-8f) return false;
+            rotation[axis] = column / length;
+        }
+        return true;
+    }
+
+    //Rotation for Euler angles in degrees. glm::quat(vec3) and glm::eulerAngles(quat) are inverses of each other
+    //The fields and the matrix use one convention.
+    glm::mat3 RotationFromDegrees(const glm::vec3& degrees) {
+        return glm::mat3_cast(glm::quat(glm::radians(degrees)));
+    }
+
+    // Largest difference between any two matching entries
+    float MaxDifference(const glm::mat3& a, const glm::mat3& b) {
+        float largest = 0.0f;
+        for (int column = 0; column < 3; ++column) {
+            const glm::vec3 difference = glm::abs(a[column] - b[column]);
+            largest = std::max(largest, std::max(difference.x, std::max(difference.y, difference.z)));
+        }
+        return largest;
+    }
 
     // Axis label colours, the usual X = red, Y = green, Z = blue convention.
     constexpr const char* kAxisNames[3] = { "X", "Y", "Z" };
@@ -75,6 +116,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     transformHeader->setObjectName("SectionHeader");
     layout->addWidget(transformHeader);
 
+    //<<POSITION>>
     auto* positionRow = new QHBoxLayout();
     positionRow->setSpacing(4);
     for (int axis = 0; axis < 3; ++axis) {
@@ -96,8 +138,58 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     positionForm->addRow("Position", positionRow);
     layout->addLayout(positionForm);
 
+    //<<ROTATION>>
+    auto* rotationRow = new QHBoxLayout();
+    rotationRow->setSpacing(4);
+    for (int axis = 0; axis < 3; ++axis) {
+        auto* label = new QLabel(kAxisNames[axis], page);
+        label->setStyleSheet(QString("color: %1; font-weight: bold;").arg(kAxisColours[axis]));
+        auto* spin = new QDoubleSpinBox(page);
+        spin->setRange(-kRotationRange, kRotationRange);
+        spin->setSingleStep(kRotationStep);
+        spin->setDecimals(kRotationDecimals);
+        spin->setKeyboardTracking(false); //apply on Enter / focus out / arrows, not every keystroke
+        spin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_rotation[axis] = spin;
+        rotationRow->addWidget(label);
+        rotationRow->addWidget(spin, 1);
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] { writeRotation(); });
+    }
+    auto* rotationForm = new QFormLayout();
+    rotationForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    rotationForm->addRow("Rotation", rotationRow);
+    layout->addLayout(rotationForm);
+
+    //<<SCALE>>
+    auto* scaleRow = new QHBoxLayout();
+    scaleRow->setSpacing(4);
+    for (int axis = 0; axis < 3; ++axis) {
+        auto* label = new QLabel(kAxisNames[axis], page);
+        label->setStyleSheet(QString("color: %1; font-weight: bold;").arg(kAxisColours[axis]));
+        auto* spin = new QDoubleSpinBox(page);
+        spin->setRange(kScaleMin, kScaleMax);
+        spin->setSingleStep(kScaleStep);
+        spin->setDecimals(kScaleDecimals);
+        spin->setValue(1.0);
+        spin->setKeyboardTracking(false); // apply on Enter / focus out / arrows, not every keystroke
+        spin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_scale[axis] = spin;
+        scaleRow->addWidget(label);
+        scaleRow->addWidget(spin, 1);
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] { writeScale(); });
+    }
+    auto* scaleForm = new QFormLayout();
+    scaleForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    scaleForm->addRow("Scale", scaleRow);
+    layout->addLayout(scaleForm);
+
     auto* resetButton = new QPushButton("Reset Position", page);
     layout->addWidget(resetButton, 0, Qt::AlignRight);
+
+    QFrame* linePosition = new QFrame(this);
+    linePosition->setFrameShape(QFrame::HLine); //QFrame::VLine for vertical
+    linePosition->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(linePosition);
 
     //---BOUNDING BOX---
     auto* cropHeader = new QLabel("Crop Box", page);
@@ -108,6 +200,10 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     m_cropToggle->setCheckable(true);
     m_cropToggle->setToolTip("Show a box around this model to select splats (Ctrl+B). Esc hides it");
     layout->addWidget(m_cropToggle);
+
+    //Shows the current mode, clicking it switches to the other one
+    m_cropModeToggle = new QPushButton(page);
+    layout->addWidget(m_cropModeToggle);
 
     //Which side of the box a crop removes. Only matters in Crop mode, so they are exclusive
     auto* cutRow = new QHBoxLayout();
@@ -126,10 +222,6 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     }
     layout->addLayout(cutRow);
 
-    //Shows the current mode, clicking it switches to the other one
-    m_cropModeToggle = new QPushButton(page);
-    layout->addWidget(m_cropModeToggle);
-
     m_cropApply = new QPushButton(page);
     m_cropApply->setToolTip("Enter, with the viewport focused");
     layout->addWidget(m_cropApply);
@@ -144,6 +236,12 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     connect(m_cropApply, &QPushButton::clicked, this, [this] { emit cropApplyRequested(); });
     setCropState(false, false, true, false);
 
+    QFrame* lineCrop = new QFrame(this);
+    lineCrop->setFrameShape(QFrame::HLine); //QFrame::VLine for vertical
+    lineCrop->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(lineCrop);
+
+    //---TRIMMING---
     auto* trimHeader = new QLabel("Trim", page);
     trimHeader->setObjectName("SectionHeader");
     layout->addWidget(trimHeader);
@@ -205,7 +303,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     connect(m_name, &QLineEdit::editingFinished, this, [this] {
         const QString name = m_name->text().trimmed();
         if (!m_model || name.isEmpty() || name.toStdString() == m_model->GetName()) {
-            if (m_model) m_name->setText(QString::fromStdString(m_model->GetName())); // undo blank names
+            if (m_model) m_name->setText(QString::fromStdString(m_model->GetName())); //undo blank names
             return;
         }
         emit nameChanged(name);
@@ -221,10 +319,11 @@ InspectorPanel::InspectorPanel(QWidget* parent)
 
     connect(resetButton, &QPushButton::clicked, this, [this] {
         if (!m_model) return;
-        glm::mat4 transform = m_model->GetTransform();
-        transform[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        m_model->SetTransform(transform);
-        syncFromModel();
+        const glm::mat4 before = m_model->GetTransform();
+        glm::mat4 after = before;
+        after[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        if (after != before) 
+            emit transformEdited(m_model, before, after);
     });
 
     setModel(nullptr);
@@ -306,6 +405,37 @@ void InspectorPanel::syncFromModel() {
         const QSignalBlocker block(spin);
         spin->setValue(translation[axis]);
     }
+
+    const glm::mat4 transform = m_model->GetTransform();
+
+    // The rotation is the axis columns with the scale divided out. Several sets of Euler angles give the
+    // same orientation (e.g. Y = 120 can come back as X = 180, Y = 60, Z = 180), so the fields are only
+    // rewritten when they no longer describe the model. Otherwise they would jump while you edit them.
+    bool rotationFocused = false;
+    for (QDoubleSpinBox* spin : m_rotation) rotationFocused = rotationFocused || spin->hasFocus();
+    glm::mat3 rotation;
+    if (!rotationFocused && ExtractRotation(transform, rotation)) {
+        const glm::vec3 shownDegrees(m_rotation[0]->value(), m_rotation[1]->value(), m_rotation[2]->value());
+        if (MaxDifference(rotation, RotationFromDegrees(shownDegrees)) > 1e-3f) {
+            const glm::vec3 degrees = glm::degrees(glm::eulerAngles(glm::quat_cast(rotation)));
+            for (int axis = 0; axis < 3; ++axis) {
+                const QSignalBlocker block(m_rotation[axis]);
+                m_rotation[axis]->setValue(degrees[axis]);
+            }
+        }
+    }
+
+    // The scale of each axis is the length of its matrix column.
+    for (int axis = 0; axis < 3; ++axis) {
+        QDoubleSpinBox* spin = m_scale[axis];
+        const double scale = glm::length(glm::vec3(transform[axis]));
+        const double tolerance = 0.5 * std::pow(10.0, -kScaleDecimals);
+        if (spin->hasFocus() || std::abs(spin->value() - scale) < tolerance) {
+            continue; // being edited, or already current
+        }
+        const QSignalBlocker block(spin);
+        spin->setValue(scale); // clamped to the spin box range, so a model scaled below 0.001 shows 0.001
+    }
 }
 
 void InspectorPanel::setCropState(bool active, bool moveContents, bool removeInside, bool confirmed) {
@@ -355,9 +485,63 @@ void InspectorPanel::writePosition() {
     if (!m_model) {
         return;
     }
-    glm::mat4 transform = m_model->GetTransform();
-    transform[3] = glm::vec4(static_cast<float>(m_position[0]->value()),
-                             static_cast<float>(m_position[1]->value()),
-                             static_cast<float>(m_position[2]->value()), 1.0f);
-    m_model->SetTransform(transform);
+    const glm::mat4 before = m_model->GetTransform();
+    glm::mat4 after = before;
+    after[3] = glm::vec4(static_cast<float>(m_position[0]->value()),
+        static_cast<float>(m_position[1]->value()),
+        static_cast<float>(m_position[2]->value()), 1.0f);
+    //Not applied here, listener pushes it onto the undo stack
+    if (after != before) emit transformEdited(m_model, before, after);
+}
+
+void InspectorPanel::writeRotation()
+{
+    if (!m_model) {
+        return;
+    }
+    const glm::mat4 before = m_model->GetTransform();
+    glm::mat3 current;
+    if (!ExtractRotation(before, current)) {
+        return; //an axis has no length, so there is nothing to rotate
+    }
+
+    const glm::mat3 wanted = RotationFromDegrees(glm::vec3(m_rotation[0]->value(), m_rotation[1]->value(), m_rotation[2]->value()));
+    //Same orientation already (e.g. the fields were just refreshed from the model), nothing to do
+    if (MaxDifference(current, wanted) < 1e-4f) {
+        return;
+    }
+
+    //Keep each axis's length (the scale) and swap in the new direction. The translation column is untouched.
+    glm::mat4 after = before;
+    for (int axis = 0; axis < 3; ++axis) {
+        const float length = glm::length(glm::vec3(before[axis]));
+        after[axis] = glm::vec4(wanted[axis] * length, 0.0f);
+    }
+    //Not applied here, listener pushes it onto the undo stack
+    if (after != before) emit transformEdited(m_model, before, after);
+}
+
+void InspectorPanel::writeScale()
+{
+    if (!m_model) {
+        return;
+    }
+    const glm::mat4 before = m_model->GetTransform();
+    glm::mat4 after = before;
+
+    //The scale of an axis is the length of its matrix column, set it by giving the column thewanted length in the same direction.
+    //Leaves the rotation and the translation alone.
+    const double tolerance = 0.5 * std::pow(10.0, -kScaleDecimals);
+    for (int axis = 0; axis < 3; ++axis) {
+        const glm::vec3 column(before[axis]);
+        const float length = glm::length(column);
+        const double wanted = m_scale[axis]->value();
+        //Skip untouched axes and columns with no direction left
+        if (length < 1e-8f || std::abs(wanted - length) < tolerance) {
+            continue;
+        }
+        after[axis] = glm::vec4(column / length * static_cast<float>(wanted), 0.0f);
+    }
+    //Not applied here, listener pushes it onto the undo stack
+    if (after != before) emit transformEdited(m_model, before, after);
 }

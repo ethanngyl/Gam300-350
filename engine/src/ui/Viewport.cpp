@@ -24,6 +24,7 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 #include <imgui_impl_opengl3.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <QKeyEvent>
@@ -115,23 +116,25 @@ void Viewport::BindInputs() {
     //Movmeent test
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::FORWARD,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatForward);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatForward, glm::vec3(1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::BACKSWARD,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatBackwards);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatBackwards, glm::vec3(-1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatLeft);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatLeft, glm::vec3(0.0f, 0.0f, -1.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT,
         [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatRight);
+            Nudge(manager, type, &SplatRenderer::NudgeSplatRight, glm::vec3(0.0f, 0.0f, 1.0f));
         });
 }
 
-void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge) {
+void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection) {
+    constexpr float kNudgeStep = 0.1f; //Same step as SplatRenderer's model nudge
+
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
 
     if (type == InputManager::RELEASE) {
@@ -139,24 +142,57 @@ void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, Nudge
         if (m_nudgeKeysDown > 0 && --m_nudgeKeysDown == 0) FinishNudge();
         return;
     }
-    if (!model) return;
 
-    //A different model got selected mid-burst, close the old one first
-    if (m_nudgeModel && m_nudgeModel != model) {
+    //If crop box active, nudge it instead of the model
+    const bool toCropBox = m_cropBox.active;
+
+    //No model or cropbox active
+    if (!toCropBox && !model)
+        return;
+
+    //The target changed midburst nudges, finish old burst first
+    //Box shown or hidden, another model selected
+    if (m_nudgeActive && (m_nudgeIsCropBox != toCropBox || (!toCropBox && m_nudgeModel != model))) {
         FinishNudge();
         m_nudgeKeysDown = 0;
     }
-    if (!m_nudgeModel) {
-        m_nudgeModel = model;
-        m_nudgeBefore = model->GetTransform();
+    if (!m_nudgeActive) {
+        m_nudgeActive = true;
+        m_nudgeIsCropBox = toCropBox;
+        m_nudgeModel = toCropBox ? nullptr : model;
+        m_nudgeBefore = toCropBox ? m_cropBox.transform : model->GetTransform();
+        //Only a confirmed selection is carried, otherwise only the box moves
+        m_nudgeMovesContents = toCropBox && m_cropBox.moveContents && m_renderer->HasSelection();
     }
     //Key repeat arrives as HOLD, only the real press counts as a key going down
     if (type == InputManager::PRESS) ++m_nudgeKeysDown;
 
-    (m_renderer.get()->*nudge)(manager, type);
+    if (toCropBox) {
+        //World-space step, the same as the gizmo's translate
+        m_cropBox.transform = glm::translate(glm::mat4(1.0f), boxDirection * kNudgeStep) * m_cropBox.transform;
+        if (m_nudgeMovesContents) {
+            m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_nudgeBefore));
+        }
+    }
+    else {
+        (m_renderer.get()->*nudge)(manager, type);
+    }
 }
 
 void Viewport::FinishNudge() {
+    if (!m_nudgeActive) return;
+    m_nudgeActive = false;
+
+    if (m_nudgeIsCropBox) {
+        //The preview is replaced by the real splat move that the callback bakes
+        if (m_nudgeMovesContents) m_renderer->ClearRegionPreview();
+        m_nudgeMovesContents = false;
+        if (m_cropBox.transform != m_nudgeBefore && onCropBoxEdited) {
+            onCropBoxEdited(m_nudgeBefore, m_cropBox.transform);
+        }
+        return;
+    }
+
     SplatModel* model = m_nudgeModel;
     m_nudgeModel = nullptr;
     //Only report if the model is still there and actually moved

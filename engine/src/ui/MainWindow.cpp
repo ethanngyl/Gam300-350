@@ -517,6 +517,11 @@ void MainWindow::createDocks() {
     });
     connect(m_inspector, &InspectorPanel::trimApplyRequested, this, &MainWindow::applyModelTrim);
     connect(m_inspector, &InspectorPanel::untrimRequested, this, &MainWindow::untrimModel);
+    //Position fields and Reset Position are undo steps like the gizmo and nudges
+    connect(m_inspector, &InspectorPanel::transformEdited, this,
+            [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
+        m_undo.push(new MoveModelCommand(model, before, after));
+    });
     connect(m_inspector, &InspectorPanel::cropBoxToggled, this, [this](bool) { toggleCropBox(); });
     //Go through the menu actions so the menu checkmarks and the viewport stay in step with the buttons
     connect(m_inspector, &InspectorPanel::cropModeSelected, this, [this](int mode) {

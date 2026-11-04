@@ -16,6 +16,8 @@ elsewhere (e.g. WASD nudges in the viewport) back into the fields.
 
 #include "splat/SplatTrimmer.h"
 
+#include <glm/glm.hpp>
+
 #include <QWidget>
 
 #include <array>
@@ -57,6 +59,7 @@ public:
     // Cheap enough to call every frame.
     void setCropState(bool active, bool moveContents, bool removeInside, bool confirmed);
 
+//QT's events
 signals:
     // The Show Crop Box button was toggled.
     void cropBoxToggled(bool on);
@@ -70,6 +73,10 @@ signals:
     // The model's name was changed from the inspector.
     void nameChanged(const QString& name);
 
+    //The position fields or Reset Position asked to change the model transform
+    //The inspector panel does not apply it, the listener does, so it can be an undo step,
+    void transformEdited(SplatModel* model, const glm::mat4& before, const glm::mat4& after);
+
     // Apply was pressed in the Trim section; the model should be re-trimmed
     // from its original data with these values.
     void trimApplyRequested(const TrimData& trim);
@@ -79,14 +86,21 @@ signals:
 
 private:
     void writePosition();
-    void loadTrim();            // fills the trim fields and status from the model
+    void writeScale();
+    void writeRotation();
+    //Fills the trim fields and status from the model
+    void loadTrim();
     void loadTrimFields(const TrimData& trim);
     TrimData currentTrim() const;
 
     QStackedWidget* m_stack = nullptr; // "nothing selected" vs. the properties
     QLineEdit* m_name = nullptr;
     QLabel* m_splatCount = nullptr;
+
+    //Transform to display in inspect
     std::array<QDoubleSpinBox*, 3> m_position{};
+    std::array<QDoubleSpinBox*, 3> m_rotation{}; // Euler angles in degrees
+    std::array<QDoubleSpinBox*, 3> m_scale{};
 
     QDoubleSpinBox* m_minAlpha = nullptr;
     QDoubleSpinBox* m_cropPct = nullptr;
