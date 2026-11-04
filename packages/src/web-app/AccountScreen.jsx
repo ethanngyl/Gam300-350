@@ -11,8 +11,10 @@ menu (the user's photo, name and plan on top, then the sections) and the
 chosen section beside it. On phones the menu becomes a row of tabs above
 the section. Sections:
 - My account: profile photo (saved in this browser, see ProfilePhoto.js),
-  name, email, password, role, member since, "Show walkthrough" (replays
-  the dock tour), and log out. Guests see a sign-in card instead.
+  name, email, password ("Change password" opens ChangePasswordDialog;
+  Google-only accounts, per GET /api/v1/auth/me/account, have none), role,
+  member since, "Show walkthrough" (replays the dock tour), and log out.
+  Guests see a sign-in card instead.
 - Plans: Genesis Free / Plus / Pro compared side by side. A prototype:
   everyone is on Free and paid plans cannot be chosen yet.
 - Usage: workspace stats counted from GET /jobs (models, photos, failed
@@ -29,6 +31,7 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound, setSoundMuted, setSoundVolume, useSoundSettings } from '../audio/Audio.js';
 import { removeProfilePhoto, saveProfilePhoto, useProfilePhoto } from './ProfilePhoto.js';
+import ChangePasswordDialog from './ChangePasswordDialog.jsx';
 import './AccountScreen.css';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -110,6 +113,11 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
     const [statsStatus, setStatsStatus] = useState('loading');
     const [photoError, setPhotoError] = useState(null);
     const [planNotice, setPlanNotice] = useState(null);
+    // Whether the account has a password (false: Google sign-in only); null
+    // until GET /auth/me/account answers, and then the button just shows.
+    const [hasPassword, setHasPassword] = useState(null);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [passwordNotice, setPasswordNotice] = useState(null);
     const photoInputRef = useRef(null);
     const { isMuted, volume } = useSoundSettings();
     const profilePhoto = useProfilePhoto(user.email);
@@ -138,6 +146,30 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
             isCancelled = true;
         };
     }, []);
+
+    // Which ways the account signs in, so Google-only accounts aren't offered
+    // a password change. If this fails the button stays; the server refuses
+    // a Google-only account anyway.
+    useEffect(() => {
+        if (user.isGuest) return undefined;
+        let isCancelled = false;
+
+        async function loadSignInMethods() {
+            try {
+                const res = await fetch('/api/v1/auth/me/account');
+                if (!res.ok) return;
+                const account = await res.json();
+                if (!isCancelled) setHasPassword(account.signInMethods?.password !== false);
+            } catch {
+                // Keep the button.
+            }
+        }
+
+        loadSignInMethods();
+        return () => {
+            isCancelled = true;
+        };
+    }, [user.isGuest, user.email]);
 
     const usageStats = buildUsageStats(jobs);
 
@@ -271,13 +303,26 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                     </div>
                     <div className="acct-row">
                         <dt>Password</dt>
-                        <dd>
-                            <span className="acct-password-dots" aria-label="Hidden">{'\u2022'.repeat(10)}</span>
-                        </dd>
-                        {/* TODO(backend): enable once a change-password endpoint exists. */}
-                        <button className="forma-btn acct-row-action" disabled title="Not available yet">
-                            <Icon name="lock" size={14} /> Change password
-                        </button>
+                        {hasPassword === false ? (
+                            // Google-only accounts have no password to change.
+                            <dd className="acct-muted">Signs in with Google</dd>
+                        ) : (
+                            <>
+                                <dd>
+                                    <span className="acct-password-dots" aria-label="Hidden">{'\u2022'.repeat(10)}</span>
+                                </dd>
+                                <button
+                                    className="forma-btn acct-row-action"
+                                    onClick={() => {
+                                        playSound('tap');
+                                        setPasswordNotice(null);
+                                        setIsChangingPassword(true);
+                                    }}
+                                >
+                                    <Icon name="lock" size={14} /> Change password
+                                </button>
+                            </>
+                        )}
                     </div>
                     {user.role === 'admin' && (
                         <div className="acct-row">
@@ -290,6 +335,16 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                         <dd>{user.memberSince}</dd>
                     </div>
                 </dl>
+                {passwordNotice && <p className="acct-notice" role="status">{passwordNotice}</p>}
+                {isChangingPassword && (
+                    <ChangePasswordDialog
+                        onChanged={() => {
+                            setIsChangingPassword(false);
+                            setPasswordNotice('Password changed. Other browsers signed in to your account were signed out.');
+                        }}
+                        onCancel={() => setIsChangingPassword(false)}
+                    />
+                )}
 
                 <div className="forma-card acct-card acct-logout">
                     <div>

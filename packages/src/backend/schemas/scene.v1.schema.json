@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "scene.v1.schema.json",
+  "title": "Genesis scene, format version 1",
+  "description": "A Scene Builder scene as saved by the API (/api/v1/scenes) and stored in the scenes table. Dates are UTC epoch milliseconds. Coordinates are world units of the normalized models, Y up; rotation is XYZ Euler angles in degrees; scale is a factor per axis. Older scenes (version 0: no format/version fields, the browser-only format) are converted on save (services/scenes.js).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "id", "name", "createdAt", "updatedAt", "background", "renderMode", "objects"],
+  "properties": {
+    "format": { "const": "genesis.scene" },
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[\\w-]{1,64}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "createdAt": { "type": "integer", "minimum": 0 },
+    "updatedAt": { "type": "integer", "minimum": 0 },
+    "background": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+    "renderMode": { "enum": ["splats", "points"] },
+    "objects": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["objectId", "jobId", "name", "position", "rotation", "scale", "trim", "isHidden"],
+        "properties": {
+          "objectId": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "jobId": { "type": "string", "pattern": "^[\\w-]{1,64}$" },
+          "name": { "type": "string", "maxLength": 120 },
+          "position": { "$ref": "#/definitions/vector3" },
+          "rotation": { "$ref": "#/definitions/vector3" },
+          "scale": { "$ref": "#/definitions/vector3" },
+          "trim": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["strength", "minOpacity", "maxSplatSize", "density"],
+            "properties": {
+              "strength": { "type": "number" },
+              "minOpacity": { "type": "number" },
+              "maxSplatSize": { "type": "number" },
+              "density": { "type": "number" }
+            }
+          },
+          "isHidden": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "vector3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    }
+  }
+}

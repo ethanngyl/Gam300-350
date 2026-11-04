@@ -51,9 +51,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Per-machine settings (AUTH_MODE, AUTH_API_KEY, ...) live in an optional,
 // gitignored .env next to this file -- see .env.example. Loaded first so
-// every process.env read below sees it.
-const envFile = path.join(__dirname, '.env')
-if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
+// every process.env read below sees it. ENV_FILE names another file; one
+// that doesn't exist means none is read (the tests do this, so a
+// developer's .env can't leak into them).
+const envFile = process.env.ENV_FILE ?? path.join(__dirname, '.env')
+if (envFile && fs.existsSync(envFile)) process.loadEnvFile(envFile)
 
 // Repo root (this file lives at packages/src/backend/).
 const repoRoot = path.join(__dirname, '..', '..', '..')
@@ -375,12 +377,25 @@ if (!AUTH_MODES.includes(authMode)) {
     process.exit(1)
 }
 
+// Where GET /jobs lists jobs from (adapters/jobSources/): 'live' (default),
+// 'sample' or 'live,sample'. A typo stops startup, like AUTH_MODE.
+const JOB_SOURCE_NAMES = ['live', 'sample']
+const jobSources = (process.env.JOB_SOURCES || 'live').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+if (jobSources.length === 0 || jobSources.some((s) => !JOB_SOURCE_NAMES.includes(s))) {
+    console.error(`[backend] JOB_SOURCES="${process.env.JOB_SOURCES}" must list one or more of: ${JOB_SOURCE_NAMES.join(', ')}`)
+    process.exit(1)
+}
+
 export const config = {
+    // The repository's root folder (sample data paths are relative to it).
+    repoRoot,
     // HTTP port the API listens on (Vite proxies /api here in dev).
     port: Number(process.env.PORT) || 5005,
 
     // Where per-job working directories live (uploads, COLMAP db, splat output).
     jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
+    // Where the database (app.db) and its backups live.
+    dataDir: process.env.DATA_DIR || path.join(__dirname, 'data'),
 
     // Every finished job's result.ply is also copied here (see runPipeline), so
     // it shows up in the native engine's samples browser (engine/src/main.cpp)
@@ -413,6 +428,13 @@ export const config = {
     // when COLMAP_STRICT=0.
     colmapStrictMatcherArgs,
     colmapStrictMapperArgs,
+
+    // Reference data (feedback categories, training presets, the photo
+    // minimum): see catalog.js.
+    catalogFile: process.env.CATALOG_FILE || path.join(__dirname, 'catalog', 'catalog.json'),
+    // Job sources for GET /jobs (see above) and the sample jobs' description.
+    jobSources,
+    sampleDataFile: process.env.SAMPLE_DATA_FILE || path.join(__dirname, 'sample-data', 'jobs.json'),
 
     // Upload limits.
     maxFiles: 300,
@@ -466,6 +488,9 @@ export const config = {
     // job_models and job_model_chunks), with no samples copy -- set
     // FILE_STORE=db on the VM only (ignored unless AUTH_MODE=authority).
     fileStore: process.env.FILE_STORE === 'db' ? 'db' : 'disk',
+    // Whether photos and models really are kept in the database: FILE_STORE=db
+    // only counts on the VM (other machines build from files on disk).
+    filesInDb: process.env.FILE_STORE === 'db' && authMode === 'authority',
     // VM clean-up (cleanup.js). Keeps stored jobs (photos + model, in the
     // database or on disk) under this many GB by deleting the oldest; 0 (the
     // default) never deletes jobs. Jobs younger than cleanupMinAgeDays, and
@@ -484,9 +509,10 @@ export const config = {
     //   /register and /verify-account, and its /auth/* routes use db.js directly.
     // 'client': this instance forwards signup/login to the authority.
     authMode,
-    // Where the authority lives (only used in 'client' mode). No trailing slash.
-    // Must be https:// (passwords are sent to it) unless allowInsecureAuth.
-    vmAuthUrl: (process.env.VM_AUTH_URL || 'https://51-79-240-131.sslip.io').replace(/\/+$/, ''),
+    // Where the authority lives (client mode; other machines also send Google
+    // sign-in there). No trailing slash. Must be https:// (passwords are sent
+    // to it) unless allowInsecureAuth. No default: set VM_AUTH_URL in .env.
+    vmAuthUrl: (process.env.VM_AUTH_URL || '').trim().replace(/\/+$/, ''),
     // Shared secret between clients and the authority. MUST be set (same value)
     // on the VM and every client via AUTH_API_KEY. Empty means signup/login
     // refuse to run rather than silently accepting anything.
@@ -506,7 +532,10 @@ export const config = {
     // .env, never commit them. Empty = Google sign-in is disabled.
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    // Must EXACTLY match an Authorized redirect URI registered in the console.
-    googleRedirectUri:
-        process.env.GOOGLE_REDIRECT_URI || 'https://51-79-240-131.sslip.io/auth/google/callback',
+    // Must EXACTLY match an Authorized redirect URI registered in the console
+    // (https://<the VM>/auth/google/callback). Empty = Google sign-in is off.
+    googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
+    // Google's OAuth 2.0 endpoints (fixed by Google, see services/google.js).
+    googleAuthUrl: process.env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
+    googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
 }

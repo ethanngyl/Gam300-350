@@ -27,7 +27,15 @@ jobs:
         working-directory: packages
         run: npm ci
 
-      # 4. Lint the JS/JSX (web app + Node backend).
+      # 4. Backend tests (packages/src/backend/tests, node:test): auth, the
+      #    OpenAPI contract, no secrets in the repo, migrations, saved scenes,
+      #    API versions and data adapters. Each test runs real servers on
+      #    temporary data, never the runner's data/ or jobs/. Blocking.
+      - name: Backend tests
+        working-directory: packages
+        run: npm test
+
+      # 5. Lint the JS/JSX (web app + Node backend).
       #    report-only for now: there are known pre-existing findings in the
       #    backend, so this annotates without failing the build. Remove
       #    continue-on-error to make it a blocking gate once those are cleared.

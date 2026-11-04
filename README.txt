@@ -20,14 +20,15 @@ engine is configured.
 
 Web app + backend (npm -- packages/package.json):
 - @mkkellogg/gaussian-splats-3d ^0.4.7
+- ajv 8.17.1 (checks data against the JSON schemas in packages/src/backend/schemas)
 - express ^5.2.1
 - file-type ^22.1.0
-- marked ^18.0.14
 - multer ^2.3.0
 - react ^19.2.8
 - react-dom ^19.2.8
 - three ^0.186.0
-  dev tools: @eslint/js, @types/react, @types/react-dom, @vitejs/plugin-react,
+  dev tools: @apidevtools/swagger-parser (OpenAPI checks in the tests),
+             @eslint/js, @types/react, @types/react-dom, @vitejs/plugin-react,
              eslint, eslint-plugin-react-hooks, eslint-plugin-react-refresh,
              globals, vite
 
@@ -51,6 +52,16 @@ External tools (downloaded automatically into tools/ on first run):
 - COLMAP (structure-from-motion / multi-view stereo)
 - Brush (Gaussian splatting trainer)
 - cloudflared (public tunnel for sharing the web app)
+
+Architecture and API:
+docs/architecture.md: how the frontend, backend layers and database fit together, and every API endpoint.
+docs/data-schema.md: the database tables (diagram), naming / date / unit rules, and every saved file format with its version.
+docs/api-changelog.md: API versions (/api/v1 and the old, deprecated unversioned paths), every API change and every database migration.
+packages/src/backend/openapi.yaml: the API reference (OpenAPI 3.1) with an example request and response for every endpoint; open it in https://editor.swagger.io. Also served at /api/v1/openapi.yaml.
+Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters). CI runs them on every push.
+Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
+packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
+packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
 
 To run (For Windows):
 run-all.bat: Double clicking this will install all required packages and run both the web application as well as the engine

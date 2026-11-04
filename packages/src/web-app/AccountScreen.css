@@ -543,3 +543,14 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
+
+/* ---------- Change password dialog (ChangePasswordDialog.jsx) ---------- */
+/* Rendered in a portal outside .acct-screen, so not scoped to it. */
+
+.change-password-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+}

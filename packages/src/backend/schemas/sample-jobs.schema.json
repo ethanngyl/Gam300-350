@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "sample-jobs.schema.json",
+  "title": "Sample jobs (sample-data/jobs.json)",
+  "description": "Read-only demo jobs listed when JOB_SOURCES includes 'sample' (adapters/jobSources/sample.js). Paths are relative to the repository root. Dates are UTC epoch milliseconds.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "jobs"],
+  "properties": {
+    "version": { "const": 1 },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "status", "createdAt", "photosDir", "photos", "model"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^sample-[a-z0-9-]+$" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "status": { "enum": ["done", "error", "cancelled"] },
+          "createdAt": { "type": "integer", "minimum": 0 },
+          "photosDir": { "type": ["string", "null"] },
+          "photos": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[\\w.-]+\\.(jpe?g|png|JPE?G|PNG)$" }
+          },
+          "model": { "type": ["string", "null"], "pattern": "\\.ply$" }
+        }
+      }
+    }
+  }
+}

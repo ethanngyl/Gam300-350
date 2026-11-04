@@ -47,6 +47,9 @@ dist/
 npm-debug.log*
 .env
 .env.local
+# The same settings saved without the dot (a real key was once committed
+# this way as packages/src/backend/env).
+env
 
 # Python / backend
 __pycache__/

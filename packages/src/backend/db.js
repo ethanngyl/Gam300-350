@@ -8,10 +8,15 @@
 \brief
 This source file owns the SQLite database (node:sqlite, built into Node)
 that stores user accounts, login sessions and who owns each job. The file
-lives at data/app.db next to this file and is created on first run.
+lives at data/app.db next to this file (DATA_DIR can move the folder) and
+is created on first run.
 Passwords are never stored: only a salted scrypt hash. Session tokens are
 never stored either: only their SHA-256, so a copied database can't be used
 to log in.
+The tables are created and changed only by the numbered migrations in
+migrations/ (run by migrate.js at startup); docs/data-schema.md has the
+diagram. This is the only file with SQL in it. Columns are snake_case;
+everything returned is camelCase. Every date is UTC epoch milliseconds.
 Tables:
   users    -- accounts. role is 'user' (default) or 'admin'. Signup never
               sets the role; promote an admin by editing the database:
@@ -23,6 +28,9 @@ Tables:
               from every machine), with the sender's name and email.
   user_avatars -- each account's profile photo (on the VM: for every
               machine's users).
+  scenes   -- Scene Builder scenes, each a versioned JSON document.
+  synced_jobs, job_images, job_models, job_model_chunks -- the shared
+              library (see below).
 - hashPassword(password)
 Returns "salt:hash" (hex) using a random 16-byte salt and scrypt.
 - verifyPassword(password, stored)
@@ -91,6 +99,9 @@ Account page edits: the name; a new password (recording when); logging
 the account out of every other browser after a password change.
 - setUserAvatar / getUserAvatar / deleteUserAvatar
 The profile photo (table user_avatars).
+- listScenes / getScene / insertScene / updateScene / deleteScene
+A user's saved scenes (table scenes). The documents are checked and
+converted in services/scenes.js; this file only stores them.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -98,13 +109,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
-import { fileURLToPath } from 'node:url'
+import { config } from './config.js'
 import { DatabaseSync } from 'node:sqlite'
+import { runMigrations } from './migrate.js'
 
 const scrypt = promisify(crypto.scrypt)
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = path.join(__dirname, 'data')
+// data/ next to this file, unless DATA_DIR says otherwise (config.js).
+const DATA_DIR = config.dataDir
 
 // How long a "Remember me" login lasts before the user has to sign in again.
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -128,52 +140,12 @@ db.exec('PRAGMA journal_mode = WAL')
 // model's size; shrink it back to at most 64 MB after each checkpoint.
 db.exec('PRAGMA journal_size_limit = 67108864')
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    name          TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
-    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`)
-
-// Databases made before roles existed have a users table without the role
-// column; CREATE TABLE IF NOT EXISTS won't add it, so add it here.
-const userColumns = db.prepare('PRAGMA table_info(users)').all().map((col) => col.name)
-if (!userColumns.includes('role'))
-{
-  db.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin'))`)
-}
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    expires_at INTEGER NOT NULL
-  )
-`)
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS jobs (
-    id         TEXT PRIMARY KEY,
-    owner_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`)
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS uploads (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id        TEXT NOT NULL,
-    original_name TEXT,
-    stored_name   TEXT,
-    mime_type     TEXT,
-    size          INTEGER,
-    uploaded_at   TEXT DEFAULT (datetime('now'))
-  )
-`)
+// Create or update the tables (migrations/). A database that already has
+// tables is backed up first. Every statement below expects the newest schema.
+await runMigrations(db, {
+  backup: backupDatabase,
+  log: (line) => console.log(`[backend] database: ${line}`),
+})
 
 // Expired sessions are useless; clear them out once per startup.
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
@@ -220,16 +192,7 @@ const countLocalAccounts = db.prepare(`SELECT COUNT(*) AS n FROM users WHERE pas
 const deleteLocalAccounts = db.prepare(`DELETE FROM users WHERE password_hash != 'remote'`)
 
 // Google accounts have no password; they're matched by Google's stable user
-// id (the ID token's "sub"). Add the column to databases made before SSO.
-const hasGoogleSub = db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'google_sub')
-if (!hasGoogleSub)
-{
-  db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT')
-  // UNIQUE so two rows can't claim the same Google identity. A partial index
-  // lets the many password users keep google_sub = NULL without clashing.
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL')
-}
-
+// id (the ID token's "sub", unique per account).
 const selectUserByGoogleSub = db.prepare('SELECT * FROM users WHERE google_sub = ?')
 const insertGoogleUser = db.prepare(
   `INSERT INTO users (email, name, password_hash, google_sub)
@@ -242,21 +205,8 @@ const deleteSessionsForUser = db.prepare('DELETE FROM sessions WHERE user_id = ?
 
 const selectUserById = db.prepare('SELECT id, email, name, role, created_at FROM users WHERE id = ?')
 
-// Account page: when the password was last changed (NULL: never, since
-// signup). Added to databases made before the account page existed.
-if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'password_changed_at'))
-  db.exec('ALTER TABLE users ADD COLUMN password_changed_at TEXT')
-
-// Account page: each user's profile photo (one small image, stored whole).
-db.exec(`
-  CREATE TABLE IF NOT EXISTS user_avatars (
-    user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    mime       TEXT NOT NULL,
-    data       BLOB NOT NULL,
-    updated_at INTEGER NOT NULL
-  )
-`)
-
+// Account page: password_changed_at is NULL until the first change after
+// signup; user_avatars holds each user's profile photo (one small image).
 const selectAccount = db.prepare(`
   SELECT u.id, u.email, u.name, u.role, u.created_at, u.password_hash, u.google_sub,
          u.password_changed_at, a.updated_at AS avatar_updated_at
@@ -264,9 +214,7 @@ const selectAccount = db.prepare(`
   WHERE u.id = ?
 `)
 const updateUserNameById = db.prepare('UPDATE users SET name = ? WHERE id = ?')
-const updateUserPassword = db.prepare(
-  `UPDATE users SET password_hash = ?, password_changed_at = datetime('now') WHERE id = ?`
-)
+const updateUserPassword = db.prepare('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?')
 const deleteOtherSessionsForUser = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?')
 const upsertAvatar = db.prepare(`
   INSERT INTO user_avatars (user_id, mime, data, updated_at) VALUES (?, ?, ?, ?)
@@ -278,21 +226,10 @@ const deleteAvatar = db.prepare('DELETE FROM user_avatars WHERE user_id = ?')
 // copies of VM accounts on client machines.
 const NO_PASSWORD_HASHES = new Set(['google-sso', 'remote'])
 
-// Shared library: on the VM, where each stored job came from and how much
-// disk it takes. Added to databases made before the library existed.
-const jobColumns = db.prepare('PRAGMA table_info(jobs)').all().map((c) => c.name)
-if (!jobColumns.includes('origin')) db.exec('ALTER TABLE jobs ADD COLUMN origin TEXT')
-if (!jobColumns.includes('bytes')) db.exec('ALTER TABLE jobs ADD COLUMN bytes INTEGER')
-
-// On a client machine: which finished jobs the VM has already received, so
-// each is sent once. Not a column on jobs: old jobs may have no jobs row.
-db.exec(`
-  CREATE TABLE IF NOT EXISTS synced_jobs (
-    id        TEXT PRIMARY KEY,
-    synced_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`)
-
+// Shared library: on the VM, jobs.origin / jobs.bytes say where each stored
+// job came from and how much disk it takes. On a client machine,
+// synced_jobs lists the finished jobs the VM has already received, so each
+// is sent once (not a column on jobs: old jobs may have no jobs row).
 const upsertStoredJob = db.prepare(`
   INSERT INTO jobs (id, owner_id, origin, bytes) VALUES (?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
@@ -304,20 +241,9 @@ const insertSyncedJob = db.prepare('INSERT OR REPLACE INTO synced_jobs (id) VALU
 const deleteSyncedJob = db.prepare('DELETE FROM synced_jobs WHERE id = ?')
 const selectSyncedJob = db.prepare('SELECT 1 FROM synced_jobs WHERE id = ?')
 
-// On the VM with FILE_STORE=db: each finished job's photos, stored whole
-// (photos are small enough, and <img> never asks for byte ranges). Deleting
-// the job's jobs row deletes its photos.
-db.exec(`
-  CREATE TABLE IF NOT EXISTS job_images (
-    job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    name   TEXT NOT NULL,
-    mime   TEXT NOT NULL,
-    size   INTEGER NOT NULL,
-    data   BLOB NOT NULL,
-    PRIMARY KEY (job_id, name)
-  )
-`)
-
+// On the VM with FILE_STORE=db: each finished job's photos, stored whole in
+// job_images (photos are small enough, and <img> never asks for byte
+// ranges). Deleting the job's jobs row deletes its photos.
 // The photos need a jobs row (foreign key). OR IGNORE: an existing row keeps
 // its owner; a job with no row (older, ownerless) stays admin-only.
 const ensureJobRow = db.prepare('INSERT OR IGNORE INTO jobs (id) VALUES (?)')
@@ -332,23 +258,8 @@ const PHOTO_NAME_RE = /\.(jpe?g|png)$/i
 // On the VM with FILE_STORE=db: each finished model (.ply, often hundreds of
 // MB) in fixed-size pieces. SQLite reads a value whole, so pieces let a
 // byte range (the viewer's 4 KB header read) or a download read only what it
-// needs. Deleting the job's jobs row (or its job_models row) deletes them.
-db.exec(`
-  CREATE TABLE IF NOT EXISTS job_models (
-    job_id     TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
-    size       INTEGER NOT NULL,
-    chunk_size INTEGER NOT NULL,
-    stored_at  INTEGER NOT NULL
-  )
-`)
-db.exec(`
-  CREATE TABLE IF NOT EXISTS job_model_chunks (
-    job_id TEXT NOT NULL REFERENCES job_models(job_id) ON DELETE CASCADE,
-    seq    INTEGER NOT NULL,
-    data   BLOB NOT NULL,
-    PRIMARY KEY (job_id, seq)
-  )
-`)
+// needs (tables job_models and job_model_chunks). Deleting the job's jobs
+// row (or its job_models row) deletes them.
 
 // Size of each piece. Stored per model (chunk_size), so changing it later
 // doesn't break models already stored.
@@ -362,24 +273,12 @@ const selectAnyJobModel = db.prepare('SELECT 1 FROM job_models LIMIT 1')
 
 // Feedback from the website. The sender's email and name are copied in, so
 // a message still says who sent it after their account is deleted.
-db.exec(`
-  CREATE TABLE IF NOT EXISTS feedback (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    user_email TEXT NOT NULL,
-    user_name  TEXT NOT NULL,
-    category   TEXT NOT NULL CHECK (category IN ('bug', 'idea', 'other')),
-    message    TEXT NOT NULL,
-    origin     TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`)
 const insertFeedback = db.prepare(
   'INSERT INTO feedback (user_id, user_email, user_name, category, message, origin) VALUES (?, ?, ?, ?, ?, ?) RETURNING id'
 )
 // Newest first; ?1 = category (NULL: all), ?2 = only ids below this (NULL:
 // from the newest), ?3 = how many rows.
-const deleteFeedbackOlderThan = db.prepare(`DELETE FROM feedback WHERE created_at < datetime('now', ?)`)
+const deleteFeedbackOlderThan = db.prepare('DELETE FROM feedback WHERE created_at < ?')
 // A job's photos + model in the database, in bytes.
 const selectDbJobBytes = db.prepare(`
   SELECT (SELECT IFNULL(SUM(size), 0) FROM job_images WHERE job_id = ?1)
@@ -390,6 +289,26 @@ const selectFeedbackPage = db.prepare(`
   WHERE (?1 IS NULL OR category = ?1) AND (?2 IS NULL OR id < ?2)
   ORDER BY id DESC LIMIT ?3
 `)
+
+// Scene Builder scenes: one JSON document per row (services/scenes.js).
+const selectSceneSummaries = db.prepare(`
+  SELECT id, name, document, updated_at FROM scenes WHERE owner_id = ? ORDER BY updated_at DESC
+`)
+const selectScene = db.prepare('SELECT document FROM scenes WHERE id = ? AND owner_id = ?')
+const insertSceneRow = db.prepare(`
+  INSERT INTO scenes (id, owner_id, name, format_version, document, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`)
+const updateSceneRow = db.prepare(`
+  UPDATE scenes SET name = ?, format_version = ?, document = ?, updated_at = ? WHERE id = ? AND owner_id = ?
+`)
+const deleteSceneRow = db.prepare('DELETE FROM scenes WHERE id = ? AND owner_id = ?')
+
+// users rows as the rest of the backend sees them (camelCase, dates in ms).
+function userFromRow(row)
+{
+  return row ? { id: row.id, email: row.email, name: row.name, role: row.role, createdAt: row.created_at } : null
+}
 
 
 // ----- Start of Functions --------------------------------------------------- //
@@ -453,8 +372,7 @@ export async function createUser({ email, name, password })
   const passwordHash = await hashPassword(password)
   try
   {
-    const row = insertUser.get(email, name, passwordHash)
-    return { id: row.id, email: row.email, name: row.name, role: row.role, createdAt: row.created_at }
+    return userFromRow(insertUser.get(email, name, passwordHash))
   }
   catch (err)
   {
@@ -476,12 +394,13 @@ export async function createUser({ email, name, password })
   string
     The email to look up
   \return
-    The user row (including password_hash), or null
+    { id, email, name, role, createdAt, passwordHash }, or null
 */
 /************************************************************************/
 export function findUserByEmail(email)
 {
-  return selectUserByEmail.get(email) ?? null
+  const row = selectUserByEmail.get(email)
+  return row ? { ...userFromRow(row), passwordHash: row.password_hash } : null
 }
 
 /************************************************************************/
@@ -530,14 +449,14 @@ export function createSession(userId, ttlMs = SESSION_TTL_MS)
   string
     The raw token from the cookie
   \return
-    { id, email, name, role, created_at }, or null if the token is
+    { id, email, name, role, createdAt }, or null if the token is
     unknown or expired
 */
 /************************************************************************/
 export function findSessionUser(token)
 {
   if (!token) return null
-  return selectSessionUser.get(hashToken(token), Date.now()) ?? null
+  return userFromRow(selectSessionUser.get(hashToken(token), Date.now()))
 }
 
 /************************************************************************/
@@ -678,7 +597,7 @@ export function retireLocalAccounts()
 export function findOrCreateGoogleUser({ sub, email, name })
 {
   const bySub = selectUserByGoogleSub.get(sub)
-  if (bySub) return { id: bySub.id, email: bySub.email, name: bySub.name, role: bySub.role, createdAt: bySub.created_at }
+  if (bySub) return userFromRow(bySub)
 
   const byEmail = selectUserByEmail.get(email)
   if (byEmail)
@@ -699,11 +618,10 @@ export function findOrCreateGoogleUser({ sub, email, name })
       db.exec('ROLLBACK')
       throw err
     }
-    return { id: byEmail.id, email: byEmail.email, name: byEmail.name, role: byEmail.role, createdAt: byEmail.created_at }
+    return userFromRow(byEmail)
   }
 
-  const row = insertGoogleUser.get(email, name || email, sub)
-  return { id: row.id, email: row.email, name: row.name, role: row.role, createdAt: row.created_at }
+  return userFromRow(insertGoogleUser.get(email, name || email, sub))
 }
 
 /************************************************************************/
@@ -715,12 +633,12 @@ export function findOrCreateGoogleUser({ sub, email, name })
   number
     The user's id
   \return
-    { id, email, name, role, created_at }, or null
+    { id, email, name, role, createdAt }, or null
 */
 /************************************************************************/
 export function findUserById(id)
 {
-  return selectUserById.get(id) ?? null
+  return userFromRow(selectUserById.get(id))
 }
 
 /************************************************************************/
@@ -1057,7 +975,7 @@ export function addFeedback({ userId, email, name, category, message, origin })
     Page size
   \return
     { items: [{ id, name, email, category, message, origin, createdAt }],
-      hasMore }, createdAt as an ISO date (UTC)
+      hasMore }, createdAt in ms
 */
 /************************************************************************/
 export function listFeedback({ category = null, before = null, limit = 50 })
@@ -1072,8 +990,7 @@ export function listFeedback({ category = null, before = null, limit = 50 })
       category: row.category,
       message: row.message,
       origin: row.origin,
-      // datetime('now') is UTC "YYYY-MM-DD HH:MM:SS"; say so for the browser.
-      createdAt: `${row.created_at.replace(' ', 'T')}Z`,
+      createdAt: row.created_at,
     })),
     hasMore: rows.length > limit,
   }
@@ -1091,7 +1008,7 @@ export function listFeedback({ category = null, before = null, limit = 50 })
 /************************************************************************/
 export function deleteOldFeedback(days)
 {
-  return Number(deleteFeedbackOlderThan.run(`-${Math.floor(days)} days`).changes)
+  return Number(deleteFeedbackOlderThan.run(Date.now() - Math.floor(days) * 24 * 60 * 60 * 1000).changes)
 }
 
 /************************************************************************/
@@ -1167,7 +1084,7 @@ export function updateUserName(userId, name)
 /************************************************************************/
 export async function setUserPassword(userId, password)
 {
-  updateUserPassword.run(await hashPassword(password), userId)
+  updateUserPassword.run(await hashPassword(password), Date.now(), userId)
 }
 
 /************************************************************************/
@@ -1242,5 +1159,85 @@ export function getUserAvatar(userId)
 export function deleteUserAvatar(userId)
 {
   deleteAvatar.run(userId)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A user's saved scenes, newest first, for the Scene Builder's list.
+  \param ownerId
+  number
+  \return
+    [{ id, name, updatedAt, objectCount }]
+*/
+/************************************************************************/
+export function listScenes(ownerId)
+{
+  return selectSceneSummaries.all(ownerId).map((row) => ({
+    id: row.id,
+    name: row.name,
+    updatedAt: row.updated_at,
+    objectCount: JSON.parse(row.document).objects?.length ?? 0,
+  }))
+}
+
+/************************************************************************/
+/*!
+  \brief
+    One of a user's scenes, as it was saved.
+  \param id
+  string
+  \param ownerId
+  number
+  \return
+    The scene document (parsed JSON), or null if the user has no such scene
+*/
+/************************************************************************/
+export function getScene(id, ownerId)
+{
+  const row = selectScene.get(id, ownerId)
+  return row ? JSON.parse(row.document) : null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Saves a new scene / replaces one of the user's scenes. The document is
+    stored exactly as given (already checked by services/scenes.js).
+  \param ownerId
+  number
+  \param scene
+    The scene document ({ id, name, version, createdAt, updatedAt, ... })
+  \return
+    true if saved (updateScene: false if the user has no such scene)
+*/
+/************************************************************************/
+export function insertScene(ownerId, scene)
+{
+  insertSceneRow.run(scene.id, ownerId, scene.name, scene.version, JSON.stringify(scene), scene.createdAt, scene.updatedAt)
+  return true
+}
+
+export function updateScene(ownerId, scene)
+{
+  const { changes } = updateSceneRow.run(scene.name, scene.version, JSON.stringify(scene), scene.updatedAt, scene.id, ownerId)
+  return Number(changes) > 0
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Deletes one of a user's scenes.
+  \param id
+  string
+  \param ownerId
+  number
+  \return
+    true if a scene was deleted
+*/
+/************************************************************************/
+export function deleteScene(id, ownerId)
+{
+  return Number(deleteSceneRow.run(id, ownerId).changes) > 0
 }
 // ----- End of Functions ----------------------------------------------------- //
