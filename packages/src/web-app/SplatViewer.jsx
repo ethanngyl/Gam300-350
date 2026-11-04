@@ -12,13 +12,16 @@ EngineSplatViewer.jsx). If that is unavailable, or the user switches to it,
 it uses @mkkellogg/gaussian-splats-3d for the WebGL rendering, depth sorting
 and orbit controls, reading the scene's up direction from the .ply header so
 any scene renders upright (readCameraUp, see plyHeader.js).
-- ThreeSplatViewer({ url })
+- ThreeSplatViewer({ url, isEmbedded })
 Private component. Creates the @mkkellogg viewer, loads the .ply at url and
 starts rendering. Stops and disposes the viewer when url changes or the
 component unmounts.
-- SplatViewer({ url })
+- SplatViewer({ url, isEmbedded })
 React component. Picks the engine or the three.js viewer and shows a toggle
-to switch between them; the choice is remembered per browser.
+to switch between them; the choice is remembered per browser. isEmbedded
+draws it inside its parent (which must be position: relative, like the
+model page's viewer card) instead of over the whole page; the renderer
+toggle then sits at the top-left.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -31,19 +34,19 @@ import { readCameraUp } from './plyHeader.js'
 const RENDERER_PREF_KEY = 'genesis.splatRenderer'
 
 function readRendererPref() {
-  try {
-    return localStorage.getItem(RENDERER_PREF_KEY) === 'three' ? 'three' : 'engine'
-  } catch {
-    return 'engine'
-  }
+    try {
+        return localStorage.getItem(RENDERER_PREF_KEY) === 'three' ? 'three' : 'engine'
+    } catch {
+        return 'engine'
+    }
 }
 
 function writeRendererPref(renderer) {
-  try {
-    localStorage.setItem(RENDERER_PREF_KEY, renderer)
-  } catch {
-    /* storage blocked, the choice just isn't remembered */
-  }
+    try {
+        localStorage.setItem(RENDERER_PREF_KEY, renderer)
+    } catch {
+        /* storage blocked, the choice just isn't remembered */
+    }
 }
 
 /**
@@ -52,62 +55,70 @@ function writeRendererPref(renderer) {
  *
  * @param {string} url  URL to the .ply (e.g. "/jobs/<id>/result.ply").
  */
-function ThreeSplatViewer({ url }) {
-  const containerRef = useRef(null)
-  const viewerRef = useRef(null)
+function ThreeSplatViewer({ url, isEmbedded = false }) {
+    const containerRef = useRef(null)
+    const viewerRef = useRef(null)
 
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
+    useEffect(() => {
+        const container = containerRef.current
+        if (!container) return
 
-    let disposed = false
+        let disposed = false
 
-    ;(async () => {
-      const cameraUp = await readCameraUp(url)
-      if (disposed) return
+            ; (async () => {
+                const cameraUp = await readCameraUp(url)
+                if (disposed) return
 
-      const viewer = new GaussianSplats3D.Viewer({
-        rootElement: container,
-        cameraUp,
-        initialCameraPosition: [-3, 1, 5],
-        initialCameraLookAt: [0, 0, 0],
-        sharedMemoryForWorkers: false, // no COOP/COEP headers needed in dev
-      })
-      viewerRef.current = viewer
+                const viewer = new GaussianSplats3D.Viewer({
+                    rootElement: container,
+                    cameraUp,
+                    initialCameraPosition: [-3, 1, 5],
+                    initialCameraLookAt: [0, 0, 0],
+                    sharedMemoryForWorkers: false, // no COOP/COEP headers needed in dev
+                })
+                viewerRef.current = viewer
 
-      try {
-        await viewer.addSplatScene(url, {
-          format: GaussianSplats3D.SceneFormat.Ply, // blob URLs have no extension to infer it from
-          splatAlphaRemovalThreshold: 5,
-          showLoadingUI: true,
-        })
-        if (!disposed) viewer.start()
-      } catch (err) {
-        console.error('Failed to load splat scene:', err)
-      }
-    })()
+                try {
+                    await viewer.addSplatScene(url, {
+                        format: GaussianSplats3D.SceneFormat.Ply, // blob URLs have no extension to infer it from
+                        splatAlphaRemovalThreshold: 5,
+                        showLoadingUI: true,
+                    })
+                    if (!disposed) viewer.start()
+                } catch (err) {
+                    console.error('Failed to load splat scene:', err)
+                }
+            })()
 
-    return () => {
-      disposed = true
-      const v = viewerRef.current
-      viewerRef.current = null
-      if (v) {
-        try {
-          v.stop?.()
-        } catch {
-          /* not started */
+        return () => {
+            disposed = true
+            const v = viewerRef.current
+            viewerRef.current = null
+            if (v) {
+                try {
+                    v.stop?.()
+                } catch {
+                    /* not started */
+                }
+                // dispose() always tries to remove its root element from <body>, which
+                // throws here (the root is this component's div), so swallow that.
+                try {
+                    Promise.resolve(v.dispose?.()).catch(() => { })
+                } catch {
+                    /* same as above, if it throws before going async */
+                }
+            }
         }
-        v.dispose?.()
-      }
-    }
-  }, [url])
+    }, [url])
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh' }}
-    />
-  )
+    return (
+        <div
+            ref={containerRef}
+            style={isEmbedded
+                ? { position: 'absolute', inset: 0, width: '100%', height: '100%' }
+                : { position: 'fixed', inset: 0, width: '100vw', height: '100vh' }}
+        />
+    )
 }
 
 /**
@@ -116,65 +127,67 @@ function ThreeSplatViewer({ url }) {
  *
  * @param {string} url  URL to the .ply (e.g. "/jobs/<id>/result.ply").
  */
-export default function SplatViewer({ url }) {
-  const [renderer, setRenderer] = useState(readRendererPref)
-  const [engineAvailable, setEngineAvailable] = useState(null) // null = still checking
-  const [engineNotice, setEngineNotice] = useState(null)
+export default function SplatViewer({ url, isEmbedded = false }) {
+    const [renderer, setRenderer] = useState(readRendererPref)
+    const [engineAvailable, setEngineAvailable] = useState(null) // null = still checking
+    const [engineNotice, setEngineNotice] = useState(null)
 
-  useEffect(() => {
-    let cancelled = false
-    isEngineAvailable().then((ok) => {
-      if (cancelled) return
-      setEngineAvailable(ok)
-      if (!ok) setEngineNotice('Engine renderer not built (run engine/build-web.bat)')
-    })
-    return () => {
-      cancelled = true
+    useEffect(() => {
+        let cancelled = false
+        isEngineAvailable().then((ok) => {
+            if (cancelled) return
+            setEngineAvailable(ok)
+            if (!ok) setEngineNotice('Engine renderer not built (run engine/build-web.bat)')
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    const handleEngineUnavailable = useCallback((reason) => {
+        console.warn('Engine renderer unavailable, using three.js viewer:', reason)
+        setEngineAvailable(false)
+        setEngineNotice(reason)
+    }, [])
+
+    const choose = (next) => {
+        setRenderer(next)
+        writeRendererPref(next)
     }
-  }, [])
 
-  const handleEngineUnavailable = useCallback((reason) => {
-    console.warn('Engine renderer unavailable, using three.js viewer:', reason)
-    setEngineAvailable(false)
-    setEngineNotice(reason)
-  }, [])
+    // Wait for the availability check so the 300+ MB .ply isn't fetched by both viewers
+    if (engineAvailable === null) return null
 
-  const choose = (next) => {
-    setRenderer(next)
-    writeRendererPref(next)
-  }
+    const active = renderer === 'engine' && engineAvailable ? 'engine' : 'three'
 
-  // Wait for the availability check so the 300+ MB .ply isn't fetched by both viewers
-  if (engineAvailable === null) return null
-
-  const active = renderer === 'engine' && engineAvailable ? 'engine' : 'three'
-
-  return (
-    <>
-      {active === 'engine' ? (
-        <EngineSplatViewer url={url} onUnavailable={handleEngineUnavailable} />
-      ) : (
-        <ThreeSplatViewer url={url} />
-      )}
-      <div
-        className="genesis-overlay"
-        style={{ position: 'fixed', bottom: 16, left: 16, display: 'flex', gap: 8, alignItems: 'center', zIndex: 10 }}
-      >
-        <button
-          className={`btn ${active === 'engine' ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={() => choose('engine')}
-          disabled={!engineAvailable}
-          title={engineAvailable ? 'Render with the Genesis Alpha Build engine (WebAssembly)' : engineNotice ?? undefined}
-        >
-          Engine renderer
-        </button>
-        <button
-          className={`btn ${active === 'three' ? 'btn-primary' : 'btn-ghost'}`}
-          onClick={() => choose('three')}
-        >
-          Three.js renderer
-        </button>
-      </div>
-    </>
-  )
+    return (
+        <>
+            {active === 'engine' ? (
+                <EngineSplatViewer url={url} isEmbedded={isEmbedded} onUnavailable={handleEngineUnavailable} />
+            ) : (
+                <ThreeSplatViewer url={url} isEmbedded={isEmbedded} />
+            )}
+            <div
+                className="genesis-overlay splat-renderer-switch"
+                style={isEmbedded
+                    ? { position: 'absolute', top: 12, left: 12, display: 'flex', gap: 6, alignItems: 'center', zIndex: 10 }
+                    : { position: 'fixed', bottom: 16, left: 16, display: 'flex', gap: 8, alignItems: 'center', zIndex: 10 }}
+            >
+                <button
+                    className={`btn ${active === 'engine' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => choose('engine')}
+                    disabled={!engineAvailable}
+                    title={engineAvailable ? 'Render with the Genesis Alpha Build engine (WebAssembly)' : engineNotice ?? undefined}
+                >
+                    Engine renderer
+                </button>
+                <button
+                    className={`btn ${active === 'three' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => choose('three')}
+                >
+                    Three.js renderer
+                </button>
+            </div>
+        </>
+    )
 }

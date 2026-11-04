@@ -16,6 +16,7 @@ to a SplatModel.
 
 #include <glm/glm.hpp>
 
+#include <QButtonGroup>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -97,6 +98,51 @@ InspectorPanel::InspectorPanel(QWidget* parent)
 
     auto* resetButton = new QPushButton("Reset Position", page);
     layout->addWidget(resetButton, 0, Qt::AlignRight);
+
+    //---BOUNDING BOX---
+    auto* cropHeader = new QLabel("Crop Box", page);
+    cropHeader->setObjectName("SectionHeader");
+    layout->addWidget(cropHeader);
+
+    m_cropToggle = new QPushButton("Show Crop Box", page);
+    m_cropToggle->setCheckable(true);
+    m_cropToggle->setToolTip("Show a box around this model to select splats (Ctrl+B). Esc hides it");
+    layout->addWidget(m_cropToggle);
+
+    //Which side of the box a crop removes. Only matters in Crop mode, so they are exclusive
+    auto* cutRow = new QHBoxLayout();
+    cutRow->setSpacing(4);
+    auto* cutGroup = new QButtonGroup(this);
+    cutGroup->setExclusive(true);
+    const char* const cutLabels[2] = { "Cut Inside", "Cut Outside" };
+    const char* const cutTips[2] = { "Crop removes the splats inside the box", "Crop removes everything outside the box" };
+    for (int side = 0; side < 2; ++side) {
+        auto* button = new QPushButton(cutLabels[side], page);
+        button->setCheckable(true);
+        button->setToolTip(cutTips[side]);
+        cutGroup->addButton(button, side);
+        cutRow->addWidget(button);
+        m_cropCutButtons[side] = button;
+    }
+    layout->addLayout(cutRow);
+
+    //Shows the current mode, clicking it switches to the other one
+    m_cropModeToggle = new QPushButton(page);
+    layout->addWidget(m_cropModeToggle);
+
+    m_cropApply = new QPushButton(page);
+    m_cropApply->setToolTip("Enter, with the viewport focused");
+    layout->addWidget(m_cropApply);
+
+    connect(m_cropToggle, &QPushButton::clicked, this, [this](bool on) { emit cropBoxToggled(on); });
+    //Button ids are the CropRemoveInside / CropRemoveOutside values
+    connect(cutGroup, &QButtonGroup::idClicked, this, [this](int side) { emit cropModeSelected(side); });
+    connect(m_cropModeToggle, &QPushButton::clicked, this, [this] {
+        if (m_cropMove) emit cropModeSelected(m_cropRemoveInside ? CropRemoveInside : CropRemoveOutside); // back to Crop
+        else emit cropModeSelected(CropMoveContents);
+    });
+    connect(m_cropApply, &QPushButton::clicked, this, [this] { emit cropApplyRequested(); });
+    setCropState(false, false, true, false);
 
     auto* trimHeader = new QLabel("Trim", page);
     trimHeader->setObjectName("SectionHeader");
@@ -248,7 +294,7 @@ void InspectorPanel::syncFromModel() {
     if (!m_model) {
         return;
     }
-    // The translation lives in the last column of the model matrix.
+    //The translation lives in the last column of the model matrix.
     const glm::vec4 translation = m_model->GetTransform()[3];
     for (int axis = 0; axis < 3; ++axis) {
         QDoubleSpinBox* spin = m_position[axis];
@@ -259,6 +305,49 @@ void InspectorPanel::syncFromModel() {
         }
         const QSignalBlocker block(spin);
         spin->setValue(translation[axis]);
+    }
+}
+
+void InspectorPanel::setCropState(bool active, bool moveContents, bool removeInside, bool confirmed) {
+    static_assert(CropRemoveInside == 0 && CropRemoveOutside == 1, "cut button ids follow CropMode");
+    //Also called once while the section is being built (the cached values start different), so that call always applies
+    if (m_cropShown && m_cropActive == active && m_cropMove == moveContents
+        && m_cropRemoveInside == removeInside && m_cropConfirmed == confirmed) {
+        return;
+    }
+    m_cropShown = true;
+    m_cropActive = active;
+    m_cropMove = moveContents;
+    m_cropRemoveInside = removeInside;
+    m_cropConfirmed = confirmed;
+
+    {
+        const QSignalBlocker blockToggle(m_cropToggle);
+        m_cropToggle->setChecked(active);
+    }
+    m_cropToggle->setText(active ? "Hide Crop Box" : "Show Crop Box");
+
+    //The cut side is kept while in Move mode, but only means something in Crop mode
+    for (int side = 0; side < 2; ++side) {
+        const QSignalBlocker block(m_cropCutButtons[side]);
+        m_cropCutButtons[side]->setChecked(side == (removeInside ? CropRemoveInside : CropRemoveOutside));
+        m_cropCutButtons[side]->setEnabled(!moveContents);
+    }
+
+    //Names the current mode, a click switches to the other one
+    m_cropModeToggle->setText(moveContents ? "Mode: Move" : "Mode: Crop");
+    m_cropModeToggle->setToolTip(moveContents
+        ? "Move mode: position the box, confirm the splats inside it, then move, rotate and scale them with the gizmo.\n"
+          "Click to switch to Crop mode (Ctrl+Shift+B)"
+        : "Crop mode: the box removes the splats inside or outside it.\n"
+          "Click to switch to Move mode (Ctrl+Shift+B)");
+
+    //The mode can be picked before the box is shown, but there is nothing to act on until it is
+    m_cropApply->setEnabled(active);
+    if (moveContents) {
+        m_cropApply->setText(confirmed ? "Release Selection" : "Confirm Selection");
+    } else {
+        m_cropApply->setText("Remove Splats");
     }
 }
 

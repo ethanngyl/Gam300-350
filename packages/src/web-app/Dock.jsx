@@ -15,37 +15,80 @@ Extractor, Model Viewer, Feedback); and the signed-in user, whose menu opens upw
 and links to the account page, mutes / unmutes sound effects, replays
 the walkthrough, and signs out (or in, for guests). The avatar shows the user's profile photo if
 they set one on the account page (ProfilePhoto.js). Each item is an icon whose label slides out on
-hover or keyboard focus; the current page is highlighted.
+hover or keyboard focus; the current page is highlighted. A switch in its
+own panel at the top-right corner ("Show Tab Labels" / "Hide Tab Labels")
+keeps every label showing instead, in one straight row (remembered on this
+browser). It only shows where that row fits, from 1160px wide; narrower
+windows keep the icons-only dock.
 On devices with a mouse, the dock fades and slides mostly out of view 3s
 after the pointer leaves it, and comes back when the pointer reaches the
-bottom of the screen or the dock gets keyboard focus. In the mobile view
-(760px wide or less, or any touch screen) the dock always stays in view
-and shows icons only, to save space. isPinned (set during the
-walkthrough) also keeps the dock in view.
+bottom of the screen or the dock gets keyboard focus. isPinned (set during
+the walkthrough) also keeps the dock in view.
+In the mobile view (760px wide or less) it is a full-width bar instead,
+always in view: five tabs at a time, each an icon with a short label, and
+an arrow button on the right that slides to the next five (on the last
+five it points back and returns to the first). The tabs can also be
+swiped. The page containing the current tab is shown when the page changes.
 **************************************************************************/
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Icon from './Icons.jsx';
 import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 import { useProfilePhoto } from './ProfilePhoto.js';
 
 const WORKSPACE_ITEMS = [
-    { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'library', label: 'Media Library', icon: 'layers' },
-    { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shield' },
-    { id: 'extractor', label: 'Frame Extractor', icon: 'play' },
-    { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
-    { id: 'feedback', label: 'Feedback', icon: 'message' },
+    { id: 'home', label: 'Home', shortLabel: 'Home', icon: 'home' },
+    { id: 'library', label: 'Media Library', shortLabel: 'Library', icon: 'layers' },
+    { id: 'editor', label: 'Photo Editor', shortLabel: 'Editor', icon: 'edit' },
+    { id: 'scene', label: 'Scene Builder', shortLabel: 'Scene', icon: 'shapes' },
+    { id: 'extractor', label: 'Frame Extractor', shortLabel: 'Frames', icon: 'play' },
+    { id: 'viewer', label: 'Model Viewer', shortLabel: 'Viewer', icon: 'cube' },
+    { id: 'feedback', label: 'Feedback', shortLabel: 'Feedback', icon: 'message' },
 ];
+
+// Mobile tab order: the most used first, five per page.
+const MOBILE_WORKSPACE_ORDER = ['home', 'library', 'viewer', 'editor', 'scene', 'extractor', 'feedback'];
 
 // How long the dock waits after the pointer leaves before it fades.
 const IDLE_DELAY_MS = 3000;
+
+// Remembers "Show tab labels" on this browser.
+const SHOW_LABELS_KEY = 'genesis-dock-show-labels';
+
+// Storage can be blocked (private windows, site data off), so every access is wrapped.
+function loadShowLabels() {
+    try {
+        return window.localStorage.getItem(SHOW_LABELS_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
+
+function saveShowLabels(showLabels) {
+    try {
+        window.localStorage.setItem(SHOW_LABELS_KEY, String(showLabels));
+    } catch {
+        // Storage unavailable: the choice lasts until the page is reloaded.
+    }
+}
 
 // Only the desktop view fades the dock: it needs a mouse to bring the dock
 // back, and the mobile view keeps it in view at all times.
 function canFadeDock() {
     return window.matchMedia?.('(hover: hover) and (pointer: fine) and (min-width: 761px)').matches ?? false;
+}
+
+// Same width as the mobile view in AppTheme.css.
+const MOBILE_QUERY = '(max-width: 760px)';
+
+function subscribeToMobileView(onChange) {
+    const query = window.matchMedia?.(MOBILE_QUERY);
+    query?.addEventListener('change', onChange);
+    return () => query?.removeEventListener('change', onChange);
+}
+
+function isMobileView() {
+    return window.matchMedia?.(MOBILE_QUERY).matches ?? false;
 }
 
 function Dock({
@@ -62,8 +105,14 @@ function Dock({
     const fileInputRef = useRef(null);
     const profileRef = useRef(null);
     const idleTimerRef = useRef(null);
+    const mobileScrollerRef = useRef(null);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isIdle, setIsIdle] = useState(false);
+    // Every item shows its full label, not just the icon (desktop view only).
+    const [showLabels, setShowLabels] = useState(loadShowLabels);
+    // Mobile view: whether the last tabs are showing, so the arrow points back.
+    const [isAtLastMobileTabs, setIsAtLastMobileTabs] = useState(false);
+    const isMobile = useSyncExternalStore(subscribeToMobileView, isMobileView);
     const { isMuted } = useSoundSettings();
     const profilePhoto = useProfilePhoto(user.email);
     const isCapturePage = activeTab === 'capture';
@@ -112,6 +161,16 @@ function Dock({
         };
     }, [isProfileMenuOpen]);
 
+    // Mobile view: show the five tabs that hold the current page.
+    useEffect(() => {
+        if (!isMobile) return;
+        const scroller = mobileScrollerRef.current;
+        const activeItem = scroller?.querySelector('[aria-current="page"]');
+        if (!scroller || !activeItem || scroller.clientWidth === 0) return;
+        const page = Math.floor(activeItem.offsetLeft / scroller.clientWidth);
+        scroller.scrollTo({ left: page * scroller.clientWidth });
+    }, [activeTab, isMobile]);
+
     function handleFilesChosen(event) {
         const chosenFiles = Array.from(event.target.files ?? []);
         // Clear so choosing the same files again still fires onChange.
@@ -124,7 +183,178 @@ function Dock({
         setIsProfileMenuOpen(false);
     }
 
-    const dockClassName = isIdle && !isPinned ? 'genesis-dock is-idle' : 'genesis-dock';
+    function openFilePicker() {
+        fileInputRef.current?.click();
+    }
+
+    // Mobile view: a tab was tapped ('capture', 'add', or a workspace page id).
+    function selectMobileItem(key) {
+        if (key === 'capture') onNewModel();
+        else if (key === 'add') openFilePicker();
+        else onNavigate(key);
+    }
+
+    function toggleShowLabels() {
+        playSound('tap');
+        saveShowLabels(!showLabels);
+        setShowLabels(!showLabels);
+    }
+
+    // Mobile view: notes whether the tabs have reached the last page.
+    function handleMobileScroll(event) {
+        const scroller = event.currentTarget;
+        setIsAtLastMobileTabs(scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4);
+    }
+
+    // Mobile view: the arrow slides to the next five tabs, or back to the first.
+    function showNextMobileTabs() {
+        playSound('tap');
+        closeProfileMenu();
+        const scroller = mobileScrollerRef.current;
+        if (!scroller) return;
+        if (isAtLastMobileTabs) scroller.scrollTo({ left: 0, behavior: 'smooth' });
+        else scroller.scrollBy({ left: scroller.clientWidth, behavior: 'smooth' });
+    }
+
+    const fileInput = (
+        <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFilesChosen}
+            style={{ display: 'none' }}
+        />
+    );
+
+    const profileMenu = isProfileMenuOpen && (
+        <div className="genesis-profile-menu" role="dialog" aria-label="Account overview">
+            <div className="genesis-profile-summary">
+                <span className="forma-avatar genesis-profile-avatar-large">
+                    {profilePhoto ? <img src={profilePhoto} alt="" /> : <Icon name="user" size={22} />}
+                </span>
+                <div className="genesis-profile-identity">
+                    <strong>{user.name}</strong>
+                    <span>{user.email}</span>
+                    {!user.isGuest && (
+                        <button
+                            className="genesis-profile-link"
+                            onClick={() => {
+                                playSound('tap');
+                                closeProfileMenu();
+                                onOpenAccount();
+                            }}
+                        >
+                            Manage account
+                        </button>
+                    )}
+                </div>
+            </div>
+            <div className="genesis-profile-divider" />
+            <button
+                className="forma-account-menu-item"
+                onClick={() => {
+                    setSoundMuted(!isMuted);
+                    // Muting stays silent; unmuting plays once to confirm.
+                    if (isMuted) playSound('tap');
+                }}
+            >
+                <Icon name={isMuted ? 'volume' : 'volumeOff'} size={14} />
+                {isMuted ? ' Unmute sounds' : ' Mute sounds'}
+            </button>
+            <button
+                className="forma-account-menu-item"
+                onClick={() => {
+                    playSound('tap');
+                    closeProfileMenu();
+                    onShowWalkthrough();
+                }}
+            >
+                <Icon name="refresh" size={14} /> Show walkthrough
+            </button>
+            <button
+                className="forma-account-menu-item"
+                onClick={() => {
+                    playSound('back');
+                    closeProfileMenu();
+                    onSignOut();
+                }}
+            >
+                {user.isGuest
+                    ? <><Icon name="user" size={14} /> Sign in</>
+                    : <><Icon name="logout" size={14} /> Sign out</>}
+            </button>
+        </div>
+    );
+
+    if (isMobile) {
+        // aria-labels match the desktop dock's, so the walkthrough finds the same items.
+        const mobileItems = [
+            { key: 'capture', label: 'New model', shortLabel: 'New', icon: 'cubePlus', isActive: isCapturePage, isPrimary: true },
+            ...MOBILE_WORKSPACE_ORDER.map((id) => {
+                const item = WORKSPACE_ITEMS.find((workspaceItem) => workspaceItem.id === id);
+                return { key: id, label: item.label, shortLabel: item.shortLabel, icon: item.icon, isActive: activeTab === id };
+            }),
+            { key: 'add', label: 'Add photos', shortLabel: 'Upload', icon: 'upload' },
+        ];
+
+        return (
+            <nav className="genesis-dock genesis-dock-mobile" aria-label="Workspace" ref={profileRef}>
+                {profileMenu}
+                <div className="genesis-mdock-scroller" ref={mobileScrollerRef} onScroll={handleMobileScroll}>
+                    {mobileItems.map((item) => (
+                        <button
+                            key={item.key}
+                            className={[
+                                'genesis-mdock-item',
+                                item.isPrimary && 'is-primary',
+                                item.isActive && 'is-active',
+                            ].filter(Boolean).join(' ')}
+                            onClick={() => {
+                                playSound('tap');
+                                closeProfileMenu();
+                                selectMobileItem(item.key);
+                            }}
+                            aria-label={item.label}
+                            aria-current={item.isActive ? 'page' : undefined}
+                        >
+                            <span className="genesis-mdock-icon"><Icon name={item.icon} size={18} /></span>
+                            <span className="genesis-mdock-label">{item.shortLabel}</span>
+                        </button>
+                    ))}
+                    <button
+                        className={activeTab === 'account' ? 'genesis-mdock-item genesis-dock-avatar is-active' : 'genesis-mdock-item genesis-dock-avatar'}
+                        onClick={() => {
+                            playSound('tap');
+                            setIsProfileMenuOpen((wasOpen) => !wasOpen);
+                        }}
+                        aria-expanded={isProfileMenuOpen}
+                        aria-label={`${user.name}, account menu`}
+                        aria-current={activeTab === 'account' ? 'page' : undefined}
+                    >
+                        <span className="forma-avatar genesis-mdock-icon genesis-mdock-avatar-icon">
+                            {profilePhoto ? <img src={profilePhoto} alt="" /> : <Icon name="user" size={15} />}
+                        </span>
+                        <span className="genesis-mdock-label">Account</span>
+                    </button>
+                </div>
+                <button
+                    className={isAtLastMobileTabs ? 'genesis-mdock-arrow is-back' : 'genesis-mdock-arrow'}
+                    onClick={showNextMobileTabs}
+                    aria-label={isAtLastMobileTabs ? 'Show first tabs' : 'Show more tabs'}
+                >
+                    <Icon name="arrow" size={18} />
+                </button>
+                {fileInput}
+            </nav>
+        );
+    }
+
+    const dockClassName = [
+        'genesis-dock',
+        isIdle && !isPinned && 'is-idle',
+        showLabels && 'is-labelled',
+    ].filter(Boolean).join(' ');
 
     return (
         <>
@@ -152,7 +382,7 @@ function Dock({
                         aria-label="New model"
                         aria-current={isCapturePage ? 'page' : undefined}
                     >
-                        <Icon name="camera" size={17} />
+                        <Icon name="cubePlus" size={17} />
                         <span className="genesis-dock-label">New model</span>
                     </button>
                     <button
@@ -160,21 +390,14 @@ function Dock({
                         onClick={() => {
                             playSound('tap');
                             closeProfileMenu();
-                            fileInputRef.current?.click();
+                            openFilePicker();
                         }}
                         aria-label="Add photos"
                     >
                         <Icon name="upload" size={17} />
                         <span className="genesis-dock-label">Add photos</span>
                     </button>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleFilesChosen}
-                        style={{ display: 'none' }}
-                    />
+                    {fileInput}
                 </div>
 
                 <span className="genesis-dock-divider" aria-hidden="true" />
@@ -201,65 +424,7 @@ function Dock({
                 <span className="genesis-dock-divider" aria-hidden="true" />
 
                 <div className="genesis-dock-profile" ref={profileRef}>
-                    {isProfileMenuOpen && (
-                        <div className="genesis-profile-menu" role="dialog" aria-label="Account overview">
-                            <div className="genesis-profile-summary">
-                                <span className="forma-avatar genesis-profile-avatar-large">
-                                    {profilePhoto ? <img src={profilePhoto} alt="" /> : <Icon name="user" size={22} />}
-                                </span>
-                                <div className="genesis-profile-identity">
-                                    <strong>{user.name}</strong>
-                                    <span>{user.email}</span>
-                                    {!user.isGuest && (
-                                        <button
-                                            className="genesis-profile-link"
-                                            onClick={() => {
-                                                playSound('tap');
-                                                closeProfileMenu();
-                                                onOpenAccount();
-                                            }}
-                                        >
-                                            Manage account
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="genesis-profile-divider" />
-                            <button
-                                className="forma-account-menu-item"
-                                onClick={() => {
-                                    setSoundMuted(!isMuted);
-                                    // Muting stays silent; unmuting plays once to confirm.
-                                    if (isMuted) playSound('tap');
-                                }}
-                            >
-                                <Icon name={isMuted ? 'volume' : 'volumeOff'} size={14} />
-                                {isMuted ? ' Unmute sounds' : ' Mute sounds'}
-                            </button>
-                            <button
-                                className="forma-account-menu-item"
-                                onClick={() => {
-                                    playSound('tap');
-                                    closeProfileMenu();
-                                    onShowWalkthrough();
-                                }}
-                            >
-                                <Icon name="refresh" size={14} /> Show walkthrough
-                            </button>
-                            <button
-                                className="forma-account-menu-item"
-                                onClick={() => {
-                                    playSound('back');
-                                    closeProfileMenu();
-                                    onSignOut();
-                                }}
-                            >
-                                {user.isGuest
-                                    ? <><Icon name="user" size={14} /> Sign in</>
-                                    : <><Icon name="logout" size={14} /> Sign out</>}
-                            </button>
-                        </div>
-                    )}
+                    {profileMenu}
 
                     <button
                         className={activeTab === 'account' ? 'genesis-dock-item genesis-dock-avatar is-active' : 'genesis-dock-item genesis-dock-avatar'}
@@ -277,6 +442,25 @@ function Dock({
                     </button>
                 </div>
             </nav>
+
+            {/* Its own small panel in the top-right corner, apart from the dock. */}
+            <button
+                type="button"
+                className={showLabels ? 'genesis-labels-toggle is-on' : 'genesis-labels-toggle'}
+                onClick={toggleShowLabels}
+                role="switch"
+                aria-checked={showLabels}
+                aria-label="Show tab labels"
+                title={showLabels ? 'Hide tab labels' : 'Show tab labels'}
+            >
+                <Icon name="menu" size={15} />
+                <span className="genesis-labels-toggle-text" aria-hidden="true">
+                    {showLabels ? 'Hide Tab Labels' : 'Show Tab Labels'}
+                </span>
+                <span className="genesis-labels-toggle-track" aria-hidden="true">
+                    <span className="genesis-labels-toggle-thumb" />
+                </span>
+            </button>
         </>
     );
 }

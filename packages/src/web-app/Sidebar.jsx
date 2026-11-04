@@ -27,7 +27,7 @@ const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'library', label: 'Media Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shield' },
+    { id: 'scene', label: 'Scene Builder', icon: 'shapes' },
     { id: 'extractor', label: 'Frame Extractor', icon: 'play' },
     { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
 ];
@@ -108,7 +108,7 @@ function Sidebar({
                 }}
                 title="New model"
             >
-                <Icon name="camera" size={16} /> <span>New model</span>
+                <Icon name="cubePlus" size={16} /> <span>New model</span>
             </button>
 
             <button
