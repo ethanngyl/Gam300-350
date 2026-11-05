@@ -147,14 +147,11 @@ void Viewport::Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction) 
     //No model or cropbox active
     if (!toCropBox && !model)
         return;
-    //If model is being dragged disable nudges
+    //A gizmo drag owns the target, so nudges are ignored (DrawGizmo already closed any nudge when the drag began).
+    //Presses are still counted: those keys are physically down, and their release must close a nudge started after the drag
     else if (m_gizmoWasUsing)
     {
-        if (m_nudgeActive)
-        {
-            FinishNudge();
-            m_nudgeKeysDown = 0;
-        }
+        if (type == InputManager::PRESS) ++m_nudgeKeysDown;
         return;
     }
 
@@ -321,6 +318,20 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     //The target is moved live during the drag, only the finished drag goes to the undo stack.
     const bool isUsing = ImGuizmo::IsUsing();
     if (isUsing && !m_gizmoWasUsing) {
+        //A nudge still in progress is committed first, ending exactly where the drag begins (original), so no part
+        //of the move is reported by both the nudge and the drag. The drag's first-frame change is put back after.
+        if (m_nudgeActive) {
+            const bool sameTarget = m_nudgeIsCropBox == editingBox;
+            if (sameTarget) {
+                if (editingBox) m_cropBox.transform = original;
+                else model->SetTransform(original);
+            }
+            FinishNudge();
+            if (sameTarget) {
+                if (editingBox) m_cropBox.transform = transform;
+                else model->SetTransform(transform);
+            }
+        }
         m_dragIsCropBox = editingBox;
         m_dragModel = editingBox ? nullptr : model;
         m_dragBefore = original;
