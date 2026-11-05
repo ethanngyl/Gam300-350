@@ -176,7 +176,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
         m_scale[axis] = spin;
         scaleRow->addWidget(label);
         scaleRow->addWidget(spin, 1);
-        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] { writeScale(); });
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this, axis] { writeScale(axis); });
     }
     auto* scaleForm = new QFormLayout();
     scaleForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -530,7 +530,7 @@ void InspectorPanel::writeRotation(int editedAxis)
     if (after != before) emit transformFieldEdited(m_model, before, after);
 }
 
-void InspectorPanel::writeScale()
+void InspectorPanel::writeScale(int editedAxis)
 {
     if (!m_model) {
         return;
@@ -541,16 +541,16 @@ void InspectorPanel::writeScale()
     //The scale of an axis is the length of its matrix column, set it by giving the column thewanted length in the same direction.
     //Leaves the rotation and the translation alone.
     const double tolerance = 0.5 * std::pow(10.0, -kScaleDecimals);
-    for (int axis = 0; axis < 3; ++axis) {
-        const glm::vec3 column(before[axis]);
-        const float length = glm::length(column);
-        const double wanted = m_scale[axis]->value();
-        //Skip untouched axes and columns with no direction left
-        if (length < 1e-8f || std::abs(wanted - length) < tolerance) {
-            continue;
-        }
-        after[axis] = glm::vec4(column / length * static_cast<float>(wanted), 0.0f);
+    //Only the edited axis changes. The other fields are clamped to the spin range, so an axis outside it
+    //(e.g. 0.0001 from the gizmo) would otherwise be snapped to the clamped value when a different axis is edited.
+    const glm::vec3 column(before[editedAxis]);
+    const float length = glm::length(column);
+    const double wanted = m_scale[editedAxis]->value();
+    //Skip a column with no direction left, or one already at the wanted length
+    if (length < 1e-8f || std::abs(wanted - length) < tolerance) {
+        return;
     }
+    after[editedAxis] = glm::vec4(column / length * static_cast<float>(wanted), 0.0f);
     //Not applied here, listener pushes it onto the undo stack
     if (after != before) emit transformFieldEdited(m_model, before, after);
 }
