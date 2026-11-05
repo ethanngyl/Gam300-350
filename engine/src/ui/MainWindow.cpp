@@ -937,6 +937,11 @@ void MainWindow::confirmCropRegion() {
         return;
     }
 
+    //Releasing mid-move would drop the preview and the move would never be baked into the splats
+    if (m_viewport->isBoxEditInProgress()) {
+        return;
+    }
+
     //Already confirmed: release the splats so the box can be repositioned over a new region
     if (renderer->HasSelection()) {
         renderer->ClearSelection();

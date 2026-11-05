@@ -306,7 +306,7 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         else model->SetTransform(transform);
     }
 
-    //A whole drag is one undo ste,: remember where it started and report it once it ends
+    //A whole drag is one undo step, remembers where it started and report it when it ends
     //The target is moved live during the drag, only the finished drag goes to the undo stack.
     const bool isUsing = ImGuizmo::IsUsing();
     if (isUsing && !m_gizmoWasUsing) {

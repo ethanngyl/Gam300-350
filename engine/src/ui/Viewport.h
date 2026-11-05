@@ -66,6 +66,8 @@ public:
 
     // The crop box. While it is active the gizmo edits it instead of the selected model.
     CropBox& cropBox() { return m_cropBox; }
+    //True while a gizmo drag or key nudge is in flight, its move is only committed once it ends
+    bool isBoxEditInProgress() const { return m_gizmoWasUsing || m_nudgeActive; }
 
     // Moves the orbit camera's pan target back to where it started.
     void recenterCamera() { m_camera.ResetPosition(); }
