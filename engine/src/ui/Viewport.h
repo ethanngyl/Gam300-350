@@ -94,6 +94,8 @@ private:
     void DrawToolButtons();
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
+    //Reports the drag in progress to the edit callbacks and clears the drag state
+    void FinishGizmoDrag(SplatModel* model, bool editingBox);
 
     using NudgeFunction = void (SplatRenderer::*)(InputManager&, InputManager::INPUT_TYPE);
     //Arrow key nudges the crop box while it is open, otherwise nudge the selected model
@@ -118,6 +120,10 @@ private:
 
     //Gizmo drag in progress the model
     bool m_gizmoWasUsing = false;
+    //Tool the drag started with, swapping tool ends the drag
+    InputManager::TOOL_MODE m_dragToolMode = InputManager::TRANSLATE;
+    //The drag was ended early by a tool swap, the gizmo ignores the mouse until the button is released
+    bool m_gizmoLocked = false;
     //Model being dragged
     SplatModel* m_dragModel = nullptr;
     //Orginal location of dragged model (or of the crop box if m_dragIsCropBox)

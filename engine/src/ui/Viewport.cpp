@@ -267,6 +267,17 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
 
     //Pan mode has no gizmo, left drag belongs to the camera
     const InputManager::TOOL_MODE toolMode = m_input.GetToolMode();
+
+    //Swapping tool mid-drag ends the drag where it is. The gizmo stays inert until the mouse is released,
+    //so carrying on with the held button (or swapping back) cannot move the target any further.
+    if (m_gizmoWasUsing && toolMode != m_dragToolMode) {
+        FinishGizmoDrag(model, editingBox);
+        m_gizmoLocked = true;
+    }
+    if (m_gizmoLocked && !ImGui::GetIO().MouseDown[0]) {
+        m_gizmoLocked = false;
+    }
+
     if ((!editingBox && (!model || model->GetIsHidden())) || toolMode == InputManager::PAN) {
         //Nothing dragged, reset drag vars
         m_gizmoWasUsing = false;
@@ -296,6 +307,9 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     //The box rotates and scales along its own axes so it can be fitted to a rotated region
     const ImGuizmo::MODE space = (editingBox && operation != ImGuizmo::TRANSLATE) ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
 
+    //A locked gizmo is still drawn but ignores the mouse
+    ImGuizmo::Enable(!m_gizmoLocked);
+
     //ImGUIzmo method to edit the transform values
     //view, projection, operation type, local/world, transform value
     if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation,
@@ -315,20 +329,10 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         m_dragBefore = original;
         //Only a confirmed selection is carried, otherwise the drag just moves the box
         m_dragMovesContents = editingBox && m_cropBox.moveContents && m_renderer->HasSelection();
+        m_dragToolMode = toolMode;
     }
     else if (!isUsing && m_gizmoWasUsing) {
-        if (m_dragIsCropBox) {
-            if (editingBox && m_cropBox.transform != m_dragBefore && onCropBoxEdited) {
-                onCropBoxEdited(m_dragBefore, m_cropBox.transform);
-            }
-        }
-        else if (m_dragModel == model && model && model->GetTransform() != m_dragBefore && onTransformEdited) {
-            onTransformEdited(model, m_dragBefore, model->GetTransform());
-        }
-        m_dragModel = nullptr;
-        m_dragIsCropBox = false;
-        m_dragMovesContents = false;
-        m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
+        FinishGizmoDrag(model, editingBox);
     }
     m_gizmoWasUsing = isUsing;
 
@@ -337,6 +341,22 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     if (isUsing && m_dragMovesContents) {
         m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_dragBefore));
     }
+}
+
+void Viewport::FinishGizmoDrag(SplatModel* model, bool editingBox) {
+    if (m_dragIsCropBox) {
+        if (editingBox && m_cropBox.transform != m_dragBefore && onCropBoxEdited) {
+            onCropBoxEdited(m_dragBefore, m_cropBox.transform);
+        }
+    }
+    else if (m_dragModel == model && model && model->GetTransform() != m_dragBefore && onTransformEdited) {
+        onTransformEdited(model, m_dragBefore, model->GetTransform());
+    }
+    m_dragModel = nullptr;
+    m_dragIsCropBox = false;
+    m_dragMovesContents = false;
+    m_gizmoWasUsing = false;
+    m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
 }
 
 void Viewport::DrawToolButtons() {

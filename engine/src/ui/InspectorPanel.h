@@ -87,7 +87,7 @@ signals:
 private:
     void writePosition();
     void writeScale();
-    void writeRotation();
+    void writeRotation(int editedAxis);
     //Fills the trim fields and status from the model
     void loadTrim();
     void loadTrimFields(const TrimData& trim);

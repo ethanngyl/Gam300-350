@@ -153,7 +153,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
         m_rotation[axis] = spin;
         rotationRow->addWidget(label);
         rotationRow->addWidget(spin, 1);
-        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] { writeRotation(); });
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this, axis] { writeRotation(axis); });
     }
     auto* rotationForm = new QFormLayout();
     rotationForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -494,7 +494,7 @@ void InspectorPanel::writePosition() {
     if (after != before) emit transformEdited(m_model, before, after);
 }
 
-void InspectorPanel::writeRotation()
+void InspectorPanel::writeRotation(int editedAxis)
 {
     if (!m_model) {
         return;
@@ -505,7 +505,16 @@ void InspectorPanel::writeRotation()
         return; //an axis has no length, so there is nothing to rotate
     }
 
-    const glm::mat3 wanted = RotationFromDegrees(glm::vec3(m_rotation[0]->value(), m_rotation[1]->value(), m_rotation[2]->value()));
+    //Only the edited field is trusted. The others can be stale while a field has focus (sync is paused then),
+    //so they come from the model's current rotation instead of being written back over a gizmo or Undo change.
+    glm::vec3 degrees = glm::degrees(glm::eulerAngles(glm::quat_cast(current)));
+    degrees[editedAxis] = static_cast<float>(m_rotation[editedAxis]->value());
+    for (int axis = 0; axis < 3; ++axis) {
+        if (axis == editedAxis) continue;
+        const QSignalBlocker block(m_rotation[axis]);
+        m_rotation[axis]->setValue(degrees[axis]);
+    }
+    const glm::mat3 wanted = RotationFromDegrees(degrees);
     //Same orientation already (e.g. the fields were just refreshed from the model), nothing to do
     if (MaxDifference(current, wanted) < 1e-4f) {
         return;
