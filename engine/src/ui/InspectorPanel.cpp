@@ -49,11 +49,16 @@ namespace {
     constexpr double kRotationStep = 1.0;
     constexpr int kRotationDecimals = 2;
 
-    // The pure rotation of a model matrix: its three axis columns with the scale divided out.
+    // The rotation of a model matrix: its axis columns made orthonormal (Gram-Schmidt, in X, Y, Z order).
+    // For a matrix of just rotation and scale this is the rotation itself. If the columns are skewed (shear) the
+    // skew is left out, so the result is always a clean rotation.
     // False if an axis has collapsed to nothing, which leaves no direction to read.
     bool ExtractRotation(const glm::mat4& transform, glm::mat3& rotation) {
         for (int axis = 0; axis < 3; ++axis) {
-            const glm::vec3 column(transform[axis]);
+            glm::vec3 column(transform[axis]);
+            for (int done = 0; done < axis; ++done) {
+                column -= glm::dot(column, rotation[done]) * rotation[done];
+            }
             const float length = glm::length(column);
             if (length < 1e-8f) return false;
             rotation[axis] = column / length;
@@ -520,11 +525,13 @@ void InspectorPanel::writeRotation(int editedAxis)
         return;
     }
 
-    //Keep each axis's length (the scale) and swap in the new direction. The translation column is untouched.
+    //Turn the whole matrix by the difference between the wanted and current rotation. A pure rotation of the
+    //existing axes keeps their lengths (the scale) and any skew between them, where writing the wanted directions
+    //straight into the columns would flatten the matrix to orthonormal. The translation column is untouched.
+    const glm::mat3 turn = wanted * glm::transpose(current);
     glm::mat4 after = before;
     for (int axis = 0; axis < 3; ++axis) {
-        const float length = glm::length(glm::vec3(before[axis]));
-        after[axis] = glm::vec4(wanted[axis] * length, 0.0f);
+        after[axis] = glm::vec4(turn * glm::vec3(before[axis]), 0.0f);
     }
     //Not applied here, listener pushes it onto the undo stack
     if (after != before) emit transformFieldEdited(m_model, before, after);
