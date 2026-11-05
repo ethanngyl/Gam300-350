@@ -133,6 +133,9 @@ void Viewport::BindInputs() {
 }
 
 void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection) {
+
+
+
     constexpr float kNudgeStep = 0.1f; //Same step as SplatRenderer's model nudge
 
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
@@ -149,6 +152,16 @@ void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, Nudge
     //No model or cropbox active
     if (!toCropBox && !model)
         return;
+    //If model is being dragged disable nudges
+    else if (m_gizmoWasUsing)
+    {
+        if (m_nudgeActive)
+        {
+            FinishNudge();
+            m_nudgeKeysDown = 0;
+        }
+        return;
+    }
 
     //The target changed midburst nudges, finish old burst first
     //Box shown or hidden, another model selected
@@ -168,7 +181,7 @@ void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, Nudge
     if (type == InputManager::PRESS) ++m_nudgeKeysDown;
 
     if (toCropBox) {
-        //World-space step, the same as the gizmo's translate
+        //Worldspace step, the same as the gizmo's translate
         m_cropBox.transform = glm::translate(glm::mat4(1.0f), boxDirection * kNudgeStep) * m_cropBox.transform;
         if (m_nudgeMovesContents) {
             m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_nudgeBefore));

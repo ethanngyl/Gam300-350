@@ -93,10 +93,10 @@ private:
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
 
-    //Arrow key nudge of the crop box while it is up, otherwise of the selected model.
-    //A burst of nudges (a key held down, or several keys) is one undo step.
-    //boxDirection is the world-space direction the same key moves the crop box
     using NudgeFunction = void (SplatRenderer::*)(InputManager&, InputManager::INPUT_TYPE);
+    //Arrow key nudges the crop box while it is open, otherwise nudge the selected model
+    //A burst of nudges (1 key held down, or several keys in a row) is one undo step traccked
+    //boxDirection is the world-space direction the same key moves the crop box
     void Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection);
     //Reports the finished burst to onTransformEdited
     void FinishNudge();
@@ -114,7 +114,7 @@ private:
     bool m_rightHeld = false;
     QPointF m_lastMousePos;
 
-    //Gizmo drag in progressthe model and where it started, for onTransformEdited.
+    //Gizmo drag in progress the model
     bool m_gizmoWasUsing = false;
     //Model being dragged
     SplatModel* m_dragModel = nullptr;
