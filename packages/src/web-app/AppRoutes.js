@@ -13,6 +13,9 @@ every page is still served from "/".
   #/home, #/library, #/library/photos, #/editor, #/scene, #/viewer,
   #/extractor, #/capture, #/account, #/feedback  -- pages in the shell
   #/processing/<jobId>  -- a model being built
+  #/extractor/uploading -- a Frame Extractor build still uploading (no job
+                           yet). Loading it means the upload was lost, so it
+                           opens the Frame Extractor with wasUploadInterrupted.
   #/model/<jobId>       -- a finished model in the full-page viewer
   #/viewer/file         -- a .ply opened from the user's computer
 - viewToHash(view)
@@ -30,6 +33,7 @@ const HOME = { activeTab: 'home', librarySubTab: 'models', screen: null, jobId: 
 
 export function viewToHash({ activeTab, librarySubTab, screen, jobId }) {
     if (screen === 'processing' && jobId) return `#/processing/${jobId}`;
+    if (screen === 'processing') return '#/extractor/uploading';
     if (screen === 'result' && jobId) return `#/model/${jobId}`;
     if (screen === 'local-model') return '#/viewer/file';
     if (activeTab === 'library' && librarySubTab === 'photos') return '#/library/photos';
@@ -45,6 +49,7 @@ export function hashToView(hash) {
         return { ...HOME, screen: page === 'processing' ? 'processing' : 'result', jobId: detail };
     }
     if (page === 'viewer' && detail === 'file') return { ...HOME, activeTab: 'viewer', screen: 'local-model' };
+    if (page === 'extractor' && detail === 'uploading') return { ...HOME, activeTab: 'extractor', wasUploadInterrupted: true };
     if (page === 'library' && (!detail || detail === 'photos'))
         return { ...HOME, activeTab: 'library', librarySubTab: detail === 'photos' ? 'photos' : 'models' };
     if (TABS.includes(page) && !detail) return { ...HOME, activeTab: page };

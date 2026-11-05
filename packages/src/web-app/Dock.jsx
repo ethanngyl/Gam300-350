@@ -223,8 +223,12 @@ function Dock({
     }
 
     function handleLabelsToggleClick() {
+        // Read and clear the flag, so a later keyboard press (Enter / Space,
+        // which has no pointer press) isn't taken for a tap.
+        const wasPressedByTouch = wasLabelsTogglePressedByTouchRef.current;
+        wasLabelsTogglePressedByTouchRef.current = false;
         // Touch screens: the first tap only opens it, so the user can see what it does.
-        if (wasLabelsTogglePressedByTouchRef.current && !isLabelsToggleOpen) {
+        if (wasPressedByTouch && !isLabelsToggleOpen) {
             playSound('tap');
             setIsLabelsToggleOpen(true);
             return;
