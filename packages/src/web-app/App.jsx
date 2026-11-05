@@ -8,50 +8,106 @@
 \brief
 Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
-dashboard (top nav + a collapsible sidebar, laid out like the Genesis
-wireframe) with these pages inside it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, YouTube Extractor, Capture and Account. Capture
-opens from the sidebar's New model button, or from Add photos with the
+dashboard (a floating dock at the bottom, laid out like the Genesis second
+layout) with these pages above it: Home, Library, Photo Editor, Scene
+Builder, Model Viewer, Frame Extractor, Feedback, Capture and Account. Capture
+opens from the dock's New model button, or from Add photos with the
 chosen photos already in the batch; its "Review photos first" hands the
-batch to the Photo Editor. The sidebar's collapsed state is remembered in
-localStorage.
-Polling reconstruction progress, the finished splat result, a local .ply
-opened from the Model Viewer and the legacy image gallery still replace
-the whole screen. Owns the active job id and uploads a finished photo
-batch to the backend to kick off reconstruction.
+batch to the Photo Editor. The first time each account signs in on this
+browser, the walkthrough (Walkthrough.jsx) tours the dock; "Show
+walkthrough" on the account page or in the account menu replays it.
+Opening a model (from Home, the Media Library or the Model Viewer, a .ply
+from the user's computer, or a build that just finished, from photos or
+the Frame Extractor) shows the model page (ModelScreen.jsx) inside the
+dashboard; its back link returns to where it was opened from. Polling
+reconstruction progress and the legacy image gallery still replace the
+whole screen. Owns the active job id and uploads a finished photo batch
+to the backend to kick off reconstruction. Frame Extractor builds go
+through the same processing screen: App uploads the media (startMediaBuild)
+while that screen already shows the upload as its first step. Each page has its own
+address-bar hash (AppRoutes.js), so the browser's Back and Forward buttons
+move between pages and a refresh stays on the page; leaving a build in
+progress with Back asks first, since leaving cancels it.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
-import SplatViewer from './SplatViewer.jsx';
-import YoutubeIngest from './YoutubeIngest.jsx';
+import FrameExtractor from './FrameExtractor.jsx';
 import ImageGallery from './ImageGallery.jsx';
-import TopNav from './TopNav.jsx';
-import Sidebar from './Sidebar.jsx';
+import Dock from './Dock.jsx';
 import HomeScreen from './HomeScreen.jsx';
 import LibraryScreen from './LibraryScreen.jsx';
 import PhotoEditorScreen from './PhotoEditorScreen.jsx';
 import SceneBuilderScreen from './SceneBuilderScreen.jsx';
 import LoginScreen from './LoginScreen.jsx';
 import AccountScreen from './AccountScreen.jsx';
+import FeedbackScreen from './FeedbackScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
-import NameModelPrompt from './NameModelPrompt.jsx';
+import ModelScreen from './ModelScreen.jsx';
+import Walkthrough from './Walkthrough.jsx';
 import { useUndoableState } from './useUndoableState.js';
-import { NEW_SCENE_INFO } from './SceneStorage.js';
+import { NEW_SCENE_INFO, createSceneObject } from './SceneStorage.js';
+import { hashToView, viewToHash } from './AppRoutes.js';
+import { uploadMedia } from './mediaJobs.js';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
-const SIDEBAR_COLLAPSED_KEY = 'genesis-sidebar-collapsed';
+// Names of the pages a model can be opened from, for the model page's back link.
+const TAB_LABELS = {
+    home: 'Home',
+    library: 'Media Library',
+    viewer: 'Model Viewer',
+    scene: 'Scene Builder',
+    extractor: 'Frame Extractor',
+};
 
-// Whether the sidebar was left collapsed last time (wider screens only).
-function loadSidebarCollapsed() {
+// AppRoutes.js names the model page by its old full-page screens: 'result'
+// (a server model, #/model/<jobId>) or 'local-model' (a .ply from this
+// computer, #/viewer/file). These two convert between that and App's state.
+function toRouteView({ activeTab, librarySubTab, screen, jobId, viewedModel }) {
+    if (!screen && activeTab === 'model' && viewedModel) {
+        return viewedModel.jobId
+            ? { activeTab, librarySubTab, screen: 'result', jobId: viewedModel.jobId }
+            : { activeTab: 'viewer', librarySubTab, screen: 'local-model', jobId: null };
+    }
+    return { activeTab, librarySubTab, screen, jobId };
+}
+
+// A route view as App state: the model page is the 'model' tab, with the
+// server model to show (a local .ply can't be reopened from a hash alone).
+function fromRouteView(view) {
+    if (view.screen === 'result') {
+        return { ...view, activeTab: 'model', screen: null, jobId: null, modelJobId: view.jobId };
+    }
+    if (view.screen === 'local-model') return { ...view, screen: null, isLocalModel: true };
+    return view;
+}
+// Shown on the Frame Extractor when a reload or Forward lands on an upload
+// that is no longer running (#/extractor/uploading, see AppRoutes.js).
+const UPLOAD_INTERRUPTED_NOTICE =
+    'Your upload stopped because the page was reloaded or left. Choose your files again to start the build.';
+
+// One flag per account (by email; guests share one), set once the
+// walkthrough has been finished or skipped on this browser.
+const WALKTHROUGH_SEEN_KEY_PREFIX = 'genesis-walkthrough-seen:';
+
+function hasSeenWalkthrough(email) {
     try {
-        return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+        return window.localStorage.getItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`) === 'true';
     } catch {
-        return false;
+        // Storage blocked: count it as seen, or it would show on every visit.
+        return true;
+    }
+}
+
+function markWalkthroughSeen(email) {
+    try {
+        window.localStorage.setItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`, 'true');
+    } catch {
+        // Storage unavailable: nothing to remember it in.
     }
 }
 
@@ -110,19 +166,73 @@ function App() {
         return () => { cancelled = true; };
     }, []);
 
+    // True while the walkthrough is replaying from the account page.
+    const [isReplayingWalkthrough, setIsReplayingWalkthrough] = useState(false);
+    // Bumped when the walkthrough closes, so the "seen" flag is read again.
+    const [, setWalkthroughCloseCount] = useState(0);
+
+    // The page in the address bar when the app loads (a refresh or a link,
+    // see AppRoutes.js). A .ply opened from this computer can't survive a
+    // reload, so that one opens the Model Viewer instead.
+    const [initialView] = useState(() => {
+        // A local .ply can't survive a reload, so #/viewer/file opens the Model Viewer.
+        return fromRouteView(hashToView(window.location.hash));
+    });
+
     // Page shown inside the shell:
-    // home | library | editor | scene | viewer | youtube | capture | account
-    const [activeTab, setActiveTab] = useState('home');
+    // home | library | editor | scene | viewer | extractor | capture | account
+    // | feedback | model (the model page)
+    const [activeTab, setActiveTab] = useState(initialView.activeTab);
+    // The model the model page shows: { jobId } for a server model, or
+    // { localFile: { url, name, sizeBytes } } for a .ply from this computer.
+    const [viewedModel, setViewedModel] = useState(
+        initialView.modelJobId ? { jobId: initialView.modelJobId } : null);
+    // The tab the model page was opened from, for its back link.
+    const [modelReturnTab, setModelReturnTab] = useState('viewer');
+    // Releases a local .ply's blob URL once another model replaces it.
+    const localModelUrl = viewedModel?.localFile?.url;
+    useEffect(() => () => {
+        if (localModelUrl) URL.revokeObjectURL(localModelUrl);
+    }, [localModelUrl]);
     // Which Library sub-tab is open: models | photos
-    const [librarySubTab, setLibrarySubTab] = useState('models');
+    const [librarySubTab, setLibrarySubTab] = useState(initialView.librarySubTab);
 
     // Full-page screens that replace the whole shell. null shows the shell;
-    // otherwise 'processing' | 'result' | 'local-model' | 'gallery'.
-    const [screen, setScreen] = useState(null);
-    const [jobId, setJobId] = useState(null);
-    // A .ply opened from the user's computer in the Model Viewer: { url, name }
-    const [localModel, setLocalModel] = useState(null);
-    // Job whose training just finished; the result screen asks for its name.
+    // otherwise 'processing' | 'gallery'.
+    const [screen, setScreen] = useState(initialView.screen);
+    const [jobId, setJobId] = useState(initialView.jobId);
+    // A build from the Frame Extractor, for the processing screen (see
+    // Processing.jsx's mediaBuild), or null for photo builds.
+    const [mediaBuild, setMediaBuild] = useState(null);
+    // Stops the media upload in progress (null when nothing is uploading).
+    const abortMediaUploadRef = useRef(null);
+    // Counts media builds, so a cancelled build's late reply is ignored.
+    const mediaBuildCountRef = useRef(0);
+    // The files and settings of the last Frame Extractor build, so "Start
+    // over" or Cancel brings the form back filled in. Cleared once the model
+    // is ready or the user goes to another page.
+    const [frameExtractorDraft, setFrameExtractorDraft] = useState(null);
+    // Message for the Frame Extractor, e.g. after a reload stopped an upload.
+    const [frameExtractorNotice, setFrameExtractorNotice] = useState(
+        initialView.wasUploadInterrupted ? UPLOAD_INTERRUPTED_NOTICE : null);
+    const isMediaBuildActive = mediaBuild !== null;
+    const isUploadingMedia = isMediaBuildActive && !jobId && !mediaBuild.startError;
+    // Releases the processing screen's preview of the first file once the build ends.
+    const mediaPreviewUrl = mediaBuild?.previewUrl;
+    useEffect(() => () => {
+        if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    }, [mediaPreviewUrl]);
+    // While media is uploading, the browser asks before a refresh or closing
+    // the tab, which would stop the upload.
+    useEffect(() => {
+        if (!isUploadingMedia) return;
+        function askBeforeLeaving(event) {
+            event.preventDefault();
+        }
+        window.addEventListener('beforeunload', askBeforeLeaving);
+        return () => window.removeEventListener('beforeunload', askBeforeLeaving);
+    }, [isUploadingMedia]);
+    // Job whose training just finished; the model page asks for its name.
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
@@ -134,7 +244,7 @@ function App() {
     // Capture reopens with those photos: { files, removeBackground, trainIters }.
     // Cleared on any other navigation.
     const [photosForCapture, setPhotosForCapture] = useState(null);
-    // Photos chosen with the sidebar's Add photos button, handed to the
+    // Photos chosen with the dock's Add photos button, handed to the
     // capture page when it opens. Cleared on any other navigation.
     const [photosToAdd, setPhotosToAdd] = useState(null);
     // While the capture page is open, its function for adding more photos
@@ -143,26 +253,84 @@ function App() {
     const registerCaptureAddFiles = useCallback((addFilesToBatch) => {
         addToCaptureBatchRef.current = addFilesToBatch;
     }, []);
-    // Whether the sidebar drawer is open (phones only).
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    // Whether the sidebar shows icons only (wider screens only).
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(loadSidebarCollapsed);
-
-    function toggleSidebarCollapsed() {
-        setIsSidebarCollapsed((wasCollapsed) => {
-            try {
-                window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(!wasCollapsed));
-            } catch {
-                // Storage unavailable: the choice just isn't remembered.
-            }
-            return !wasCollapsed;
-        });
-    }
     // Models placed in the Scene Builder, with their undo history, and the
     // scene's id, name and settings. Kept here so the scene survives
     // switching tabs (each page remounts when its tab opens).
     const scene = useUndoableState([]);
     const [sceneInfo, setSceneInfo] = useState(NEW_SCENE_INFO);
+
+    // Stops a media upload in progress and forgets the media build.
+    // (Only refs and state setters, so the Back / Forward listener can use it.)
+    const stopMediaBuild = useCallback(() => {
+        mediaBuildCountRef.current += 1;
+        abortMediaUploadRef.current?.();
+        abortMediaUploadRef.current = null;
+        setMediaBuild(null);
+    }, []);
+
+    // Browser Back / Forward. Every page change gets its own history entry
+    // with the page's hash (AppRoutes.js), so Back and Forward move between
+    // pages instead of leaving the site. Set replaceNextRef before a change
+    // whose page shouldn't come back with Back (a finished or cancelled
+    // build); the first sync only tidies the loaded URL.
+    const replaceNextRef = useRef(true);
+    // The hash of the page on screen, for putting it back when leaving is refused.
+    const currentHashRef = useRef(window.location.hash);
+    // While a page would lose work by being left (a build in progress), its
+    // function that asks the user first; returns true if they may leave.
+    const leaveGuardRef = useRef(null);
+    const registerLeaveGuard = useCallback((guard) => {
+        leaveGuardRef.current = guard;
+    }, []);
+    // The model page's model, for Back / Forward (the listener below is set up once).
+    const viewedModelRef = useRef(viewedModel);
+    useEffect(() => {
+        viewedModelRef.current = viewedModel;
+    }, [viewedModel]);
+
+    useEffect(() => {
+        const hash = viewToHash(toRouteView({ activeTab, librarySubTab, screen, jobId, viewedModel }));
+        const replace = replaceNextRef.current;
+        replaceNextRef.current = false;
+        currentHashRef.current = hash;
+        if (hash === window.location.hash) return;
+        if (replace) window.history.replaceState(null, '', hash);
+        else window.history.pushState(null, '', hash);
+    }, [activeTab, librarySubTab, screen, jobId, viewedModel]);
+
+    useEffect(() => {
+        function handlePopState() {
+            if (leaveGuardRef.current && !leaveGuardRef.current()) {
+                // Stay: put this page back as the newest entry.
+                window.history.pushState(null, '', currentHashRef.current);
+                return;
+            }
+            const view = fromRouteView(hashToView(window.location.hash));
+            // Leaving a media build mid-upload: stop sending the files.
+            if (view.screen !== 'processing') stopMediaBuild();
+            if (view.isLocalModel) {
+                if (viewedModelRef.current?.localFile) view.activeTab = 'model';
+                // That file is gone (the page was reloaded): open the Model Viewer.
+                else replaceNextRef.current = true;
+            }
+            if (view.modelJobId && viewedModelRef.current?.jobId !== view.modelJobId) {
+                setViewedModel({ jobId: view.modelJobId });
+            }
+            // Like goToTab: one-off hand-offs between pages don't survive navigation.
+            setUploadError(null);
+            setPhotosForEditor(null);
+            setPhotosForCapture(null);
+            setPhotosToAdd(null);
+            setFrameExtractorDraft(null);
+            setFrameExtractorNotice(view.wasUploadInterrupted ? UPLOAD_INTERRUPTED_NOTICE : null);
+            setActiveTab(view.activeTab);
+            if (view.activeTab === 'library') setLibrarySubTab(view.librarySubTab);
+            setScreen(view.screen);
+            if (view.jobId) setJobId(view.jobId);
+        }
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [stopMediaBuild]);
 
     function handleLogin(user) {
         saveUser(user);
@@ -177,24 +345,25 @@ function App() {
         saveUser(null);
         setCurrentUser(null);
         setScreen(null);
-        setIsMenuOpen(false);
         scene.reset([]);
         setSceneInfo(NEW_SCENE_INFO);
         setActiveTab('home');
     }
 
-    // Every navigation goes through here: it closes the phone drawer and
-    // clears a stale upload error so it doesn't reappear on the next visit.
-    function goToTab(tab) {
-        setIsMenuOpen(false);
+    // Every navigation goes through here: it clears a stale upload error so
+    // it doesn't reappear on the next visit.
+    // (Only state setters, so it never changes and callbacks can depend on it.)
+    const goToTab = useCallback((tab) => {
         setUploadError(null);
         setPhotosForEditor(null);
         setPhotosForCapture(null);
         setPhotosToAdd(null);
+        setFrameExtractorDraft(null);
+        setFrameExtractorNotice(null);
         setActiveTab(tab);
-    }
+    }, []);
 
-    // Adds the photos chosen with the sidebar's Add photos button to the
+    // Adds the photos chosen with the dock's Add photos button to the
     // capture page's batch, opening the page first if needed.
     function addPhotosToCapture(files) {
         if (activeTab === 'capture' && addToCaptureBatchRef.current) {
@@ -236,6 +405,7 @@ function App() {
             const res = await fetch('/upload', { method: 'POST', body: form });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
+            setMediaBuild(null);
             setJobId(data.id);
             // The capture page closes once processing starts, so returning
             // from the result screen lands on Home instead of an empty capture.
@@ -250,31 +420,146 @@ function App() {
         setScreen(null);
     }
 
-    function resetJob() {
+    // Processing's Cancel / Start over. A useCallback, like handleProcessingDone,
+    // so Processing's polling doesn't restart every time App re-renders.
+    const resetJob = useCallback(() => {
+        // The build or model screen being left can't be opened again with Back.
+        replaceNextRef.current = true;
+        // A cancelled media build returns to the Frame Extractor (with its
+        // files and settings still in frameExtractorDraft), photos to Home.
+        const returnTab = isMediaBuildActive ? 'extractor' : 'home';
+        stopMediaBuild();
         setJobId(null);
         setUploadError(null);
         setScreen(null);
-        setActiveTab('home');
+        setActiveTab(returnTab);
+    }, [isMediaBuildActive, stopMediaBuild]);
+
+    // Starts a Frame Extractor build and shows the processing screen at once,
+    // uploading the files from here (with progress). The job id arrives after.
+    async function startMediaBuild({ files, fps, trainIters, removeBackground }) {
+        mediaBuildCountRef.current += 1;
+        const buildNumber = mediaBuildCountRef.current;
+        const isStillCurrent = () => mediaBuildCountRef.current === buildNumber;
+        const firstFile = files[0];
+        // Upload progress last shown, in whole percent.
+        let lastUploadPercent = 0;
+        // Once every byte is sent the server is making the job, so the upload
+        // is no longer aborted (see abortMediaUploadRef below).
+        let hasSentAllBytes = false;
+
+        setFrameExtractorDraft({ files, fps, trainIters, removeBackground });
+        setFrameExtractorNotice(null);
+        // The upload's address (#/extractor/uploading) replaces the Frame
+        // Extractor's, as the build's own address replaces it later.
+        replaceNextRef.current = true;
+        setJobId(null);
+        setMediaBuild({
+            label: files.length === 1 ? firstFile.name : `${files.length} files`,
+            fileCount: files.length,
+            fps,
+            removeBackground,
+            previewUrl: URL.createObjectURL(firstFile),
+            isGif: /\.gif$/i.test(firstFile.name),
+            uploadFraction: 0,
+            startError: null,
+        });
+        setScreen('processing');
+
+        try {
+            const newJobId = await uploadMedia(
+                files,
+                { fps, trainIters, removeBackground },
+                (xhr) => {
+                    xhr.upload.addEventListener('load', () => {
+                        hasSentAllBytes = true;
+                    });
+                    // Aborting after every byte is sent would lose the reply
+                    // with the new job's id, leaving that job running on the
+                    // GPU. So Cancel lets the request finish, and the late
+                    // reply below deletes the job.
+                    abortMediaUploadRef.current = () => {
+                        if (!hasSentAllBytes) xhr.abort();
+                    };
+                },
+                (fraction) => {
+                    // Only re-render when the shown percentage changes.
+                    const uploadPercent = Math.round(fraction * 100);
+                    if (uploadPercent === lastUploadPercent || !isStillCurrent()) return;
+                    lastUploadPercent = uploadPercent;
+                    setMediaBuild((build) => build && { ...build, uploadFraction: uploadPercent / 100 });
+                },
+            );
+            if (!isStillCurrent()) {
+                // Cancelled while the upload was finishing: free the job it made.
+                fetch(`/jobs/${newJobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
+                return;
+            }
+            setMediaBuild((build) => build && { ...build, uploadFraction: null });
+            // The build's own address replaces the Frame Extractor's in the history.
+            replaceNextRef.current = true;
+            setJobId(newJobId);
+        } catch (err) {
+            // { aborted: true }: Cancel or Back already left the screen.
+            if (err?.aborted || !isStillCurrent()) return;
+            playSound('error');
+            setMediaBuild((build) => build && { ...build, startError: err.message });
+        } finally {
+            if (isStillCurrent()) abortMediaUploadRef.current = null;
+        }
     }
 
-    // Opens a finished model in the full-page splat viewer (the same screen
-    // the reconstruction flow ends on). Back to dashboard returns to the page
-    // it was opened from (Library or Model Viewer).
-    function openModel(modelJobId) {
-        setJobId(modelJobId);
-        setScreen('result');
-    }
+    // Shows a model on the model page; its back link returns to returnTab.
+    const showModelPage = useCallback((model, returnTab) => {
+        setViewedModel(model);
+        setModelReturnTab(returnTab);
+        goToTab('model');
+    }, [goToTab]);
 
-    function openLocalModel(file) {
-        setLocalModel({ url: URL.createObjectURL(file), name: file.name });
-        setScreen('local-model');
-    }
-
-    function closeLocalModel() {
-        // Release the file the blob URL holds on to.
-        URL.revokeObjectURL(localModel.url);
-        setLocalModel(null);
+    // The build finished: open its model page and ask for its name.
+    const handleProcessingDone = useCallback(() => {
+        // A media build's model page links back to the Frame Extractor.
+        const returnTab = isMediaBuildActive ? 'extractor' : 'home';
+        stopMediaBuild();
+        setNamePromptJobId(jobId);
+        // The model replaces the build screen, so Back skips the finished build.
+        replaceNextRef.current = true;
         setScreen(null);
+        // showModelPage -> goToTab also clears frameExtractorDraft.
+        showModelPage({ jobId }, returnTab);
+    }, [isMediaBuildActive, jobId, stopMediaBuild, showModelPage]);
+
+    // Opens a finished model from Home, the Media Library or the Model Viewer.
+    function openModel(modelJobId) {
+        showModelPage({ jobId: modelJobId }, activeTab);
+    }
+
+    // Opens a .ply from the user's computer (Model Viewer's "Open .ply file").
+    function openLocalModel(file) {
+        showModelPage({ localFile: { url: URL.createObjectURL(file), name: file.name, sizeBytes: file.size } }, 'viewer');
+    }
+
+    // Adds the model to the Scene Builder's scene and opens it there.
+    function addModelToScene(model) {
+        scene.set((objects) => [...objects, createSceneObject(model, objects)]);
+        setSceneInfo((info) => ({ ...info, hasUnsavedChanges: true }));
+        goToTab('scene');
+    }
+
+    // Shown on the dashboard the first time an account signs in here, or on request.
+    const isWalkthroughOpen = Boolean(currentUser)
+        && (isReplayingWalkthrough || !hasSeenWalkthrough(currentUser.email));
+
+    // Replays the walkthrough from step 1, which points at Home's Recent section.
+    function showWalkthroughAgain() {
+        goToTab('home');
+        setIsReplayingWalkthrough(true);
+    }
+
+    function closeWalkthrough() {
+        markWalkthroughSeen(currentUser.email);
+        setIsReplayingWalkthrough(false);
+        setWalkthroughCloseCount((closeCount) => closeCount + 1);
     }
 
     if (isCheckingSession) {
@@ -285,69 +570,15 @@ function App() {
         return <LoginScreen onLogin={handleLogin} />;
     }
 
-    if (screen === 'processing' && jobId) {
+    if (screen === 'processing' && (jobId || mediaBuild)) {
         return (
             <Processing
                 jobId={jobId}
-                onDone={() => {
-                    setNamePromptJobId(jobId);
-                    setScreen('result');
-                }}
+                mediaBuild={mediaBuild}
+                onDone={handleProcessingDone}
                 onCancel={resetJob}
+                onRegisterLeaveGuard={registerLeaveGuard}
             />
-        );
-    }
-
-    if (screen === 'result' && jobId) {
-        // SplatViewer renders itself full-page (position: fixed, inset: 0), so it
-        // is only used here as a standalone screen, never inside the dashboard.
-        return (
-            <>
-                <SplatViewer url={`/jobs/${jobId}/result.ply`} />
-                {/* Must stay fixed above the full-page viewer, or its canvas covers the buttons. */}
-                <div
-                    className="genesis-overlay"
-                    style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, zIndex: 10 }}
-                >
-                    <button
-                        className="btn btn-primary"
-                        onClick={() => {
-                            playSound('tap');
-                            resetJob();
-                            goToTab('capture');
-                        }}
-                    >
-                        New scan
-                    </button>
-                    <a className="btn btn-ghost" href={`/jobs/${jobId}/result.ply`} download="model.ply"
-                        onClick={() => playSound('tap')}>
-                        Download .ply
-                    </a>
-                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); backToDashboard(); }}>
-                        Back to dashboard
-                    </button>
-                </div>
-                {namePromptJobId === jobId && (
-                    <NameModelPrompt jobId={jobId} onClose={() => setNamePromptJobId(null)} />
-                )}
-            </>
-        );
-    }
-
-    if (screen === 'local-model' && localModel) {
-        return (
-            <>
-                <SplatViewer url={localModel.url} />
-                <div
-                    className="genesis-overlay"
-                    style={{ position: 'fixed', top: 16, left: 16, display: 'flex', gap: 10, alignItems: 'center', zIndex: 10 }}
-                >
-                    <button className="btn btn-ghost" onClick={() => { playSound('tap'); closeLocalModel(); }}>
-                        Back to dashboard
-                    </button>
-                    <span style={{ color: '#f4fbfd', fontSize: 13, opacity: 0.8 }}>{localModel.name}</span>
-                </div>
-            </>
         );
     }
 
@@ -356,41 +587,8 @@ function App() {
     }
 
     return (
-        <div className={isSidebarCollapsed ? 'forma-app genesis-shell is-sidebar-collapsed' : 'forma-app genesis-shell'}>
-            <TopNav
-                activeTab={activeTab}
-                onTabChange={goToTab}
-                user={currentUser}
-                onOpenAccount={() => goToTab('account')}
-                onSignOut={handleSignOut}
-                onToggleMenu={() => setIsMenuOpen((wasOpen) => !wasOpen)}
-            />
-
+        <div className="forma-app genesis-shell">
             <div className="genesis-body">
-                {/* Dark overlay behind the phone drawer; tapping it closes the drawer. */}
-                {isMenuOpen && (
-                    <button
-                        type="button"
-                        className="genesis-backdrop"
-                        aria-label="Close menu"
-                        onClick={() => setIsMenuOpen(false)}
-                    />
-                )}
-
-                <Sidebar
-                    activeTab={activeTab}
-                    onNavigate={goToTab}
-                    onNewModel={() => goToTab('capture')}
-                    onAddPhotos={addPhotosToCapture}
-                    user={currentUser}
-                    onOpenAccount={() => goToTab('account')}
-                    onSignOut={handleSignOut}
-                    isCollapsed={isSidebarCollapsed}
-                    onToggleCollapsed={toggleSidebarCollapsed}
-                    isOpen={isMenuOpen}
-                    onClose={() => setIsMenuOpen(false)}
-                />
-
                 {/* key resets the scroll position, so each page opens at the top. */}
                 <div className="genesis-main" key={activeTab}>
                     {activeTab === 'home' && (
@@ -432,9 +630,13 @@ function App() {
                     {activeTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}
-                    {activeTab === 'youtube' && (
-                        // YoutubeIngest plays the click sound itself, so none here.
-                        <YoutubeIngest />
+                    {activeTab === 'extractor' && (
+                        // FrameExtractor plays the click sound itself, so none here.
+                        <FrameExtractor
+                            onStartBuild={startMediaBuild}
+                            initialDraft={frameExtractorDraft}
+                            notice={frameExtractorNotice}
+                        />
                     )}
                     {activeTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
@@ -449,10 +651,46 @@ function App() {
                         />
                     )}
                     {activeTab === 'account' && (
-                        <AccountScreen user={currentUser} onSignOut={handleSignOut} />
+                        <AccountScreen
+                            user={currentUser}
+                            onSignOut={handleSignOut}
+                            onShowWalkthrough={showWalkthroughAgain}
+                        />
+                    )}
+                    {activeTab === 'feedback' && (
+                        // Guests are sent back to the login screen to sign in.
+                        <FeedbackScreen user={currentUser} onSignIn={handleSignOut} />
+                    )}
+                    {activeTab === 'model' && viewedModel && (
+                        <ModelScreen
+                            jobId={viewedModel.jobId}
+                            localFile={viewedModel.localFile}
+                            backLabel={TAB_LABELS[modelReturnTab] ?? 'Back'}
+                            showNamePrompt={Boolean(viewedModel.jobId) && namePromptJobId === viewedModel.jobId}
+                            onNamePromptClose={() => setNamePromptJobId(null)}
+                            onBack={() => goToTab(modelReturnTab)}
+                            onOpenPhotos={() => openLibrary('photos')}
+                            onAddToScene={addModelToScene}
+                            onDeleted={() => goToTab(modelReturnTab === 'model' ? 'library' : modelReturnTab)}
+                        />
                     )}
                 </div>
             </div>
+
+            {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
+
+            <Dock
+                isPinned={isWalkthroughOpen}
+                // The model page belongs with the Model Viewer.
+                activeTab={activeTab === 'model' ? 'viewer' : activeTab}
+                onNavigate={goToTab}
+                onNewModel={() => goToTab('capture')}
+                onAddPhotos={addPhotosToCapture}
+                user={currentUser}
+                onOpenAccount={() => goToTab('account')}
+                onShowWalkthrough={showWalkthroughAgain}
+                onSignOut={handleSignOut}
+            />
         </div>
     );
 }

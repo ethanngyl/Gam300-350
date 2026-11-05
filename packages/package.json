@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "migrate": "node src/backend/migrate.js",
+    "test": "node --test --test-concurrency=1 \"src/backend/tests/*.test.js\"",
     "metrics:dev": "vite --config vite.metrics.config.js",
     "metrics:build": "vite build --config vite.metrics.config.js",
     "metrics:server": "node src/metrics-dashboard/server.js",
@@ -15,15 +17,16 @@
   },
   "dependencies": {
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",
+    "ajv": "8.17.1",
     "express": "^5.2.1",
     "file-type": "^22.1.0",
-    "marked": "^18.0.14",
     "multer": "^2.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "10.1.1",
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

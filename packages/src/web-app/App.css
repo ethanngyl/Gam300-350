@@ -1,15 +1,17 @@
 :root {
-    --bg: #171a24;
-    --surface: #1f2330;
-    --surface-raised: #262b3d;
-    --border: rgba(237, 238, 243, 0.12);
-    --border-strong: rgba(237, 238, 243, 0.22);
-    --text: #edeef3;
-    --text-muted: #8c93a8;
-    --accent: #e38b57;
-    --accent-dim: rgba(227, 139, 87, 0.16);
-    --mesh: #6ee7c8;
-    --mesh-dim: rgba(110, 231, 200, 0.14);
+    /* Old landing-page variables, now pointing at the GENESIS theme in
+       AppTheme.css so the .btn buttons and page background match it. */
+    --bg: var(--forma-bg);
+    --surface: var(--forma-panel);
+    --surface-raised: var(--forma-panel-alt);
+    --border: var(--forma-border);
+    --border-strong: var(--forma-border-strong);
+    --text: var(--forma-text);
+    --text-muted: var(--forma-text-muted);
+    --accent: var(--forma-blue);
+    --accent-dim: rgba(var(--forma-accent-rgb), 0.16);
+    --mesh: var(--forma-teal-text);
+    --mesh-dim: rgba(var(--forma-accent-light-rgb), 0.14);
     --radius-sm: 4px;
     --radius-md: 8px;
 }
@@ -38,13 +40,13 @@ body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--forma-font);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3 {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: var(--forma-font);
     font-weight: 600;
     line-height: 1.15;
     margin: 0;
@@ -91,7 +93,7 @@ a {
     }
 
 .logo {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: var(--forma-font);
     font-weight: 700;
     font-size: 1.15rem;
     letter-spacing: -0.01em;
@@ -136,7 +138,7 @@ a {
 /* ---------- Buttons ---------- */
 
 .btn {
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: var(--forma-font);
     font-size: 0.95rem;
     font-weight: 600;
     padding: 12px 22px;
@@ -152,11 +154,11 @@ a {
 
 .btn-primary {
     background: var(--accent);
-    color: #1a1204;
+    color: var(--forma-on-accent);
 }
 
     .btn-primary:hover {
-        background: #ec9a68;
+        background: var(--forma-blue-hover);
     }
 
 .btn-ghost {
@@ -277,7 +279,7 @@ a {
     position: absolute;
     top: 16px;
     left: 46px;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     font-size: 0.72rem;
     color: var(--mesh);
     background: rgba(110, 231, 200, 0.1);
@@ -391,7 +393,7 @@ section {
 }
 
 .workflow-num {
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: var(--forma-font-mono);
     color: var(--accent);
     font-size: 0.95rem;
     padding-top: 4px;
@@ -444,7 +446,7 @@ section {
         }
 
     .builder-bar .filename {
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-size: 0.78rem;
         color: var(--text-muted);
     }
@@ -461,7 +463,7 @@ section {
 }
 
     .builder-sidebar h4 {
-        font-family: 'IBM Plex Mono', monospace;
+        font-family: var(--forma-font-mono);
         font-weight: 500;
         font-size: 0.72rem;
         color: var(--text-muted);

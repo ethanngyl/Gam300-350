@@ -12,6 +12,10 @@ without downloading the whole file.
 Fetches only the first 4 KB of the .ply (HTTP Range) and reads the
 "Vertical axis" line Brush writes into the header. Returns it as
 [x, y, z], or [0, 1, 0] (+Y) if it can't be found.
+- readPlyInfo(url)
+Same 4 KB read; returns { splatCount, fileSizeBytes } for the model page
+(the "element vertex" count and the size from Content-Range). Either is
+null if it can't be found.
 **************************************************************************/
 
 /**
@@ -20,25 +24,55 @@ Fetches only the first 4 KB of the .ply (HTTP Range) and reads the
  * Falls back to +Y if not found.
  */
 export async function readCameraUp(url) {
-  try {
-    const res = await fetch(url, { headers: { Range: 'bytes=0-4095' } })
-    // Blob URLs (a .ply opened from disk) may ignore Range, so stop reading
-    // after 4 KB instead of pulling in the whole file
-    const reader = res.body.getReader()
-    const chunks = []
-    let received = 0
-    while (received < 4096) {
-      const { done, value } = await reader.read()
-      if (done) break
-      chunks.push(value)
-      received += value.length
+    try {
+        const res = await fetch(url, { headers: { Range: 'bytes=0-4095' } })
+        // Blob URLs (a .ply opened from disk) may ignore Range, so stop reading
+        // after 4 KB instead of pulling in the whole file
+        const reader = res.body.getReader()
+        const chunks = []
+        let received = 0
+        while (received < 4096) {
+            const { done, value } = await reader.read()
+            if (done) break
+            chunks.push(value)
+            received += value.length
+        }
+        reader.cancel().catch(() => { })
+        const text = new TextDecoder().decode(await new Blob(chunks).arrayBuffer())
+        const m = text.match(/Vertical axis:\s*([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/)
+        if (m) return [Number(m[1]), Number(m[2]), Number(m[3])]
+    } catch {
+        /* ignore — use default */
     }
-    reader.cancel().catch(() => {})
-    const text = new TextDecoder().decode(await new Blob(chunks).arrayBuffer())
-    const m = text.match(/Vertical axis:\s*([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/)
-    if (m) return [Number(m[1]), Number(m[2]), Number(m[3])]
-  } catch {
-    /* ignore — use default */
-  }
-  return [0, 1, 0]
+    return [0, 1, 0]
+}
+
+/**
+ * Read a .ply's splat count (header "element vertex N") and file size
+ * (Content-Range "bytes 0-4095/<size>") from its first 4 KB.
+ */
+export async function readPlyInfo(url) {
+    const info = { splatCount: null, fileSizeBytes: null }
+    try {
+        const res = await fetch(url, { headers: { Range: 'bytes=0-4095' } })
+        if (!res.ok) return info
+        const totalFromRange = Number(res.headers.get('Content-Range')?.split('/')[1])
+        if (totalFromRange > 0) info.fileSizeBytes = totalFromRange
+        const reader = res.body.getReader()
+        const chunks = []
+        let received = 0
+        while (received < 4096) {
+            const { done, value } = await reader.read()
+            if (done) break
+            chunks.push(value)
+            received += value.length
+        }
+        reader.cancel().catch(() => { })
+        const text = new TextDecoder().decode(await new Blob(chunks).arrayBuffer())
+        const match = text.match(/element vertex\s+(\d+)/)
+        if (match) info.splatCount = Number(match[1])
+    } catch {
+        /* ignore: the model page just leaves these out */
+    }
+    return info
 }

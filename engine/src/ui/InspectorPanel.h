@@ -16,6 +16,8 @@ elsewhere (e.g. WASD nudges in the viewport) back into the fields.
 
 #include "splat/SplatTrimmer.h"
 
+#include <glm/glm.hpp>
+
 #include <QWidget>
 
 #include <array>
@@ -48,9 +50,37 @@ public:
     // Cheap enough to call every frame.
     void syncFromModel();
 
+    // The modes the crop box buttons can ask for. The two cut values are the cut button ids.
+    enum CropMode { CropRemoveInside = 0, CropRemoveOutside = 1, CropMoveContents = 2 };
+
+    // Shows the real crop box state in the Crop Box section (the box can also be changed with
+    // shortcuts and menus). `removeInside` is kept while in move mode, so switching back to crop
+    // restores it. `confirmed` is whether move mode has a confirmed selection.
+    // Cheap enough to call every frame.
+    void setCropState(bool active, bool moveContents, bool removeInside, bool confirmed);
+
+//QT's events
 signals:
+    // The Show Crop Box button was toggled.
+    void cropBoxToggled(bool on);
+
+    // A cut button or the mode button asked for a mode (a CropMode value).
+    void cropModeSelected(int mode);
+
+    // The action button was pressed: remove the splats, or confirm/release the selection in move-contents mode.
+    void cropApplyRequested();
+
     // The model's name was changed from the inspector.
     void nameChanged(const QString& name);
+
+    //The Reset Position button was clicked
+    void resetPositionRequested();
+
+    //Asks to change the model transform
+    //The inspector panel does not apply it, the listener does, so it can be an undo step,
+    void transformEdited(SplatModel* model, const glm::mat4& before, const glm::mat4& after);
+    //Same, from the position, rotation and scale fields. Quick steps in a row merge into one undo step
+    void transformFieldEdited(SplatModel* model, const glm::mat4& before, const glm::mat4& after);
 
     // Apply was pressed in the Trim section; the model should be re-trimmed
     // from its original data with these values.
@@ -61,14 +91,24 @@ signals:
 
 private:
     void writePosition();
-    void loadTrim();            // fills the trim fields and status from the model
+    void writeScale(int editedAxis);
+    void writeRotation(int editedAxis);
+    //Fills the trim fields and status from the model
+    void loadTrim();
     void loadTrimFields(const TrimData& trim);
     TrimData currentTrim() const;
 
     QStackedWidget* m_stack = nullptr; // "nothing selected" vs. the properties
     QLineEdit* m_name = nullptr;
     QLabel* m_splatCount = nullptr;
+
+    //Transform to display in inspect
     std::array<QDoubleSpinBox*, 3> m_position{};
+    std::array<QDoubleSpinBox*, 3> m_rotation{}; // Euler angles in degrees
+    // The angles the rotation fields last showed for the model. Several sets of angles give the same orientation,
+    // so writeRotation keeps editing this set while it still matches the model, instead of re-reading the matrix.
+    glm::vec3 m_shownRotation{0.0f};
+    std::array<QDoubleSpinBox*, 3> m_scale{};
 
     QDoubleSpinBox* m_minAlpha = nullptr;
     QDoubleSpinBox* m_cropPct = nullptr;
@@ -77,6 +117,17 @@ private:
     QLabel* m_trimStatus = nullptr;
     QPushButton* m_untrimButton = nullptr;
     TrimData m_defaultTrim;
+
+    QPushButton* m_cropToggle = nullptr;
+    std::array<QPushButton*, 2> m_cropCutButtons{}; // Cut Inside, Cut Outside
+    QPushButton* m_cropModeToggle = nullptr;        // shows the mode, click switches Crop <-> Move
+    QPushButton* m_cropApply = nullptr;
+    // Last state shown, so the per-frame setCropState only touches widgets when something changed
+    bool m_cropShown = false; // false until the first setCropState has filled the widgets in
+    bool m_cropActive = false;
+    bool m_cropMove = false;
+    bool m_cropRemoveInside = true;
+    bool m_cropConfirmed = false;
 
     SplatModel* m_model = nullptr;
 };

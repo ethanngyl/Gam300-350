@@ -24,6 +24,7 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 #include <imgui_impl_opengl3.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <QKeyEvent>
@@ -36,6 +37,9 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 namespace {
     // Qt reports a wheel notch as 120 units of angle delta.
     constexpr double kWheelNotch = 120.0;
+    // Overlay layout, shared so the stats window can sit below the tool buttons.
+    constexpr float kOverlayPad = 10.0f;
+    constexpr float kToolButtonHeight = 26.0f;
 }
 
 Viewport::Viewport(QWidget* parent)
@@ -50,6 +54,7 @@ Viewport::~Viewport() {
     }
     // GL resources must be released with this widget's context current.
     makeCurrent();
+    m_cropBoxRenderer.reset();
     m_renderer.reset();
     ImGui_ImplOpenGL3_Shutdown();
     ImGuiQtBackend::Shutdown();
@@ -71,6 +76,7 @@ void Viewport::initializeGL() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     m_renderer = std::make_unique<SplatRenderer>();
+    m_cropBoxRenderer = std::make_unique<CropBoxRenderer>();
     BindInputs();
 
     // ImGui setup -- foundation for the sandbox UI in later milestones.
@@ -109,21 +115,96 @@ void Viewport::BindInputs() {
 
     //Movmeent test
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::FORWARD,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatForward(manager, type);
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::BACKSWARD,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatBackwards(manager, type);
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(-1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatLeft(manager, type);
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(0.0f, 0.0f, -1.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            m_renderer->NudgeSplatRight(manager, type);
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(0.0f, 0.0f, 1.0f));
         });
+}
+
+void Viewport::Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction) {
+    SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
+
+    if (type == InputManager::RELEASE) {
+        //The last nudge key coming up ends the burst
+        if (m_nudgeKeysDown > 0 && --m_nudgeKeysDown == 0) FinishNudge();
+        return;
+    }
+
+    //If crop box active, nudge it instead of the model
+    const bool toCropBox = m_cropBox.active;
+
+    //No model or cropbox active
+    if (!toCropBox && !model)
+        return;
+    //A gizmo drag owns the target, so nudges are ignored (DrawGizmo already closed any nudge when the drag began).
+    //Presses are still counted: those keys are physically down, and their release must close a nudge started after the drag
+    else if (m_gizmoWasUsing)
+    {
+        if (type == InputManager::PRESS) ++m_nudgeKeysDown;
+        return;
+    }
+
+    //The target changed midburst nudges, finish old burst first
+    //Box shown or hidden, another model selected
+    //The key count is kept: those keys are still physically down, and their release must close the new burst
+    if (m_nudgeActive && (m_nudgeIsCropBox != toCropBox || (!toCropBox && m_nudgeModel != model))) {
+        FinishNudge();
+    }
+    if (!m_nudgeActive) {
+        m_nudgeActive = true;
+        m_nudgeIsCropBox = toCropBox;
+        m_nudgeModel = toCropBox ? nullptr : model;
+        m_nudgeBefore = toCropBox ? m_cropBox.transform : model->GetTransform();
+        //Only a confirmed selection is carried, otherwise only the box moves
+        m_nudgeMovesContents = toCropBox && m_cropBox.moveContents && m_renderer->HasSelection();
+    }
+    //Key repeat arrives as HOLD, only the real press counts as a key going down
+    if (type == InputManager::PRESS) ++m_nudgeKeysDown;
+
+    if (toCropBox) {
+        //Worldspace step, the same as the gizmo's translate
+        m_cropBox.transform = glm::translate(glm::mat4(1.0f), direction * SplatRenderer::kNudgeStep) * m_cropBox.transform;
+        if (m_nudgeMovesContents) {
+            m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_nudgeBefore));
+        }
+    }
+    else {
+        m_renderer->NudgeSelectedModel(direction);
+    }
+}
+
+void Viewport::FinishNudge() {
+    if (!m_nudgeActive) return;
+    m_nudgeActive = false;
+
+    if (m_nudgeIsCropBox) {
+        //The preview is replaced by the real splat move that the callback bakes
+        if (m_nudgeMovesContents) m_renderer->ClearRegionPreview();
+        m_nudgeMovesContents = false;
+        if (m_cropBox.transform != m_nudgeBefore && onCropBoxEdited) {
+            onCropBoxEdited(m_nudgeBefore, m_cropBox.transform);
+        }
+        return;
+    }
+
+    SplatModel* model = m_nudgeModel;
+    m_nudgeModel = nullptr;
+    //Only report if the model is still there and actually moved
+    if (model && model == m_renderer->GetModel(m_renderer->GetSelectedModel())
+        && model->GetTransform() != m_nudgeBefore && onTransformEdited) {
+        onTransformEdited(model, m_nudgeBefore, model->GetTransform());
+    }
 }
 
 void Viewport::paintGL() {
@@ -143,11 +224,18 @@ void Viewport::paintGL() {
     const glm::mat4 proj = m_camera.getProjection(aspect);
     //Draw Splat/Pointcloud models
     m_renderer->Draw(view, proj, static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
+    if (m_cropBox.active) {
+        //Green when the gizmo moves the contents, otherwise orange for removing the inside and blue when keeping it
+        glm::vec3 color = m_cropBox.removeInside ? glm::vec3(1.0f, 0.55f, 0.1f) : glm::vec3(0.2f, 0.7f, 1.0f);
+        if (m_cropBox.moveContents) color = glm::vec3(0.3f, 1.0f, 0.4f);
+        m_cropBoxRenderer->Draw(proj * view, m_cropBox.transform, color);
+    }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGuiQtBackend::NewFrame(*this, deltaTime);
     ImGui::NewFrame();
     DrawGizmo(view, proj); //Draw Gizmos (Movement arrows, etc.)
+    DrawToolButtons();
     DrawImGui(fps);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -166,13 +254,32 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
 
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
 
+    //An active crop box takes over the gizmo from the selected model
+    const bool editingBox = m_cropBox.active;
+
     //Pan mode has no gizmo, left drag belongs to the camera
     const InputManager::TOOL_MODE toolMode = m_input.GetToolMode();
-    if (!model || model->GetIsHidden() || toolMode == InputManager::PAN) {
+
+    //Swapping tool mid-drag ends the drag where it is. The gizmo stays inert until the mouse is released,
+    //so carrying on with the held button (or swapping back) cannot move the target any further.
+    if (m_gizmoWasUsing && toolMode != m_dragToolMode) {
+        FinishGizmoDrag(model, editingBox);
+        m_gizmoLocked = true;
+    }
+    if (m_gizmoLocked && !ImGui::GetIO().MouseDown[0]) {
+        m_gizmoLocked = false;
+    }
+
+    if ((!editingBox && (!model || model->GetIsHidden())) || toolMode == InputManager::PAN) {
         //Nothing dragged, reset drag vars
         m_gizmoWasUsing = false;
         m_dragModel = nullptr;
+        m_dragIsCropBox = false;
+        m_dragMovesContents = false;
         m_dragBefore = glm::mat4(1.0f);
+        //A nudge in progress owns the preview, FinishNudge clears it. Wiping it here every frame would
+        //hide the carried splats moving while the arrow keys are held (nudging works in Pan mode too).
+        if (!m_nudgeMovesContents) m_renderer->ClearRegionPreview();
         return;
     }
 
@@ -181,9 +288,9 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetRect(0.0f, 0.0f, displaySize.x, displaySize.y);
 
-    //Get orginal model transform. Kept separate from the copy ImGuizmo edits, because
+    //Get orginal transform of whatever is being edited. Kept separate from the copy ImGuizmo edits, because
     //the first frame of a drag has already moved it by the time IsUsing() reports true.
-    const glm::mat4 original = model->GetTransform();
+    const glm::mat4 original = editingBox ? m_cropBox.transform : model->GetTransform();
     glm::mat4 transform = original;
 
     //Gizmo operation follows the active tool mode
@@ -191,29 +298,101 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     if (toolMode == InputManager::ROTATE) operation = ImGuizmo::ROTATE;
     else if (toolMode == InputManager::SCALE) operation = ImGuizmo::SCALE;
 
+    //The box rotates and scales along its own axes so it can be fitted to a rotated region
+    const ImGuizmo::MODE space = (editingBox && operation != ImGuizmo::TRANSLATE) ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+
+    //A locked gizmo is still drawn but ignores the mouse
+    ImGuizmo::Enable(!m_gizmoLocked);
+
     //ImGUIzmo method to edit the transform values
     //view, projection, operation type, local/world, transform value
     if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation,
-                             ImGuizmo::WORLD, glm::value_ptr(transform)))
+                             space, glm::value_ptr(transform)))
     {
         //Apply transform value
-        model->SetTransform(transform);
+        if (editingBox) m_cropBox.transform = transform;
+        else model->SetTransform(transform);
     }
 
-    //A whole drag is one undo ste,: remember where it started and report it once it ends
-    //The model is moved live during the drag, only the finished drag goes to the undo stack.
+    //A whole drag is one undo step, remembers where it started and report it when it ends
+    //The target is moved live during the drag, only the finished drag goes to the undo stack.
     const bool isUsing = ImGuizmo::IsUsing();
     if (isUsing && !m_gizmoWasUsing) {
-        m_dragModel = model;
+        //A nudge still in progress is committed first, ending exactly where the drag begins (original), so no part
+        //of the move is reported by both the nudge and the drag. The drag's first-frame change is put back after.
+        if (m_nudgeActive) {
+            const bool sameTarget = m_nudgeIsCropBox == editingBox;
+            if (sameTarget) {
+                if (editingBox) m_cropBox.transform = original;
+                else model->SetTransform(original);
+            }
+            FinishNudge();
+            if (sameTarget) {
+                if (editingBox) m_cropBox.transform = transform;
+                else model->SetTransform(transform);
+            }
+        }
+        m_dragIsCropBox = editingBox;
+        m_dragModel = editingBox ? nullptr : model;
         m_dragBefore = original;
+        //Only a confirmed selection is carried, otherwise the drag just moves the box
+        m_dragMovesContents = editingBox && m_cropBox.moveContents && m_renderer->HasSelection();
+        m_dragToolMode = toolMode;
     }
     else if (!isUsing && m_gizmoWasUsing) {
-        if (m_dragModel == model && model->GetTransform() != m_dragBefore && onTransformEdited) {
-            onTransformEdited(model, m_dragBefore, model->GetTransform());
-        }
-        m_dragModel = nullptr;
+        FinishGizmoDrag(model, editingBox);
     }
     m_gizmoWasUsing = isUsing;
+
+    //While the box is dragged with a confirmed selection, draw the selected splats moving with it.
+    //The splat data itself is only changed once the drag ends.
+    if (isUsing && m_dragMovesContents) {
+        m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_dragBefore));
+    }
+}
+
+void Viewport::FinishGizmoDrag(SplatModel* model, bool editingBox) {
+    if (m_dragIsCropBox) {
+        if (editingBox && m_cropBox.transform != m_dragBefore && onCropBoxEdited) {
+            onCropBoxEdited(m_dragBefore, m_cropBox.transform);
+        }
+    }
+    else if (m_dragModel == model && model && model->GetTransform() != m_dragBefore && onTransformEdited) {
+        onTransformEdited(model, m_dragBefore, model->GetTransform());
+    }
+    m_dragModel = nullptr;
+    m_dragIsCropBox = false;
+    m_dragMovesContents = false;
+    m_gizmoWasUsing = false;
+    m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
+}
+
+void Viewport::DrawToolButtons() {
+    static const char* const kLabels[] = { "Pan", "Move", "Rotate", "Scale" };
+    static const char* const kTooltips[] = { "Pan (Q)", "Translate (W)", "Rotate (E)", "Scale (R)" };
+    constexpr int kModeCount = 4;
+    constexpr float kButtonWidth = 60.0f;
+
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x, kOverlayPad), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.45f);
+    //Unlike the stats overlay this one takes input, so ImGui captures clicks on it and they never reach the camera
+    ImGui::Begin("Tool Buttons", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                 ImGuiWindowFlags_NoNav);
+    for (int i = 0; i < kModeCount; ++i) {
+        const auto mode = static_cast<InputManager::TOOL_MODE>(i);
+        const bool active = m_input.GetToolMode() == mode;
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.45f, 0.8f, 1.0f));
+        if (ImGui::Button(kLabels[i], ImVec2(kButtonWidth, kToolButtonHeight))) {
+            m_input.SetToolMode(mode);
+        }
+        if (active) ImGui::PopStyleColor();
+        ImGui::SetItemTooltip("%s", kTooltips[i]);
+        if (i < kModeCount - 1) ImGui::SameLine();
+    }
+    ImGui::End();
 }
 
 void Viewport::DrawImGui(float fps) {
@@ -221,11 +400,11 @@ void Viewport::DrawImGui(float fps) {
         return;
     }
 
-    // Read-only stats overlay pinned to the top-right corner. NoInputs keeps
-    // it from ever capturing the mouse, so it never blocks camera drags.
-    constexpr float kPad = 10.0f;
+    // Read-only stats overlay pinned to the top-right corner, below the tool buttons.
+    // NoInputs keeps it from ever capturing the mouse, so it never blocks camera drags.
     const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos(ImVec2(displaySize.x - kPad, kPad), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    const float buttonsBottom = kOverlayPad + kToolButtonHeight + ImGui::GetStyle().WindowPadding.y * 2.0f;
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x - kOverlayPad, buttonsBottom + 6.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.45f);
     ImGui::Begin("Engine Stats", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
@@ -314,4 +493,9 @@ void Viewport::focusOutEvent(QFocusEvent* event) {
     if (m_glInitialized) ImGuiQtBackend::ProcessFocus(false);
     m_leftHeld = false;
     m_rightHeld = false;
+    //The key release will never arrive, so close any nudge burst here
+    if (m_glInitialized) {
+        m_nudgeKeysDown = 0;
+        FinishNudge();
+    }
 }

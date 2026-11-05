@@ -74,7 +74,7 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
 
     return (
         <div className="library-screen">
-            <div className="library-toolbar">
+            <div className="library-toolbar model-viewer-toolbar">
                 <div className="library-subtabs">
                     <span className="library-subtab is-active">Model Viewer</span>
                 </div>

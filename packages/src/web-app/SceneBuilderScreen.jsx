@@ -36,7 +36,16 @@ import SceneViewport from './SceneViewport.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 import { captureSceneScreenshot, isSceneEngineReady, measureLowestPoint, resetSceneCamera } from './SceneEngine.js';
-import { NEW_SCENE_INFO, SCENES_SAVED_ON_SERVER, deleteScene, listScenes, loadScene, saveScene } from './SceneStorage.js';
+import {
+    NEW_SCENE_INFO,
+    SCENES_SAVED_ON_SERVER,
+    createSceneObject,
+    deleteScene,
+    listScenes,
+    loadScene,
+    makeObjectId,
+    saveScene,
+} from './SceneStorage.js';
 import './SceneBuilder.css';
 
 const PHONE_MEDIA_QUERY = '(max-width: 760px)';
@@ -49,7 +58,6 @@ const TRANSFORM_MODES = [
     { id: 'scale', gizmoMode: 'scale', label: 'Scale', icon: 'cube', shortcut: '3' },
 ];
 
-const DEFAULT_TRIM = { strength: 0, minOpacity: 0, maxSplatSize: 0, density: 0 };
 const AXIS_LABELS = ['X', 'Y', 'Z'];
 
 const MIN_SCALE = 0.05;
@@ -79,27 +87,6 @@ function useIsPhone() {
     }, []);
 
     return isPhone;
-}
-
-function makeObjectId() {
-    // Not crypto.randomUUID: that needs HTTPS, and the app is also opened over plain LAN http.
-    return `object-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-// Placed at the origin, named after the model (numbered if it is already
-// in the scene).
-function createSceneObject(model, objects) {
-    const copies = objects.filter((sceneObject) => sceneObject.jobId === model.id).length;
-    return {
-        objectId: makeObjectId(),
-        jobId: model.id,
-        name: copies === 0 ? model.name : `${model.name} (${copies + 1})`,
-        position: [0, 0, 0],
-        rotation: [0, 0, 0],
-        scale: [1, 1, 1],
-        trim: { ...DEFAULT_TRIM },
-        isHidden: false,
-    };
 }
 
 function clamp(value, min, max) {

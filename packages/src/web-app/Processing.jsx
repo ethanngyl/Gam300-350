@@ -18,12 +18,23 @@ iteration counter, progress bar, elapsed time, Cancel) sits beside a
 preview of the job's first photo with a scanning effect and the step
 tracker. On phones everything stacks in one column, with the preview as
 a short banner on top and a full-width Cancel button at the bottom.
-- PHASE_LABELS
-Maps the backend's phase names to the labels shown to the user.
-- Processing({ jobId, onDone, onCancel })
+Frame Extractor builds (videos / GIFs) use this screen too, passing
+mediaBuild: their steps start with "Uploading media" and "Extracting
+frames", the preview shows the first file and then its first extracted
+frame, and App uploads the files while this screen already shows (jobId
+is null until the server has made the job).
+- PHASE_LABELS / MEDIA_PHASE_LABELS
+Map the backend's phase names to the labels shown to the user.
+- Processing({ jobId, mediaBuild, onDone, onCancel, onRegisterLeaveGuard })
 React component. Polls /jobs/:id every 1.5s until the job is done, failed or
 cancelled. Calls onDone() when the splat is ready and onCancel() when the
-user leaves. Shows an error message with tips if the reconstruction fails.
+user leaves (or finds the build already cancelled). Shows an error message
+with tips if the reconstruction fails. onRegisterLeaveGuard(guard) hands
+App a function the browser's Back / Forward buttons call first: while the
+build runs it asks whether to leave and cancel it.
+mediaBuild (Frame Extractor builds only): { label, fileCount, fps,
+removeBackground, previewUrl, isGif, uploadFraction (0-1 while uploading,
+else null), startError }.
 - killJob()
 Inner helper. Sends DELETE /jobs/:id (keepalive) on pagehide or unmount,
 unless the job already finished so its result stays downloadable.
@@ -61,6 +72,26 @@ const PHASE_ORDER = [
     'normalize',
 ]
 
+// Frame Extractor builds: frames instead of photos, and the media upload first.
+const MEDIA_PHASE_LABELS = {
+    ...PHASE_LABELS,
+    upload: 'Uploading media',
+    extract: 'Extracting frames',
+    'colmap-features': 'Analyzing frames',
+    'colmap-matching': 'Matching frames',
+}
+
+const MEDIA_PHASE_ORDER = [
+    'upload',
+    'extract',
+    'masking',
+    'colmap-features',
+    'colmap-matching',
+    'colmap-mapping',
+    'training',
+    'normalize',
+]
+
 const STEP_STATE_LABELS = { done: 'Done', active: 'In progress', pending: 'Waiting' }
 
 // "0:42" or "12:05" -- time since this screen opened.
@@ -76,7 +107,7 @@ function formatElapsed(totalSeconds) {
  * asks the server to kill the job's tool process so training doesn't keep
  * hogging the GPU for a job nobody is watching.
  */
-export default function Processing({ jobId, onDone, onCancel }) {
+export default function Processing({ jobId, mediaBuild = null, onDone, onCancel, onRegisterLeaveGuard = null }) {
     const [job, setJob] = useState(null)
     const [failed, setFailed] = useState(null)
     // The job's first photo and photo count, for the preview (from GET /jobs,
@@ -84,11 +115,20 @@ export default function Processing({ jobId, onDone, onCancel }) {
     const [previewPhoto, setPreviewPhoto] = useState(null)
     const [photoCount, setPhotoCount] = useState(null)
     const [elapsedSeconds, setElapsedSeconds] = useState(0)
+    // The first file couldn't be shown (formats like .mkv or .avi often don't
+    // play in a browser), so the preview shows an icon instead.
+    const [hasMediaPreviewFailed, setHasMediaPreviewFailed] = useState(false)
     const doneRef = useRef(false)
-    // Last phase seen, so the tick sound plays once per finished step.
-    const lastPhaseRef = useRef(null)
+    const isMediaBuild = Boolean(mediaBuild)
+    const mediaStartError = mediaBuild?.startError ?? null
+    const hasFailed = Boolean(failed || mediaStartError)
+    // Last phase seen, so the tick sound plays once per finished step. A media
+    // build starts at 'upload', so finishing the upload ticks too.
+    const lastPhaseRef = useRef(isMediaBuild ? 'upload' : null)
 
     useEffect(() => {
+        // A media build has no job until App has sent the files.
+        if (!jobId) return
         let stopped = false
         let timer
 
@@ -115,7 +155,12 @@ export default function Processing({ jobId, onDone, onCancel }) {
                     setFailed(data.error || 'Reconstruction failed')
                     return
                 }
-                if (data.status === 'cancelled') return // cancel() already navigated away
+                // Pressing Cancel already left this screen. Otherwise the build was
+                // cancelled while away (Back, then Forward, or a reload): leave too.
+                if (data.status === 'cancelled') {
+                    onCancel()
+                    return
+                }
             } catch (err) {
                 if (!stopped) {
                     playSound('error')
@@ -131,10 +176,37 @@ export default function Processing({ jobId, onDone, onCancel }) {
             stopped = true
             clearTimeout(timer)
         }
-    }, [jobId, onDone])
+    }, [jobId, onDone, onCancel])
 
-    // Load the preview photo once. Failing is fine: the preview shows an icon.
+    // The browser's Back / Forward buttons ask before leaving a build in
+    // progress, since leaving cancels it (see the cleanup below).
     useEffect(() => {
+        if (!onRegisterLeaveGuard) return
+        onRegisterLeaveGuard(() => Boolean(failed || mediaStartError) || doneRef.current ||
+            window.confirm('Leave this page? The build will be cancelled.'))
+        return () => onRegisterLeaveGuard(null)
+    }, [onRegisterLeaveGuard, failed, mediaStartError])
+
+    // Phases this build moves through (display only, does not affect the job).
+    // The masking step only runs for jobs sent with "Remove background" on.
+    const isRemovingBackground = job?.removeBackground ?? mediaBuild?.removeBackground ?? false
+    const phaseLabels = isMediaBuild ? MEDIA_PHASE_LABELS : PHASE_LABELS
+    const phases = (isMediaBuild ? MEDIA_PHASE_ORDER : PHASE_ORDER)
+        .filter((p) => p !== 'masking' || isRemovingBackground)
+    // Before the job exists, the media is still uploading.
+    const currentPhase = jobId ? job?.phase : (isMediaBuild ? 'upload' : null)
+    // The job exists but hasn't started (queued behind another build, or not
+    // polled yet). The server still calls this phase 'upload', but the files
+    // are already there, so the upload step shows as done.
+    const isWaitingToStart = Boolean(jobId) && (!job || job.status === 'queued')
+    const phaseIndex = isWaitingToStart ? phases.indexOf('upload') + 1 : phases.indexOf(currentPhase)
+    // A video's frames only exist once extraction has finished.
+    const hasPreviewFrames = !isMediaBuild || phaseIndex > phases.indexOf('extract')
+
+    // Load the preview photo (a media build's first frame) once there is one.
+    // Failing is fine: the preview shows an icon.
+    useEffect(() => {
+        if (!jobId || !hasPreviewFrames) return
         let stopped = false
         async function loadPreview() {
             try {
@@ -151,14 +223,14 @@ export default function Processing({ jobId, onDone, onCancel }) {
         }
         loadPreview()
         return () => { stopped = true }
-    }, [jobId])
+    }, [jobId, hasPreviewFrames])
 
-    // Elapsed-time counter, stopped once the job fails.
+    // Elapsed-time counter, stopped once the build or the media upload fails.
     useEffect(() => {
-        if (failed) return
+        if (hasFailed) return
         const timerId = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000)
         return () => clearInterval(timerId)
-    }, [failed])
+    }, [hasFailed])
 
     // Free the server-side job if the user leaves without pressing Cancel:
     // closing the tab, refreshing, or the browser Back button all tear down
@@ -168,7 +240,7 @@ export default function Processing({ jobId, onDone, onCancel }) {
     // DELETE is idempotent, so a redundant call after Cancel is harmless.
     useEffect(() => {
         function killJob() {
-            if (doneRef.current) return
+            if (!jobId || doneRef.current) return
             fetch(`/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { })
         }
         window.addEventListener('pagehide', killJob)
@@ -180,35 +252,42 @@ export default function Processing({ jobId, onDone, onCancel }) {
 
     // Kill the server-side job, then leave. keepalive lets the request finish
     // even if the page unloads; failures are ignored since we're leaving anyway.
+    // (While media is still uploading there is no job: onCancel stops the upload.)
     function cancel() {
-        fetch(`/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { })
+        if (jobId) fetch(`/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { })
         onCancel()
     }
 
-    const pct = Math.round((job?.progress ?? 0) * 100)
-    const label = PHASE_LABELS[job?.phase] ?? 'Starting'
-    // The masking step only runs for jobs sent with "Remove background" on.
-    const phases = PHASE_ORDER.filter((p) => p !== 'masking' || job?.removeBackground)
-    const phaseIndex = phases.indexOf(job?.phase)
+    const isUploadingMedia = !jobId && isMediaBuild
+    let pct
+    if (isUploadingMedia) pct = Math.round((mediaBuild.uploadFraction ?? 0) * 100)
+    // Keep the finished upload's full bar until the build starts.
+    else if (isWaitingToStart) pct = isMediaBuild ? 100 : 0
+    else pct = Math.round((job?.progress ?? 0) * 100)
+    const label = isWaitingToStart ? 'Waiting to start' : (phaseLabels[currentPhase] ?? 'Starting')
+    // A failed upload (from App), or a failed build.
+    const failure = failed ?? mediaStartError
 
     // Which state a step in the tracker is in (display only, does not affect the job).
     function stepState(index) {
         if (index < phaseIndex) return 'done'
-        if (index === phaseIndex) return 'active'
+        // While waiting to start, the next step hasn't begun yet.
+        if (index === phaseIndex && !isWaitingToStart) return 'active'
         return 'pending'
     }
 
-    if (failed) {
+    if (failure) {
         return (
             <div className="processing-page">
                 <div className="forma-card processing-card processing-card-failed">
                     <span className="processing-failed-icon"><Icon name="triangle" size={22} /></span>
                     <div className="eyebrow processing-eyebrow-error">Reconstruction failed</div>
                     <h1 className="processing-title">Something went wrong</h1>
-                    <p className="processing-error">{failed}</p>
+                    <p className="processing-error">{failure}</p>
                     <p className="processing-hint">
-                        Common causes: too few photos, not enough overlap, or blurry/reflective
-                        surfaces. Try again with more, sharper, overlapping photos.
+                        {isMediaBuild
+                            ? 'Common causes: the camera does not circle the object, the video is blurry or shaky, or it moves too fast. Try a slower, steadier video, or a higher fps.'
+                            : 'Common causes: too few photos, not enough overlap, or blurry/reflective surfaces. Try again with more, sharper, overlapping photos.'}
                     </p>
                     <button
                         className="forma-btn forma-btn-primary processing-action"
@@ -231,8 +310,9 @@ export default function Processing({ jobId, onDone, onCancel }) {
                     <div className="eyebrow eyebrow-accent">Reconstruction</div>
                     <h1 className="processing-title">Building your 3D model</h1>
                     <p className="processing-hint">
-                        Running COLMAP and Brush on the server. This takes a few minutes
-                        depending on photo count and quality.
+                        {isMediaBuild
+                            ? 'Extracting frames from your files, then running COLMAP and Brush on the server. This takes a few minutes depending on the media and fps.'
+                            : 'Running COLMAP and Brush on the server. This takes a few minutes depending on photo count and quality.'}
                     </p>
 
                     <div className="processing-status" aria-live="polite">
@@ -277,13 +357,34 @@ export default function Processing({ jobId, onDone, onCancel }) {
                     <div className="processing-preview">
                         {previewPhoto
                             ? <img src={previewPhoto} alt="" />
-                            : <span className="processing-preview-icon"><Icon name="cube" size={34} /></span>}
+                            : mediaBuild?.previewUrl && !hasMediaPreviewFailed
+                                ? (mediaBuild.isGif
+                                    ? <img src={mediaBuild.previewUrl} alt="" onError={() => setHasMediaPreviewFailed(true)} />
+                                    // #t skips the first instant, which is often a black frame.
+                                    : <video
+                                        src={`${mediaBuild.previewUrl}#t=0.1`}
+                                        muted
+                                        playsInline
+                                        preload="metadata"
+                                        aria-hidden="true"
+                                        onError={() => setHasMediaPreviewFailed(true)}
+                                    />)
+                                : <span className="processing-preview-icon"><Icon name={isMediaBuild ? 'video' : 'cube'} size={34} /></span>}
                         <span className="processing-scan" aria-hidden="true"></span>
                         <span className="processing-corner processing-corner-tl"></span>
                         <span className="processing-corner processing-corner-tr"></span>
                         <span className="processing-corner processing-corner-bl"></span>
                         <span className="processing-corner processing-corner-br"></span>
-                        {photoCount != null && (
+                        {isMediaBuild ? (
+                            <span className="processing-chip">
+                                <Icon name="video" size={12} />
+                                <span className="processing-chip-text">
+                                    {mediaBuild.label}
+                                    {mediaBuild.fps ? ` \u00B7 ${mediaBuild.fps} fps` : ''}
+                                    {photoCount != null && hasPreviewFrames ? ` \u00B7 ${photoCount} frames` : ''}
+                                </span>
+                            </span>
+                        ) : photoCount != null && (
                             <span className="processing-chip">
                                 <Icon name="image" size={12} /> {photoCount} photos
                             </span>
@@ -298,7 +399,7 @@ export default function Processing({ jobId, onDone, onCancel }) {
                                     <span className="processing-step-dot">
                                         {state === 'done' && <Icon name="check" size={11} />}
                                     </span>
-                                    <span className="processing-step-label">{PHASE_LABELS[phaseKey]}</span>
+                                    <span className="processing-step-label">{phaseLabels[phaseKey]}</span>
                                     <span className="processing-step-state">{STEP_STATE_LABELS[state]}</span>
                                 </li>
                             )

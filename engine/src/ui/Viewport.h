@@ -19,7 +19,9 @@ through renderer().
 #include <GL/glew.h>
 
 #include "gfx/Camera.h"
+#include "gfx/CropBoxRenderer.h"
 #include "Manager/InputManager.h"
+#include "splat/CropBox.h"
 
 #include <glm/glm.hpp>
 
@@ -52,12 +54,20 @@ public:
     // transform before and after the whole drag (not once per frame).
     std::function<void(SplatModel* model, const glm::mat4& before, const glm::mat4& after)> onTransformEdited;
 
+    // Engine -> Qt UI: same as onTransformEdited but for the crop box.
+    std::function<void(const glm::mat4& before, const glm::mat4& after)> onCropBoxEdited;
+
     // Qt UI -> ImGui: whether the ImGui "Engine Stats" overlay is drawn.
     void setShowImGuiStats(bool show) { m_showImGuiStats = show; }
 
     // The scene renderer the editor panels operate on. Null until the GL
     // context exists (i.e. before the widget is first shown).
     SplatRenderer* renderer() const { return m_renderer.get(); }
+
+    // The crop box. While it is active the gizmo edits it instead of the selected model.
+    CropBox& cropBox() { return m_cropBox; }
+    //True while a gizmo drag or key nudge is in flight, its move is only committed once it ends
+    bool isBoxEditInProgress() const { return m_gizmoWasUsing || m_nudgeActive; }
 
     // Moves the orbit camera's pan target back to where it started.
     void recenterCamera() { m_camera.ResetPosition(); }
@@ -80,8 +90,19 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
-    //Draws the translate gizmo on the selected model and writes drags back to it.
+    //Top right row of tool buttons, active tool is highlighted
+    void DrawToolButtons();
+    //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
+    //Reports the drag in progress to the edit callbacks and clears the drag state
+    void FinishGizmoDrag(SplatModel* model, bool editingBox);
+
+    //Arrow key nudges the crop box while it is open, otherwise nudge the selected model
+    //A burst of nudges (1 key held down, or several keys in a row) is one undo step traccked
+    //direction is the world-space direction the key moves the target
+    void Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction);
+    //Reports the finished burst to onTransformEdited
+    void FinishNudge();
 
     Camera m_camera;
     InputManager m_input;
@@ -96,10 +117,29 @@ private:
     bool m_rightHeld = false;
     QPointF m_lastMousePos;
 
-    //Gizmo drag in progressthe model and where it started, for onTransformEdited.
+    //Gizmo drag in progress the model
     bool m_gizmoWasUsing = false;
+    //Tool the drag started with, swapping tool ends the drag
+    InputManager::TOOL_MODE m_dragToolMode = InputManager::TRANSLATE;
+    //The drag was ended early by a tool swap, the gizmo ignores the mouse until the button is released
+    bool m_gizmoLocked = false;
     //Model being dragged
     SplatModel* m_dragModel = nullptr;
-    //Orginal location of dragged model
+    //Orginal location of dragged model (or of the crop box if m_dragIsCropBox)
     glm::mat4 m_dragBefore = glm::mat4(1.0f);
+    //The drag in progress is moving the crop box, not a model
+    bool m_dragIsCropBox = false;
+    //The crop box drag also carries the confirmed splat selection along
+    bool m_dragMovesContents = false;
+
+    //Nudge burst in progress: what is being nudged and where it started, and how many nudge keys are down
+    bool m_nudgeActive = false;
+    bool m_nudgeIsCropBox = false;       //The burst moves the crop box, not m_nudgeModel
+    bool m_nudgeMovesContents = false;   //...and carries the confirmed splat selection with it
+    SplatModel* m_nudgeModel = nullptr;
+    glm::mat4 m_nudgeBefore = glm::mat4(1.0f); //Transform of the model (or crop box) when the burst started
+    int m_nudgeKeysDown = 0;
+
+    CropBox m_cropBox;
+    std::unique_ptr<CropBoxRenderer> m_cropBoxRenderer; // created once the GL context exists
 };

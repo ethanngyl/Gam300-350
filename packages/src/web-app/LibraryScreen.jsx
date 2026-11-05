@@ -12,9 +12,9 @@ variant. The 3D Models grid is built from GET /jobs: finished jobs show
 as Ready, jobs still running show as Processing, and failed or cancelled
 jobs are hidden. Each card shows the object cut out of one of its photos,
 or its first photo (see ModelCover.jsx).
-Viewing a model is left to the Model Viewer tab; right-clicking a card
-here renames or deletes it. The active sub-tab is controlled by the parent
-so the sidebar can open either one directly.
+Clicking a Ready card (or Enter on it) opens it on the model page
+(onOpenModel); right-clicking a card renames or deletes it. The active sub-tab is controlled by the parent
+so other pages (such as Home's "View all") can open either one directly.
 **************************************************************************/
 
 import { useCallback, useEffect, useState } from 'react';
@@ -37,7 +37,7 @@ function lastEditedTime(model) {
     return Date.parse(model.updatedAt ?? model.createdAt) || 0;
 }
 
-function LibraryScreen({ subTab, onSubTabChange }) {
+function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
     const [search, setSearch] = useState('');
     const [sortOrder, setSortOrder] = useState('newest');
     const [jobs, setJobs] = useState([]);
@@ -200,7 +200,7 @@ function LibraryScreen({ subTab, onSubTabChange }) {
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use New model in the sidebar to create one.'}
+                                : 'No generated models yet. Use New model in the dock below to create one.'}
                         </p>
                     )}
 
@@ -215,7 +215,15 @@ function LibraryScreen({ subTab, onSubTabChange }) {
                                         ? 'forma-card library-item library-item-actionable'
                                         : 'forma-card library-item library-item-actionable is-processing'
                                 }
-                                title="Right-click to rename or delete"
+                                title={model.isReady ? 'Click to open, right-click to rename or delete' : 'Right-click to rename or delete'}
+                                onClick={() => {
+                                    if (!model.isReady) return;
+                                    playSound('tap');
+                                    onOpenModel(model.id);
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter' && model.isReady) onOpenModel(model.id);
+                                }}
                                 onContextMenu={(event) => openModelMenu(event, model)}
                             >
                                 <div className="library-thumb">

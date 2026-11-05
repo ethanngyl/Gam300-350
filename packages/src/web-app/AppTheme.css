@@ -597,7 +597,7 @@ html {
     background: rgba(var(--forma-green-rgb), 0.12);
 }
 
-.home-tool-icon-youtube {
+.home-tool-icon-extractor {
     color: var(--forma-orange);
     background: rgba(var(--forma-orange-rgb), 0.12);
 }
@@ -2086,8 +2086,8 @@ html {
     margin-top: 8px;
 }
 
-/* ---------- Full-page legacy screens (YouTube, result overlay) ----------
-   Processing.jsx / YoutubeIngest.jsx / SplatViewer.jsx are untouched, so their
+/* ---------- Full-page legacy screens (Frame Extractor, result overlay) ----------
+   Processing.jsx / FrameExtractor.jsx / SplatViewer.jsx are untouched, so their
    old "btn" classes are re-coloured here instead. */
 
 .genesis-page {
@@ -3161,5 +3161,642 @@ html {
 
     .genesis-login-split .login-logo {
         display: flex;
+    }
+}
+
+/* ============================================================
+   Dock layout (Genesis second layout)
+   No top nav or sidebar: the page fills the screen and a floating
+   dock sits at the bottom centre (Dock.jsx). Items are icons whose
+   labels slide out on hover / focus. On mouse devices the dock fades
+   and slides mostly out of view when idle (.is-idle) and comes back
+   when the pointer reaches the bottom edge (.genesis-dock-reveal).
+   Kept after the sidebar and responsive sections so these rules win.
+   ============================================================ */
+
+.genesis-shell {
+    position: relative;
+}
+
+    .genesis-body,
+    .genesis-shell .genesis-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+/* Room under the last content, so the dock never covers it. */
+.genesis-main {
+    padding-bottom: 84px;
+}
+
+.genesis-dock {
+    position: fixed;
+    left: 50%;
+    bottom: 14px;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 16px);
+    padding: 6px;
+    border-radius: 999px;
+    border: 1px solid var(--forma-border-strong);
+    background: rgba(24, 24, 27, 0.82);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    transform: translateX(-50%);
+    transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease;
+}
+
+    /* Faded: only a sliver shows above the bottom edge. */
+    .genesis-dock.is-idle {
+        opacity: 0.48;
+        transform: translate(-50%, calc(100% + 9px));
+    }
+
+/* Invisible strip along the bottom edge that brings a faded dock back. */
+.genesis-dock-reveal {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    z-index: 69;
+    width: min(640px, 90vw);
+    height: 20px;
+    transform: translateX(-50%);
+}
+
+.genesis-dock-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.genesis-dock-divider {
+    flex: none;
+    width: 1px;
+    height: 24px;
+    margin: 0 3px;
+    background: var(--forma-border-strong);
+}
+
+.genesis-dock-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    height: 40px;
+    min-width: 40px;
+    padding: 0 11px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text-soft);
+    font-family: var(--forma-font);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+    .genesis-dock-item > svg {
+        flex: none;
+    }
+
+    .genesis-dock-item:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+/* The label is hidden until hover / focus, then slides out. */
+.genesis-dock-label {
+    display: inline-block;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-width 0.34s cubic-bezier(0.22, 1, 0.36, 1), margin 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+
+/* Desktop view with a mouse only. On touch screens a tapped item keeps
+   hover / focus, and in the mobile view labels would push the dock wider
+   than the screen, so there it stays icons only. */
+@media (hover: hover) and (pointer: fine) and (min-width: 761px) {
+    .genesis-dock-item:hover,
+    .genesis-dock-item:focus-visible {
+        padding-right: 15px;
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+    }
+
+        .genesis-dock-item:hover .genesis-dock-label,
+        .genesis-dock-item:focus-visible .genesis-dock-label {
+            max-width: 150px;
+            margin-left: 9px;
+            opacity: 1;
+        }
+}
+
+/* Current page: blue tint. */
+.genesis-dock-item.is-active {
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    color: var(--forma-teal-text);
+}
+
+    .genesis-dock-item.is-active:hover,
+    .genesis-dock-item.is-active:focus-visible {
+        background: rgba(var(--forma-accent-rgb), 0.22);
+        color: var(--forma-heading);
+    }
+
+/* New model: always solid blue. */
+.genesis-dock-item.is-primary,
+.genesis-dock-item.is-primary.is-active {
+    border-color: rgba(var(--forma-accent-rgb), 0.45);
+    background: var(--forma-blue);
+    color: var(--forma-on-accent);
+}
+
+    .genesis-dock-item.is-primary:hover,
+    .genesis-dock-item.is-primary:focus-visible {
+        background: var(--forma-blue-hover);
+        color: var(--forma-on-accent);
+    }
+
+/* ---------- "Show tab labels": every label stays out ---------- */
+
+/* The labelled dock is always one straight row, so it only shows labels
+   where that row fits: from 1160px wide (tighter from 1160 to 1319px).
+   Narrower windows keep the icons-only dock and hide the switch. */
+@media (min-width: 1160px) {
+    .genesis-dock.is-labelled .genesis-dock-item {
+        padding-right: 15px;
+    }
+
+    .genesis-dock.is-labelled .genesis-dock-label {
+        max-width: 150px;
+        margin-left: 9px;
+        opacity: 1;
+    }
+
+    .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
+        padding-right: 3px;
+    }
+
+    .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
+        margin-right: 10px;
+    }
+}
+
+@media (min-width: 1160px) and (max-width: 1319px) {
+    .genesis-dock.is-labelled {
+        gap: 4px;
+    }
+
+        .genesis-dock.is-labelled .genesis-dock-group {
+            gap: 2px;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-item {
+            padding-left: 8px;
+            padding-right: 10px;
+            font-size: 0.72rem;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-label {
+            margin-left: 6px;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
+            padding-left: 3px;
+            padding-right: 3px;
+        }
+
+        .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
+            max-width: 110px;
+            margin-right: 8px;
+        }
+}
+
+/* The switch's own panel, top-right, styled like the dock. Just a small
+   round icon button until it is hovered, focused with the keyboard or
+   tapped (.is-open), then it slides open to the left to show its text and
+   switch, so it doesn't cover the pages' own buttons. */
+.genesis-labels-toggle {
+    position: fixed;
+    top: 8px;
+    right: 12px;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 32px;
+    max-width: 32px; /* only the icon shows */
+    padding: 0 0 0 7.5px; /* centres the 15px icon in the 32px circle */
+    overflow: hidden;
+    border-radius: 999px;
+    border: 1px solid var(--forma-border-strong);
+    background: rgba(24, 24, 27, 0.82);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    color: var(--forma-text-soft);
+    cursor: pointer;
+    transition: max-width 0.28s cubic-bezier(0.22, 1, 0.36, 1), padding 0.28s ease, border-color 0.22s ease, color 0.22s ease;
+}
+
+    .genesis-labels-toggle > svg {
+        flex: none;
+    }
+
+    .genesis-labels-toggle:hover,
+    .genesis-labels-toggle.is-on {
+        color: var(--forma-heading);
+    }
+
+    .genesis-labels-toggle:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+    /* Open. Hover only counts with a mouse; a tap sets .is-open instead. */
+    .genesis-labels-toggle:focus-visible,
+    .genesis-labels-toggle.is-open {
+        max-width: 240px;
+        padding-right: 12px;
+    }
+
+@media (hover: hover) {
+    .genesis-labels-toggle:hover {
+        max-width: 240px;
+        padding-right: 12px;
+    }
+}
+
+/* Text and switch fade in as it opens. */
+.genesis-labels-toggle .genesis-labels-toggle-text,
+.genesis-labels-toggle .genesis-labels-toggle-track {
+    flex: none;
+    opacity: 0;
+    transition: opacity 0.18s ease, background-color 0.22s ease, border-color 0.22s ease;
+}
+
+.genesis-labels-toggle:focus-visible :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track),
+.genesis-labels-toggle.is-open :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track) {
+    opacity: 1;
+}
+
+@media (hover: hover) {
+    .genesis-labels-toggle:hover :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track) {
+        opacity: 1;
+    }
+}
+
+/* Blue dot on the icon while labels are on, so the setting shows when closed. */
+.genesis-labels-toggle-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--forma-blue);
+    box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.95);
+    transition: opacity 0.18s ease;
+}
+
+.genesis-labels-toggle:focus-visible .genesis-labels-toggle-dot,
+.genesis-labels-toggle.is-open .genesis-labels-toggle-dot {
+    opacity: 0;
+}
+
+@media (hover: hover) {
+    .genesis-labels-toggle:hover .genesis-labels-toggle-dot {
+        opacity: 0;
+    }
+}
+
+/* Model Viewer's Open .ply file reaches the top-right corner, so its row
+   leaves room for the switch (shown from 1160px wide). */
+@media (min-width: 1160px) {
+    .library-toolbar.model-viewer-toolbar {
+        padding-right: 56px;
+    }
+}
+
+/* Hidden below 1160px wide. After the rules above so display: none wins. */
+@media (max-width: 1159px) {
+    .genesis-labels-toggle {
+        display: none;
+    }
+}
+
+.genesis-labels-toggle-text {
+    font-family: var(--forma-font);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.genesis-labels-toggle-track {
+    position: relative;
+    width: 30px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+    border: 1px solid var(--forma-border-strong);
+    transition: background-color 0.22s ease, border-color 0.22s ease;
+}
+
+.genesis-labels-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--forma-text-soft);
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.22s ease;
+}
+
+.genesis-labels-toggle.is-on .genesis-labels-toggle-track {
+    background: var(--forma-blue);
+    border-color: rgba(var(--forma-accent-rgb), 0.45);
+}
+
+.genesis-labels-toggle.is-on .genesis-labels-toggle-thumb {
+    transform: translateX(14px);
+    background: var(--forma-on-accent);
+}
+
+/* ---------- Signed-in user ---------- */
+
+.genesis-dock-profile {
+    position: relative;
+}
+
+.genesis-dock-item.genesis-dock-avatar {
+    padding: 3px;
+}
+
+    .genesis-dock-item.genesis-dock-avatar[aria-expanded='true'] {
+        background: var(--forma-panel-raised);
+    }
+
+@media (hover: hover) and (pointer: fine) and (min-width: 761px) {
+    .genesis-dock-item.genesis-dock-avatar:hover,
+    .genesis-dock-item.genesis-dock-avatar:focus-visible {
+        padding-right: 3px;
+    }
+
+        .genesis-dock-item.genesis-dock-avatar:hover .genesis-dock-label,
+        .genesis-dock-item.genesis-dock-avatar:focus-visible .genesis-dock-label {
+            margin-right: 10px;
+        }
+}
+
+.genesis-dock-avatar-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--forma-accent-rgb), 0.15);
+    border-color: rgba(var(--forma-accent-rgb), 0.35);
+    color: var(--forma-teal-text);
+}
+
+/* Profile photo (set on the account page) fills the round avatar. */
+.genesis-dock-avatar-icon,
+.genesis-dock-profile .genesis-profile-avatar-large {
+    overflow: hidden;
+}
+
+    .genesis-dock-avatar-icon img,
+    .genesis-dock-profile .genesis-profile-avatar-large img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+/* The account menu opens upwards, right-aligned with the avatar. */
+.genesis-dock-profile .genesis-profile-menu {
+    left: auto;
+    right: -6px;
+    bottom: calc(100% + 16px);
+    width: 270px;
+    max-width: calc(100vw - 24px);
+}
+
+/* ---------- Mobile view: smaller items, never fades ---------- */
+
+@media (max-width: 760px) {
+    /* Also undoes a fade started before the window was made narrow. */
+    .genesis-dock.is-idle {
+        opacity: 1;
+        transform: translateX(-50%);
+    }
+
+    .genesis-main {
+        padding-bottom: 72px;
+    }
+
+    .genesis-dock {
+        bottom: max(10px, env(safe-area-inset-bottom));
+        gap: 2px;
+        padding: 4px;
+    }
+
+    .genesis-dock-group {
+        gap: 0;
+    }
+
+    .genesis-dock-divider {
+        margin: 0 2px;
+    }
+
+    /* 34px items, so all 10 fit on a 390px-wide phone. */
+    .genesis-dock-item {
+        height: 34px;
+        min-width: 34px;
+        padding: 0 7px;
+    }
+
+        .genesis-dock-item.genesis-dock-avatar {
+            padding: 1px;
+        }
+
+    .genesis-dock-avatar-icon {
+        width: 30px;
+        height: 30px;
+    }
+}
+
+/* Small phones (360px wide and similar): tighter items so the dock still fits. */
+@media (max-width: 380px) {
+    .genesis-dock-item {
+        min-width: 32px;
+        padding: 0 6px;
+    }
+
+    .genesis-dock-divider {
+        margin: 0 1px;
+    }
+
+    .genesis-dock-avatar-icon {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+/* ---------- Mobile view: five labelled tabs at a time, with an arrow ---------- */
+
+/* Full-width bar (Dock.jsx renders it only at 760px wide or less). */
+.genesis-dock.genesis-dock-mobile {
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    max-width: none;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 20px;
+    transform: none;
+}
+
+/* The tabs, five to a page. Swipeable; the scrollbar is hidden. */
+.genesis-mdock-scroller {
+    position: relative; /* tabs' offsetLeft is measured from here */
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+
+    .genesis-mdock-scroller::-webkit-scrollbar {
+        display: none;
+    }
+
+.genesis-mdock-item {
+    flex: 0 0 20%;
+    min-width: 0;
+    height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0 2px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text-soft);
+    font-family: var(--forma-font);
+    font-size: 0.64rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease;
+}
+
+    /* Each page of five starts here when snapping. */
+    .genesis-mdock-item:nth-child(5n + 1) {
+        scroll-snap-align: start;
+    }
+
+    .genesis-mdock-item:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+    .genesis-mdock-item.is-active {
+        background: rgba(var(--forma-accent-rgb), 0.16);
+        color: var(--forma-teal-text);
+    }
+
+.genesis-mdock-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 28px;
+    height: 24px;
+}
+
+/* New model: a solid blue circle. */
+.genesis-mdock-item.is-primary {
+    color: var(--forma-heading);
+}
+
+    .genesis-mdock-item.is-primary .genesis-mdock-icon {
+        width: 28px;
+        height: 28px;
+        margin-bottom: -2px;
+        border-radius: 50%;
+        background: var(--forma-blue);
+        color: var(--forma-on-accent);
+    }
+
+.genesis-mdock-item .genesis-mdock-avatar-icon {
+    width: 24px;
+    height: 24px;
+    overflow: hidden;
+    background: rgba(var(--forma-accent-rgb), 0.15);
+    border-color: rgba(var(--forma-accent-rgb), 0.35);
+    color: var(--forma-teal-text);
+}
+
+.genesis-mdock-avatar-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Long labels are cut short with "..." */
+.genesis-mdock-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Slides to the next five tabs; on the last five it turns to point back. */
+.genesis-mdock-arrow {
+    flex: none;
+    width: 40px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel-raised);
+    color: var(--forma-heading);
+    cursor: pointer;
+}
+
+    .genesis-mdock-arrow svg {
+        transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .genesis-mdock-arrow.is-back svg {
+        transform: rotate(180deg);
+    }
+
+    .genesis-mdock-arrow:focus-visible {
+        outline: none;
+        border-color: var(--forma-blue);
+    }
+
+/* The account menu opens upwards from the bar's right edge. */
+.genesis-dock-mobile .genesis-profile-menu {
+    left: auto;
+    right: 0;
+    bottom: calc(100% + 10px);
+    width: min(300px, 100%);
+}
+
+/* Room under the last content for the taller bar. */
+@media (max-width: 760px) {
+    .genesis-main {
+        padding-bottom: 84px;
     }
 }

@@ -20,19 +20,19 @@ engine is configured.
 
 Web app + backend (npm -- packages/package.json):
 - @mkkellogg/gaussian-splats-3d ^0.4.7
+- ajv 8.17.1 (checks data against the JSON schemas in packages/src/backend/schemas)
 - express ^5.2.1
 - file-type ^22.1.0
-- marked ^18.0.14
 - multer ^2.3.0
 - react ^19.2.8
 - react-dom ^19.2.8
 - three ^0.186.0
-  dev tools: @eslint/js, @types/react, @types/react-dom, @vitejs/plugin-react,
+  dev tools: @apidevtools/swagger-parser (OpenAPI checks in the tests),
+             @eslint/js, @types/react, @types/react-dom, @vitejs/plugin-react,
              eslint, eslint-plugin-react-hooks, eslint-plugin-react-refresh,
              globals, vite
 
 Python (tools/requirements.txt):
-- yt-dlp[default] >=2025.11.12
 - opencv-python >=4.8.0
 - aqtinstall (installed into a venv by engine/run.bat to download Qt)
 
@@ -52,6 +52,16 @@ External tools (downloaded automatically into tools/ on first run):
 - COLMAP (structure-from-motion / multi-view stereo)
 - Brush (Gaussian splatting trainer)
 - cloudflared (public tunnel for sharing the web app)
+
+Architecture and API:
+docs/architecture.md: how the frontend, backend layers and database fit together, and every API endpoint.
+docs/data-schema.md: the database tables (diagram), naming / date / unit rules, and every saved file format with its version.
+docs/api-changelog.md: API versions (/api/v1 and the old, deprecated unversioned paths), every API change and every database migration.
+packages/src/backend/openapi.yaml: the API reference (OpenAPI 3.1) with an example request and response for every endpoint; open it in https://editor.swagger.io. Also served at /api/v1/openapi.yaml.
+Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters). CI runs them on every push.
+Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
+packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
+packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
 
 To run (For Windows):
 run-all.bat: Double clicking this will install all required packages and run both the web application as well as the engine
@@ -76,7 +86,7 @@ Navigation:
 2. On the Home tab, under Features, left-click each card and confirm it opens the right page:
    - Media Library → opens the Library tab (3D Models view)
    - Photo Editor → opens the Photo Editor tab
-   - YouTube Extractor → opens the YouTube extractor page
+   - Frame Extractor → opens the Frame Extractor page
    - Image Gallery → opens a list of past jobs, each showing a job ID, status (e.g. "cancelled," "done"), photo count, and a thumbnail grid of that job's uploaded photos
 
 Scanning an object — camera capture:
@@ -89,7 +99,7 @@ Scanning an object — camera capture:
    - Click the × on a thumbnail and confirm it's removed from the batch.
 6. Auto-capture mode:
    - Switch to "Auto capture."
-   - Set the interval (e.g. 2s) and the max photo count from their dropdowns.
+   - Set the interval (0.5s to 5s) and the max photo count from their dropdowns.
    - Click "Start auto-capture" and confirm photos are taken automatically on the chosen interval, with the running count shown (e.g. "12/50").
    - Click "Stop auto-capture" and confirm it actually stops.
    - Let it run to the max count and confirm it stops itself automatically once the cap is reached.
@@ -102,6 +112,13 @@ Uploading existing photos instead of scanning live:
 
 Training a 3D model:
 
+Model detail (training iterations):
+The "Model detail" slider (on the capture screen, the Photo Editor and the Frame Extractor) sets how many training iterations Brush runs for the model. Fewer iterations are faster; more give a sharper, more detailed model.
+- Fast: 5,000 iterations
+- Normal: 7,000 iterations (the website's default)
+- Detailed: 10,000 iterations
+The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
+
 10. With fewer than the minimum required photos in the batch, confirm the "Train model" button is disabled and a message tells you how many more photos are needed.
 11. Add enough photos to pass the minimum, then click "Train model."
 12. Confirm the app moves to a processing screen showing live progress (phase name and percentage) as the backend runs COLMAP and trains the Gaussian splat.
@@ -111,12 +128,12 @@ Training a 3D model:
 16. Failure case: try training with too few photos and confirm the processing screen shows a clear error message rather than hanging or crashing.
 17. While a model is processing, click "Cancel" and confirm the job actually stops on the backend (not just visually — check it isn't still consuming GPU afterward if you can observe this).
 
-18. On the YouTube extractor page, paste a valid YouTube video link and click "Extract frames."
-19. Confirm it rejects invalid input: a non-YouTube URL, a playlist link, or a channel link should show an error message instead of submitting.
+18. On the Frame Extractor page, drop or browse for one or more video files or animated GIFs, confirm they're listed with a preview and size, and click "Process media." Confirm a bar shows the upload and "Cancel upload" stops it.
+19. Confirm it rejects invalid input: a photo or a text file should show an error message instead of being added, and a text file renamed to .mp4 should be refused by the server.
 20. Adjust the fps field and confirm higher values pull more frames (slower) and lower values pull fewer (faster).
 21. Confirm the status area updates live through each phase (extracting frames, detecting features, matching images, recovering camera poses, training, finalizing) with a progress bar.
 22. Once finished, confirm a "Download result (.ply)" link appears and works.
-23. Navigate away ("Back to dashboard") while a YouTube job is still running, then check the backend doesn't keep processing it unwatched.
+23. Navigate away ("Back to dashboard") while a Frame Extractor job is still running, then check the backend doesn't keep processing it unwatched.
 
 Click sounds:
 

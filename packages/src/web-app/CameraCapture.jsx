@@ -11,11 +11,15 @@ the GENESIS theme: a camera panel (live preview, manual or interval-based
 auto-capture with a user-adjustable photo cap, and the Space key as a
 shortcut for both) beside a batch panel
 (drag-and-drop and file-picker uploads, live thumbnails with per-photo
-removal, and the button that sends the batch for reconstruction).
+removal, and the button that sends the batch for reconstruction). The
+thumbnails are small copies (PhotoThumbnails.js), so large batches scroll
+smoothly; the original photos are what get uploaded.
 Each photo is checked in the background for blur, bad exposure and
 near-duplicates (PhotoChecks.js). Flagged photos are outlined, and a note
 suggests "Review photos first", which opens the batch in the Photo Editor.
 Taking a photo plays the camera shutter sound (quieter for auto-capture).
+Cameras that allow it start in autofocus; tapping the preview focuses on
+that spot, and a Focus slider sets the focus by hand.
 If the camera can't start, the preview reads "Click to enable camera" and
 clicking it asks for the camera again. The Remove background option and
 the Model detail slider (training iteration cap) are here and in the Photo
@@ -29,6 +33,7 @@ import { playSound } from '../audio/Audio.js';
 import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
+import { usePhotoThumbnails } from './PhotoThumbnails.js';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 
@@ -50,18 +55,51 @@ const ISSUE_SUMMARY_PHRASES = {
     bright: (count) => `${count} ${count === 1 ? 'is' : 'are'} too bright`,
 };
 
+// What focus control the camera offers: continuous autofocus, focusing on a
+// tapped point, and/or a manual focus distance. Phone cameras usually offer
+// some of these; many desktop webcams offer none (they keep their own focus).
+function readFocusSupport(track) {
+    const capabilities = track.getCapabilities?.() ?? {};
+    const focusModes = capabilities.focusMode ?? [];
+    const canFocusOnPoint = Boolean(navigator.mediaDevices.getSupportedConstraints?.().pointsOfInterest);
+    return {
+        autoMode: focusModes.includes('continuous') ? 'continuous' : focusModes.includes('single-shot') ? 'single-shot' : null,
+        canTapFocus: canFocusOnPoint && (focusModes.includes('continuous') || focusModes.includes('single-shot')),
+        distanceRange: focusModes.includes('manual') && capabilities.focusDistance ? capabilities.focusDistance : null,
+    };
+}
+
+// Turns a click on the preview into a point on the camera frame (0-1 on
+// each axis). The preview is cropped to fill its box (object-fit: cover),
+// so the hidden overflow is added back before dividing.
+function clickToFramePoint(event, video) {
+    const rect = video.getBoundingClientRect();
+    const scale = Math.max(rect.width / video.videoWidth, rect.height / video.videoHeight);
+    const shownWidth = video.videoWidth * scale;
+    const shownHeight = video.videoHeight * scale;
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+    return {
+        frame: {
+            x: Math.min(1, Math.max(0, (clickX + (shownWidth - rect.width) / 2) / shownWidth)),
+            y: Math.min(1, Math.max(0, (clickY + (shownHeight - rect.height) / 2) / shownHeight)),
+        },
+        // Where to draw the focus ring, as a percentage of the preview.
+        ring: { left: (clickX / rect.width) * 100, top: (clickY / rect.height) * 100 },
+    };
+}
+
 // Builds one batch entry. Checks start as 'pending'.
 function createBatchPhoto(file) {
     return {
         id: `${file.name}-${file.lastModified}-${Math.random()}`,
-        url: URL.createObjectURL(file),
         file,
         analysisStatus: 'pending',
         analysis: null,
     };
 }
 
-// addedFiles: photos chosen with the sidebar's Add photos button before
+// addedFiles: photos chosen with the dock's Add photos button before
 // this page opened; they start in the batch. While the page is open,
 // onRegisterAddFiles(handler) hands App a function that adds more.
 // initialPhotos: { files, removeBackground, trainIters } handed back from the Photo
@@ -79,10 +117,12 @@ function CameraCapture({
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
     const streamRef = useRef(null);
-    // Latest photo list, read when the page closes to release preview URLs.
-    const photosRef = useRef([]);
     // Id of the photo currently being checked, so only one runs at a time.
     const analyzingPhotoIdRef = useRef(null);
+    // Latest photo list, read by the auto-capture timer.
+    const photosRef = useRef([]);
+    // Photos grabbed but still encoding, not yet counted in the batch.
+    const capturesInFlightRef = useRef(0);
 
     const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
@@ -112,6 +152,17 @@ function CameraCapture({
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
 
+    // Focus: what the current camera supports (null until it starts),
+    // 'auto' or 'manual', the manual focus distance, the ring drawn where
+    // the preview was tapped, and a short note when focusing isn't possible.
+    const [focusSupport, setFocusSupport] = useState(null);
+    const [focusMode, setFocusMode] = useState('auto');
+    const [focusDistance, setFocusDistance] = useState(null);
+    const [focusRing, setFocusRing] = useState(null);
+    const [focusNote, setFocusNote] = useState(null);
+    const focusRingTimerRef = useRef(null);
+    const focusNoteTimerRef = useRef(null);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -132,6 +183,17 @@ function CameraCapture({
 
                 streamRef.current = mediaStream;
                 setStream(mediaStream);
+
+                // See what focus control this camera has and switch it to
+                // autofocus, so photos start sharp without the user doing anything.
+                const track = mediaStream.getVideoTracks()[0];
+                const support = readFocusSupport(track);
+                setFocusSupport(support);
+                setFocusMode('auto');
+                setFocusDistance(track.getSettings?.().focusDistance ?? support.distanceRange?.min ?? null);
+                if (support.autoMode) {
+                    track.applyConstraints({ advanced: [{ focusMode: support.autoMode }] }).catch(() => {});
+                }
                 if (videoRef.current) {
                     videoRef.current.srcObject = mediaStream;
                 }
@@ -160,16 +222,71 @@ function CameraCapture({
     }
 
     useEffect(() => {
+        return () => {
+            clearTimeout(focusRingTimerRef.current);
+            clearTimeout(focusNoteTimerRef.current);
+        };
+    }, []);
+
+    function showFocusNote(note) {
+        setFocusNote(note);
+        clearTimeout(focusNoteTimerRef.current);
+        focusNoteTimerRef.current = setTimeout(() => setFocusNote(null), 2500);
+    }
+
+    // Tap / click the preview to focus on that spot. Goes back to autofocus
+    // (centred on the spot) if the manual slider was in use.
+    async function handlePreviewClick(event) {
+        const video = videoRef.current;
+        const track = streamRef.current?.getVideoTracks()[0];
+        if (!stream || !track || !video?.videoWidth) return;
+
+        if (!focusSupport?.canTapFocus) {
+            showFocusNote('This camera adjusts its own focus');
+            return;
+        }
+
+        const { frame, ring } = clickToFramePoint(event, video);
+        playSound('tap', 0.5);
+        setFocusRing({ ...ring, id: Date.now() });
+        clearTimeout(focusRingTimerRef.current);
+        focusRingTimerRef.current = setTimeout(() => setFocusRing(null), 1200);
+
+        try {
+            await track.applyConstraints({
+                advanced: [{ focusMode: focusSupport.autoMode, pointsOfInterest: [frame] }],
+            });
+            setFocusMode('auto');
+        } catch {
+            showFocusNote("Couldn't focus there");
+        }
+    }
+
+    function handleAutoFocus() {
+        const track = streamRef.current?.getVideoTracks()[0];
+        if (!track || !focusSupport?.autoMode) return;
+        playSound('tap');
+        track.applyConstraints({ advanced: [{ focusMode: focusSupport.autoMode }] })
+            .then(() => setFocusMode('auto'))
+            .catch(() => showFocusNote("Couldn't switch to autofocus"));
+    }
+
+    function handleFocusDistanceChange(distance) {
+        const track = streamRef.current?.getVideoTracks()[0];
+        if (!track) return;
+        setFocusDistance(distance);
+        setFocusMode('manual');
+        track.applyConstraints({ advanced: [{ focusMode: 'manual', focusDistance: distance }] })
+            .catch(() => showFocusNote("Couldn't set the focus"));
+    }
+
+    useEffect(() => {
         photosRef.current = photos;
     }, [photos]);
 
-    // Release every thumbnail URL when the page closes. (Removed photos
-    // release theirs in removePhoto.)
-    useEffect(() => {
-        return () => {
-            photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url));
-        };
-    }, []);
+    // Small copies for the thumbnails: showing the original photos made the
+    // page lag with large batches (see PhotoThumbnails.js).
+    const thumbnailUrls = usePhotoThumbnails(photos);
 
     // Check pending photos one at a time, same as the Photo Editor. Each
     // finished check updates the list, which starts the next one.
@@ -219,7 +336,7 @@ function CameraCapture({
         return newPhotos.length;
     }, []);
 
-    // While this page is open, the sidebar's Add photos button adds to
+    // While this page is open, the dock's Add photos button adds to
     // this batch through the handler registered here.
     useEffect(() => {
         if (!onRegisterAddFiles) return;
@@ -243,11 +360,13 @@ function CameraCapture({
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         // Shutter sound the moment the frame is grabbed. Quieter for
-        // auto-capture, which repeats every few seconds.
+        // auto-capture, which can repeat as often as twice a second.
         playSound('camera', showFeedback ? 1 : 0.5);
 
+        capturesInFlightRef.current += 1;
         canvas.toBlob(
             (blob) => {
+                capturesInFlightRef.current -= 1;
                 if (!blob) return;
                 const file = new File([blob], `capture-${Date.now()}.jpg`, {
                     type: 'image/jpeg',
@@ -267,8 +386,10 @@ function CameraCapture({
     useEffect(() => {
         if (captureMode !== 'auto' || !isAutoCapturing) return;
 
+        // The count is read from refs so a new photo doesn't restart the timer,
+        // which would stretch every interval by the time a photo takes to encode.
         const id = setInterval(() => {
-            if (photos.length >= maxCaptures) {
+            if (photosRef.current.length + capturesInFlightRef.current >= maxCaptures) {
                 setIsAutoCapturing(false);
                 return;
             }
@@ -276,7 +397,7 @@ function CameraCapture({
         }, intervalSeconds * 1000);
 
         return () => clearInterval(id);
-    }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto, photos.length]);
+    }, [captureMode, isAutoCapturing, intervalSeconds, maxCaptures, capturePhoto]);
 
     // Space: take a photo in Manual mode, start / stop in Auto mode.
     useEffect(() => {
@@ -350,8 +471,6 @@ function CameraCapture({
     }
 
     function removePhoto(id) {
-        const removedPhoto = photos.find((p) => p.id === id);
-        if (removedPhoto) URL.revokeObjectURL(removedPhoto.url);
         setPhotos((prev) => prev.filter((p) => p.id !== id));
     }
 
@@ -397,7 +516,10 @@ function CameraCapture({
 
             <div className="capture-layout">
                 <div className="forma-card capture-camera">
-                    <div className="capture-viewport">
+                    <div
+                        className={focusSupport?.canTapFocus ? 'capture-viewport can-tap-focus' : 'capture-viewport'}
+                        onClick={handlePreviewClick}
+                    >
                         <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
@@ -426,6 +548,18 @@ function CameraCapture({
                                 Live
                             </span>
                         )}
+
+                        {focusRing && (
+                            <span
+                                key={focusRing.id}
+                                className="capture-focus-ring"
+                                style={{ left: `${focusRing.left}%`, top: `${focusRing.top}%` }}
+                            ></span>
+                        )}
+                        {stream && focusSupport?.canTapFocus && !focusNote && (
+                            <span className="capture-focus-hint">Tap to focus</span>
+                        )}
+                        {focusNote && <span className="capture-focus-hint" role="status">{focusNote}</span>}
                     </div>
 
                     {error && <p className="capture-error">{error}</p>}
@@ -485,6 +619,7 @@ function CameraCapture({
                                         onChange={(e) => setIntervalSeconds(Number(e.target.value))}
                                         disabled={isAutoCapturing}
                                     >
+                                        <option value={0.5}>0.5s</option>
                                         <option value={1}>1s</option>
                                         <option value={2}>2s</option>
                                         <option value={3}>3s</option>
@@ -512,6 +647,31 @@ function CameraCapture({
                                         Capturing every {intervalSeconds}s... ({photos.length}/{maxCaptures})
                                     </span>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Manual focus, only for cameras that allow it. */}
+                        {stream && focusSupport?.distanceRange && (
+                            <div className="capture-focus-controls">
+                                <span className="capture-interval-label">focus</span>
+                                <button
+                                    type="button"
+                                    className={focusMode === 'auto' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
+                                    onClick={handleAutoFocus}
+                                    disabled={!focusSupport.autoMode}
+                                >
+                                    Auto
+                                </button>
+                                <input
+                                    type="range"
+                                    className="capture-focus-slider"
+                                    aria-label="Manual focus distance"
+                                    min={focusSupport.distanceRange.min}
+                                    max={focusSupport.distanceRange.max}
+                                    step={focusSupport.distanceRange.step || 0.01}
+                                    value={focusDistance ?? focusSupport.distanceRange.min}
+                                    onChange={(e) => handleFocusDistanceChange(Number(e.target.value))}
+                                />
                             </div>
                         )}
                     </div>
@@ -594,7 +754,10 @@ function CameraCapture({
                                     className={issuesById[photo.id]?.length > 0 ? 'capture-thumb has-issue' : 'capture-thumb'}
                                     title={issuesById[photo.id]?.length > 0 ? 'Flagged: open Review photos first to see why' : undefined}
                                 >
-                                    <img src={photo.url} alt="" />
+                                    {/* Until its thumbnail is ready, the tile's background shows. */}
+                                    {thumbnailUrls[photo.id] && (
+                                        <img src={thumbnailUrls[photo.id]} alt="" decoding="async" />
+                                    )}
                                     <button
                                         className="capture-thumb-remove"
                                         onClick={() => {

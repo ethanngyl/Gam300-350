@@ -17,12 +17,15 @@ export default defineConfig({
   server: {
     // In dev the app is served by Vite (5173) but the backend runs on 5005.
     // Forward the API calls there so the frontend can use relative URLs
-    // (/upload, /jobs) that also work in production, where server.js serves
+    // (/upload, /jobs, /feedback) that also work in production, where server.js serves
     // the built app on the same origin.
     proxy: {
       '/upload': 'http://localhost:5005',
       '/jobs': 'http://localhost:5005',
       '/auth': 'http://localhost:5005',
+      '/feedback': 'http://localhost:5005',
+      // API v1 (/api/v1/...), e.g. the account page's password change.
+      '/api': 'http://localhost:5005',
     },
   },
 })

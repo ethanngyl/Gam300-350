@@ -13,6 +13,7 @@
  * All rights reserved.
  ******************************************************************************/
 #include "SplatRenderer.h"
+#include "CropBox.h"
 
 #ifdef CODEFINE_GLES
 #include <GLES3/gl3.h>
@@ -40,6 +41,10 @@ layout(location = 4) in float aModelId;
 uniform mat4 uViewProj;
 uniform float uPixelsPerUnit;
 uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
+//Live preview of a crop box drag: the selected splats of model uRegionModel are moved
+uniform int uRegionModel;    // -1 = off
+uniform mat4 uRegionDelta;   // world-space move applied to the splat position
+uniform mat4 uRegionLinear;  // rotation * average scale of that move, applied to the splat's shape
 
 out vec3 vColor;
 out float vAlpha;
@@ -47,11 +52,21 @@ out float vAlpha;
 void main() {
     mat4 model = uModelTransforms[int(aModelId)];
     vec4 worldPos = model * vec4(aPosition, 1.0);
+    float pointSize = aPointSize;
 
-    vColor = aColor;
+    //Selected splats carry +0.5 on their model id (see RebuildCombinedBuffer)
+    bool selected = fract(aModelId) > 0.25;
+
+    //Crop box drag preview
+    if (selected && int(aModelId) == uRegionModel) {
+        worldPos = uRegionDelta * worldPos;
+        pointSize *= length(uRegionLinear[0].xyz);
+    }
+
+    vColor = selected ? mix(aColor, vec3(0.3, 1.0, 0.4), 0.4) : aColor;
     vAlpha = aAlpha;
     gl_Position = uViewProj * worldPos;
-    gl_PointSize = max(aPointSize * uPixelsPerUnit / gl_Position.w, 1.0);
+    gl_PointSize = max(pointSize * uPixelsPerUnit / gl_Position.w, 1.0);
 }
 )";
 
@@ -94,6 +109,10 @@ uniform mat4 uView;
 uniform mat4 uProj;
 uniform vec2 uViewport; // framebuffer size in pixels
 uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
+//Live preview of a crop box drag: the selected splats of model uRegionModel are moved
+uniform int uRegionModel;    // -1 = off
+uniform mat4 uRegionDelta;   // world-space move applied to the splat position
+uniform mat4 uRegionLinear;  // rotation * average scale of that move, applied to the splat's shape
 
 out vec3 vColor;
 out float vAlpha;
@@ -112,13 +131,23 @@ mat3 quatToMat3(vec4 q) {
 }
 
 void main() {
-    vColor = aColor;
+    //Selected splats carry +0.5 on their model id (see RebuildCombinedBuffer)
+    bool selected = fract(aModelId) > 0.25;
+    vColor = selected ? mix(aColor, vec3(0.3, 1.0, 0.4), 0.4) : aColor;
     vAlpha = aAlpha;
     vValid = 1.0;
 
     //Step 1: splat center in view space (camera looks down -z, so visible t.z < 0)
-    mat4 modelView = uView * uModelTransforms[int(aModelId)];
-    vec4 t = modelView * vec4(aPosition, 1.0);
+    mat4 model = uModelTransforms[int(aModelId)];
+    vec4 worldPos = model * vec4(aPosition, 1.0);
+    mat3 regionLinear = mat3(1.0);
+
+    //Crop box drag preview
+    if (selected && int(aModelId) == uRegionModel) {
+        worldPos = uRegionDelta * worldPos;
+        regionLinear = mat3(uRegionLinear);
+    }
+    vec4 t = uView * worldPos;
 
     //Cull splats behind the camera
     if (t.z > -0.01) {
@@ -143,7 +172,7 @@ void main() {
     mat3 S = mat3(aScale.x, 0.0, 0.0,
                   0.0, aScale.y, 0.0,
                   0.0, 0.0, aScale.z);
-    mat3 A = mat3(modelView) * quatToMat3(normalize(aRotation)) * S;
+    mat3 A = mat3(uView) * regionLinear * mat3(model) * quatToMat3(normalize(aRotation)) * S;
 
     //Step 3: Jacobian of the perspective projection at the splat center.
     //Focal lengths in pixels come straight from the projection matrix.
@@ -288,6 +317,10 @@ uniform mat4 uView;
 uniform mat4 uProj;
 uniform vec2 uViewport; // framebuffer size in pixels
 uniform mat4 uModelTransforms[32]; //Must match SplatRenderer::kMaxModels
+//Live preview of a crop box drag: the selected splats of model uRegionModel are moved
+uniform int uRegionModel;    // -1 = off
+uniform mat4 uRegionDelta;   // world-space move applied to the splat position
+uniform mat4 uRegionLinear;  // rotation * average scale of that move, applied to the splat's shape
 
 out vec3 gColor;
 out float gAlpha;
@@ -321,15 +354,26 @@ void main() {
     vec3 aScale = t2.yzw;
     vec4 aRotation = t3;
 
-    gColor = t1.rgb;
+    //Selected splats carry +0.5 on their model id (see RebuildCombinedBuffer)
+    bool selected = fract(t2.x) > 0.25;
+    gColor = selected ? mix(t1.rgb, vec3(0.3, 1.0, 0.4), 0.4) : t1.rgb;
     gAlpha = t1.a;
 
     //Quad of +-3 sigma, which contains ~99% of the Gaussian's energy
     vec2 sigmaOffset = aCorner * 3.0;
     gOffset = sigmaOffset;
 
-    mat4 modelView = uView * uModelTransforms[int(t2.x + 0.5)];
-    vec4 t = modelView * vec4(aPosition, 1.0);
+    int modelId = int(floor(t2.x + 0.01));
+    mat4 model = uModelTransforms[modelId];
+    vec4 worldPos = model * vec4(aPosition, 1.0);
+    mat3 regionLinear = mat3(1.0);
+
+    //Crop box drag preview
+    if (selected && modelId == uRegionModel) {
+        worldPos = uRegionDelta * worldPos;
+        regionLinear = mat3(uRegionLinear);
+    }
+    vec4 t = uView * worldPos;
 
     //Cull splats behind the camera
     if (t.z > -0.01) { cull(); return; }
@@ -342,7 +386,7 @@ void main() {
     mat3 S = mat3(aScale.x, 0.0, 0.0,
                   0.0, aScale.y, 0.0,
                   0.0, 0.0, aScale.z);
-    mat3 A = mat3(modelView) * quatToMat3(normalize(aRotation)) * S;
+    mat3 A = mat3(uView) * regionLinear * mat3(model) * quatToMat3(normalize(aRotation)) * S;
 
     float fx = uProj[0][0] * uViewport.x * 0.5;
     float fy = uProj[1][1] * uViewport.y * 0.5;
@@ -541,6 +585,44 @@ void SplatRenderer::TranslateModel(SplatModel* model, const glm::vec3& delta) {
     model->Translate(delta); // no buffer rebuild needed -- transform is GPU-side
 }
 
+void SplatRenderer::SetSelection(int modelIndex, std::vector<uint32_t> indices) {
+    if (!GetModel(modelIndex) || indices.empty()) {
+        ClearSelection();
+        return;
+    }
+    m_selectionModel = modelIndex;
+    m_selection = std::move(indices);
+    m_modified = true; //The selection is marked in the combined buffer
+}
+
+void SplatRenderer::ClearSelection() {
+    if (m_selectionModel < 0) return;
+    m_selectionModel = -1;
+    m_selection.clear();
+    m_regionModel = -1;
+    m_modified = true;
+}
+
+void SplatRenderer::SetRegionPreview(const glm::mat4& deltaWorld) {
+    if (m_selectionModel < 0) {
+        m_regionModel = -1;
+        return;
+    }
+    glm::mat3 rotation;
+    float factor;
+    DecomposeRegionDelta(deltaWorld, rotation, factor);
+
+    m_regionModel = m_selectionModel;
+    m_regionDelta = deltaWorld;
+    m_regionLinear = glm::mat4(rotation * factor);
+}
+
+void SplatRenderer::SetRegionUniforms(const Shader& shader) const {
+    shader.setInt("uRegionModel", m_regionModel);
+    shader.setMat4("uRegionDelta", m_regionDelta);
+    shader.setMat4("uRegionLinear", m_regionLinear);
+}
+
 void SplatRenderer::ScaleModel(SplatModel* model, const glm::vec3& delta)
 {
     model->Scale(delta);
@@ -583,6 +665,7 @@ void SplatRenderer::DrawGaussian(const glm::mat4& view, const glm::mat4& proj,
     m_gaussianShader->setMat4("uView", view);
     m_gaussianShader->setMat4("uProj", proj);
     m_gaussianShader->setVec2("uViewport", glm::vec2(viewportWidthPixels, viewportHeightPixels));
+    SetRegionUniforms(*m_gaussianShader);
 
     std::vector<glm::mat4> transforms;
     transforms.reserve(m_models.size());
@@ -754,6 +837,7 @@ void SplatRenderer::DrawPointCloud(const glm::mat4& viewProj, float viewportHeig
     m_shader->use();
     m_shader->setMat4("uViewProj", viewProj);
     m_shader->setFloat("uPixelsPerUnit", viewportHeightPixels * 0.5f);
+    SetRegionUniforms(*m_shader);
 
     std::vector<glm::mat4> transforms;
     transforms.reserve(m_models.size());
@@ -853,36 +937,11 @@ void SplatRenderer::SelectModel(int index)
         m_selectedModelIndex = index;
 }
 
-void SplatRenderer::NudgeSplatForward(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
+void SplatRenderer::NudgeSelectedModel(const glm::vec3& direction)
 {
-    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
-        return;
-
-    m_models[m_selectedModelIndex].get()->Translate({ 0.1,0,0 });
-}
-
-
-void SplatRenderer::NudgeSplatBackwards(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
-{
-    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
-        return;
-    m_models[m_selectedModelIndex].get()->Translate({ -0.1,0,0 });
-}
-
-void SplatRenderer::NudgeSplatLeft(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
-{
-    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
-        return;
-
-    m_models[m_selectedModelIndex].get()->Translate({ 0,0,-0.1 });
-}
-
-void SplatRenderer::NudgeSplatRight(InputManager& /*manager*/, InputManager::INPUT_TYPE type)
-{
-    if (m_selectedModelIndex < 0 || m_selectedModelIndex >= static_cast<int>(m_models.size()) || type == InputManager::INPUT_TYPE::RELEASE)
-        return;
-
-    m_models[m_selectedModelIndex].get()->Translate({ 0,0,0.1 });
+    if (SplatModel* model = GetModel(m_selectedModelIndex)) {
+        model->Translate(direction * kNudgeStep);
+    }
 }
 
 
@@ -899,8 +958,17 @@ void SplatRenderer::RebuildCombinedBuffer()
         if (m_models[modelIdx]->GetIsHidden()) continue;
         const auto& splats = m_models[modelIdx]->splats();
         //Copy, about to mutate modelId
-        for (SplatVertex v : splats) { 
+        const bool hasSelection = static_cast<int>(modelIdx) == m_selectionModel;
+        size_t nextSelected = 0; //Next entry of m_selection still to mark
+        size_t splatIdx = 0;
+        for (SplatVertex v : splats) {
             v.modelID = static_cast<float>(modelIdx);
+            //Selected splats are marked with +0.5, every reader truncates the id to get the model back
+            if (hasSelection && nextSelected < m_selection.size() && m_selection[nextSelected] == splatIdx) {
+                v.modelID += 0.5f;
+                ++nextSelected;
+            }
+            ++splatIdx;
             m_combined.push_back(v);
         }
     }

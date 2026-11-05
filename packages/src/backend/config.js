@@ -51,9 +51,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Per-machine settings (AUTH_MODE, AUTH_API_KEY, ...) live in an optional,
 // gitignored .env next to this file -- see .env.example. Loaded first so
-// every process.env read below sees it.
-const envFile = path.join(__dirname, '.env')
-if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
+// every process.env read below sees it. ENV_FILE names another file; one
+// that doesn't exist means none is read (the tests do this, so a
+// developer's .env can't leak into them).
+const envFile = process.env.ENV_FILE ?? path.join(__dirname, '.env')
+if (envFile && fs.existsSync(envFile)) process.loadEnvFile(envFile)
 
 // Repo root (this file lives at packages/src/backend/).
 const repoRoot = path.join(__dirname, '..', '..', '..')
@@ -375,12 +377,25 @@ if (!AUTH_MODES.includes(authMode)) {
     process.exit(1)
 }
 
+// Where GET /jobs lists jobs from (adapters/jobSources/): 'live' (default),
+// 'sample' or 'live,sample'. A typo stops startup, like AUTH_MODE.
+const JOB_SOURCE_NAMES = ['live', 'sample']
+const jobSources = (process.env.JOB_SOURCES || 'live').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+if (jobSources.length === 0 || jobSources.some((s) => !JOB_SOURCE_NAMES.includes(s))) {
+    console.error(`[backend] JOB_SOURCES="${process.env.JOB_SOURCES}" must list one or more of: ${JOB_SOURCE_NAMES.join(', ')}`)
+    process.exit(1)
+}
+
 export const config = {
+    // The repository's root folder (sample data paths are relative to it).
+    repoRoot,
     // HTTP port the API listens on (Vite proxies /api here in dev).
     port: Number(process.env.PORT) || 5005,
 
     // Where per-job working directories live (uploads, COLMAP db, splat output).
     jobsDir: process.env.JOBS_DIR || path.join(__dirname, 'jobs'),
+    // Where the database (app.db) and its backups live.
+    dataDir: process.env.DATA_DIR || path.join(__dirname, 'data'),
 
     // Every finished job's result.ply is also copied here (see runPipeline), so
     // it shows up in the native engine's samples browser (engine/src/main.cpp)
@@ -414,27 +429,40 @@ export const config = {
     colmapStrictMatcherArgs,
     colmapStrictMapperArgs,
 
+    // Reference data (feedback categories, training presets, the photo
+    // minimum): see catalog.js.
+    catalogFile: process.env.CATALOG_FILE || path.join(__dirname, 'catalog', 'catalog.json'),
+    // Job sources for GET /jobs (see above) and the sample jobs' description.
+    jobSources,
+    sampleDataFile: process.env.SAMPLE_DATA_FILE || path.join(__dirname, 'sample-data', 'jobs.json'),
+
+    // Largest JSON request body. The biggest is a saved scene: up to 500
+    // objects (schemas/scene.v1.schema.json), a few hundred KB at most.
+    maxJsonBodyMB: 2,
+
     // Upload limits.
     maxFiles: 300,
     maxFileSizeMB: 30,
+    // Videos / GIFs per Frame Extractor job, and the size of each. Their frames
+    // still count towards frameMaxFrames. FrameExtractor.jsx checks the same limits.
+    maxMediaFiles: 10,
+    maxMediaSizeMB: Number(process.env.MAX_MEDIA_SIZE_MB) || 2048,
 
     // --- Python post-processing / ingest scripts (repo tools/ dir) -------------
     // Interpreter used to run them. Needs `pip install -r tools/requirements.txt`
-    // for the YouTube extractor (yt-dlp, opencv); normalize needs only stdlib.
+    // for the frame extractor (opencv); normalize needs only stdlib.
     // macOS has no `python` command, only `python3` (start.sh sets PYTHON_BIN
     // to its virtualenv's interpreter).
     pythonBin: process.env.PYTHON_BIN || findPython(),
-    // Extracts evenly spaced frames from a YouTube video into a job's images/.
-    ytScript: process.env.YT_SCRIPT || path.join(toolsDir, 'youtube_frames.py'),
+    // Extracts evenly spaced frames from uploaded media into a job's images/.
+    frameScript: process.env.FRAME_SCRIPT || path.join(toolsDir, 'extract_frames.py'),
     // Default extraction rate (frames per second) and cap on frames pulled.
-    ytFps: Number(process.env.YT_FPS) || 2,
-    ytMaxFrames: Number(process.env.YT_MAX_FRAMES) || 200,
+    frameFps: Number(process.env.FRAME_FPS) || 2,
+    frameMaxFrames: Number(process.env.FRAME_MAX_FRAMES) || 200,
     // Upper bound on the requested extraction rate.
-    ytMaxFps: 30,
-    // Videos longer than this are refused before anything is downloaded.
-    ytMaxDurationSec: Number(process.env.YT_MAX_DURATION) || 20 * 60,
-    // Kill the download + extraction if it runs longer than this.
-    ytTimeoutMin: Number(process.env.YT_TIMEOUT_MIN) || 30,
+    frameMaxFps: 30,
+    // Kill the extraction if it runs longer than this.
+    frameTimeoutMin: Number(process.env.FRAME_TIMEOUT_MIN) || 30,
     // Recenters/rescales the trained splat into the viewer's frame.
     normalizeScript:
         process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
@@ -458,6 +486,25 @@ export const config = {
     syncIntervalMin: Number(process.env.SYNC_INTERVAL_MIN) || 5,
     // Largest result.ply the VM accepts from a client.
     maxResultSizeMB: 500,
+    // Where finished jobs' photos and models are kept. 'disk' (default):
+    // jobs/<id>/images/ and jobs/<id>_out/result.ply (plus a copy in the engine
+    // samples folder). 'db': inside the database (app.db, tables job_images,
+    // job_models and job_model_chunks), with no samples copy -- set
+    // FILE_STORE=db on the VM only (ignored unless AUTH_MODE=authority).
+    fileStore: process.env.FILE_STORE === 'db' ? 'db' : 'disk',
+    // Whether photos and models really are kept in the database: FILE_STORE=db
+    // only counts on the VM (other machines build from files on disk).
+    filesInDb: process.env.FILE_STORE === 'db' && authMode === 'authority',
+    // VM clean-up (cleanup.js). Keeps stored jobs (photos + model, in the
+    // database or on disk) under this many GB by deleting the oldest; 0 (the
+    // default) never deletes jobs. Jobs younger than cleanupMinAgeDays, and
+    // running ones, are always kept. Feedback older than feedbackKeepDays is
+    // deleted (0 keeps it forever). Checked every cleanupIntervalMin minutes
+    // and after each new job.
+    storageBudgetGB: Number(process.env.STORAGE_BUDGET_GB) || 0,
+    cleanupMinAgeDays: Number(process.env.CLEANUP_MIN_AGE_DAYS) || 7,
+    feedbackKeepDays: process.env.FEEDBACK_KEEP_DAYS === undefined ? 365 : Number(process.env.FEEDBACK_KEEP_DAYS) || 0,
+    cleanupIntervalMin: Number(process.env.CLEANUP_INTERVAL_MIN) || 60,
 
     // --- Account authority (centralized accounts on the VM) --------------------
     // 'local' (default): accounts live in this machine's own database, as
@@ -466,9 +513,10 @@ export const config = {
     //   /register and /verify-account, and its /auth/* routes use db.js directly.
     // 'client': this instance forwards signup/login to the authority.
     authMode,
-    // Where the authority lives (only used in 'client' mode). No trailing slash.
-    // Must be https:// (passwords are sent to it) unless allowInsecureAuth.
-    vmAuthUrl: (process.env.VM_AUTH_URL || 'https://51-79-240-131.sslip.io').replace(/\/+$/, ''),
+    // Where the authority lives (client mode; other machines also send Google
+    // sign-in there). No trailing slash. Must be https:// (passwords are sent
+    // to it) unless allowInsecureAuth. No default: set VM_AUTH_URL in .env.
+    vmAuthUrl: (process.env.VM_AUTH_URL || '').trim().replace(/\/+$/, ''),
     // Shared secret between clients and the authority. MUST be set (same value)
     // on the VM and every client via AUTH_API_KEY. Empty means signup/login
     // refuse to run rather than silently accepting anything.
@@ -480,12 +528,18 @@ export const config = {
     // Caddy forwards from the same machine, so req.ip is the real client
     // address (for rate limits) and req.secure reflects HTTPS (for cookies).
     trustProxy: process.env.TRUST_PROXY || null,
+    // Largest profile photo accepted (PUT /auth/me/avatar). The website
+    // shrinks photos to a 256 x 256 JPEG first, which is far smaller.
+    maxAvatarKB: 256,
     // --- Google SSO (authority only) -------------------------------------------
     // From the Google Cloud Console OAuth client (step 6). Secrets: put them in
     // .env, never commit them. Empty = Google sign-in is disabled.
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    // Must EXACTLY match an Authorized redirect URI registered in the console.
-    googleRedirectUri:
-        process.env.GOOGLE_REDIRECT_URI || 'https://51-79-240-131.sslip.io/auth/google/callback',
+    // Must EXACTLY match an Authorized redirect URI registered in the console
+    // (https://<the VM>/auth/google/callback). Empty = Google sign-in is off.
+    googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
+    // Google's OAuth 2.0 endpoints (fixed by Google, see services/google.js).
+    googleAuthUrl: process.env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
+    googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
 }

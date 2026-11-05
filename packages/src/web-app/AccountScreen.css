@@ -1,0 +1,556 @@
+/* ============================================================
+   Account page - GENESIS theme (account settings design)
+   Uses the --forma-* variables from AppTheme.css. The sound card
+   (.account-sound*) and usage cards (.account-stats, .home-stat)
+   keep their styles from AppTheme.css.
+   Mobile-first: the section menu is a scrolling row of tabs above
+   the section; from 900px it is a side menu beside the section. The
+   section always stretches to the right edge of the page, so the
+   layout looks centred at any window width.
+   ============================================================ */
+
+.acct-screen {
+    padding: 20px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+    /* App.css still styles bare h1, h2 and p with the old theme, so reset them here. */
+    .acct-screen :is(h1, h2, p, dl, dd) {
+        font-family: inherit;
+        max-width: none;
+        margin: 0;
+    }
+
+/* ---------- Section menu (phones: tabs) ---------- */
+
+.acct-menu {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+    .acct-menu::-webkit-scrollbar {
+        display: none;
+    }
+
+/* The user and the group labels only show in the side menu. */
+.acct-menu-user,
+.acct-menu-label {
+    display: none;
+}
+
+.acct-menu-group {
+    display: contents;
+}
+
+.acct-menu-item {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.86rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+    .acct-menu-item:hover {
+        background: var(--forma-panel-alt);
+        color: var(--forma-text);
+    }
+
+    .acct-menu-item.is-active {
+        background: rgba(var(--forma-accent-rgb), 0.16);
+        border-color: rgba(var(--forma-accent-rgb), 0.45);
+        color: var(--forma-heading);
+    }
+
+        .acct-menu-item.is-active svg {
+            color: var(--forma-teal-text);
+        }
+
+    .acct-menu-item:focus-visible {
+        outline: 2px solid var(--forma-blue);
+        outline-offset: -2px;
+    }
+
+/* Narrow phones: four equal tabs, text only, so all of them fit. */
+@media (max-width: 480px) {
+    .acct-menu-item {
+        flex: 1;
+        justify-content: center;
+        padding: 9px 6px;
+        font-size: 0.82rem;
+    }
+
+        .acct-menu-item svg {
+            display: none;
+        }
+}
+
+/* ---------- Avatars (photo or user icon) ---------- */
+
+.acct-avatar {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--forma-accent-rgb), 0.45);
+    background: radial-gradient(circle at 68% 28%, rgba(var(--forma-accent-light-rgb), 0.35), transparent 40%), linear-gradient(145deg, rgba(var(--forma-accent-rgb), 0.42), rgba(var(--forma-accent-rgb), 0.12));
+    color: var(--forma-teal-text);
+}
+
+    .acct-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+.acct-avatar-small {
+    width: 44px;
+    height: 44px;
+}
+
+.acct-avatar-large {
+    width: 88px;
+    height: 88px;
+}
+
+/* ---------- Section content ---------- */
+
+.acct-content {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.acct-section-heading {
+    margin-bottom: 6px;
+}
+
+.acct-screen .acct-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.acct-screen .acct-subtitle {
+    margin-top: 6px;
+    color: var(--forma-text-muted);
+    line-height: 1.6;
+}
+
+.acct-card {
+    min-width: 0;
+}
+
+.acct-screen .acct-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.acct-screen .acct-muted {
+    color: var(--forma-text-muted);
+    font-size: 0.86rem;
+    line-height: 1.55;
+}
+
+.acct-screen .acct-error {
+    color: var(--forma-red);
+    font-size: 0.82rem;
+}
+
+.acct-screen .acct-btn-quiet {
+    background: transparent;
+}
+
+/* ---------- Profile photo ---------- */
+
+.acct-photo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.acct-photo-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.acct-photo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* ---------- Details (name, email, password ...) ---------- */
+
+.acct-screen .acct-details {
+    padding: 0;
+    overflow: hidden;
+}
+
+/* Phones: label above value; any button on its own line. */
+.acct-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .acct-row:last-child {
+        border-bottom: none;
+    }
+
+    .acct-row dt {
+        font-size: 0.78rem;
+        color: var(--forma-text-muted);
+    }
+
+    .acct-row dd {
+        min-width: 0;
+        color: var(--forma-text);
+        font-size: 0.92rem;
+    }
+
+.acct-email {
+    overflow-wrap: anywhere;
+}
+
+.acct-password-dots {
+    letter-spacing: 0.12em;
+}
+
+.acct-screen .acct-row-action {
+    justify-self: start;
+    margin-top: 6px;
+    font-size: 0.82rem;
+}
+
+    .acct-screen .acct-row-action:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+/* ---------- Log out and guest cards ---------- */
+
+.acct-logout,
+.acct-guest {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+    .acct-logout > div,
+    .acct-guest-text {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+.acct-guest-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(var(--forma-accent-rgb), 0.14);
+    border: 1px solid rgba(var(--forma-accent-rgb), 0.4);
+    color: var(--forma-teal-text);
+}
+
+/* ---------- Plans ---------- */
+
+.acct-plans {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+}
+
+.acct-plan {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+    .acct-plan.is-current {
+        border-color: rgba(var(--forma-green-rgb), 0.55);
+        background: linear-gradient(180deg, rgba(var(--forma-green-rgb), 0.1), transparent 55%), var(--forma-panel);
+    }
+
+    .acct-plan.is-featured {
+        border-color: rgba(var(--forma-accent-rgb), 0.55);
+        background: linear-gradient(180deg, rgba(var(--forma-accent-rgb), 0.16), transparent 55%), var(--forma-panel);
+    }
+
+.acct-plan-flag {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--forma-accent-rgb), 0.5);
+    background: rgba(var(--forma-accent-rgb), 0.16);
+    color: var(--forma-teal-text);
+    font-family: var(--forma-font-mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.acct-plan-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    padding-right: 110px; /* room for the "Most popular" flag */
+}
+
+.acct-plan:not(.is-featured) .acct-plan-head {
+    padding-right: 0;
+}
+
+.acct-screen .acct-plan-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--forma-heading);
+}
+
+.acct-plan-current {
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--forma-green-rgb), 0.55);
+    background: rgba(var(--forma-green-rgb), 0.14);
+    color: var(--forma-green);
+    font-family: var(--forma-font-mono);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.acct-plan-features {
+    list-style: none;
+    margin: 6px 0 4px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+}
+
+    .acct-plan-features li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 0.8rem;
+        color: var(--forma-text-muted);
+    }
+
+        .acct-plan-features li strong {
+            display: block;
+            margin-top: 2px;
+            color: var(--forma-heading);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+.acct-plan-check {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: rgba(var(--forma-accent-rgb), 0.18);
+    color: var(--forma-teal-text);
+}
+
+.acct-screen .acct-plan-btn {
+    justify-content: center;
+    width: 100%;
+    padding: 12px 16px;
+}
+
+    .acct-screen .acct-plan-btn:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+.acct-screen .acct-notice {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(var(--forma-accent-rgb), 0.1);
+    border: 1px solid rgba(var(--forma-accent-rgb), 0.35);
+    color: var(--forma-text);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.acct-screen .acct-footnote {
+    font-size: 0.72rem;
+    color: var(--forma-text-dim);
+}
+
+/* ---------- Tablets and up ---------- */
+
+@media (min-width: 761px) {
+    .acct-screen {
+        padding: 32px 40px 48px;
+    }
+
+        .acct-screen .acct-title {
+            font-size: 2rem;
+        }
+
+    .acct-photo {
+        flex-direction: row;
+        align-items: center;
+        gap: 22px;
+    }
+
+    /* Label | value | button, like the design. */
+    .acct-row {
+        grid-template-columns: 160px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+        min-height: 36px;
+    }
+
+    .acct-screen .acct-row-action {
+        margin-top: 0;
+    }
+
+    .acct-logout,
+    .acct-guest {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .acct-guest-text {
+        flex: 1;
+    }
+}
+
+/* ---------- Wide screens: side menu, plans side by side ---------- */
+
+@media (min-width: 900px) {
+    .acct-screen {
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr);
+        gap: 28px;
+        align-items: start;
+    }
+
+    .acct-menu {
+        position: sticky;
+        top: 16px;
+        flex-direction: column;
+        gap: 2px;
+        padding: 16px 12px;
+        overflow: visible;
+    }
+
+    .acct-menu-user {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 6px 16px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--forma-border);
+    }
+
+    .acct-menu-identity {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+        .acct-menu-identity strong {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--forma-heading);
+            font-size: 0.92rem;
+        }
+
+        .acct-menu-identity span {
+            font-family: var(--forma-font-mono);
+            font-size: 0.7rem;
+            color: var(--forma-teal-text);
+        }
+
+    .acct-menu-group {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-bottom: 10px;
+    }
+
+    .acct-menu-label {
+        display: block;
+        padding: 8px 10px 6px;
+        font-family: var(--forma-font-mono);
+        font-size: 0.64rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--forma-text-dim);
+    }
+
+    .acct-menu-item {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+}
+
+/* The sound card keeps a narrow width elsewhere; here it fills the section like the others. */
+.acct-screen .account-sound {
+    max-width: none;
+    margin-bottom: 0;
+}
+
+@media (min-width: 1200px) {
+    .acct-plans {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* ---------- Change password dialog (ChangePasswordDialog.jsx) ---------- */
+/* Rendered in a portal outside .acct-screen, so not scoped to it. */
+
+.change-password-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+}

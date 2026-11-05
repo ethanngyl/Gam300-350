@@ -1,6 +1,8 @@
 name: Deploy
 
-# Manual trigger only — press "Run workflow" in the Actions tab.
+# Manual trigger only — press "Run workflow" in the Actions tab. The VM is
+# switched to the branch picked in "Use workflow from" (e.g. main, or a
+# feature branch to try it on the VM); pick main again to go back.
 on:
   workflow_dispatch:
 
@@ -12,7 +14,10 @@ jobs:
       - name: Pull, build, and restart on the VM
         run: |
           cd ~/Gam300-350
-          git pull origin main
+          git fetch origin
+          # Match the chosen branch exactly (no merge). Stops if the VM has
+          # uncommitted edits to tracked files; .env, jobs/ and data/ are untouched.
+          git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
           cd packages
           npm ci
           cd src/web-app

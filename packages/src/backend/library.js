@@ -12,7 +12,9 @@ the VM, which stores it for every machine, and passes Library requests for
 jobs this machine doesn't have on to the VM. Every request carries the
 shared AUTH_API_KEY and the id of the user it is made for; the VM looks the
 user (and their role) up in its own database and applies the normal owner /
-admin rule. The VM side is in server.js (the /library routes).
+admin rule. The VM side is the /library routes (routes/). Every call goes
+to the VM's API v1 (/api/v1/library/...), so the VM must run a build with
+/api/v1 (update the VM first).
 - syncJob(record)
 Sends one finished job to the VM. Returns true once the VM has stored it.
 - syncPendingJobs()
@@ -26,6 +28,10 @@ Forwards a browser request to the VM as the logged-in user and streams the
 reply back (status, headers, body), including HTTP Range requests.
 - forwardToVm(method, vmPath, user, body)
 Sends a small JSON request to the VM as a user. Returns { status, data }.
+- isForVm(req) / askVm(req, method, vmPath, { body, contentType, unavailable })
+For the routes whose data lives on the VM (account, feedback, scenes): on a
+team machine, whether to pass the request on, and passing it on (503 with
+the route's message when the VM can't be used).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -37,6 +43,8 @@ import { getJobOwnerId, isJobSynced, markJobSynced } from './db.js'
 import { scanJobs } from './scan.js'
 import { STATUS_FILE } from './status.js'
 import { jobs } from './pipeline.js'
+import { API_V1_PREFIX } from './adapters/apiVersions.js'
+import { clientAuthProblem } from './services/authority.js'
 
 // Uploads of a whole job can take a while on a slow connection.
 const SYNC_TIMEOUT_MS = 10 * 60 * 1000
@@ -70,8 +78,8 @@ function vmHeaders(user)
 /************************************************************************/
 /*!
   \brief
-    Sends one finished job to the VM: its photos, final model, metrics and
-    status record, plus its owner (the VM's user id -- on a client machine
+    Sends one finished job to the VM: its photos, final model, metrics,
+    card cover and status record, plus its owner (the VM's user id -- on a client machine
     local ids are the VM's) and this machine's name. Marks it synced once
     the VM confirms. Logs and returns false on any failure, so the next
     sync round tries again.
@@ -98,8 +106,12 @@ export async function syncJob(record)
     const metricsPath = path.join(config.jobsDir, `${record.id}_out`, 'metrics.json')
     if (fs.existsSync(metricsPath))
       form.append('metrics', await fs.openAsBlob(metricsPath), 'metrics.json')
+    // The card cover (made from the background masks before they were tidied up).
+    const coverPath = path.join(config.jobsDir, `${record.id}_out`, 'cover.webp')
+    if (fs.existsSync(coverPath))
+      form.append('cover', await fs.openAsBlob(coverPath), 'cover.webp')
 
-    const resp = await fetch(`${config.vmAuthUrl}/library/jobs/${record.id}`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}/library/jobs/${record.id}`, {
       method: 'PUT',
       headers: vmHeaders(null),
       body: form,
@@ -190,7 +202,7 @@ export async function fetchRemoteJobs(user)
 {
   try
   {
-    const resp = await fetch(`${config.vmAuthUrl}/library/jobs`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}/library/jobs`, {
       headers: vmHeaders(user),
       signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
     })
@@ -246,7 +258,7 @@ export async function proxyToVm(req, res, vmPath)
 
   try
   {
-    const resp = await fetch(`${config.vmAuthUrl}${vmPath}`, {
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}${vmPath}`, {
       method: req.method,
       headers,
       body,
@@ -291,21 +303,25 @@ export async function proxyToVm(req, res, vmPath)
   \param user
     req.user
   \param body
-    object, optional
+    object (sent as JSON) or Buffer (sent as is, e.g. a profile photo),
+    optional
+  \param contentType
+    string, the Content-Type of a Buffer body
   \return
     { status, data } -- status 0 if the VM couldn't be reached
 */
 /************************************************************************/
-export async function forwardToVm(method, vmPath, user, body)
+export async function forwardToVm(method, vmPath, user, body, contentType)
 {
   try
   {
     const headers = vmHeaders(user)
-    if (body) headers['Content-Type'] = 'application/json'
-    const resp = await fetch(`${config.vmAuthUrl}${vmPath}`, {
+    const isRaw = Buffer.isBuffer(body)
+    if (body) headers['Content-Type'] = isRaw ? contentType : 'application/json'
+    const resp = await fetch(`${config.vmAuthUrl}${API_V1_PREFIX}${vmPath}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isRaw ? body : JSON.stringify(body)) : undefined,
       signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
     })
     const data = await resp.json().catch(() => ({}))
@@ -316,6 +332,52 @@ export async function forwardToVm(method, vmPath, user, body)
     console.error(`[backend] library: ${method} ${vmPath} on the VM failed: ${err.message}`)
     return { status: 0, data: {} }
   }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether a request should be answered by the VM: on a team machine
+    (AUTH_MODE=client), its own routes for things that live on the VM
+    (account, feedback, scenes) -- not the VM's /library twins.
+  \param req
+    The request
+  \return
+    bool
+*/
+/************************************************************************/
+export function isForVm(req)
+{
+  return config.authMode === 'client' && !req.path.startsWith('/library/')
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A team machine passing a user's request on to the VM: forwardToVm,
+    with 503 and the given message when this machine has no working VM
+    connection (no key / address) or the VM can't be reached.
+  \param req
+    The request (req.user is the user to act as)
+  \param method
+    'GET' | 'POST' | ...
+  \param vmPath
+    string, e.g. '/library/feedback'
+  \param body
+    object or Buffer, optional (see forwardToVm)
+  \param contentType
+    string, for a Buffer body
+  \param unavailable
+    the 503 reply, e.g. { error: 'The feedback service is unavailable.' }
+  \return
+    { status, data }
+*/
+/************************************************************************/
+export async function askVm(req, method, vmPath, { body, contentType, unavailable })
+{
+  if (clientAuthProblem()) return { status: 503, data: unavailable }
+  const reply = await forwardToVm(method, vmPath, req.user, body, contentType)
+  return reply.status === 0 ? { status: 503, data: unavailable } : reply
 }
 
 // ----- End of Functions ----------------------------------------------------- //

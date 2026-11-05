@@ -16,7 +16,9 @@ object (keep), black = background (ignore):
                                    and ignores masked pixels in training
 
 Segmentation uses rembg (pip install -r tools/requirements.txt). The model
-(~170 MB) is downloaded to ~/.u2net on first use.
+(~170 MB) is downloaded to ~/.u2net on first use. It runs on an NVIDIA GPU
+when onnxruntime-gpu is installed (packages/start.bat picks it), else on the
+CPU.
 
 Progress / errors go to stderr for pipeline.js to parse:
     "PROGRESS mask <0..1>" and "ERROR: <message>"
@@ -37,6 +39,12 @@ IMAGE_EXTS = (".jpg", ".jpeg", ".png")
 # A mask covering less than this fraction of the photo almost certainly means
 # segmentation missed the object; that photo is left unmasked instead.
 MIN_COVERAGE = 0.01
+
+# rembg's models look at the photo squashed to at most 1024x1024. Shrinking it
+# that far ourselves (with a fast filter) and scaling the mask back up skips
+# rembg's slow LANCZOS resizes of the full photo, which take longer than the
+# model itself on a GPU.
+MODEL_SIZE = 1024
 
 
 def eprint(*args: object) -> None:
@@ -59,10 +67,37 @@ def require_deps():
         from PIL import Image  # noqa: F401
         from rembg import new_session, remove  # noqa: F401
     except ImportError as err:
+        if (err.name or "").startswith("onnxruntime"):
+            fail(
+                "Background removal needs onnxruntime. Run: pip install onnxruntime "
+                '(or on an NVIDIA GPU: pip install "onnxruntime-gpu[cuda,cudnn]")'
+            )
         fail(
             f"Background removal needs extra Python packages ({err.name} missing). "
             "Run: pip install -r tools/requirements.txt"
         )
+
+
+def load_session(model: str):
+    """A rembg session on the GPU when onnxruntime-gpu can use it, else the CPU."""
+    import onnxruntime as ort
+    from rembg import new_session
+
+    if "CUDAExecutionProvider" in ort.get_available_providers():
+        # Load the CUDA / cuDNN DLLs from the nvidia-* pip packages
+        # (onnxruntime-gpu[cuda,cudnn]). Harmless if they're installed system-wide.
+        try:
+            ort.preload_dlls()
+        except Exception as err:
+            eprint(f"Could not preload the CUDA libraries ({err}); trying anyway.")
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    else:
+        providers = ["CPUExecutionProvider"]
+    session = new_session(model, providers=providers)
+    # onnxruntime quietly falls back to the CPU if CUDA fails to start.
+    used = session.inner_session.get_providers()[0]
+    eprint("Segmenting on the " + ("GPU (CUDA)" if used == "CUDAExecutionProvider" else "CPU"))
+    return session
 
 
 def clean_mask(alpha, dilate_frac: float):
@@ -107,7 +142,7 @@ def main() -> None:
     require_deps()
     import numpy as np
     from PIL import Image, ImageOps
-    from rembg import new_session, remove
+    from rembg import remove
 
     names = sorted(n for n in os.listdir(args.images_dir) if n.lower().endswith(IMAGE_EXTS))
     if not names:
@@ -117,7 +152,7 @@ def main() -> None:
 
     eprint(f"Loading segmentation model {args.model} (downloads on first use)...")
     try:
-        session = new_session(args.model)
+        session = load_session(args.model)
     except Exception as err:  # network / model download problems
         fail(f"Could not load background-removal model {args.model}: {err}")
     progress(0)
@@ -132,7 +167,14 @@ def main() -> None:
             upright = ImageOps.exif_transpose(raw).convert("RGB")
             orientation = raw.getexif().get(0x0112, 1)
 
-        alpha = np.asarray(remove(upright, session=session, only_mask=True).convert("L"))
+        small = upright
+        if max(upright.size) > MODEL_SIZE:
+            small = upright.resize(
+                (min(upright.width, MODEL_SIZE), min(upright.height, MODEL_SIZE)),
+                Image.BILINEAR, reducing_gap=2.0,
+            )
+        alpha = remove(small, session=session, only_mask=True).convert("L")
+        alpha = np.asarray(alpha.resize(upright.size, Image.BILINEAR))
         mask = clean_mask(alpha, args.dilate)
         if mask.mean() / 255 < MIN_COVERAGE:
             eprint(f"WARNING: no object found in {name}; leaving it unmasked")

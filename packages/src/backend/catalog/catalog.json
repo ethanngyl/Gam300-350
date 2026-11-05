@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "minPhotos": 8,
+  "feedbackCategories": [
+    {
+      "id": "bug",
+      "label": "Bug report",
+      "icon": "triangle",
+      "placeholder": "What did you do, what did you expect, and what happened instead?"
+    },
+    {
+      "id": "idea",
+      "label": "Idea",
+      "icon": "sparkle",
+      "placeholder": "What would you like GENESIS to do, and what problem would it solve?"
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "icon": "message",
+      "placeholder": "Tell us what you think of GENESIS."
+    }
+  ],
+  "feedbackMessage": {
+    "minLength": 10,
+    "maxLength": 1000
+  },
+  "trainingPresets": [
+    { "id": "fast", "label": "Fast", "iterations": 5000 },
+    { "id": "normal", "label": "Normal", "iterations": 7000 },
+    { "id": "detailed", "label": "Detailed", "iterations": 10000 }
+  ],
+  "defaultTrainingPreset": "normal"
+}
