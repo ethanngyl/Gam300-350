@@ -28,6 +28,10 @@ Forwards a browser request to the VM as the logged-in user and streams the
 reply back (status, headers, body), including HTTP Range requests.
 - forwardToVm(method, vmPath, user, body)
 Sends a small JSON request to the VM as a user. Returns { status, data }.
+- isForVm(req) / askVm(req, method, vmPath, { body, contentType, unavailable })
+For the routes whose data lives on the VM (account, feedback, scenes): on a
+team machine, whether to pass the request on, and passing it on (503 with
+the route's message when the VM can't be used).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -40,6 +44,7 @@ import { scanJobs } from './scan.js'
 import { STATUS_FILE } from './status.js'
 import { jobs } from './pipeline.js'
 import { API_V1_PREFIX } from './adapters/apiVersions.js'
+import { clientAuthProblem } from './services/authority.js'
 
 // Uploads of a whole job can take a while on a slow connection.
 const SYNC_TIMEOUT_MS = 10 * 60 * 1000
@@ -327,6 +332,52 @@ export async function forwardToVm(method, vmPath, user, body, contentType)
     console.error(`[backend] library: ${method} ${vmPath} on the VM failed: ${err.message}`)
     return { status: 0, data: {} }
   }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether a request should be answered by the VM: on a team machine
+    (AUTH_MODE=client), its own routes for things that live on the VM
+    (account, feedback, scenes) -- not the VM's /library twins.
+  \param req
+    The request
+  \return
+    bool
+*/
+/************************************************************************/
+export function isForVm(req)
+{
+  return config.authMode === 'client' && !req.path.startsWith('/library/')
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A team machine passing a user's request on to the VM: forwardToVm,
+    with 503 and the given message when this machine has no working VM
+    connection (no key / address) or the VM can't be reached.
+  \param req
+    The request (req.user is the user to act as)
+  \param method
+    'GET' | 'POST' | ...
+  \param vmPath
+    string, e.g. '/library/feedback'
+  \param body
+    object or Buffer, optional (see forwardToVm)
+  \param contentType
+    string, for a Buffer body
+  \param unavailable
+    the 503 reply, e.g. { error: 'The feedback service is unavailable.' }
+  \return
+    { status, data }
+*/
+/************************************************************************/
+export async function askVm(req, method, vmPath, { body, contentType, unavailable })
+{
+  if (clientAuthProblem()) return { status: 503, data: unavailable }
+  const reply = await forwardToVm(method, vmPath, req.user, body, contentType)
+  return reply.status === 0 ? { status: 503, data: unavailable } : reply
 }
 
 // ----- End of Functions ----------------------------------------------------- //

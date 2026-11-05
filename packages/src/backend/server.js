@@ -147,8 +147,9 @@ if (config.trustProxy) {
 }
 
 // Parse JSON bodies. Only applies to application/json requests, so the
-// multipart photo and media uploads are unaffected.
-app.use(express.json())
+// multipart photo and media uploads are unaffected. Express's default 100 KB
+// is too small for a large saved scene (config.maxJsonBodyMB).
+app.use(express.json({ limit: `${config.maxJsonBodyMB}mb` }))
 
 // Serve the built React frontend (run `npm run build` to produce web-app/dist).
 app.use(express.static(path.join(__dirname, '../web-app/dist')))

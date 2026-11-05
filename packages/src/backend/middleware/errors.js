@@ -106,7 +106,9 @@ export function jsonErrorHandler(err, req, res, _next) {
         // The limits come from config (maxFileSizeMB, maxFiles, and the media
         // versions); keep the messages in sync with those so they stay true if
         // the limits change.
-        const isMediaUpload = req.path === '/jobs/from-media'
+        // endsWith: this runs on the app, where the path still has its
+        // /api/v1 prefix (or none, on the legacy path).
+        const isMediaUpload = req.path.endsWith('/jobs/from-media')
         switch (err.code) {
             case 'LIMIT_FILE_SIZE':
                 return res.status(413).json({

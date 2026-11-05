@@ -14,8 +14,10 @@ constants followed by two exported functions.
 Writes the job's current state to disk.
 - readStatus(id, jobsDir)
 Async. Reads and parses <jobsDir>/<id>/status.json, converting a record
-from an older version (STATUS_UPGRADES) and checking it against
-schemas/job-status.schema.json.
+from an older version (STATUS_UPGRADES). Only a record without a usable id,
+version or status is refused; any other field that breaks
+schemas/job-status.schema.json is left out (the job then uses its default
+for that field), so a hand-edited record keeps its name, status and error.
 - upgradeStatus(record)
 Brings a record of an older version up to STATUS_VERSION, or null for a
 version this build can't read.
@@ -29,7 +31,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.js'
-import { validate } from './schemas.js'
+import { schemaErrors } from './schemas.js'
 
 export const STATUS_FILE = 'status.json'
 // The record format version; the VM also writes it when storing a synced job.
@@ -40,8 +42,12 @@ const VERSION = STATUS_VERSION
 // Converters by the version they start from (none yet: every record ever
 // written is version 1). Old ones are never removed, so any old record loads.
 export const STATUS_UPGRADES = {}
-// Jobs whose record is from a newer build, so the warning is logged once.
+// Jobs already warned about (a record from a newer build / fields left out),
+// so each warning is logged once.
 const warnedNewer = new Set()
+const warnedFields = new Set()
+// Without these a record can't be used at all.
+const CORE_FIELDS = new Set(['version', 'id', 'status'])
 const VALID_STATUS = new Set(['queued', 'running', 'done', 'error', 'cancelled'])
 const TERMINAL_STATUS = new Set(['done', 'error', 'cancelled'])
 // Progress updates arrive on nearly every log line; don't rewrite the file that often.
@@ -145,10 +151,12 @@ export function upgradeStatus(record) {
 /************************************************************************/
 /*!
   \brief
-    Read a job's saved record, or null if missing, unreadable or not a
-    valid record. A record from an older version is converted; one from a
-    newer build is skipped with a warning (the job is then rebuilt from its
-    folder, as for a missing record).
+    Read a job's saved record, or null if missing, unreadable, for another
+    id, or without a known status. A record from an older version is
+    converted; one from a newer build is skipped with a warning (the job is
+    then rebuilt from its folder, as for a missing record). Other fields
+    that break the schema (e.g. a hand-edited progress of 7) are left out
+    with one warning, and the rest of the record is kept.
   \param id
     The job's ID.
   \param jobsDir
@@ -172,8 +180,20 @@ export async function readStatus(id, jobsDir = config.jobsDir) {
         console.warn(`[backend] job ${id}: status.json is version ${record.version}, newer than this build reads (${VERSION}); ignoring it`)
     }
     const upgraded = upgradeStatus(record)
-    if (!upgraded || !VALID_STATUS.has(upgraded.status) || validate('job-status', upgraded).length > 0) return null
-    return upgraded
+    if (!upgraded || !VALID_STATUS.has(upgraded.status)) return null
+
+    // Leave out just the fields that break the schema ("/progress",
+    // "/logTail/3" -> progress, logTail); scan.js has a default for each.
+    const badFields = new Set(schemaErrors('job-status', upgraded)
+        .map((err) => err.instancePath.split('/')[1])
+        .filter(Boolean))
+    if ([...badFields].some((field) => CORE_FIELDS.has(field))) return null
+    if (badFields.size === 0) return upgraded
+    if (!warnedFields.has(id)) {
+        warnedFields.add(id)
+        console.warn(`[backend] job ${id}: status.json has invalid ${[...badFields].join(', ')}; ignoring those fields`)
+    }
+    return Object.fromEntries(Object.entries(upgraded).filter(([field]) => !badFields.has(field)))
 }
 
 // ----- End of Functions ----------------------------------------------------- //

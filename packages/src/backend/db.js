@@ -291,8 +291,10 @@ const selectFeedbackPage = db.prepare(`
 `)
 
 // Scene Builder scenes: one JSON document per row (services/scenes.js).
+// SQLite counts the objects in each document, so a list never parses whole scenes.
 const selectSceneSummaries = db.prepare(`
-  SELECT id, name, document, updated_at FROM scenes WHERE owner_id = ? ORDER BY updated_at DESC
+  SELECT id, name, updated_at, json_array_length(document, '$.objects') AS object_count
+  FROM scenes WHERE owner_id = ? ORDER BY updated_at DESC
 `)
 const selectScene = db.prepare('SELECT document FROM scenes WHERE id = ? AND owner_id = ?')
 const insertSceneRow = db.prepare(`
@@ -1177,7 +1179,7 @@ export function listScenes(ownerId)
     id: row.id,
     name: row.name,
     updatedAt: row.updated_at,
-    objectCount: JSON.parse(row.document).objects?.length ?? 0,
+    objectCount: row.object_count ?? 0,
   }))
 }
 

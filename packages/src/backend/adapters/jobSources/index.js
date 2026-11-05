@@ -46,13 +46,16 @@ if (config.jobSources.includes('sample')) sample.loadSamples()
 export async function listJobs(req)
 {
   const forTeamMachine = req.path.startsWith('/library/')
-  const lists = []
+  // All sources at once (the VM is a network call); listed in this order,
+  // so a job's first copy -- this machine's -- wins below.
+  const pending = []
   if (config.jobSources.includes('live'))
   {
-    lists.push(await folders.listJobs(req.user))
-    if (!forTeamMachine) lists.push(await vmLibrary.listJobs(req.user))
+    pending.push(folders.listJobs(req.user))
+    if (!forTeamMachine) pending.push(vmLibrary.listJobs(req.user))
   }
-  if (config.jobSources.includes('sample') && !forTeamMachine) lists.push(sample.listJobs())
+  if (config.jobSources.includes('sample') && !forTeamMachine) pending.push(sample.listJobs())
+  const lists = await Promise.all(pending)
 
   const seen = new Set()
   const merged = []
