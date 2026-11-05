@@ -165,9 +165,9 @@ void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, Nudge
 
     //The target changed midburst nudges, finish old burst first
     //Box shown or hidden, another model selected
+    //The key count is kept: those keys are still physically down, and their release must close the new burst
     if (m_nudgeActive && (m_nudgeIsCropBox != toCropBox || (!toCropBox && m_nudgeModel != model))) {
         FinishNudge();
-        m_nudgeKeysDown = 0;
     }
     if (!m_nudgeActive) {
         m_nudgeActive = true;
