@@ -285,7 +285,9 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         m_dragIsCropBox = false;
         m_dragMovesContents = false;
         m_dragBefore = glm::mat4(1.0f);
-        m_renderer->ClearRegionPreview();
+        //A nudge in progress owns the preview, FinishNudge clears it. Wiping it here every frame would
+        //hide the carried splats moving while the arrow keys are held (nudging works in Pan mode too).
+        if (!m_nudgeMovesContents) m_renderer->ClearRegionPreview();
         return;
     }
 
