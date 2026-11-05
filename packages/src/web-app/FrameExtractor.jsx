@@ -19,6 +19,10 @@ full-screen processing screen (Processing.jsx), the same one photo builds
 use, which shows the upload as its first step and then the build's progress;
 a finished model opens on the model page. The file rules and the upload live
 in mediaJobs.js. There is no Back button; the dock handles navigation.
+- FrameExtractor({ onStartBuild, initialDraft, notice })
+initialDraft ({ files, fps, trainIters, removeBackground }, from App) fills
+the form in again after a failed or cancelled build. notice is a message
+shown in the form's error line, e.g. after a reload stopped an upload.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
@@ -56,17 +60,18 @@ function MediaPreview({ item }) {
     );
 }
 
-function FrameExtractor({ onStartBuild }) {
-    const [mediaItems, setMediaItems] = useState([]);
+function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
+    // Starts from the last build's files and settings, if App passes them back.
+    const [mediaItems, setMediaItems] = useState(() => initialDraft?.files.map(createMediaItem) ?? []);
     const [isDragging, setIsDragging] = useState(false);
-    const [fps, setFps] = useState(2);
+    const [fps, setFps] = useState(initialDraft?.fps ?? 2);
     // Mask out the background before reconstruction. On by default here, since
     // a video of a turntable otherwise makes the model come out flat or
     // incoherent, and solving the camera positions takes far longer.
-    const [removeBackground, setRemoveBackground] = useState(true);
+    const [removeBackground, setRemoveBackground] = useState(initialDraft?.removeBackground ?? true);
     // Training iteration cap from the "Model detail" slider.
-    const [trainIters, setTrainIters] = useState(DEFAULT_TRAINING_ITERATIONS);
-    const [error, setError] = useState(null);
+    const [trainIters, setTrainIters] = useState(initialDraft?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
+    const [error, setError] = useState(notice);
     const fileInputRef = useRef(null);
     // Latest file list, read when the page closes to release preview URLs.
     const mediaItemsRef = useRef([]);

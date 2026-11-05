@@ -115,9 +115,13 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
     const [previewPhoto, setPreviewPhoto] = useState(null)
     const [photoCount, setPhotoCount] = useState(null)
     const [elapsedSeconds, setElapsedSeconds] = useState(0)
+    // The first file couldn't be shown (formats like .mkv or .avi often don't
+    // play in a browser), so the preview shows an icon instead.
+    const [hasMediaPreviewFailed, setHasMediaPreviewFailed] = useState(false)
     const doneRef = useRef(false)
     const isMediaBuild = Boolean(mediaBuild)
     const mediaStartError = mediaBuild?.startError ?? null
+    const hasFailed = Boolean(failed || mediaStartError)
     // Last phase seen, so the tick sound plays once per finished step. A media
     // build starts at 'upload', so finishing the upload ticks too.
     const lastPhaseRef = useRef(isMediaBuild ? 'upload' : null)
@@ -191,7 +195,11 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
         .filter((p) => p !== 'masking' || isRemovingBackground)
     // Before the job exists, the media is still uploading.
     const currentPhase = jobId ? job?.phase : (isMediaBuild ? 'upload' : null)
-    const phaseIndex = phases.indexOf(currentPhase)
+    // The job exists but hasn't started (queued behind another build, or not
+    // polled yet). The server still calls this phase 'upload', but the files
+    // are already there, so the upload step shows as done.
+    const isWaitingToStart = Boolean(jobId) && (!job || job.status === 'queued')
+    const phaseIndex = isWaitingToStart ? phases.indexOf('upload') + 1 : phases.indexOf(currentPhase)
     // A video's frames only exist once extraction has finished.
     const hasPreviewFrames = !isMediaBuild || phaseIndex > phases.indexOf('extract')
 
@@ -217,12 +225,12 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
         return () => { stopped = true }
     }, [jobId, hasPreviewFrames])
 
-    // Elapsed-time counter, stopped once the job fails.
+    // Elapsed-time counter, stopped once the build or the media upload fails.
     useEffect(() => {
-        if (failed) return
+        if (hasFailed) return
         const timerId = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000)
         return () => clearInterval(timerId)
-    }, [failed])
+    }, [hasFailed])
 
     // Free the server-side job if the user leaves without pressing Cancel:
     // closing the tab, refreshing, or the browser Back button all tear down
@@ -251,17 +259,20 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
     }
 
     const isUploadingMedia = !jobId && isMediaBuild
-    const pct = isUploadingMedia
-        ? Math.round((mediaBuild.uploadFraction ?? 0) * 100)
-        : Math.round((job?.progress ?? 0) * 100)
-    const label = phaseLabels[currentPhase] ?? 'Starting'
+    let pct
+    if (isUploadingMedia) pct = Math.round((mediaBuild.uploadFraction ?? 0) * 100)
+    // Keep the finished upload's full bar until the build starts.
+    else if (isWaitingToStart) pct = isMediaBuild ? 100 : 0
+    else pct = Math.round((job?.progress ?? 0) * 100)
+    const label = isWaitingToStart ? 'Waiting to start' : (phaseLabels[currentPhase] ?? 'Starting')
     // A failed upload (from App), or a failed build.
     const failure = failed ?? mediaStartError
 
     // Which state a step in the tracker is in (display only, does not affect the job).
     function stepState(index) {
         if (index < phaseIndex) return 'done'
-        if (index === phaseIndex) return 'active'
+        // While waiting to start, the next step hasn't begun yet.
+        if (index === phaseIndex && !isWaitingToStart) return 'active'
         return 'pending'
     }
 
@@ -346,11 +357,18 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
                     <div className="processing-preview">
                         {previewPhoto
                             ? <img src={previewPhoto} alt="" />
-                            : mediaBuild?.previewUrl
+                            : mediaBuild?.previewUrl && !hasMediaPreviewFailed
                                 ? (mediaBuild.isGif
-                                    ? <img src={mediaBuild.previewUrl} alt="" />
+                                    ? <img src={mediaBuild.previewUrl} alt="" onError={() => setHasMediaPreviewFailed(true)} />
                                     // #t skips the first instant, which is often a black frame.
-                                    : <video src={`${mediaBuild.previewUrl}#t=0.1`} muted playsInline preload="metadata" aria-hidden="true" />)
+                                    : <video
+                                        src={`${mediaBuild.previewUrl}#t=0.1`}
+                                        muted
+                                        playsInline
+                                        preload="metadata"
+                                        aria-hidden="true"
+                                        onError={() => setHasMediaPreviewFailed(true)}
+                                    />)
                                 : <span className="processing-preview-icon"><Icon name={isMediaBuild ? 'video' : 'cube'} size={34} /></span>}
                         <span className="processing-scan" aria-hidden="true"></span>
                         <span className="processing-corner processing-corner-tl"></span>
