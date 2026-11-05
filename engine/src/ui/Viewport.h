@@ -97,11 +97,10 @@ private:
     //Reports the drag in progress to the edit callbacks and clears the drag state
     void FinishGizmoDrag(SplatModel* model, bool editingBox);
 
-    using NudgeFunction = void (SplatRenderer::*)(InputManager&, InputManager::INPUT_TYPE);
     //Arrow key nudges the crop box while it is open, otherwise nudge the selected model
     //A burst of nudges (1 key held down, or several keys in a row) is one undo step traccked
-    //boxDirection is the world-space direction the same key moves the crop box
-    void Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection);
+    //direction is the world-space direction the key moves the target
+    void Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction);
     //Reports the finished burst to onTransformEdited
     void FinishNudge();
 

@@ -522,6 +522,7 @@ void MainWindow::createDocks() {
             [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after));
     });
+    connect(m_inspector, &InspectorPanel::resetPositionRequested, m_resetPositionAction, &QAction::trigger);
     connect(m_inspector, &InspectorPanel::transformFieldEdited, this,
             [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after, nullptr, true));

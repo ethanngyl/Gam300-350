@@ -322,14 +322,8 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     });
     connect(trimDefaultsButton,&QPushButton::clicked, this, [this] { loadTrimFields(m_defaultTrim); });
 
-    connect(resetButton, &QPushButton::clicked, this, [this] {
-        if (!m_model) return;
-        const glm::mat4 before = m_model->GetTransform();
-        glm::mat4 after = before;
-        after[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        if (after != before) 
-            emit transformEdited(m_model, before, after);
-    });
+    //MainWindow's Reset Position action does the work, so the button and the menu cannot drift apart
+    connect(resetButton, &QPushButton::clicked, this, &InspectorPanel::resetPositionRequested);
 
     setModel(nullptr);
 }

@@ -115,29 +115,24 @@ void Viewport::BindInputs() {
 
     //Movmeent test
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::FORWARD,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatForward, glm::vec3(1.0f, 0.0f, 0.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::BACKSWARD,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatBackwards, glm::vec3(-1.0f, 0.0f, 0.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(-1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatLeft, glm::vec3(0.0f, 0.0f, -1.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(0.0f, 0.0f, -1.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatRight, glm::vec3(0.0f, 0.0f, 1.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(0.0f, 0.0f, 1.0f));
         });
 }
 
-void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection) {
-
-
-
-    constexpr float kNudgeStep = 0.1f; //Same step as SplatRenderer's model nudge
-
+void Viewport::Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction) {
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
 
     if (type == InputManager::RELEASE) {
@@ -182,13 +177,13 @@ void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, Nudge
 
     if (toCropBox) {
         //Worldspace step, the same as the gizmo's translate
-        m_cropBox.transform = glm::translate(glm::mat4(1.0f), boxDirection * kNudgeStep) * m_cropBox.transform;
+        m_cropBox.transform = glm::translate(glm::mat4(1.0f), direction * SplatRenderer::kNudgeStep) * m_cropBox.transform;
         if (m_nudgeMovesContents) {
             m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_nudgeBefore));
         }
     }
     else {
-        (m_renderer.get()->*nudge)(manager, type);
+        m_renderer->NudgeSelectedModel(direction);
     }
 }
 

@@ -73,7 +73,10 @@ signals:
     // The model's name was changed from the inspector.
     void nameChanged(const QString& name);
 
-    //The position fields or Reset Position asked to change the model transform
+    //The Reset Position button was clicked
+    void resetPositionRequested();
+
+    //Asks to change the model transform
     //The inspector panel does not apply it, the listener does, so it can be an undo step,
     void transformEdited(SplatModel* model, const glm::mat4& before, const glm::mat4& after);
     //Same, from the position, rotation and scale fields. Quick steps in a row merge into one undo step
