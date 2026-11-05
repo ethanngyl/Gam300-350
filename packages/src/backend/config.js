@@ -436,6 +436,10 @@ export const config = {
     jobSources,
     sampleDataFile: process.env.SAMPLE_DATA_FILE || path.join(__dirname, 'sample-data', 'jobs.json'),
 
+    // Largest JSON request body. The biggest is a saved scene: up to 500
+    // objects (schemas/scene.v1.schema.json), a few hundred KB at most.
+    maxJsonBodyMB: 2,
+
     // Upload limits.
     maxFiles: 300,
     maxFileSizeMB: 30,

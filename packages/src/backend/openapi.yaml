@@ -26,7 +26,8 @@ info:
     them on to these.
 
     **Formats.** Dates are UTC epoch milliseconds, sizes are bytes, ids are
-    UUIDs (see docs/data-schema.md). Errors are `{ "error": "..." }`.
+    UUIDs (see docs/data-schema.md). Errors are `{ "error": "..." }`. JSON
+    request bodies may be up to 2 MB (a saved scene of 500 objects fits).
 servers:
   - url: /api/v1
     description: The same server that serves the website (http://localhost:5005 locally)
@@ -567,6 +568,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
         '503':
           $ref: '#/components/responses/Unavailable'
   /scenes/{id}:
@@ -602,6 +605,8 @@ paths:
           $ref: '#/components/responses/SceneNotFound'
         '422':
           $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
     delete:
       tags: [Scenes]
       operationId: deleteScene
@@ -1171,6 +1176,8 @@ paths:
           $ref: '#/components/responses/KeyOrUserRefused'
         '422':
           $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
   /library/scenes/{id}:
     parameters:
       - $ref: '#/components/parameters/SceneId'
@@ -1208,6 +1215,8 @@ paths:
           $ref: '#/components/responses/SceneNotFound'
         '422':
           $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
     delete:
       tags: [VM]
       operationId: vmDeleteScene
@@ -1414,6 +1423,12 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { error: Enter a valid email address. }
+    BodyTooLarge:
+      description: A JSON body over the server's limit (2 MB; config.maxJsonBodyMB)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: That request is too large. }
     TooLarge:
       description: A file or message is over its limit
       content:

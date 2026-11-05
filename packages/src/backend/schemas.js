@@ -14,6 +14,8 @@ docs point to keeps the two from drifting apart.
 - validate(schemaName, data)
 The problems with data (empty when it is valid). schemaName is a file in
 schemas/ without .schema.json, e.g. 'scene.v1'.
+- schemaErrors(schemaName, data)
+The same, as Ajv's error objects (which field failed: instancePath).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -46,6 +48,24 @@ const compiled = new Map()
 /************************************************************************/
 export function validate(schemaName, data)
 {
+  return schemaErrors(schemaName, data).map((err) => `${err.instancePath || '(top level)'} ${err.message}`)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The same check, as Ajv's own error objects, for callers that need to
+    know which field failed (instancePath, e.g. "/progress").
+  \param schemaName
+    string
+  \param data
+    any
+  \return
+    [{ instancePath, message, ... }]; empty when valid
+*/
+/************************************************************************/
+export function schemaErrors(schemaName, data)
+{
   let check = compiled.get(schemaName)
   if (!check)
   {
@@ -53,7 +73,6 @@ export function validate(schemaName, data)
     check = ajv.compile(JSON.parse(fs.readFileSync(file, 'utf8')))
     compiled.set(schemaName, check)
   }
-  if (check(data)) return []
-  return check.errors.map((err) => `${err.instancePath || '(top level)'} ${err.message}`)
+  return check(data) ? [] : [...check.errors]
 }
 // ----- End of Functions ----------------------------------------------------- //

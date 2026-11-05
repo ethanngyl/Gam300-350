@@ -141,3 +141,46 @@ describe('scenes on the VM', () =>
     }
   })
 })
+
+describe('large scenes', () =>
+{
+  let server, cookie
+  before(async () =>
+  {
+    server = await startServer(tempDir('scenes-large'))
+    cookie = (await signUp(server.base, { email: 'erin@example.com', password: PASSWORD })).cookie
+  })
+  after(() => server.stop())
+
+  // The most the scene format allows (scene.v1.schema.json maxItems), with long names.
+  const object = (i) => ({
+    objectId: `object-${String(i).padStart(4, '0')}-${'x'.repeat(40)}`, jobId: 'aaaaaaaa-1111-2222-3333-444444444444',
+    name: `Model ${i} ${'y'.repeat(100)}`, position: [i * 0.123456789, -1.5, 2.25], rotation: [0, 90, 180], scale: [1.25, 1.25, 1.25],
+    trim: { strength: 0.3, minOpacity: 0.1, maxSplatSize: 0.05, density: 0.75 }, isHidden: i % 2 === 0,
+  })
+  const BIG_SCENE = { name: 'Big scene', background: '#18181b', renderMode: 'splats', objects: Array.from({ length: 500 }, (_v, i) => object(i)) }
+
+  test('a 500-object scene (well over the old 100 KB) saves and loads back exactly', async () =>
+  {
+    assert.ok(JSON.stringify(BIG_SCENE).length > 150 * 1024, 'the test scene should be bigger than 150 KB')
+    const saved = await call(server.base, 'POST', '/api/v1/scenes', { cookie, json: BIG_SCENE })
+    assert.equal(saved.status, 201, JSON.stringify(saved.body).slice(0, 200))
+    assert.equal(saved.body.objects.length, 500)
+    assert.deepEqual((await call(server.base, 'GET', `/api/v1/scenes/${saved.body.id}`, { cookie })).body, saved.body)
+  })
+
+  test('the list counts the objects', async () =>
+  {
+    const list = (await call(server.base, 'GET', '/api/v1/scenes', { cookie })).body
+    assert.equal(list.length, 1)
+    assert.equal(list[0].objectCount, 500)
+  })
+
+  test('a body over 2 MB gets a JSON 413', async () =>
+  {
+    const huge = { ...BIG_SCENE, name: 'z'.repeat(3 * 1024 * 1024) }
+    const reply = await call(server.base, 'POST', '/api/v1/scenes', { cookie, json: huge })
+    assert.equal(reply.status, 413)
+    assert.equal(reply.body.error, 'That request is too large.')
+  })
+})

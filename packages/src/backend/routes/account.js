@@ -28,12 +28,11 @@ import {
   setUserPassword, updateUserName, upsertLocalUser,
 } from '../db.js'
 import { jobStoredBytes } from '../cleanup.js'
-import { forwardToVm, proxyToVm } from '../library.js'
+import { askVm, isForVm, proxyToVm } from '../library.js'
 import { createLimiter } from '../ratelimit.js'
 import { SESSION_COOKIE, readCookie, requireUser } from '../middleware/session.js'
 import { tooManyAttempts } from '../middleware/limits.js'
 import { MIN_PASSWORD_LENGTH, accountDetails, checkCredentials } from '../services/accounts.js'
-import { clientAuthProblem } from '../services/authority.js'
 import { getJob } from '../services/jobs.js'
 import { accountFor, toV1Account } from '../adapters/apiVersions.js'
 
@@ -58,21 +57,6 @@ const avatarBody = express.raw({ type: AVATAR_TYPES, limit: `${config.maxAvatarK
 /************************************************************************/
 /*!
   \brief
-    Whether this request should be passed to the VM: a client machine's
-    own /auth/me... routes (not the VM's /library twins).
-  \param req
-    The request
-  \return
-    bool
-*/
-/************************************************************************/
-function isForVm(req) {
-    return config.authMode === 'client' && !req.path.startsWith('/library/')
-}
-
-/************************************************************************/
-/*!
-  \brief
     Client machine: passes an account request to the VM as the logged-in
     user. When the VM answers with the account, this machine's copy of it
     is updated too, so /auth/me shows the new name straight away.
@@ -93,9 +77,7 @@ function isForVm(req) {
 */
 /************************************************************************/
 async function askVmAccount(req, method, vmPath, body, contentType) {
-    if (clientAuthProblem()) return { status: 503, data: ACCOUNT_UNAVAILABLE }
-    const reply = await forwardToVm(method, vmPath, req.user, body, contentType)
-    if (reply.status === 0) return { status: 503, data: ACCOUNT_UNAVAILABLE }
+    const reply = await askVm(req, method, vmPath, { body, contentType, unavailable: ACCOUNT_UNAVAILABLE })
     if (reply.status === 200 && reply.data?.email)
         upsertLocalUser({ id: req.user.id, email: reply.data.email, name: reply.data.name, role: reply.data.role })
     return { status: reply.status, data: toV1Account(reply.data) }

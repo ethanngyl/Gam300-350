@@ -23,16 +23,17 @@ The admins' read-only Inbox (requireAdmin: 403 for everyone else).
 import express from 'express'
 import { config } from '../config.js'
 import { addFeedback, listFeedback } from '../db.js'
-import { forwardToVm } from '../library.js'
+import { askVm, isForVm } from '../library.js'
 import { createLimiter } from '../ratelimit.js'
 import { requireAdmin, requireUser } from '../middleware/session.js'
 import { tooManyAttempts } from '../middleware/limits.js'
-import { clientAuthProblem } from '../services/authority.js'
 import { FEEDBACK_CATEGORIES, validateFeedback } from '../services/feedback.js'
 import { feedbackPageFor, toV1FeedbackPage } from '../adapters/apiVersions.js'
 
 const router = express.Router()
 
+// A team machine's reply when the VM can't be reached.
+const FEEDBACK_UNAVAILABLE = { error: 'The feedback service is unavailable. Try again shortly.' }
 // Per account, so one user can't flood the table.
 const feedbackLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
 
@@ -64,14 +65,11 @@ router.post(['/feedback', '/library/feedback'], requireUser, async (req, res) =>
     }
 
     const fromClientMachine = req.path.startsWith('/library/')
-    if (config.authMode === 'client' && !fromClientMachine) {
-        const unavailable = { error: 'The feedback service is unavailable. Try again shortly.' }
-        if (clientAuthProblem()) return res.status(503).json(unavailable)
-        const { status, data } = await forwardToVm('POST', '/library/feedback', req.user, {
-            ...checked,
-            origin: config.machineName,
+    if (isForVm(req)) {
+        const { status, data } = await askVm(req, 'POST', '/library/feedback', {
+            body: { ...checked, origin: config.machineName },
+            unavailable: FEEDBACK_UNAVAILABLE,
         })
-        if (status === 0) return res.status(503).json(unavailable)
         return res.status(status).json(data)
     }
 
@@ -111,14 +109,11 @@ router.get(['/feedback', '/library/feedback'], requireUser, requireAdmin, async 
     const beforeNumber = Number(req.query.before)
     const before = Number.isInteger(beforeNumber) && beforeNumber > 0 ? beforeNumber : null
 
-    if (config.authMode === 'client' && !req.path.startsWith('/library/')) {
-        const unavailable = { error: 'The feedback service is unavailable. Try again shortly.' }
-        if (clientAuthProblem()) return res.status(503).json(unavailable)
+    if (isForVm(req)) {
         const query = new URLSearchParams()
         if (category) query.set('category', category)
         if (before) query.set('before', String(before))
-        const { status, data } = await forwardToVm('GET', `/library/feedback?${query}`, req.user)
-        if (status === 0) return res.status(503).json(unavailable)
+        const { status, data } = await askVm(req, 'GET', `/library/feedback?${query}`, { unavailable: FEEDBACK_UNAVAILABLE })
         return res.status(status).json(feedbackPageFor(req, toV1FeedbackPage(data)))
     }
 

@@ -23,11 +23,9 @@ Loads / saves (creating it under that id if new) / deletes one scene.
 // ----- Headers ------------------------------------------------------- //
 import crypto from 'node:crypto'
 import express from 'express'
-import { config } from '../config.js'
 import { deleteScene, getScene, insertScene, listScenes, updateScene } from '../db.js'
-import { forwardToVm } from '../library.js'
+import { askVm, isForVm } from '../library.js'
 import { requireUser } from '../middleware/session.js'
-import { clientAuthProblem } from '../services/authority.js'
 import { prepareScene } from '../services/scenes.js'
 
 const router = express.Router()
@@ -55,16 +53,10 @@ const SCENES_UNAVAILABLE = { error: 'Saved scenes are unavailable. Try again sho
 /************************************************************************/
 async function answeredByVm(req, res, method, vmPath)
 {
-  if (config.authMode !== 'client' || req.path.startsWith('/library/')) return false
-  if (clientAuthProblem())
-  {
-    res.status(503).json(SCENES_UNAVAILABLE)
-    return true
-  }
+  if (!isForVm(req)) return false
   const body = method === 'POST' || method === 'PUT' ? req.body : undefined
-  const { status, data } = await forwardToVm(method, vmPath, req.user, body)
-  if (status === 0) res.status(503).json(SCENES_UNAVAILABLE)
-  else if (status === 204) res.status(204).end()
+  const { status, data } = await askVm(req, method, vmPath, { body, unavailable: SCENES_UNAVAILABLE })
+  if (status === 204) res.status(204).end()
   else res.status(status).json(data)
   return true
 }

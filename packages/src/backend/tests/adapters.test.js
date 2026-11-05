@@ -208,10 +208,39 @@ describe('status.json versions', async () =>
     assert.match(warnings[0], /version 2, newer than this build/)
   })
 
-  test('a record that breaks the schema is not trusted', async () =>
+  test('a hand-edited record keeps its good fields; only the bad ones are left out, with one warning', async () =>
   {
-    write('bad-job', { version: 1, status: 'done', progress: 7 })
-    assert.equal(await status.readStatus('bad-job', dir), null)
+    write('edited-job', { version: 1, status: 'error', name: 'Fox on the desk', error: 'COLMAP failed', progress: 7, logTail: 'not a list' })
+    const warnings = []
+    const warn = console.warn
+    console.warn = (...a) => warnings.push(a.join(' '))
+    let record
+    try
+    {
+      record = await status.readStatus('edited-job', dir)
+      await status.readStatus('edited-job', dir)
+    }
+    finally
+    {
+      console.warn = warn
+    }
+    assert.equal(record.status, 'error')
+    assert.equal(record.name, 'Fox on the desk')
+    assert.equal(record.error, 'COLMAP failed')
+    assert.ok(!('progress' in record) && !('logTail' in record))
+    assert.equal(warnings.length, 1)
+    assert.match(warnings[0], /invalid progress, logTail/)
+  })
+
+  test('a record without a usable version or status is still refused', async () =>
+  {
+    write('no-version', { status: 'done', name: 'x' })
+    write('bad-status', { version: 1, status: 'exploded', name: 'x' })
+    write('other-id', { version: 1, status: 'done' })
+    fs.writeFileSync(path.join(dir, 'other-id', 'status.json'), JSON.stringify({ id: 'someone-else', version: 1, status: 'done' }))
+    assert.equal(await status.readStatus('no-version', dir), null)
+    assert.equal(await status.readStatus('bad-status', dir), null)
+    assert.equal(await status.readStatus('other-id', dir), null)
   })
 
   test('an older record loads once a converter exists', async () =>

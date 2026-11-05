@@ -93,6 +93,18 @@ describe('v1 and the legacy paths', () =>
     assert.equal(v1Missing.headers.get('deprecation'), null)
   })
 
+  test('video upload limits give the video message on both paths', async () =>
+  {
+    for (const urlPath of ['/api/v1/jobs/from-media', '/jobs/from-media'])
+    {
+      const form = new FormData()
+      for (let i = 0; i < 11; i++) form.append('media', new Blob(['not really a video']), `clip-${i}.mp4`)
+      const reply = await call(server.base, 'POST', urlPath, { cookie, body: form })
+      assert.equal(reply.status, 400, urlPath)
+      assert.equal(reply.body.error, 'Too many files -- upload at most 10 files at once.', urlPath)
+    }
+  })
+
   test('an unknown version or path is a JSON 404', async () =>
   {
     for (const urlPath of ['/api/v2/jobs', '/wiki', '/no/such/path'])
