@@ -98,8 +98,9 @@ router.post('/upload', requireUser, assignJobId, upload.array('images', config.m
     401 if not logged in, else JobSummary[]
 */
 /************************************************************************/
-router.get(['/jobs', '/library/jobs'], requireUser, async (req, res) => {
-    res.json(await listJobs(req))
+router.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
+{
+  res.json(await listJobs(req))
 })
 
 /************************************************************************/
@@ -115,23 +116,27 @@ router.get(['/jobs', '/library/jobs'], requireUser, async (req, res) => {
     the image itself
 */
 /************************************************************************/
-router.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJobAccess, (req, res) => {
-    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
-    const { id, name } = req.params
-    if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name)) {
-        return res.status(404).json({ error: 'image not found' })
-    }
-    const filePath = path.join(config.jobsDir, id, 'images', name)
-    if (!fs.existsSync(filePath) && filesInDb) {
-        const image = getDbImage(id, name)
-        if (!image) return res.status(404).json({ error: 'image not found' })
-        res.type(image.mime)
-        res.setHeader('Cache-Control', 'private, max-age=3600')
-        return res.send(image.data)
-    }
-    res.sendFile(filePath, (err) => {
-        if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
-    })
+router.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJobAccess, (req, res) =>
+{
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+  const { id, name } = req.params
+  if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name))
+  {
+    return res.status(404).json({ error: 'image not found' })
+  }
+  const filePath = path.join(config.jobsDir, id, 'images', name)
+  if (!fs.existsSync(filePath) && filesInDb)
+  {
+    const image = getDbImage(id, name)
+    if (!image) return res.status(404).json({ error: 'image not found' })
+    res.type(image.mime)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    return res.send(image.data)
+  }
+  res.sendFile(filePath, (err) =>
+  {
+    if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
+  })
 })
 
 /************************************************************************/
@@ -189,24 +194,25 @@ router.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, me
     else status, phase, progress, error and the last 40 log lines
 */
 /************************************************************************/
-router.get(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) => {
-    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
-    const job = await getJob(req.params.id)
-    if (!job)
-        return res.status(404).json({ error: 'job not found' })
-    res.json({
-        id: job.id,
-        status: job.status,
-        phase: job.phase,
-        progress: job.progress,
-        detail: job.detail,
-        error: job.error,
-        updatedAt: job.updatedAt ?? null,
-        imageCount: job.imageCount ?? null,
-        removeBackground: !!job.removeBackground,
-        hasResult: job.status === 'done' && !!job.resultPath,
-        logTail: job.log.slice(-40),
-    })
+router.get(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) =>
+{
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+  const job = await getJob(req.params.id)
+  if (!job) 
+    return res.status(404).json({ error: 'job not found' })
+  res.json({
+    id: job.id,
+    status: job.status,
+    phase: job.phase,
+    progress: job.progress,
+    detail: job.detail,
+    error: job.error,
+    updatedAt: job.updatedAt ?? null,
+    imageCount: job.imageCount ?? null,
+    removeBackground: !!job.removeBackground,
+    hasResult: job.status === 'done' && !!job.resultPath,
+    logTail: job.log.slice(-40),
+  })
 })
 
 /************************************************************************/
@@ -222,15 +228,17 @@ router.get(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res
     kills processes and frees GPU
 */
 /************************************************************************/
-router.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) => {
-    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
-    const job = await getJob(req.params.id)
-    if (!job) return res.status(404).json({ error: 'job not found' })
-    if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
-    if (!cancelJob(job)) {
-        return res.status(409).json({ error: `job already ${job.status}` })
-    }
-    res.json({ id: job.id, status: job.status })
+router.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) =>
+{
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+  const job = await getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
+  if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
+  if (!cancelJob(job)) 
+  {
+    return res.status(409).json({ error: `job already ${job.status}` })
+  }
+  res.json({ id: job.id, status: job.status })
 })
 
 /************************************************************************/
@@ -243,19 +251,22 @@ router.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, 
     401 if not logged in, 404 if result is not ready or isn't theirs
 */
 /************************************************************************/
-router.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobAccess, async (req, res) => {
-    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
-    const job = await getJob(req.params.id)
-    if (!job || job.status !== 'done' || !job.resultPath) {
-        return res.status(404).json({ error: 'result not ready' })
-    }
-    if (filesInDb && !fs.existsSync(job.resultPath)) {
-        const info = getDbModelInfo(job.id)
-        if (!info) return res.status(404).json({ error: 'result not ready' })
-        return sendDbModel(req, res, job.id, info)
-    }
-    res.setHeader('Content-Type', 'application/octet-stream')
-    res.sendFile(job.resultPath)
+router.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobAccess, async (req, res) =>
+{
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+  const job = await getJob(req.params.id)
+  if (!job || job.status !== 'done' || !job.resultPath)
+  {
+    return res.status(404).json({ error: 'result not ready' })
+  }
+  if (filesInDb && !fs.existsSync(job.resultPath))
+  {
+    const info = getDbModelInfo(job.id)
+    if (!info) return res.status(404).json({ error: 'result not ready' })
+    return sendDbModel(req, res, job.id, info)
+  }
+  res.setHeader('Content-Type', 'application/octet-stream')
+  res.sendFile(job.resultPath)
 })
 
 /************************************************************************/
@@ -300,10 +311,11 @@ router.get(['/jobs/:id/cover.webp', '/library/jobs/:id/cover.webp'], requireJobA
     name and sample filename
 */
 /************************************************************************/
-router.patch(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) => {
-    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
-    const job = await getJob(req.params.id)
-    if (!job) return res.status(404).json({ error: 'job not found' })
+router.patch(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res) =>
+{
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+  const job = await getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
 
     const { name } = req.body || {}
     const trimmed = typeof name === 'string' ? name.trim() : ''
@@ -328,18 +340,19 @@ router.patch(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, r
         }
     }
 
-    job.name = newName
-    job.sampleFile = newFile
-    saveJob(job)
+  job.name = newName
+  job.sampleFile = newFile
+  saveJob(job)
 
-    // Keep the shared library's copy in step. Best-effort: the local rename
-    // already happened, so a VM that is down only leaves its old name.
-    if (config.authMode === 'client' && isJobSynced(job.id)) {
-        const { status } = await forwardToVm('PATCH', `/library/jobs/${job.id}`, req.user, { name: newName ?? '' })
-        if (status !== 200)
-            console.warn(`[backend] library: renamed job ${job.id} here, but not on the VM (${status || 'unreachable'})`)
-    }
-    res.json({ id: job.id, name: job.name, sampleFile: newFile })
+  // Keep the shared library's copy in step. Best-effort: the local rename
+  // already happened, so a VM that is down only leaves its old name.
+  if (config.authMode === 'client' && isJobSynced(job.id))
+  {
+    const { status } = await forwardToVm('PATCH', `/library/jobs/${job.id}`, req.user, { name: newName ?? '' })
+    if (status !== 200)
+      console.warn(`[backend] library: renamed job ${job.id} here, but not on the VM (${status || 'unreachable'})`)
+  }
+  res.json({ id: job.id, name: job.name, sampleFile: newFile })
 })
 
 /************************************************************************/
@@ -357,27 +370,31 @@ router.patch(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, r
     VM's copy couldn't be deleted, else 200 once the folders are gone
 */
 /************************************************************************/
-router.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, async (req, res, next) => {
-    if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
-    const job = await getJob(req.params.id)
-    if (!job) return res.status(404).json({ error: 'job not found' })
+router.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, async (req, res, next) =>
+{
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+  const job = await getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'job not found' })
 
-    if (config.authMode === 'client' && isJobSynced(job.id)) {
-        const { status } = await forwardToVm('DELETE', `/library/jobs/${job.id}/files`, req.user)
-        if (status !== 200 && status !== 404)
-            return res.status(502).json({ error: 'Couldn\'t delete it from the shared library. Try again shortly.' })
-        unmarkJobSynced(job.id)
-    }
+  if (config.authMode === 'client' && isJobSynced(job.id))
+  {
+    const { status } = await forwardToVm('DELETE', `/library/jobs/${job.id}/files`, req.user)
+    if (status !== 200 && status !== 404)
+      return res.status(502).json({ error: 'Couldn\'t delete it from the shared library. Try again shortly.' })
+    unmarkJobSynced(job.id)
+  }
 
-    try {
-        // Cancels it if still running, then removes its folders, samples copy and
-        // database photos / model (the same as the VM's clean-up, cleanup.js).
-        await deleteJobData(job)
-        res.json({ id: job.id, deleted: true })
-    }
-    catch (err) {
-        next(err)
-    }
+  try
+  {
+    // Cancels it if still running, then removes its folders, samples copy and
+    // database photos / model (the same as the VM's clean-up, cleanup.js).
+    await deleteJobData(job)
+    res.json({ id: job.id, deleted: true })
+  }
+  catch (err)
+  {
+    next(err)
+  }
 })
 
 export default router
