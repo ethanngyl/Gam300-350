@@ -76,6 +76,8 @@ signals:
     //The position fields or Reset Position asked to change the model transform
     //The inspector panel does not apply it, the listener does, so it can be an undo step,
     void transformEdited(SplatModel* model, const glm::mat4& before, const glm::mat4& after);
+    //Same, from the position, rotation and scale fields. Quick steps in a row merge into one undo step
+    void transformFieldEdited(SplatModel* model, const glm::mat4& before, const glm::mat4& after);
 
     // Apply was pressed in the Trim section; the model should be re-trimmed
     // from its original data with these values.

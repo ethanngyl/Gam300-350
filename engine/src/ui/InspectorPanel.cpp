@@ -491,7 +491,7 @@ void InspectorPanel::writePosition() {
         static_cast<float>(m_position[1]->value()),
         static_cast<float>(m_position[2]->value()), 1.0f);
     //Not applied here, listener pushes it onto the undo stack
-    if (after != before) emit transformEdited(m_model, before, after);
+    if (after != before) emit transformFieldEdited(m_model, before, after);
 }
 
 void InspectorPanel::writeRotation(int editedAxis)
@@ -527,7 +527,7 @@ void InspectorPanel::writeRotation(int editedAxis)
         after[axis] = glm::vec4(wanted[axis] * length, 0.0f);
     }
     //Not applied here, listener pushes it onto the undo stack
-    if (after != before) emit transformEdited(m_model, before, after);
+    if (after != before) emit transformFieldEdited(m_model, before, after);
 }
 
 void InspectorPanel::writeScale()
@@ -552,5 +552,5 @@ void InspectorPanel::writeScale()
         after[axis] = glm::vec4(column / length * static_cast<float>(wanted), 0.0f);
     }
     //Not applied here, listener pushes it onto the undo stack
-    if (after != before) emit transformEdited(m_model, before, after);
+    if (after != before) emit transformFieldEdited(m_model, before, after);
 }
