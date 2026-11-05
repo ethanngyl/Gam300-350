@@ -522,6 +522,11 @@ void MainWindow::createDocks() {
             [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after));
     });
+    connect(m_inspector, &InspectorPanel::resetPositionRequested, m_resetPositionAction, &QAction::trigger);
+    connect(m_inspector, &InspectorPanel::transformFieldEdited, this,
+            [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
+        m_undo.push(new MoveModelCommand(model, before, after, nullptr, true));
+    });
     connect(m_inspector, &InspectorPanel::cropBoxToggled, this, [this](bool) { toggleCropBox(); });
     //Go through the menu actions so the menu checkmarks and the viewport stay in step with the buttons
     connect(m_inspector, &InspectorPanel::cropModeSelected, this, [this](int mode) {
@@ -934,6 +939,11 @@ void MainWindow::confirmCropRegion() {
     SplatModel* model = renderer ? renderer->GetModel(renderer->GetSelectedModel()) : nullptr;
     const CropBox& box = m_viewport->cropBox();
     if (!box.active || !model) {
+        return;
+    }
+
+    //Releasing mid-move would drop the preview and the move would never be baked into the splats
+    if (m_viewport->isBoxEditInProgress()) {
         return;
     }
 

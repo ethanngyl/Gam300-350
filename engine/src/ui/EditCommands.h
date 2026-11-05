@@ -11,6 +11,7 @@ Push calls redo() straight away, so the edit is applied by the command itself
 
 #include <glm/glm.hpp>
 
+#include <QElapsedTimer>
 #include <QUndoCommand>
 
 #include <cstdint>
@@ -27,15 +28,23 @@ struct CropBox;
 //MainWindow clears the undo stack when a model is removed from the scene for now
 class MoveModelCommand : public QUndoCommand {
 public:
-    MoveModelCommand(SplatModel* model, const glm::mat4& before, const glm::mat4& after, QUndoCommand* parent = nullptr);
+    //mergeable commands (inspector spin-box steps) that follow each other closely on the same model
+    //collapse into one undo step, like a gizmo drag
+    MoveModelCommand(SplatModel* model, const glm::mat4& before, const glm::mat4& after, QUndoCommand* parent = nullptr,
+                     bool mergeable = false);
 
     void undo() override;
     void redo() override;
+    int id() const override { return m_mergeable ? kMergeId : -1; }
+    bool mergeWith(const QUndoCommand* other) override;
 
 private:
+    static constexpr int kMergeId = 1001;
     SplatModel* m_model;
     glm::mat4 m_before;
     glm::mat4 m_after;
+    bool m_mergeable;
+    QElapsedTimer m_lastEdit; //Time since this step was created or last extended
 };
 
 //Loads/Unloads a model

@@ -115,26 +115,24 @@ void Viewport::BindInputs() {
 
     //Movmeent test
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::FORWARD,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatForward, glm::vec3(1.0f, 0.0f, 0.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::BACKSWARD,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatBackwards, glm::vec3(-1.0f, 0.0f, 0.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(-1.0f, 0.0f, 0.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::LEFT,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatLeft, glm::vec3(0.0f, 0.0f, -1.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(0.0f, 0.0f, -1.0f));
         });
     m_input.AddCallBack(InputManager::STATE::NORMAL, InputManager::KEY_ACTIONS::RIGHT,
-        [this](InputManager& manager, InputManager::INPUT_TYPE type) {
-            Nudge(manager, type, &SplatRenderer::NudgeSplatRight, glm::vec3(0.0f, 0.0f, 1.0f));
+        [this](InputManager&, InputManager::INPUT_TYPE type) {
+            Nudge(type, glm::vec3(0.0f, 0.0f, 1.0f));
         });
 }
 
-void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection) {
-    constexpr float kNudgeStep = 0.1f; //Same step as SplatRenderer's model nudge
-
+void Viewport::Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction) {
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
 
     if (type == InputManager::RELEASE) {
@@ -149,12 +147,22 @@ void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, Nudge
     //No model or cropbox active
     if (!toCropBox && !model)
         return;
+    //If model is being dragged disable nudges
+    else if (m_gizmoWasUsing)
+    {
+        if (m_nudgeActive)
+        {
+            FinishNudge();
+            m_nudgeKeysDown = 0;
+        }
+        return;
+    }
 
     //The target changed midburst nudges, finish old burst first
     //Box shown or hidden, another model selected
+    //The key count is kept: those keys are still physically down, and their release must close the new burst
     if (m_nudgeActive && (m_nudgeIsCropBox != toCropBox || (!toCropBox && m_nudgeModel != model))) {
         FinishNudge();
-        m_nudgeKeysDown = 0;
     }
     if (!m_nudgeActive) {
         m_nudgeActive = true;
@@ -168,14 +176,14 @@ void Viewport::Nudge(InputManager& manager, InputManager::INPUT_TYPE type, Nudge
     if (type == InputManager::PRESS) ++m_nudgeKeysDown;
 
     if (toCropBox) {
-        //World-space step, the same as the gizmo's translate
-        m_cropBox.transform = glm::translate(glm::mat4(1.0f), boxDirection * kNudgeStep) * m_cropBox.transform;
+        //Worldspace step, the same as the gizmo's translate
+        m_cropBox.transform = glm::translate(glm::mat4(1.0f), direction * SplatRenderer::kNudgeStep) * m_cropBox.transform;
         if (m_nudgeMovesContents) {
             m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_nudgeBefore));
         }
     }
     else {
-        (m_renderer.get()->*nudge)(manager, type);
+        m_renderer->NudgeSelectedModel(direction);
     }
 }
 
@@ -254,6 +262,17 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
 
     //Pan mode has no gizmo, left drag belongs to the camera
     const InputManager::TOOL_MODE toolMode = m_input.GetToolMode();
+
+    //Swapping tool mid-drag ends the drag where it is. The gizmo stays inert until the mouse is released,
+    //so carrying on with the held button (or swapping back) cannot move the target any further.
+    if (m_gizmoWasUsing && toolMode != m_dragToolMode) {
+        FinishGizmoDrag(model, editingBox);
+        m_gizmoLocked = true;
+    }
+    if (m_gizmoLocked && !ImGui::GetIO().MouseDown[0]) {
+        m_gizmoLocked = false;
+    }
+
     if ((!editingBox && (!model || model->GetIsHidden())) || toolMode == InputManager::PAN) {
         //Nothing dragged, reset drag vars
         m_gizmoWasUsing = false;
@@ -261,7 +280,9 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         m_dragIsCropBox = false;
         m_dragMovesContents = false;
         m_dragBefore = glm::mat4(1.0f);
-        m_renderer->ClearRegionPreview();
+        //A nudge in progress owns the preview, FinishNudge clears it. Wiping it here every frame would
+        //hide the carried splats moving while the arrow keys are held (nudging works in Pan mode too).
+        if (!m_nudgeMovesContents) m_renderer->ClearRegionPreview();
         return;
     }
 
@@ -283,6 +304,9 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     //The box rotates and scales along its own axes so it can be fitted to a rotated region
     const ImGuizmo::MODE space = (editingBox && operation != ImGuizmo::TRANSLATE) ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
 
+    //A locked gizmo is still drawn but ignores the mouse
+    ImGuizmo::Enable(!m_gizmoLocked);
+
     //ImGUIzmo method to edit the transform values
     //view, projection, operation type, local/world, transform value
     if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation,
@@ -293,7 +317,7 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         else model->SetTransform(transform);
     }
 
-    //A whole drag is one undo ste,: remember where it started and report it once it ends
+    //A whole drag is one undo step, remembers where it started and report it when it ends
     //The target is moved live during the drag, only the finished drag goes to the undo stack.
     const bool isUsing = ImGuizmo::IsUsing();
     if (isUsing && !m_gizmoWasUsing) {
@@ -302,20 +326,10 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
         m_dragBefore = original;
         //Only a confirmed selection is carried, otherwise the drag just moves the box
         m_dragMovesContents = editingBox && m_cropBox.moveContents && m_renderer->HasSelection();
+        m_dragToolMode = toolMode;
     }
     else if (!isUsing && m_gizmoWasUsing) {
-        if (m_dragIsCropBox) {
-            if (editingBox && m_cropBox.transform != m_dragBefore && onCropBoxEdited) {
-                onCropBoxEdited(m_dragBefore, m_cropBox.transform);
-            }
-        }
-        else if (m_dragModel == model && model && model->GetTransform() != m_dragBefore && onTransformEdited) {
-            onTransformEdited(model, m_dragBefore, model->GetTransform());
-        }
-        m_dragModel = nullptr;
-        m_dragIsCropBox = false;
-        m_dragMovesContents = false;
-        m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
+        FinishGizmoDrag(model, editingBox);
     }
     m_gizmoWasUsing = isUsing;
 
@@ -324,6 +338,22 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     if (isUsing && m_dragMovesContents) {
         m_renderer->SetRegionPreview(m_cropBox.transform * glm::inverse(m_dragBefore));
     }
+}
+
+void Viewport::FinishGizmoDrag(SplatModel* model, bool editingBox) {
+    if (m_dragIsCropBox) {
+        if (editingBox && m_cropBox.transform != m_dragBefore && onCropBoxEdited) {
+            onCropBoxEdited(m_dragBefore, m_cropBox.transform);
+        }
+    }
+    else if (m_dragModel == model && model && model->GetTransform() != m_dragBefore && onTransformEdited) {
+        onTransformEdited(model, m_dragBefore, model->GetTransform());
+    }
+    m_dragModel = nullptr;
+    m_dragIsCropBox = false;
+    m_dragMovesContents = false;
+    m_gizmoWasUsing = false;
+    m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
 }
 
 void Viewport::DrawToolButtons() {

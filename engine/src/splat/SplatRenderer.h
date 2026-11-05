@@ -90,10 +90,10 @@ public:
     int GetSelectedModel();
     void SelectModel(int index);
 
-    void NudgeSplatForward(InputManager& manager, InputManager::INPUT_TYPE type);
-    void NudgeSplatBackwards(InputManager& manager, InputManager::INPUT_TYPE type);
-    void NudgeSplatLeft(InputManager& manager, InputManager::INPUT_TYPE type);
-    void NudgeSplatRight(InputManager& manager, InputManager::INPUT_TYPE type);
+    //World-space distance of one nudge step, shared by the model nudge and the crop box nudge
+    static constexpr float kNudgeStep = 0.1f;
+    //Moves the selected model one step along direction (a unit world-space vector), nothing if none is selected
+    void NudgeSelectedModel(const glm::vec3& direction);
 
 private:
     void RebuildCombinedBuffer();

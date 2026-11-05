@@ -66,6 +66,8 @@ public:
 
     // The crop box. While it is active the gizmo edits it instead of the selected model.
     CropBox& cropBox() { return m_cropBox; }
+    //True while a gizmo drag or key nudge is in flight, its move is only committed once it ends
+    bool isBoxEditInProgress() const { return m_gizmoWasUsing || m_nudgeActive; }
 
     // Moves the orbit camera's pan target back to where it started.
     void recenterCamera() { m_camera.ResetPosition(); }
@@ -92,12 +94,13 @@ private:
     void DrawToolButtons();
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
     void DrawGizmo(const glm::mat4& view, const glm::mat4& proj);
+    //Reports the drag in progress to the edit callbacks and clears the drag state
+    void FinishGizmoDrag(SplatModel* model, bool editingBox);
 
-    //Arrow key nudge of the crop box while it is up, otherwise of the selected model.
-    //A burst of nudges (a key held down, or several keys) is one undo step.
-    //boxDirection is the world-space direction the same key moves the crop box
-    using NudgeFunction = void (SplatRenderer::*)(InputManager&, InputManager::INPUT_TYPE);
-    void Nudge(InputManager& manager, InputManager::INPUT_TYPE type, NudgeFunction nudge, const glm::vec3& boxDirection);
+    //Arrow key nudges the crop box while it is open, otherwise nudge the selected model
+    //A burst of nudges (1 key held down, or several keys in a row) is one undo step traccked
+    //direction is the world-space direction the key moves the target
+    void Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction);
     //Reports the finished burst to onTransformEdited
     void FinishNudge();
 
@@ -114,8 +117,12 @@ private:
     bool m_rightHeld = false;
     QPointF m_lastMousePos;
 
-    //Gizmo drag in progressthe model and where it started, for onTransformEdited.
+    //Gizmo drag in progress the model
     bool m_gizmoWasUsing = false;
+    //Tool the drag started with, swapping tool ends the drag
+    InputManager::TOOL_MODE m_dragToolMode = InputManager::TRANSLATE;
+    //The drag was ended early by a tool swap, the gizmo ignores the mouse until the button is released
+    bool m_gizmoLocked = false;
     //Model being dragged
     SplatModel* m_dragModel = nullptr;
     //Orginal location of dragged model (or of the crop box if m_dragIsCropBox)

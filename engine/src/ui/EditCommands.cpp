@@ -9,11 +9,30 @@ Implements the undoable editor commands declared in EditCommands.h.
 #include "splat/SplatModel.h"
 #include "splat/SplatRenderer.h"
 
-MoveModelCommand::MoveModelCommand(SplatModel* model, const glm::mat4& before, const glm::mat4& after, QUndoCommand* parent) 
-    : QUndoCommand(parent), m_model(model), m_before(before), m_after(after)
+namespace {
+    //Spin-box steps closer together than this belong to the same edit
+    constexpr qint64 kMergeWindowMs = 800;
+}
+
+MoveModelCommand::MoveModelCommand(SplatModel* model, const glm::mat4& before, const glm::mat4& after, QUndoCommand* parent,
+                                   bool mergeable)
+    : QUndoCommand(parent), m_model(model), m_before(before), m_after(after), m_mergeable(mergeable)
 {
     //Shown in the Edit menu as "Undo Move <name>".
     setText(QString("Move %1").arg(QString::fromStdString(model->GetName())));
+    m_lastEdit.start();
+}
+
+bool MoveModelCommand::mergeWith(const QUndoCommand* other) {
+    const auto* next = dynamic_cast<const MoveModelCommand*>(other);
+    //Only back-to-back steps on the same model, anything slower is a separate edit
+    if (!next || !m_mergeable || !next->m_mergeable || next->m_model != m_model
+        || m_lastEdit.hasExpired(kMergeWindowMs)) {
+        return false;
+    }
+    m_after = next->m_after; //Keep the original start, end where the last step ended
+    m_lastEdit.restart();
+    return true;
 }
 
 

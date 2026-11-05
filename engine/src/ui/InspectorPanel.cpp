@@ -49,11 +49,16 @@ namespace {
     constexpr double kRotationStep = 1.0;
     constexpr int kRotationDecimals = 2;
 
-    // The pure rotation of a model matrix: its three axis columns with the scale divided out.
+    // The rotation of a model matrix: its axis columns made orthonormal (Gram-Schmidt, in X, Y, Z order).
+    // For a matrix of just rotation and scale this is the rotation itself. If the columns are skewed (shear) the
+    // skew is left out, so the result is always a clean rotation.
     // False if an axis has collapsed to nothing, which leaves no direction to read.
     bool ExtractRotation(const glm::mat4& transform, glm::mat3& rotation) {
         for (int axis = 0; axis < 3; ++axis) {
-            const glm::vec3 column(transform[axis]);
+            glm::vec3 column(transform[axis]);
+            for (int done = 0; done < axis; ++done) {
+                column -= glm::dot(column, rotation[done]) * rotation[done];
+            }
             const float length = glm::length(column);
             if (length < 1e-8f) return false;
             rotation[axis] = column / length;
@@ -153,7 +158,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
         m_rotation[axis] = spin;
         rotationRow->addWidget(label);
         rotationRow->addWidget(spin, 1);
-        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] { writeRotation(); });
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this, axis] { writeRotation(axis); });
     }
     auto* rotationForm = new QFormLayout();
     rotationForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -176,7 +181,7 @@ InspectorPanel::InspectorPanel(QWidget* parent)
         m_scale[axis] = spin;
         scaleRow->addWidget(label);
         scaleRow->addWidget(spin, 1);
-        connect(spin, &QDoubleSpinBox::valueChanged, this, [this] { writeScale(); });
+        connect(spin, &QDoubleSpinBox::valueChanged, this, [this, axis] { writeScale(axis); });
     }
     auto* scaleForm = new QFormLayout();
     scaleForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -317,14 +322,8 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     });
     connect(trimDefaultsButton,&QPushButton::clicked, this, [this] { loadTrimFields(m_defaultTrim); });
 
-    connect(resetButton, &QPushButton::clicked, this, [this] {
-        if (!m_model) return;
-        const glm::mat4 before = m_model->GetTransform();
-        glm::mat4 after = before;
-        after[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        if (after != before) 
-            emit transformEdited(m_model, before, after);
-    });
+    //MainWindow's Reset Position action does the work, so the button and the menu cannot drift apart
+    connect(resetButton, &QPushButton::clicked, this, &InspectorPanel::resetPositionRequested);
 
     setModel(nullptr);
 }
@@ -491,10 +490,10 @@ void InspectorPanel::writePosition() {
         static_cast<float>(m_position[1]->value()),
         static_cast<float>(m_position[2]->value()), 1.0f);
     //Not applied here, listener pushes it onto the undo stack
-    if (after != before) emit transformEdited(m_model, before, after);
+    if (after != before) emit transformFieldEdited(m_model, before, after);
 }
 
-void InspectorPanel::writeRotation()
+void InspectorPanel::writeRotation(int editedAxis)
 {
     if (!m_model) {
         return;
@@ -505,23 +504,34 @@ void InspectorPanel::writeRotation()
         return; //an axis has no length, so there is nothing to rotate
     }
 
-    const glm::mat3 wanted = RotationFromDegrees(glm::vec3(m_rotation[0]->value(), m_rotation[1]->value(), m_rotation[2]->value()));
+    //Only the edited field is trusted. The others can be stale while a field has focus (sync is paused then),
+    //so they come from the model's current rotation instead of being written back over a gizmo or Undo change.
+    glm::vec3 degrees = glm::degrees(glm::eulerAngles(glm::quat_cast(current)));
+    degrees[editedAxis] = static_cast<float>(m_rotation[editedAxis]->value());
+    for (int axis = 0; axis < 3; ++axis) {
+        if (axis == editedAxis) continue;
+        const QSignalBlocker block(m_rotation[axis]);
+        m_rotation[axis]->setValue(degrees[axis]);
+    }
+    const glm::mat3 wanted = RotationFromDegrees(degrees);
     //Same orientation already (e.g. the fields were just refreshed from the model), nothing to do
     if (MaxDifference(current, wanted) < 1e-4f) {
         return;
     }
 
-    //Keep each axis's length (the scale) and swap in the new direction. The translation column is untouched.
+    //Turn the whole matrix by the difference between the wanted and current rotation. A pure rotation of the
+    //existing axes keeps their lengths (the scale) and any skew between them, where writing the wanted directions
+    //straight into the columns would flatten the matrix to orthonormal. The translation column is untouched.
+    const glm::mat3 turn = wanted * glm::transpose(current);
     glm::mat4 after = before;
     for (int axis = 0; axis < 3; ++axis) {
-        const float length = glm::length(glm::vec3(before[axis]));
-        after[axis] = glm::vec4(wanted[axis] * length, 0.0f);
+        after[axis] = glm::vec4(turn * glm::vec3(before[axis]), 0.0f);
     }
     //Not applied here, listener pushes it onto the undo stack
-    if (after != before) emit transformEdited(m_model, before, after);
+    if (after != before) emit transformFieldEdited(m_model, before, after);
 }
 
-void InspectorPanel::writeScale()
+void InspectorPanel::writeScale(int editedAxis)
 {
     if (!m_model) {
         return;
@@ -532,16 +542,16 @@ void InspectorPanel::writeScale()
     //The scale of an axis is the length of its matrix column, set it by giving the column thewanted length in the same direction.
     //Leaves the rotation and the translation alone.
     const double tolerance = 0.5 * std::pow(10.0, -kScaleDecimals);
-    for (int axis = 0; axis < 3; ++axis) {
-        const glm::vec3 column(before[axis]);
-        const float length = glm::length(column);
-        const double wanted = m_scale[axis]->value();
-        //Skip untouched axes and columns with no direction left
-        if (length < 1e-8f || std::abs(wanted - length) < tolerance) {
-            continue;
-        }
-        after[axis] = glm::vec4(column / length * static_cast<float>(wanted), 0.0f);
+    //Only the edited axis changes. The other fields are clamped to the spin range, so an axis outside it
+    //(e.g. 0.0001 from the gizmo) would otherwise be snapped to the clamped value when a different axis is edited.
+    const glm::vec3 column(before[editedAxis]);
+    const float length = glm::length(column);
+    const double wanted = m_scale[editedAxis]->value();
+    //Skip a column with no direction left, or one already at the wanted length
+    if (length < 1e-8f || std::abs(wanted - length) < tolerance) {
+        return;
     }
+    after[editedAxis] = glm::vec4(column / length * static_cast<float>(wanted), 0.0f);
     //Not applied here, listener pushes it onto the undo stack
-    if (after != before) emit transformEdited(m_model, before, after);
+    if (after != before) emit transformFieldEdited(m_model, before, after);
 }
