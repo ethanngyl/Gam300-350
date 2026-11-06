@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
     QApplication::setOrganizationName("CoDefine");
     QApplication::setApplicationName("Codefine Engine");
     EditorTheme::Apply(app);
-    // Hover sound on every push/tool button in the editor and its dialogs.
+    // Click sound on every push/tool button in the editor and its dialogs.
     ButtonSounds buttonSounds;
 
     MainWindow window;

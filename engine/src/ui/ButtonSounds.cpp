@@ -6,8 +6,8 @@
 \par Software Engineering Project 5
 \date 06-11-2026
 \brief
-Implements ButtonSounds: watches every widget's Enter event application-wide
-and, when it is an enabled QPushButton or QToolButton, plays
+Implements ButtonSounds: watches mouse presses application-wide and, when
+the left button is pressed on an enabled QPushButton or QToolButton, plays
 "UI Hover New 1.wav" through FMOD. A timer pumps FMOD so finished voices are
 freed.
 **************************************************************************/
@@ -19,20 +19,17 @@ freed.
 #include <QApplication>
 #include <QEvent>
 #include <QFileInfo>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QTimer>
 #include <QToolButton>
 
 namespace {
-    // Hover sound, relative to the assets/audio folder.
-    const char* const kHoverFile = "UI Hover New 1.wav";
+    // Click sound, relative to the assets/audio folder.
+    const char* const kClickFile = "UI Hover New 1.wav";
 
     // How often FMOD is pumped (matches the Audio panel).
     constexpr int kAudioUpdateMs = 50;
-
-    // Minimum gap between hover sounds, so sweeping across a row of toolbar
-    // buttons doesn't stack a burst of overlapping clicks.
-    constexpr qint64 kMinGapMs = 40;
 }
 
 ButtonSounds::ButtonSounds(QObject* parent)
@@ -43,14 +40,13 @@ ButtonSounds::ButtonSounds(QObject* parent)
         return;
     }
 
-    m_hoverPath = AssetPaths::AssetsSubdir("audio") + "/" + kHoverFile;
-    if (!QFileInfo::exists(m_hoverPath)) {
-        qWarning("Button sounds disabled: missing %s", qPrintable(m_hoverPath));
-        m_hoverPath.clear();
+    m_clickPath = AssetPaths::AssetsSubdir("audio") + "/" + kClickFile;
+    if (!QFileInfo::exists(m_clickPath)) {
+        qWarning("Button sounds disabled: missing %s", qPrintable(m_clickPath));
+        m_clickPath.clear();
         return;
     }
 
-    m_sinceLastPlay.start();
     qApp->installEventFilter(this);
 
     auto* timer = new QTimer(this);
@@ -63,14 +59,15 @@ ButtonSounds::ButtonSounds(QObject* parent)
 ButtonSounds::~ButtonSounds() = default;
 
 bool ButtonSounds::eventFilter(QObject* watched, QEvent* event) {
-    if (event->type() == QEvent::Enter) {
+    if (event->type() == QEvent::MouseButtonPress &&
+        static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
         auto* widget = qobject_cast<QWidget*>(watched);
         const bool isButton = qobject_cast<QPushButton*>(watched) || qobject_cast<QToolButton*>(watched);
-        if (isButton && widget->isEnabled() && m_sinceLastPlay.elapsed() >= kMinGapMs) {
-            if (!m_audio->Play(m_hoverPath.toStdString())) {
+        // Disabled buttons never receive mouse presses, but check anyway.
+        if (isButton && widget->isEnabled()) {
+            if (!m_audio->Play(m_clickPath.toStdString())) {
                 qWarning("Button sound: %s", m_audio->LastError().c_str());
             }
-            m_sinceLastPlay.restart();
         }
     }
     return QObject::eventFilter(watched, event); // never swallow the event

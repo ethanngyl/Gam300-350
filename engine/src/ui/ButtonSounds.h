@@ -7,13 +7,12 @@
 \date 06-11-2026
 \brief
 Declares ButtonSounds, an application-wide event filter that plays a short
-UI sound whenever the mouse moves onto an enabled push or tool button
+UI sound whenever the user left-clicks an enabled push or tool button
 anywhere in the editor (main window, docks, toolbars and dialogs). It owns
 its own FMOD AudioManager so it is independent of the Audio panel.
 **************************************************************************/
 #pragma once
 
-#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 
@@ -33,7 +32,6 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-    std::unique_ptr<AudioManager> m_audio; // FMOD wrapper for the hover sound
-    QString m_hoverPath;                   // absolute path of the hover .wav
-    QElapsedTimer m_sinceLastPlay;         // throttles rapid re-triggers
+    std::unique_ptr<AudioManager> m_audio; // FMOD wrapper for the click sound
+    QString m_clickPath;                   // absolute path of the click .wav
 };

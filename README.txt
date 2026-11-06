@@ -273,7 +273,7 @@ Play/Stop sounds (Audio panel):
 2) Press "Stop All" to stop all currently playing sounds.
 3) "Choose Folder..." picks which folder to list audio files from; the default is engine/assets/audio.
 4) "Play File..." plays a specific audio file that is not in the listed folder.
-5) Hovering over any button in the editor plays a short UI hover sound.
+5) Clicking any button in the editor (including toolbar buttons and dialog buttons) plays a short UI click sound.
 
 Panels and layout:
 - Scene, Inspector, Assets, My Models, Console and Audio are dockable panels. Open or close them from the Window menu, drag them to
