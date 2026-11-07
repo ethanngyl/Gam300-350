@@ -51,7 +51,7 @@ import json
 import os
 import re
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 # Files this script writes (0000.jpg, 0001.jpg, ...), used by --clean.
 FRAME_NAME_RE = re.compile(r"^\d{4,}\.jpg$")
