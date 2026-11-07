@@ -2,7 +2,7 @@
 
 > Team CoDefine - Real World Object Scanning to 3D Model Conversion
 
-Capture/Takes in real-world object images and turns it into an interactable 3D model. The front-end scans an object either via a camera, uploaded photos or uploaded videos from multiple angles; the Python back-end will then reconstruct it with photogrammetry + Gaussian splatting pipeline; the custom renderer displays the final result.
+Capture/Takes in real-world object images and turns it into an interactable 3D model. The web app scans an object either via a camera, uploaded photos or uploaded videos from multiple angles; the Node.js back-end then reconstructs it with a photogrammetry (COLMAP) + Gaussian splatting (Brush) pipeline; the custom renderer displays the final result.
 
 ---
 
@@ -10,9 +10,9 @@ Capture/Takes in real-world object images and turns it into an interactable 3D m
 
 This project takes a set of photographs of a physical object and produces a 3D asset that can be viewed in a custom renderer. It is built as three loosely-coupled parts so the team can work on them in parallel:
 
-- **Front-end (scanner):** a mobile app that captures overlapping photos of an object from many angles. Early development targets small objects on a rotating stand (spinning-photo-booth style) for controlled, repeatable captures.
-- **Back-end (reconstruction pipeline):** a Python service that runs the captured images through COLMAP (structure-from-motion + multi-view stereo) to recover camera poses and a point cloud, then through Gaussian Splatting, and exports a renderable 3D asset.
-- **Engine (renderer/visualizer):** a custom 3D renderer that loads and displays the reconstructed asset.
+- **Front-end (scanner):** a React web app (desktop and phone browsers) that captures overlapping photos of an object from many angles, or takes uploaded photos / videos. Early development targets small objects on a rotating stand (spinning-photo-booth style) for controlled, repeatable captures.
+- **Back-end (API + reconstruction pipeline):** a Node.js / Express service with a versioned JSON API (`/api/v1`) and a SQLite database. It runs the captured images through COLMAP (structure-from-motion) to recover camera poses and a point cloud, then trains a Gaussian splat with Brush, and exports a renderable `.ply`. Small Python tools (`tools/`) handle frame extraction from videos.
+- **Engine (renderer/visualizer):** a custom C++ 3D renderer that loads and displays the reconstructed asset, as a desktop editor and compiled to WebAssembly for the web app's viewer.
 
 The end goal of the project is to have as many additional features/solve current problems that similar existing applications are having in the market.
 
@@ -20,10 +20,17 @@ The end goal of the project is to have as many additional features/solve current
 
 | Part | Stack |
 | --- | --- |
-| Scanner (front-end) | Mobile app _(framework TBD)_ |
-| Reconstruction | Python, COLMAP _(external — see below)_, Gaussian Splatting |
-| API / orchestration | Python _(e.g. FastAPI)_ |
-| Renderer (engine) | Custom 3D renderer _(target TBD — native C++/OpenGL or web)_ |
+| Scanner (front-end) | React 19 web app, built with Vite; Three.js viewer |
+| Reconstruction | COLMAP _(external — see below)_, Brush (Gaussian splatting trainer); Python tools for frame extraction |
+| API / orchestration | Node.js + Express, SQLite (`node:sqlite`); versioned API at `/api/v1` ([OpenAPI](packages/src/backend/openapi.yaml), [changelog](docs/api-changelog.md)) |
+| Renderer (engine) | C++20, Qt 6 + OpenGL desktop editor (CMake); the splat renderer also compiles to WebAssembly / WebGL2 (Emscripten) |
+
+## Documentation
+- [Project wiki](https://github.com/ethanngyl/Gam300-350/wiki)
+- [Architecture](docs/architecture.md): layers, diagram and every API route
+- [Data schema](docs/data-schema.md): tables, naming, units and file formats
+- [API changelog](docs/api-changelog.md): API versions, changes and database migrations
+- [features.txt](features.txt): the full feature list, and README.txt for testing steps
 
 ## Prerequisites/How to Set up
 
@@ -98,7 +105,7 @@ The engine uses the same accounts as the web app, so models made through the web
 - "Remember me" keeps you signed in for 7 days. Only the session is saved (in the engine's settings), never the password
 - Sign Out deletes that account's downloaded models from the PC (`%APPDATA%/CoDefine/Codefine Engine/remote-models`), so the next person can't open them
 - Local files are not affected: the **Assets** panel and File > Import still open any .ply on disk. Note the backend also copies every finished model into `engine/assets/samples`, so on the machine running the backend, the Assets panel shows every user's models
-- Code: `engine/src/net/BackendClient` (sign-in, model list, downloads), `engine/src/ui/LoginDialog` and `engine/src/ui/RemoteModelsPanel`. The engine signs in with the same session cookie as the browser, so it needs no engine-specific backend routes
+- Code: `engine/src/net/BackendClient` (sign-in, model list, downloads), `engine/src/ui/LoginDialog` and `engine/src/ui/RemoteModelsPanel`. The engine signs in with the same session cookie as the browser and calls the same `/api/v1` routes, so it needs no engine-specific backend routes
 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page

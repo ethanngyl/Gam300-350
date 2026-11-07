@@ -58,7 +58,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
 
         async function loadJobs() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!isCancelled) {

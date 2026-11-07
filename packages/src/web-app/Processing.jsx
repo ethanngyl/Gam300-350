@@ -134,7 +134,7 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
 
         async function poll() {
             try {
-                const res = await fetch(`/jobs/${jobId}`)
+                const res = await fetch(`/api/v1/jobs/${jobId}`)
                 if (!res.ok) throw new Error('Job not found (did the server restart?)')
                 const data = await res.json()
                 if (stopped) return
@@ -210,7 +210,7 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
         let stopped = false
         async function loadPreview() {
             try {
-                const res = await fetch('/jobs')
+                const res = await fetch('/api/v1/jobs')
                 if (!res.ok) return
                 const allJobs = await res.json()
                 const thisJob = Array.isArray(allJobs) ? allJobs.find((listedJob) => listedJob.id === jobId) : null
@@ -241,7 +241,7 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
     useEffect(() => {
         function killJob() {
             if (!jobId || doneRef.current) return
-            fetch(`/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { })
+            fetch(`/api/v1/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { })
         }
         window.addEventListener('pagehide', killJob)
         return () => {
@@ -254,7 +254,7 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
     // even if the page unloads; failures are ignored since we're leaving anyway.
     // (While media is still uploading there is no job: onCancel stops the upload.)
     function cancel() {
-        if (jobId) fetch(`/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { })
+        if (jobId) fetch(`/api/v1/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { })
         onCancel()
     }
 

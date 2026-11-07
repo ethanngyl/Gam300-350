@@ -35,10 +35,10 @@ export function jobDisplayName(job, prefix) {
 
 // An empty name resets the job to its default name.
 export function renameJob(jobId, name) {
-    return request(`/jobs/${jobId}`, jsonBody('PATCH', { name }));
+    return request(`/api/v1/jobs/${jobId}`, jsonBody('PATCH', { name }));
 }
 
 // Removes the job's photos and model for good.
 export function deleteJob(jobId) {
-    return request(`/jobs/${jobId}/files`, { method: 'DELETE' });
+    return request(`/api/v1/jobs/${jobId}/files`, { method: 'DELETE' });
 }

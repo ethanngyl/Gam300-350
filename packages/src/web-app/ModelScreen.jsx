@@ -75,7 +75,7 @@ function ModelScreen({
     const [reloadCount, setReloadCount] = useState(0);
     const viewerCardRef = useRef(null);
 
-    const plyUrl = jobId ? `/jobs/${jobId}/result.ply` : localFile?.url;
+    const plyUrl = jobId ? `/api/v1/jobs/${jobId}/result.ply` : localFile?.url;
     const modelName = jobId
         ? (model ? jobDisplayName(model, 'Model') : 'Loading...')
         : localFile?.name;
@@ -86,13 +86,13 @@ function ModelScreen({
 
         async function loadModel() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const allJobs = await res.json();
                 const thisJob = Array.isArray(allJobs) ? allJobs.find((listedJob) => listedJob.id === jobId) : null;
                 if (!thisJob) throw new Error('This model no longer exists.');
                 // /jobs has no removeBackground; /jobs/:id does.
-                const detailRes = await fetch(`/jobs/${jobId}`);
+                const detailRes = await fetch(`/api/v1/jobs/${jobId}`);
                 const detail = detailRes.ok ? await detailRes.json() : {};
                 if (isCancelled) return;
                 setModel({ ...thisJob, removeBackground: detail.removeBackground ?? null });

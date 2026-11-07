@@ -53,7 +53,7 @@ function writeRendererPref(renderer) {
  * Renders a Gaussian splat .ply in the browser via @mkkellogg/gaussian-splats-3d,
  * which handles WebGL splat rendering, depth sorting, and orbit controls.
  *
- * @param {string} url  URL to the .ply (e.g. "/jobs/<id>/result.ply").
+ * @param {string} url  URL to the .ply (e.g. "/api/v1/jobs/<id>/result.ply").
  */
 function ThreeSplatViewer({ url, isEmbedded = false }) {
     const containerRef = useRef(null)
@@ -125,7 +125,7 @@ function ThreeSplatViewer({ url, isEmbedded = false }) {
  * Full-page splat viewer. Uses the engine renderer when it is available and
  * falls back to the three.js viewer otherwise.
  *
- * @param {string} url  URL to the .ply (e.g. "/jobs/<id>/result.ply").
+ * @param {string} url  URL to the .ply (e.g. "/api/v1/jobs/<id>/result.ply").
  */
 export default function SplatViewer({ url, isEmbedded = false }) {
     const [renderer, setRenderer] = useState(readRendererPref)

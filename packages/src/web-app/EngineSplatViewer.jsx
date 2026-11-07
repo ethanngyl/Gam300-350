@@ -51,7 +51,7 @@ async function downloadChunks(url, signal, onProgress) {
 /**
  * Renders a Gaussian splat .ply with the engine's renderer.
  *
- * @param {string}   url            URL to the .ply (e.g. "/jobs/<id>/result.ply").
+ * @param {string}   url            URL to the .ply (e.g. "/api/v1/jobs/<id>/result.ply").
  * @param {function} onUnavailable  Called with a reason if the engine can't run here.
  */
 export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = false }) {

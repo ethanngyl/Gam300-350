@@ -93,7 +93,7 @@ async function requestJson(url, options) {
 
 // Summaries for lists: { id, name, updatedAt, objectCount }, newest first.
 export async function listScenes() {
-    if (SCENES_API_READY) return requestJson('/scenes');
+    if (SCENES_API_READY) return requestJson('/api/v1/scenes');
 
     return readLocalScenes()
         .map((scene) => ({
@@ -106,7 +106,7 @@ export async function listScenes() {
 }
 
 export async function loadScene(sceneId) {
-    if (SCENES_API_READY) return requestJson(`/scenes/${sceneId}`);
+    if (SCENES_API_READY) return requestJson(`/api/v1/scenes/${sceneId}`);
 
     const scene = readLocalScenes().find((savedScene) => savedScene.id === sceneId);
     if (!scene) throw new Error('Scene not found.');
@@ -119,8 +119,8 @@ export async function saveScene(scene) {
     const now = Date.now();
 
     if (SCENES_API_READY) {
-        if (!scene.id) return requestJson('/scenes', { method: 'POST', body: JSON.stringify(scene) });
-        return requestJson(`/scenes/${scene.id}`, { method: 'PUT', body: JSON.stringify(scene) });
+        if (!scene.id) return requestJson('/api/v1/scenes', { method: 'POST', body: JSON.stringify(scene) });
+        return requestJson(`/api/v1/scenes/${scene.id}`, { method: 'PUT', body: JSON.stringify(scene) });
     }
 
     const scenes = readLocalScenes();
@@ -140,7 +140,7 @@ export async function saveScene(scene) {
 }
 
 export async function deleteScene(sceneId) {
-    if (SCENES_API_READY) return requestJson(`/scenes/${sceneId}`, { method: 'DELETE' });
+    if (SCENES_API_READY) return requestJson(`/api/v1/scenes/${sceneId}`, { method: 'DELETE' });
 
     writeLocalScenes(readLocalScenes().filter((savedScene) => savedScene.id !== sceneId));
     return null;

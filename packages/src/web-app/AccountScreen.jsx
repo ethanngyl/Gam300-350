@@ -129,7 +129,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
 
         async function loadJobs() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 if (!isCancelled) {

@@ -14,11 +14,11 @@ to the API is recorded here, newest first.
 - **Legacy paths:** the original unversioned paths (`/auth/me`, `/jobs`,
   `/library/...`, ...) are **deprecated** and frozen. They keep answering
   exactly as before, with two extra headers: `Deprecation` (RFC 9745) and
-  `Link: </api/v1/...>; rel="successor-version"`. They stay for the clients
-  not moved yet:
-  - the website (to-do list below);
-  - the engine (`engine/src/net/BackendClient.cpp`);
-  - team machines on a build from before 2026-11-03.
+  `Link: </api/v1/...>; rel="successor-version"`. The website and the
+  engine moved to `/api/v1` on 2026-11-07; the legacy paths stay for the
+  clients not moved yet:
+  - team machines on a build from before 2026-11-03;
+  - website and engine builds from before 2026-11-07.
 
   They will only be removed once nothing uses them, and that removal will be
   listed here.
@@ -30,6 +30,17 @@ to the API is recorded here, newest first.
   it twice). `adapters/apiVersions.js` holds the only differences.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
+
+## Clients moved to v1: 2026-11-07 (no API change)
+
+- The website calls every endpoint under `/api/v1/...`, including the URLs
+  it builds itself (`/api/v1/jobs/<id>/result.ply`) and the start of Google
+  sign-in (`/api/v1/auth/google`). The Feedback inbox reads `createdAt` as
+  milliseconds.
+- The engine (`engine/src/net/BackendClient.cpp`) prefixes every request
+  with `/api/v1`. It never read user dates, and job dates were already
+  milliseconds, so nothing else changed.
+- Google's callback still comes back to `GOOGLE_REDIRECT_URI` (see below).
 
 ## v1 additions: 2026-11-03 (later the same day; nothing breaks)
 
@@ -95,21 +106,17 @@ then migrates it.
 
 ### Moving the website to v1 (frontend to-do, for Bryan)
 
-The website keeps working unchanged on the legacy paths. To move it to v1:
+Steps 1 and 3 are done (2026-11-07); 2, 4 and 5 are still open.
 
-1. Prefix every API call with `/api/v1` (one helper, for example
-   `apiUrl(path)`), including the URLs built by hand: `App.jsx` (lines 409
-   and 427) and `SceneBuilderScreen.jsx` (line 115) build
-   `/jobs/<id>/result.ply`. (`vite.config.js` already forwards `/api` in
-   development, and the account page's password change already uses
-   `/api/v1/auth/me/account` and `/api/v1/auth/me/password`.)
+1. **Done.** Every API call is prefixed with `/api/v1`, including the URLs
+   built by hand (`/api/v1/jobs/<id>/result.ply`).
 2. Fix the "Last edited" sort in `LibraryScreen.jsx:37` and
    `ImageGallery.jsx:159`. They call `Date.parse(job.updatedAt)`, but job
    dates are numbers, so the result is `NaN` and the sort does nothing (this
    is already broken today). Use `new Date(x).getTime()`.
-3. With v1, `createdAt` of users, the account and feedback items is a number.
-   The website only shows them through `new Date(...)` and `memberSince`,
-   which already accept both.
+3. **Done.** With v1, `createdAt` of users, the account and feedback items
+   is a number. The Feedback inbox now turns it into ISO text for its
+   `<time dateTime>`; everything else already went through `new Date(...)`.
 4. Read `GET /api/v1/catalog` instead of the copies in
    `FeedbackCategories.js`, `TrainingPresets.js` and `FrameExtractor.jsx`
    (`MAX_MEDIA_FILES`, `MAX_MEDIA_SIZE_MB`), plus `MIN_PHOTOS = 8` in

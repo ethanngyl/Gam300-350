@@ -65,7 +65,7 @@ function FeedbackScreen({ user, onSignIn }) {
         setIsSending(true);
         setErrorMessage(null);
         try {
-            const res = await fetch('/feedback', {
+            const res = await fetch('/api/v1/feedback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ category, message: message.trim() }),

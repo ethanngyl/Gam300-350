@@ -47,7 +47,7 @@ async function fetchFeedbackPage(category, before) {
     if (before) query.set('before', String(before));
     let res;
     try {
-        res = await fetch(`/feedback?${query}`);
+        res = await fetch(`/api/v1/feedback?${query}`);
     } catch {
         throw new Error("Couldn't reach the server. Check your connection and try again.");
     }
@@ -56,8 +56,9 @@ async function fetchFeedbackPage(category, before) {
 }
 
 // "31 Oct 2026, 4:05 pm" in the viewer's own time zone.
-function formatWhen(isoDate) {
-    return new Date(isoDate).toLocaleString('en-SG', {
+// createdAt is UTC epoch milliseconds (the v1 API's date format).
+function formatWhen(ms) {
+    return new Date(ms).toLocaleString('en-SG', {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
@@ -156,7 +157,7 @@ function FeedbackInbox() {
                                     <Icon name={kind?.icon ?? 'message'} size={13} />
                                     {kind?.label ?? item.category}
                                 </span>
-                                <time className="feedback-inbox-time" dateTime={item.createdAt}>
+                                <time className="feedback-inbox-time" dateTime={Number.isFinite(item.createdAt) ? new Date(item.createdAt).toISOString() : undefined}>
                                     {formatWhen(item.createdAt)}
                                 </time>
                             </div>

@@ -111,8 +111,9 @@ Scene Builder
   - Clean-up, render mode, reset view, screenshot and an exact drop to floor
     are waiting on scene functions in the WebAssembly engine
     (SceneEngine.js).
-  - Scenes are saved only in the browser (localStorage), because the backend
-    has no /scenes routes.
+  - Scenes are saved only in the browser (localStorage). The backend has
+    /api/v1/scenes routes, but the web app doesn't use them yet
+    (SCENES_API_READY in SceneStorage.js).
 
 Backend
 -------
@@ -126,7 +127,8 @@ Backend
   a machine doesn't have are fetched from the VM.
 - Per-job metrics: phase timings, iterations, splat count, hardware, and
   VRAM/GPU use via nvidia-smi.
-- /wiki pages served from markdown.
+- Versioned JSON API at /api/v1 (OpenAPI description at
+  /api/v1/openapi.yaml); the website and the engine both use it.
 - One-click launcher (start.bat) that installs tools and dependencies,
   builds the wasm and web app, and starts the backend and a Cloudflare
   tunnel.

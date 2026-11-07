@@ -29,12 +29,12 @@ const GOOGLE_SIGN_IN_READY = true;
 // Relative, so no server address is written into the frontend: the VM starts
 // Google sign-in itself, and other machines' backends send the browser on to
 // the VM (VM_AUTH_URL in the backend's .env).
-const GOOGLE_SIGN_IN_URL = '/auth/google';
+const GOOGLE_SIGN_IN_URL = '/api/v1/auth/google';
 
 // TODO(backend): set to true once a password reset flow exists, and point
 // PASSWORD_RESET_URL at its page.
 const PASSWORD_RESET_READY = false;
-const PASSWORD_RESET_URL = '/auth/forgot-password';
+const PASSWORD_RESET_URL = '/api/v1/auth/forgot-password';
 
 // Short summary of the workflow shown on the hero panel.
 const HERO_STEPS = ['Capture source photos', 'Generate detailed models', 'Build complete scenes'];
@@ -125,7 +125,7 @@ function LoginScreen({ onLogin }) {
             const body = isSignUp
                 ? { name: displayName.trim(), email: trimmedEmail, password, remember: rememberMe }
                 : { email: trimmedEmail, password, remember: rememberMe };
-            const res = await fetch(isSignUp ? '/auth/signup' : '/auth/login', {
+            const res = await fetch(isSignUp ? '/api/v1/auth/signup' : '/api/v1/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),

@@ -99,7 +99,7 @@ function tidyNumber(value) {
 }
 
 function getPlyUrl(jobId) {
-    return `/jobs/${jobId}/result.ply`;
+    return `/api/v1/jobs/${jobId}/result.ply`;
 }
 
 // Fields where Ctrl+Z should undo the typing rather than the scene.
@@ -324,7 +324,7 @@ function SceneBuilderScreen({
 
         async function loadModels() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const jobs = await res.json();
                 if (isCancelled) return;

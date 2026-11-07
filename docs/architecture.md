@@ -84,7 +84,7 @@ flowchart TB
 
 | Layer | Where | Responsibility | Never does |
 |---|---|---|---|
-| Presentation | `packages/src/web-app/` | Screens, 3D viewing, user input. Calls the API with relative URLs (`/jobs`, `/auth/login`, ...). | Database access, holding secrets. |
+| Presentation | `packages/src/web-app/` | Screens, 3D viewing, user input. Calls the versioned API with relative URLs (`/api/v1/jobs`, `/api/v1/auth/login`, ...). | Database access, holding secrets. |
 | API | `backend/routes/`, `backend/middleware/` | Reads requests, checks sign-in and access, validates input, replies with JSON or file data. | SQL, HTML pages. |
 | Adapters | `backend/adapters/` | `apiVersions.js` turns the one internal shape into each API version's shape. `jobSources/` has one adapter per place jobs come from (job folders, the VM's library, sample data), each converting into the common JobSummary; `JOB_SOURCES` picks them. | Business rules, SQL. |
 | Business logic | `backend/services/`, `pipeline.js`, `library.js`, `cleanup.js`, `catalog.js`, `metrics.js`, `scan.js`, `status.js`, `schemas.js`, `ratelimit.js` | Account rules, job life cycle, the COLMAP / Brush pipeline, sync to the VM, clean-up, the scene format, reading and checking the data files. `services/` never sees `req` / `res`. | HTTP replies, SQL. |

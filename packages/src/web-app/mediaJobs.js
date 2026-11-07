@@ -48,7 +48,7 @@ export function uploadMedia(files, { fps, trainIters, removeBackground }, onStar
 
         const xhr = new XMLHttpRequest();
         onStart(xhr);
-        xhr.open('POST', '/jobs/from-media');
+        xhr.open('POST', '/api/v1/jobs/from-media');
         xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) onProgress(e.loaded / e.total);
         };

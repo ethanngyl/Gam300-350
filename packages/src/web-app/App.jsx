@@ -142,7 +142,7 @@ function App() {
 
         async function checkSession() {
             try {
-                const res = await fetch('/auth/me');
+                const res = await fetch('/api/v1/auth/me');
                 if (cancelled) return;
                 if (res.ok) {
                     // Fresh copy from the server, so role changes show up.
@@ -341,7 +341,7 @@ function App() {
     function handleSignOut() {
         // Ends the session on the server and clears the cookie. Not awaited:
         // a backend that is down must not stop the user signing out here.
-        fetch('/auth/logout', { method: 'POST' }).catch(() => { });
+        fetch('/api/v1/auth/logout', { method: 'POST' }).catch(() => { });
         saveUser(null);
         setCurrentUser(null);
         setScreen(null);
@@ -402,7 +402,7 @@ function App() {
             form.append('removeBackground', String(removeBackground));
             if (trainIters) form.append('trainIters', String(trainIters));
             for (const file of files) form.append('images', file);
-            const res = await fetch('/upload', { method: 'POST', body: form });
+            const res = await fetch('/api/v1/upload', { method: 'POST', body: form });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Upload failed');
             setMediaBuild(null);
@@ -492,7 +492,7 @@ function App() {
             );
             if (!isStillCurrent()) {
                 // Cancelled while the upload was finishing: free the job it made.
-                fetch(`/jobs/${newJobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
+                fetch(`/api/v1/jobs/${newJobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
                 return;
             }
             setMediaBuild((build) => build && { ...build, uploadFraction: null });
