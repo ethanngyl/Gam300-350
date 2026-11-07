@@ -65,12 +65,15 @@ RUN python3 -m venv /opt/venv \
 COPY tools/extract_frames.py tools/make_masks.py tools/normalize_ply.py /app/tools/
 COPY --from=web /app/packages /app/packages
 
+# UV_THREADPOOL_SIZE: 16 worker threads instead of 4, so a burst of sign-ups
+# (password hashing) doesn't queue (README "Many users at once").
 ENV PORT=5005 \
     JOBS_DIR=/data/jobs \
     COLMAP_BIN=/usr/local/bin/colmap \
     BRUSH_BIN=/usr/local/bin/brush_app \
     PYTHON_BIN=/opt/venv/bin/python \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
+    UV_THREADPOOL_SIZE=16
 
 VOLUME /data/jobs
 EXPOSE 5005

@@ -161,7 +161,7 @@ How we test that the app stays up and correct with many users at the same time:
 
 Latest `npm run load` (2026-11-08, same laptop, 100 users at once x 3 rounds = 3,600 requests): **0 failed requests, 0 server errors**, about 690 requests/s, server answering in 1 ms afterwards. Under that load the light routes (catalog, jobs, scenes, feedback) stay at p95 45-240 ms.
 
-Cause and plan: sign-up and sign-in are the slow part under a burst (p95 about 0.9 s with 100 sign-ups in the same second), and requests right behind them wait too. Password hashing (scrypt) is asynchronous but runs on the Node.js worker thread pool, which has 4 threads by default, so 100 sign-ups queue there. Measured with `UV_THREADPOOL_SIZE=16`: sign-up p95 858 -> 470 ms, `GET /auth/me` p95 791 -> 321 ms, throughput +31%. Plan: set `UV_THREADPOOL_SIZE=16` in the VM's service environment (and the Docker image) at the next deploy.
+Cause and plan: sign-up and sign-in are the slow part under a burst (p95 about 0.9 s with 100 sign-ups in the same second), and requests right behind them wait too. Password hashing (scrypt) is asynchronous but runs on the Node.js worker thread pool, which has 4 threads by default, so 100 sign-ups queue there. Measured with `UV_THREADPOOL_SIZE=16`: sign-up p95 858 -> 470 ms, `GET /auth/me` p95 791 -> 321 ms, throughput +31%. Fix: `UV_THREADPOOL_SIZE=16` is set on the VM (pm2, since 2026-11-08) and in the Docker image. To set it on another machine: `UV_THREADPOOL_SIZE=16 pm2 restart server --update-env`, then `pm2 save`.
 
 ## Team
 
