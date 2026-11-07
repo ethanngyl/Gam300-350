@@ -166,3 +166,9 @@ Play/Stop Sounds:
 Loading Audio Files:
 1) You can select which folder to load the audio files from under "Choose folder", the default folder path is under engine/assets/audio
 2) You can load a specific audio file that is not in the selected folder with the "Play File Not Listed" button
+
+Login In to Account:
+1) Open the My Models tab on the bottom row and click Sign In
+2) Change server address to the desired server if required
+3) Enter your account and password
+
