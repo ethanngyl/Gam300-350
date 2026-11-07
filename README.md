@@ -124,7 +124,7 @@ Targets the product must meet, how each is measured, and the latest numbers.
 | Area | Target | How to measure |
 | --- | --- | --- |
 | Engine desktop editor (no backend needed) | **60 FPS** with the largest sample model (`fox.ply`, 304,526 splats), Gaussian mode | FPS readout in the status bar, or View > Stats Overlay (`engine/src/ui/Viewport.cpp`) |
-| Web viewer, desktop browser (model already downloaded, so rendering doesn't wait on the backend) | **60 FPS** while orbiting the same model | Chrome DevTools > Ctrl+Shift+P > "Show frame rendering stats", on `#/model/sample-fox` |
+| Web viewer, desktop browser (model already downloaded, so rendering doesn't wait on the backend) | **60 FPS** while orbiting the same model | Chrome DevTools (F12) > ⋮ > More tools > Rendering > tick "Frame Rendering Stats", on `#/model/sample-fox` |
 | Web viewer, phone browser | **30 FPS** while orbiting | Same, with remote debugging (chrome://inspect) |
 | API, JSON routes | **p95 ≤ 200 ms** | `npm run perf` (in packages); live: `GET /api/v1/metrics/performance` (admins) |
 | API, sign-in | **p95 ≤ 500 ms** (password hashing is slow on purpose) | `npm run perf` |
@@ -147,7 +147,9 @@ API, `npm run perf` on 2026-11-07 (AMD Ryzen 7 7435HS, Node 24, local backend on
 
 Website load, local backend, Chrome (same machine): first byte 9 ms, DOM ready 96 ms, fully loaded 113 ms, 1.3 MB transferred.
 
-Still to measure for the demo: engine desktop FPS, web viewer FPS (desktop and phone), and the website load and API p95 from the deployed VM (`GET /api/v1/metrics/performance?window=24h`). The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
+Web viewer, desktop (same laptop, Chrome, `fox.ply` 304,526 splats, engine renderer, orbiting): above 60 FPS throughout, up to 140 FPS (the display refresh rate). Within budget.
+
+Still to measure for the demo: engine desktop FPS, web viewer FPS on a phone, and the website load and API p95 from the deployed VM (`GET /api/v1/metrics/performance?window=24h`). The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
 
 ## Team
 

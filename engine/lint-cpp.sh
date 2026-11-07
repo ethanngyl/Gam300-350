@@ -44,6 +44,19 @@ fi
 FILES=$(find src/gfx src/splat -name '*.cpp' | sort)
 
 "$CLANG_TIDY" --version | head -n 2
+
+# clang-tidy from pip brings no C++ standard library; it uses the system's
+# (g++ on Linux, Visual Studio on Windows). Check for it first, so a machine
+# without one gets this message instead of an error per file.
+PROBE="build-lint/probe.cpp"
+mkdir -p build-lint
+printf '#include <cmath>\n#include <vector>\nint main() { return 0; }\n' > "$PROBE"
+if ! "$CLANG_TIDY" --quiet --checks='-*,bugprone-assert-side-effect' "$PROBE" -- -std=c++20 -xc++ > /dev/null 2>&1; then
+    echo "error: clang-tidy can't find the C++ standard library headers (<cmath>, <vector>)." >&2
+    echo "Install them once: Ubuntu / Debian: sudo apt-get install -y g++   macOS: xcode-select --install" >&2
+    echo "Windows: Visual Studio with the C++ workload." >&2
+    exit 1
+fi
 echo "Checking:" $FILES
 
 # shellcheck disable=SC2086  # FILES is a list of paths without spaces
