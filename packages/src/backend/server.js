@@ -16,7 +16,7 @@ engine) use to turn photos or videos into a Gaussian Splat .ply with COLMAP
 and Brush. The backend is split into layers (see docs/architecture.md):
 - routes/ (API layer)
 jobs.js, sampleJobs.js, libraryStore.js, auth.js, account.js, feedback.js,
-scenes.js and catalog.js: one Express Router each. They read the request,
+scenes.js, catalog.js, docs.js and metrics.js: one Express Router each. They read the request,
 call the layers below and reply with JSON or file data only. All of them
 are served at /api/v1/... and at the old unversioned paths.
 - adapters/ (between the API and the data)
@@ -24,10 +24,11 @@ apiVersions.js (v1 vs legacy reply shapes) and jobSources/ (one adapter per
 place jobs come from, set by JOB_SOURCES).
 - middleware/ (API layer)
 session.js (who is calling, access rules), limits.js (429s), uploads.js
-(multer and file checks), sendDbModel.js and errors.js (JSON 404s and the
-JSON error handler).
+(multer and file checks), sendDbModel.js, errors.js (JSON 404s and the
+JSON error handler) and timing.js (times every API request).
 - services/ (business logic, no req / res)
-jobs.js, accounts.js, authority.js, feedback.js and google.js; with
+jobs.js, accounts.js, authority.js, feedback.js, google.js, scenes.js and
+performance.js (response and page-load times, p50 / p95 / p99); with
 pipeline.js (COLMAP / Brush), library.js (sending jobs to the VM),
 cleanup.js, metrics.js, scan.js and status.js.
 - db.js and dbstore.js (data)
@@ -71,6 +72,9 @@ import catalogRoutes from './routes/catalog.js'
 import docsRoutes from './routes/docs.js'
 import sampleJobRoutes from './routes/sampleJobs.js'
 import sceneRoutes from './routes/scenes.js'
+import metricsRoutes from './routes/metrics.js'
+import { timeRequests } from './middleware/timing.js'
+import { flushTimings, startPerformance } from './services/performance.js'
 import { API_V1_PREFIX, markLegacy } from './adapters/apiVersions.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -146,6 +150,11 @@ if (config.trustProxy) {
     app.set('trust proxy', value === 'true' ? true : /^\d+$/.test(value) ? Number(value) : value)
 }
 
+// Time every API request (first, so body parsing counts too); see
+// services/performance.js and GET /api/v1/metrics/performance.
+app.use(timeRequests)
+startPerformance()
+
 // Parse JSON bodies. Only applies to application/json requests, so the
 // multipart photo and media uploads are unaffected. Express's default 100 KB
 // is too small for a large saved scene (config.maxJsonBodyMB).
@@ -179,6 +188,7 @@ api.use(authRoutes)
 api.use(accountRoutes)
 api.use(feedbackRoutes)
 api.use(sceneRoutes)
+api.use(metricsRoutes)
 
 app.use(API_V1_PREFIX, api)
 // Legacy: the same routes, marked deprecated (Deprecation / Link headers).
@@ -214,6 +224,8 @@ function shutdown(reason, exitCode = 0) {
     if (shuttingDown) return
     shuttingDown = true
     console.log(`[backend] ${reason} -- stopping running tool processes`)
+    // Save the performance measurements not yet written.
+    flushTimings()
     for (const job of jobs.values()) {
         if (job.status === 'running') {
             job.status = 'error'

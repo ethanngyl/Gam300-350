@@ -31,6 +31,17 @@ to the API is recorded here, newest first.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
 
+## v1 additions: 2026-11-07 (nothing breaks)
+
+- `POST /metrics/page-load`: the website reports how long it took to load
+  (`ttfb`, `fcp`, `domContentLoaded`, `load`, in ms). Public; at most 30 per
+  IP address per minute. The website sends it once per page load.
+- `GET /metrics/performance?window=1h|24h|7d` (admins): p50 / p95 / p99,
+  mean, slowest and counts for every API route (slowest p95 first) and for
+  the page-load measures. Each machine reports its own numbers, kept 7 days
+  (`PERF_KEEP_DAYS`).
+- Database migration 5 (`005_performance.sql`) adds the `perf_minutes` table.
+
 ## Clients moved to v1: 2026-11-07 (no API change)
 
 - The website calls every endpoint under `/api/v1/...`, including the URLs
@@ -100,6 +111,7 @@ pages. Nothing used them.
 | 2 | `002_drop_uploads.sql` | Drops the `uploads` table, which was never used. |
 | 3 | `003_timestamps_ms.js` | Every date column becomes INTEGER milliseconds (`users`, `jobs`, `feedback`, `synced_jobs`). `feedback.category` is checked against the catalog instead of a fixed list. |
 | 4 | `004_scenes.sql` | Adds the `scenes` table. |
+| 5 | `005_performance.sql` | Adds the `perf_minutes` table (2026-11-07). |
 
 The first start after updating backs `app.db` up (`data/app.db.bak-<time>`),
 then migrates it.

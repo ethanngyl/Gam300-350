@@ -175,6 +175,15 @@ needs the shared key.
 | DELETE | `/scenes/:id` | user (own scenes) | 204; 404 |
 | GET | `/catalog` | anyone | 200 feedback categories, training presets, photo minimum and upload limits |
 
+### Performance
+
+| Method | Path | Who | Reply |
+|---|---|---|---|
+| POST | `/metrics/page-load` | anyone (the website, once per page load) | 204. Body `{ ttfb?, fcp?, domContentLoaded?, load? }` in ms; 400 / 429 |
+| GET | `/metrics/performance` | admin | 200 p50 / p95 / p99, mean, slowest and counts per API route and per page-load measure. Query `window` = `1h`, `24h` (default) or `7d` |
+
+Every API request is timed (`middleware/timing.js`), and each machine reports its own numbers.
+
 Any other path answers 404 with a JSON `{ error }`.
 
 ## Configuration and secrets
