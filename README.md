@@ -152,6 +152,17 @@ Web viewer, desktop (same laptop, Chrome, `fox.ply` 304,526 splats, engine rende
 
 Still to measure for the demo: engine desktop FPS, web viewer FPS on a phone, and the website load and API p95 from the deployed VM (`GET /api/v1/metrics/performance?window=24h`). The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
 
+### Many users at once
+
+How we test that the app stays up and correct with many users at the same time:
+
+- **`npm test` (every push, in CI):** `concurrency.test.js` runs 30 users through a whole visit at the same moment (sign up, account, catalog, jobs, create / list / edit / read / delete a scene, feedback, sign out), each from their own IP address. It checks there are no failed requests and no 5xx, each user only ever sees their own scene, the database totals add up (30 accounts, 30 feedback, 0 scenes left), 25 simultaneous edits of one scene all succeed without deadlocking, and the server still answers within 1 s afterwards. Every test has a time limit, so a freeze fails instead of hanging.
+- **`npm run load` (in packages):** the same visit for `LOAD_USERS` users at once (default 100) over `LOAD_ROUNDS` rounds (default 3), with p50 / p95 per route under that load. Exits with 1 on any failure.
+
+Latest `npm run load` (2026-11-08, same laptop, 100 users at once x 3 rounds = 3,600 requests): **0 failed requests, 0 server errors**, about 690 requests/s, server answering in 1 ms afterwards. Under that load the light routes (catalog, jobs, scenes, feedback) stay at p95 45-240 ms.
+
+Cause and plan: sign-up and sign-in are the slow part under a burst (p95 about 0.9 s with 100 sign-ups in the same second), and requests right behind them wait too. Password hashing (scrypt) is asynchronous but runs on the Node.js worker thread pool, which has 4 threads by default, so 100 sign-ups queue there. Measured with `UV_THREADPOOL_SIZE=16`: sign-up p95 858 -> 470 ms, `GET /auth/me` p95 791 -> 321 ms, throughput +31%. Plan: set `UV_THREADPOOL_SIZE=16` in the VM's service environment (and the Docker image) at the next deploy.
+
 ## Team
 
 Team Codefine GAM300-350

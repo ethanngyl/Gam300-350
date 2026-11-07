@@ -25,12 +25,13 @@ React component. onSignIn takes a guest back to the login screen.
 import { useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
-import { FEEDBACK_CATEGORIES } from './FeedbackCategories.js';
+import { FEEDBACK_CATEGORIES, FEEDBACK_MESSAGE } from './FeedbackCategories.js';
 import FeedbackInbox from './FeedbackInbox.jsx';
 import './FeedbackScreen.css';
 
-const MIN_MESSAGE_LENGTH = 10;
-const MAX_MESSAGE_LENGTH = 1000;
+// From the backend's catalog (GET /api/v1/catalog), the same limits it enforces.
+const MIN_MESSAGE_LENGTH = FEEDBACK_MESSAGE.minLength;
+const MAX_MESSAGE_LENGTH = FEEDBACK_MESSAGE.maxLength;
 
 // Turns a failed POST /feedback into a message the user can act on. For a
 // bad message (400), sending too often (429) or the VM being unreachable

@@ -118,7 +118,7 @@ then migrates it.
 
 ### Moving the website to v1 (frontend to-do, for Bryan)
 
-Steps 1 and 3 are done (2026-11-07); 2, 4 and 5 are still open.
+Steps 1 and 3 are done (2026-11-07), step 4 (2026-11-08); 2 and 5 are still open.
 
 1. **Done.** Every API call is prefixed with `/api/v1`, including the URLs
    built by hand (`/api/v1/jobs/<id>/result.ply`).
@@ -129,10 +129,11 @@ Steps 1 and 3 are done (2026-11-07); 2, 4 and 5 are still open.
 3. **Done.** With v1, `createdAt` of users, the account and feedback items
    is a number. The Feedback inbox now turns it into ISO text for its
    `<time dateTime>`; everything else already went through `new Date(...)`.
-4. Read `GET /api/v1/catalog` instead of the copies in
-   `FeedbackCategories.js`, `TrainingPresets.js` and `FrameExtractor.jsx`
-   (`MAX_MEDIA_FILES`, `MAX_MEDIA_SIZE_MB`), plus `MIN_PHOTOS = 8` in
-   `PhotoEditorScreen.jsx`.
+4. **Done.** `web-app/catalog.js` reads `GET /api/v1/catalog` once (top-level
+   await, so importing modules can use it as constants). `FeedbackCategories.js`,
+   `TrainingPresets.js`, `mediaJobs.js` (`MAX_MEDIA_FILES`, `MAX_MEDIA_SIZE_MB`),
+   the feedback length limits in `FeedbackScreen.jsx` and `MIN_PHOTOS` in
+   `PhotoEditorScreen.jsx` now come from it instead of copies.
 5. Set `SCENES_API_READY = true` in `SceneStorage.js`, so scenes are saved to
    the account. Scenes already in the browser can be moved with
    `PUT /api/v1/scenes/<their id>`; the server converts them.

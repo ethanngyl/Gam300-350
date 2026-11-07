@@ -9,29 +9,18 @@
 \date 31-10-2026
 \brief
 The kinds of feedback, shared by the Feedback page's form
-(FeedbackScreen.jsx) and the admins' Inbox (FeedbackInbox.jsx). The ids
-must match the backend's FEEDBACK_CATEGORIES (server.js).
+(FeedbackScreen.jsx) and the admins' Inbox (FeedbackInbox.jsx). They are
+reference data in the backend's catalog/catalog.json, read through
+GET /api/v1/catalog (catalog.js), so the website and the backend can't
+disagree.
 - FEEDBACK_CATEGORIES
 Each kind's id, label, icon and the placeholder shown in the form.
+- FEEDBACK_MESSAGE
+{ minLength, maxLength } of a feedback message.
 **************************************************************************/
 
-export const FEEDBACK_CATEGORIES = [
-    {
-        id: 'bug',
-        label: 'Bug report',
-        icon: 'triangle',
-        placeholder: 'What did you do, what did you expect, and what happened instead?',
-    },
-    {
-        id: 'idea',
-        label: 'Idea',
-        icon: 'sparkle',
-        placeholder: 'What would you like GENESIS to do, and what problem would it solve?',
-    },
-    {
-        id: 'other',
-        label: 'Other',
-        icon: 'message',
-        placeholder: 'Tell us what you think of GENESIS.',
-    },
-];
+import { catalog } from './catalog.js';
+
+export const FEEDBACK_CATEGORIES = catalog.feedbackCategories;
+
+export const FEEDBACK_MESSAGE = catalog.feedbackMessage;

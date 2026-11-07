@@ -66,6 +66,7 @@ packages/src/backend/openapi.yaml: the API reference (OpenAPI 3.1) with an examp
 Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters, performance). CI runs them on every push.
 Lint (all blocking in CI): "npm run lint" in packages (ESLint), "ruff check --config ruff.toml tools" (Python), and engine/lint-cpp.sh (clang-tidy on the engine renderer; pip install clang-tidy==22.1.8).
 Performance: "npm run perf" (in packages) measures API p50 / p95 against the budget in README.md ("Performance budget"), on a temporary server; exits 1 if a route is over budget.
+Load: "npm run load" (in packages) runs LOAD_USERS users (default 100) through a whole visit at the same time, LOAD_ROUNDS times (default 3), and reports failures and p95 under load. "npm test" also runs a 30-user concurrency test (concurrency.test.js).
 Performance: every API request is timed, and the website reports how long it took to load. Signed in as an admin, GET /api/v1/metrics/performance?window=1h (or 24h, 7d) shows p50 / p95 / p99 per route and for page loads on that machine. Kept 7 days (PERF_KEEP_DAYS).
 Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
 packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.

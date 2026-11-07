@@ -22,11 +22,14 @@ progress). onStart gets the request so it can be aborted. Resolves with
 the new job's id; rejects with a readable error, or { aborted: true }.
 **************************************************************************/
 
+import { catalog } from './catalog.js';
+
 // Same rules as the backend (MEDIA_EXT_RE, maxMediaFiles and maxMediaSizeMB in
 // server.js / config.js), checked here so a bad file isn't uploaded for nothing.
+// The limits come from the backend's config through GET /api/v1/catalog.
 export const MEDIA_EXT_RE = /\.(mp4|m4v|mov|webm|mkv|avi|mpe?g|gif)$/i;
-export const MAX_MEDIA_FILES = 10;
-export const MAX_MEDIA_SIZE_MB = 2048;
+export const MAX_MEDIA_FILES = catalog.limits.maxMediaFiles;
+export const MAX_MEDIA_SIZE_MB = catalog.limits.maxMediaSizeMB;
 // Browsers don't list every video type under video/*, so name the extras.
 export const MEDIA_ACCEPT = 'video/*,image/gif,.mkv,.avi';
 
