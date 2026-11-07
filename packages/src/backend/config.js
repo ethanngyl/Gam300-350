@@ -506,6 +506,13 @@ export const config = {
     feedbackKeepDays: process.env.FEEDBACK_KEEP_DAYS === undefined ? 365 : Number(process.env.FEEDBACK_KEEP_DAYS) || 0,
     cleanupIntervalMin: Number(process.env.CLEANUP_INTERVAL_MIN) || 60,
 
+    // --- Performance measurements (services/performance.js) --------------------
+    // API response times and the website's load times, kept as per-minute
+    // summaries for this many days (every machine), and written to the
+    // database every perfFlushSec seconds.
+    perfKeepDays: Number(process.env.PERF_KEEP_DAYS) || 7,
+    perfFlushSec: Number(process.env.PERF_FLUSH_SEC) || 60,
+
     // --- Account authority (centralized accounts on the VM) --------------------
     // 'local' (default): accounts live in this machine's own database, as
     //   before the VM existed. Safe default: 'client' deletes local accounts.

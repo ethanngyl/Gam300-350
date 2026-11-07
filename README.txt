@@ -63,7 +63,8 @@ docs/architecture.md: how the frontend, backend layers and database fit together
 docs/data-schema.md: the database tables (diagram), naming / date / unit rules, and every saved file format with its version.
 docs/api-changelog.md: API versions (/api/v1 and the old, deprecated unversioned paths), every API change and every database migration.
 packages/src/backend/openapi.yaml: the API reference (OpenAPI 3.1) with an example request and response for every endpoint; open it in https://editor.swagger.io. Also served at /api/v1/openapi.yaml.
-Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters). CI runs them on every push.
+Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters, performance). CI runs them on every push.
+Performance: every API request is timed, and the website reports how long it took to load. Signed in as an admin, GET /api/v1/metrics/performance?window=1h (or 24h, 7d) shows p50 / p95 / p99 per route and for page loads on that machine. Kept 7 days (PERF_KEEP_DAYS).
 Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
 packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
 packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.

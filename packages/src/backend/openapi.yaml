@@ -44,6 +44,8 @@ tags:
     description: Feedback from the website, and the admins' inbox
   - name: Catalog
     description: Reference data and API documentation
+  - name: Metrics
+    description: API response times and website load times (p50 / p95 / p99), per machine
   - name: VM
     description: Machine-to-machine routes on the VM (shared key required)
 
@@ -702,6 +704,90 @@ paths:
             application/yaml:
               schema: { type: string }
               example: "openapi: 3.1.0\ninfo:\n  title: Genesis backend API\n  ..."
+
+  # --------------------------------------------------------------- Metrics
+  /metrics/page-load:
+    post:
+      tags: [Metrics]
+      operationId: reportPageLoad
+      summary: Report how long the website took to load
+      description: |
+        Sent once per page load by the website (navigator.sendBeacon), from the
+        browser's Navigation Timing. Public, because the page loads before
+        anyone signs in. Each measure is in ms from 0 to 120000; others are
+        ignored. At most 30 reports per IP address per minute.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttfb: { type: number, minimum: 0, maximum: 120000, description: Time to the first byte of the page }
+                fcp: { type: number, minimum: 0, maximum: 120000, description: First contentful paint }
+                domContentLoaded: { type: number, minimum: 0, maximum: 120000, description: HTML parsed and scripts run }
+                load: { type: number, minimum: 0, maximum: 120000, description: Everything loaded (the load event finished) }
+            example: { ttfb: 42.5, fcp: 310.2, domContentLoaded: 288.9, load: 642.1 }
+      responses:
+        '204':
+          description: Recorded
+        '400':
+          description: No valid measure was sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Send at least one of ttfb, fcp, domContentLoaded, load, in ms (0-120000).' }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+  /metrics/performance:
+    get:
+      tags: [Metrics]
+      operationId: getPerformance
+      summary: API response times and website load times (admins)
+      description: |
+        p50 / p95 / p99, mean, slowest and counts, per API route (slowest p95
+        first) and per page-load measure, for this machine. Times are in ms.
+        Percentiles come from per-minute histograms, so they are accurate to
+        within their time range (about +-25%); counts, means and maximums
+        are exact. Measurements are kept PERF_KEEP_DAYS days (default 7).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: window
+          in: query
+          required: false
+          description: How far back to look (default 24h)
+          schema: { enum: ['1h', '24h', '7d'] }
+          example: 24h
+      responses:
+        '200':
+          description: The report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PerformanceReport' }
+              example:
+                window: 24h
+                from: 1792800000000
+                to: 1792886400000
+                api:
+                  - { route: 'GET /jobs/:id/result.ply', count: 41, errors: 0, mean: 3120.4, p50: 2410.7, p95: 8650.2, p99: 11800.0, max: 12391.6 }
+                  - { route: 'POST /upload', count: 6, errors: 0, mean: 1840.2, p50: 1630.0, p95: 2900.4, p99: 2980.1, max: 3001.7 }
+                  - { route: 'GET /jobs/:id', count: 1287, errors: 0, mean: 4.1, p50: 3.2, p95: 9.8, p99: 18.5, max: 41.0 }
+                pageLoad:
+                  - { metric: ttfb, count: 120, mean: 61.3, p50: 48.0, p95: 140.2, p99: 260.4, max: 402.0 }
+                  - { metric: fcp, count: 118, mean: 402.7, p50: 351.0, p95: 820.5, p99: 1310.0, max: 1622.4 }
+                  - { metric: domContentLoaded, count: 120, mean: 380.4, p50: 330.6, p95: 790.1, p99: 1180.0, max: 1490.3 }
+                  - { metric: load, count: 120, mean: 911.0, p50: 760.2, p95: 1980.4, p99: 2700.8, max: 3302.1 }
+        '400':
+          description: An unknown window
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'window must be one of 1h, 24h, 7d.' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # -------------------------------------------------------------------- VM
   /register:
@@ -1825,3 +1911,38 @@ components:
             minTrainIters: { type: integer }
             maxTrainIters: { type: integer }
             maxAvatarKB: { type: number }
+    PerformanceReport:
+      type: object
+      required: [window, from, to, api, pageLoad]
+      properties:
+        window: { enum: ['1h', '24h', '7d'] }
+        from: { type: integer, description: UTC epoch ms }
+        to: { type: integer, description: UTC epoch ms }
+        api:
+          type: array
+          description: One entry per route ("METHOD /pattern", the same for /api/v1 and the legacy paths; "(no route)" for unknown paths), slowest p95 first
+          items:
+            type: object
+            required: [route, count, errors, mean, p50, p95, p99, max]
+            properties:
+              route: { type: string }
+              count: { type: integer, minimum: 1 }
+              errors: { type: integer, minimum: 0, description: Replies with a 5xx status }
+              mean: { type: number }
+              p50: { type: number }
+              p95: { type: number }
+              p99: { type: number }
+              max: { type: number }
+        pageLoad:
+          type: array
+          items:
+            type: object
+            required: [metric, count, mean, p50, p95, p99, max]
+            properties:
+              metric: { enum: [ttfb, fcp, domContentLoaded, load] }
+              count: { type: integer, minimum: 1 }
+              mean: { type: number }
+              p50: { type: number }
+              p95: { type: number }
+              p99: { type: number }
+              max: { type: number }

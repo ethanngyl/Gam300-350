@@ -64,7 +64,7 @@ test('a clean database is built by the command line, and a second run does nothi
   assert.match(run.stdout, new RegExp(`now at version ${NEWEST}`))
   const db = new DatabaseSync(file)
   assert.equal(version(db), NEWEST)
-  assert.deepEqual(tables(db), ['feedback', 'job_images', 'job_model_chunks', 'job_models', 'jobs', 'scenes', 'sessions', 'synced_jobs', 'user_avatars', 'users'])
+  assert.deepEqual(tables(db), ['feedback', 'job_images', 'job_model_chunks', 'job_models', 'jobs', 'perf_minutes', 'scenes', 'sessions', 'synced_jobs', 'user_avatars', 'users'])
   for (const [table, column] of [['users', 'created_at'], ['users', 'password_changed_at'], ['jobs', 'created_at'], ['feedback', 'created_at'], ['synced_jobs', 'synced_at'], ['scenes', 'updated_at']])
     assert.equal(columnType(db, table, column), 'INTEGER', `${table}.${column}`)
   db.exec(`INSERT INTO users (email, name, password_hash) VALUES ('a@example.com', 'A', 'x:y')`)

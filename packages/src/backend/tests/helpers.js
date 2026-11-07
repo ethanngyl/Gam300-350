@@ -48,7 +48,17 @@ const BACKEND_SETTING_RE = /^(AUTH_|VM_|GOOGLE_|FILE_STORE|JOB_SOURCES|CATALOG_F
 const tempDirs = []
 process.on('exit', () =>
 {
-  for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 })
+  for (const dir of tempDirs)
+  {
+    try
+    {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 })
+    }
+    catch
+    {
+      // A file still open (Windows): the system's temp clean-up gets it later.
+    }
+  }
 })
 
 export function tempDir(name)

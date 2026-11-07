@@ -29,6 +29,7 @@ Tables:
   user_avatars -- each account's profile photo (on the VM: for every
               machine's users).
   scenes   -- Scene Builder scenes, each a versioned JSON document.
+  perf_minutes -- API response times and website load times, per minute.
   synced_jobs, job_images, job_models, job_model_chunks -- the shared
               library (see below).
 - hashPassword(password)
@@ -102,6 +103,9 @@ The profile photo (table user_avatars).
 - listScenes / getScene / insertScene / updateScene / deleteScene
 A user's saved scenes (table scenes). The documents are checked and
 converted in services/scenes.js; this file only stores them.
+- addPerfMinutes / listPerfMinutes / deletePerfOlderThan
+Per-minute API and page-load timing summaries (table perf_minutes, see
+services/performance.js).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -305,6 +309,17 @@ const updateSceneRow = db.prepare(`
   UPDATE scenes SET name = ?, format_version = ?, document = ?, updated_at = ? WHERE id = ? AND owner_id = ?
 `)
 const deleteSceneRow = db.prepare('DELETE FROM scenes WHERE id = ? AND owner_id = ?')
+
+// Performance measurements: per-minute summaries (services/performance.js).
+const selectPerfMinute = db.prepare('SELECT count, errors, sum_ms, max_ms, buckets FROM perf_minutes WHERE kind = ? AND name = ? AND minute = ?')
+const upsertPerfMinute = db.prepare(`
+  INSERT INTO perf_minutes (kind, name, minute, count, errors, sum_ms, max_ms, buckets) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(kind, name, minute) DO UPDATE SET
+    count = excluded.count, errors = excluded.errors, sum_ms = excluded.sum_ms,
+    max_ms = excluded.max_ms, buckets = excluded.buckets
+`)
+const selectPerfSince = db.prepare('SELECT kind, name, minute, count, errors, sum_ms, max_ms, buckets FROM perf_minutes WHERE minute >= ?')
+const deletePerfBefore = db.prepare('DELETE FROM perf_minutes WHERE minute < ?')
 
 // users rows as the rest of the backend sees them (camelCase, dates in ms).
 function userFromRow(row)
@@ -1241,5 +1256,86 @@ export function updateScene(ownerId, scene)
 export function deleteScene(id, ownerId)
 {
   return Number(deleteSceneRow.run(id, ownerId).changes) > 0
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Adds per-minute performance summaries to the table. A minute already
+    stored (e.g. written in part before a restart) is added to, not
+    replaced. One transaction for the whole batch.
+  \param rows
+    [{ kind, name, minute, count, errors, sumMs, maxMs, buckets (number[]) }]
+*/
+/************************************************************************/
+export function addPerfMinutes(rows)
+{
+  if (rows.length === 0) return
+  db.exec('BEGIN')
+  try
+  {
+    for (const row of rows)
+    {
+      const old = selectPerfMinute.get(row.kind, row.name, row.minute)
+      let { count, errors, sumMs, maxMs, buckets } = row
+      if (old)
+      {
+        const oldBuckets = JSON.parse(old.buckets)
+        buckets = buckets.map((n, i) => n + (oldBuckets[i] ?? 0))
+        count += old.count
+        errors += old.errors
+        sumMs += old.sum_ms
+        maxMs = Math.max(maxMs, old.max_ms)
+      }
+      upsertPerfMinute.run(row.kind, row.name, row.minute, count, errors, sumMs, maxMs, JSON.stringify(buckets))
+    }
+    db.exec('COMMIT')
+  }
+  catch (err)
+  {
+    db.exec('ROLLBACK')
+    throw err
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    The performance summaries from a time onwards.
+  \param since
+  number
+    UTC epoch ms
+  \return
+    [{ kind, name, minute, count, errors, sumMs, maxMs, buckets (number[]) }]
+*/
+/************************************************************************/
+export function listPerfMinutes(since)
+{
+  return selectPerfSince.all(since).map((row) => ({
+    kind: row.kind,
+    name: row.name,
+    minute: row.minute,
+    count: row.count,
+    errors: row.errors,
+    sumMs: row.sum_ms,
+    maxMs: row.max_ms,
+    buckets: JSON.parse(row.buckets),
+  }))
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Deletes performance summaries older than a time.
+  \param before
+  number
+    UTC epoch ms
+  \return
+    How many rows were deleted
+*/
+/************************************************************************/
+export function deletePerfOlderThan(before)
+{
+  return Number(deletePerfBefore.run(before).changes)
 }
 // ----- End of Functions ----------------------------------------------------- //
