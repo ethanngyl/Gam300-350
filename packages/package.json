@@ -17,6 +17,7 @@
     "metrics:start": "npm run metrics:build && npm run metrics:server"
   },
   "dependencies": {
+    "@codefine/splat-renderer": "file:../engine/web/package",
     "@mkkellogg/gaussian-splats-3d": "^0.4.7",
     "ajv": "8.17.1",
     "express": "^5.2.1",

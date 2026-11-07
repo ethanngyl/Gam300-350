@@ -6,9 +6,10 @@
 \date 15-10-2026
 \brief
 Shows a Gaussian splat .ply full-screen using the Codefine engine's own
-renderer, compiled to WebAssembly from engine/src (see engine/web and
-engine/build-web.bat). The engine draws into a WebGL2 canvas; this component
-owns the canvas, the input events, the .ply download and the render loop.
+renderer, compiled to WebAssembly from engine/src and installed as the
+@codefine/splat-renderer package (engine/web/package). The engine draws into
+a WebGL2 canvas; this component owns the canvas, the input events, the .ply
+download and the render loop.
 - EngineSplatViewer({ url, onUnavailable, isEmbedded })
 React component. Loads the engine, downloads the .ply at url into it and
 renders it. Calls onUnavailable(reason) if the engine or WebGL2 cannot start,
@@ -18,13 +19,9 @@ its parent (position: relative) instead of over the whole page.
 
 // ----- Headers ------------------------------------------------------- //
 import { useEffect, useRef, useState } from 'react'
-import { loadEngineFactory } from './codefineEngine.js'
+import { createSplatRenderer, EngineUnavailableError, RenderMode } from '@codefine/splat-renderer'
 
-const RENDER_MODE = { pointCloud: 0, gaussian: 1 }
-
-let canvasCounter = 0
-
-class EngineUnavailableError extends Error { }
+const RENDER_MODE = { pointCloud: RenderMode.PointCloud, gaussian: RenderMode.Gaussian }
 
 /**
  * Download url with progress callbacks (0..1, or null if the size is unknown).
@@ -76,11 +73,10 @@ export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = fal
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas) return
-        canvas.id = `codefine-engine-${++canvasCounter}`
 
         const abort = new AbortController()
         let cancelled = false
-        let engine = null
+        let engine = null // the SplatRenderer once it has started
         let raf = 0
         let dirty = true // render on demand: only after input, resize or a load
 
@@ -96,7 +92,7 @@ export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = fal
             }
             if (!dirty) return
             dirty = false
-            engine._cf_render(w, h)
+            engine.render(w, h)
         }
 
         // ----- Input: same camera as the editor, mapped for mouse + touch ----- //
@@ -130,12 +126,12 @@ export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = fal
             prev.y = e.clientY
 
             if (pointers.size === 1) {
-                if (prev.pan || e.shiftKey) engine._cf_pan(dx, dy)
-                else engine._cf_orbit(dx, dy)
+                if (prev.pan || e.shiftKey) engine.pan(dx, dy)
+                else engine.orbit(dx, dy)
             } else if (pointers.size === 2 && pinch) {
                 const next = twoFingerState()
-                if (pinch.dist > 0 && next.dist > 0) engine._cf_zoom(Math.log(next.dist / pinch.dist) * 5)
-                engine._cf_pan(next.midX - pinch.midX, next.midY - pinch.midY)
+                if (pinch.dist > 0 && next.dist > 0) engine.zoom(Math.log(next.dist / pinch.dist) * 5)
+                engine.pan(next.midX - pinch.midX, next.midY - pinch.midY)
                 pinch = next
             }
             dirty = true
@@ -151,13 +147,13 @@ export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = fal
             e.preventDefault()
             // The editor zooms one step per wheel notch; browsers report ~100px (or 3 lines) per notch
             const notches = -e.deltaY / (e.deltaMode === 1 ? 3 : 100)
-            engine._cf_zoom(Math.max(-2, Math.min(2, notches)))
+            engine.zoom(Math.max(-2, Math.min(2, notches)))
             dirty = true
         }
 
         const onDoubleClick = () => {
             if (!engine) return
-            engine._cf_reset_camera()
+            engine.resetCamera()
             dirty = true
         }
 
@@ -173,59 +169,41 @@ export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = fal
 
             ; (async () => {
                 try {
-                    let createEngine
-                    try {
-                        createEngine = await loadEngineFactory()
-                    } catch {
-                        throw new EngineUnavailableError('The engine has not been built for the web (run engine/build-web.bat).')
+                    // Rejects with EngineUnavailableError if the engine isn't built or WebGL2 is missing.
+                    const renderer = await createSplatRenderer(canvas)
+                    if (cancelled) {
+                        renderer.dispose()
+                        return
                     }
-                    const instance = await createEngine({ printErr: (msg) => console.warn('[Engine]', msg) })
-                    if (cancelled) return
-                    if (!instance.ccall('cf_init', 'number', ['string'], [`#${canvas.id}`])) {
-                        throw new EngineUnavailableError('This browser does not support WebGL2.')
-                    }
-                    engine = instance
-                    engine._cf_set_render_mode(modeRef.current)
+                    engine = renderer
+                    engine.setRenderMode(modeRef.current)
                     controlsRef.current = {
                         setMode: (m) => {
-                            engine._cf_set_render_mode(m)
+                            engine.setRenderMode(m)
                             dirty = true
                         },
                         resetCamera: () => {
-                            engine._cf_reset_camera()
+                            engine.resetCamera()
                             dirty = true
                         },
                     }
                     raf = requestAnimationFrame(frame)
 
                     setStatus({ phase: 'download', progress: 0 })
-                    const { chunks, size } = await downloadChunks(url, abort.signal, (progress) => {
+                    const { chunks } = await downloadChunks(url, abort.signal, (progress) => {
                         if (!cancelled) setStatus({ phase: 'download', progress })
                     })
                     if (cancelled) return
 
-                    // Copy into wasm memory. HEAPU8 is re-read after malloc because growing
-                    // the heap replaces the underlying ArrayBuffer.
-                    const ptr = engine._malloc(size) >>> 0
-                    if (!ptr) throw new Error('Not enough memory to load this model in the browser.')
-                    let offset = ptr
-                    for (const chunk of chunks) {
-                        engine.HEAPU8.set(chunk, offset)
-                        offset += chunk.length
-                    }
-                    chunks.length = 0
-
                     // Parsing blocks the main thread, so let the status paint first
                     setStatus({ phase: 'parse' })
                     await new Promise((resolve) => setTimeout(resolve, 30))
-                    if (cancelled) {
-                        engine._free(ptr)
-                        return
-                    }
+                    if (cancelled) return
                     const name = url.split('/').filter(Boolean).slice(-2).join('/')
-                    const count = engine.ccall('cf_load_ply', 'number', ['number', 'number', 'string'], [ptr, size, name])
-                    engine._free(ptr)
-                    if (count <= 0) throw new Error('The engine could not read this .ply (see the browser console).')
+                    // The chunks go straight into wasm memory, without first joining them
+                    // into one large buffer; throws if the engine can't read the file.
+                    const count = engine.loadPly(chunks, name)
+                    chunks.length = 0
 
                     dirty = true
                     setStatus({ phase: 'ready', count })
@@ -252,13 +230,8 @@ export default function EngineSplatViewer({ url, onUnavailable, isEmbedded = fal
             canvas.removeEventListener('wheel', onWheel)
             canvas.removeEventListener('dblclick', onDoubleClick)
             canvas.removeEventListener('contextmenu', onContextMenu)
-            if (engine) {
-                try {
-                    engine._cf_shutdown()
-                } catch {
-                    /* module already aborted (e.g. out of memory) */
-                }
-            }
+            // Frees the GPU resources; safe if the engine already stopped.
+            engine?.dispose()
         }
     }, [url])
 

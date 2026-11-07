@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  @codefine/splat-renderer example: pick a Gaussian splat .ply and orbit it.
+  Build the engine first (engine/build-web.bat), then serve the package folder
+  and open /example/, e.g.:
+    cd engine/web/package
+    python -m http.server 8080      ->  http://localhost:8080/example/
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Splat renderer example</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d0d14; color: #f4fbfd; font: 14px system-ui, sans-serif; }
+    canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+    .bar { position: fixed; top: 12px; left: 12px; display: flex; gap: 8px; align-items: center; z-index: 1;
+           background: rgba(0, 0, 0, 0.6); padding: 8px 12px; border-radius: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div class="bar">
+    <input type="file" id="file" accept=".ply">
+    <button id="gaussian">Gaussian</button>
+    <button id="points">Point cloud</button>
+    <button id="reset">Reset view</button>
+    <span id="status">Pick a .ply</span>
+  </div>
+
+  <script type="module">
+    import { createSplatRenderer, RenderMode } from '../index.js'
+
+    const canvas = document.getElementById('view')
+    const status = document.getElementById('status')
+
+    let renderer
+    try {
+      // dist/ sits next to this folder when the package folder is served.
+      renderer = await createSplatRenderer(canvas, { engineUrl: '../dist/codefine-engine.js' })
+    } catch (error) {
+      status.textContent = error.message
+      throw error
+    }
+
+    // Draw only when something changed.
+    let dirty = true
+    const frame = () => {
+      requestAnimationFrame(frame)
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const w = Math.max(1, Math.round(canvas.clientWidth * dpr))
+      const h = Math.max(1, Math.round(canvas.clientHeight * dpr))
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; dirty = true }
+      if (dirty) { dirty = false; renderer.render(w, h) }
+    }
+    requestAnimationFrame(frame)
+
+    document.getElementById('file').addEventListener('change', async (event) => {
+      const file = event.target.files[0]
+      if (!file) return
+      status.textContent = 'Loading…'
+      try {
+        renderer.clear()
+        const count = renderer.loadPly(await file.arrayBuffer(), file.name)
+        status.textContent = `${count.toLocaleString()} splats`
+        renderer.resetCamera()
+        dirty = true
+      } catch (error) {
+        status.textContent = error.message
+      }
+    })
+    document.getElementById('gaussian').onclick = () => { renderer.setRenderMode(RenderMode.Gaussian); dirty = true }
+    document.getElementById('points').onclick = () => { renderer.setRenderMode(RenderMode.PointCloud); dirty = true }
+    document.getElementById('reset').onclick = () => { renderer.resetCamera(); dirty = true }
+
+    // Drag = orbit, Shift / right-drag = pan, wheel = zoom.
+    let last = null
+    canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); last = { x: e.clientX, y: e.clientY, pan: e.button !== 0 } })
+    canvas.addEventListener('pointermove', (e) => {
+      if (!last) return
+      const dx = e.clientX - last.x, dy = e.clientY - last.y
+      last.x = e.clientX; last.y = e.clientY
+      if (last.pan || e.shiftKey) renderer.pan(dx, dy)
+      else renderer.orbit(dx, dy)
+      dirty = true
+    })
+    canvas.addEventListener('pointerup', () => { last = null })
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault())
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault()
+      renderer.zoom(Math.max(-2, Math.min(2, -e.deltaY / (e.deltaMode === 1 ? 3 : 100))))
+      dirty = true
+    }, { passive: false })
+  </script>
+</body>
+</html>

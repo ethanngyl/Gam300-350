@@ -102,6 +102,8 @@ venv/
 # Header-only deps fetched by engine/lint-cpp.sh when engine/build is missing.
 /engine/build-lint/
 /packages/src/web-app/public/engine/
+# ...now written into the @codefine/splat-renderer package instead (engine/web/package).
+/engine/web/package/dist/
 
 # ImGui window layout, rewritten at runtime per user.
 imgui.ini

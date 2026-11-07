@@ -22,10 +22,14 @@ RUN emcmake cmake -S engine/web -B /build -DCMAKE_BUILD_TYPE=Release -DCODEFINE_
 # ---- Stage 1: build the React app and install server deps ----------
 FROM node:22-bookworm-slim AS web
 WORKDIR /app/packages
+# The web app installs the renderer package from ../engine/web/package
+# (file: dependency), so it must be in place before npm ci; the compiled
+# engine from stage 0 goes into its dist/, where vite.config.js picks it up.
+COPY engine/web/package /app/engine/web/package
+COPY --from=engine-web /out/ /app/engine/web/package/dist/
 COPY packages/package.json packages/package-lock.json ./
 RUN npm ci
 COPY packages/ ./
-COPY --from=engine-web /out/ ./src/web-app/public/engine/
 RUN npm run build && npm prune --omit=dev
 
 # ---- Stage 2: runtime (COLMAP's official CUDA image) ---------------

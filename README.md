@@ -75,12 +75,13 @@ Builds a Release copy that runs on any Windows PC, with no Visual Studio, Qt or 
 
 ## Engine renderer in the web app
 The web app's 3D viewer can render with the engine's own splat renderer (`engine/src/splat`, `engine/src/gfx`) compiled to WebAssembly, instead of the Three.js viewer.
-- The start scripts (`start.bat`, `start.sh`, `start-linux.sh`) build it automatically. The first run downloads the Emscripten SDK into `engine/Library/emsdk` (a few hundred MB); later runs only rebuild what changed. Output goes to `packages/src/web-app/public/engine/`
+- The start scripts (`start.bat`, `start.sh`, `start-linux.sh`) build it automatically. The first run downloads the Emscripten SDK into `engine/Library/emsdk` (a few hundred MB); later runs only rebuild what changed. Output goes to `engine/web/package/dist/`
 - To build it on its own: double click `engine/build-web.bat` (Windows), or run `./engine/build-web.sh` (macOS / Linux, needs `git`, `python3` and `cmake`: `brew install cmake` / `sudo apt install cmake git python3`)
 - Re-run it after changing anything in `engine/src/splat`, `engine/src/gfx` or `engine/web`. Docker builds it automatically
 - In the viewer, switch between **Engine renderer** and **Three.js renderer** (bottom left), and between Gaussian / Point cloud (bottom right). If the engine hasn't been built, or the browser has no WebGL2, the Three.js viewer is used
 - Controls: drag to orbit, right-drag or Shift-drag to pan, scroll or pinch to zoom, double-click to reset the view
-- Web-specific code: `engine/web/` (entry point + CMake), and the `CODEFINE_GLES` blocks in `SplatRenderer.cpp` / `Shader.cpp` (WebGL2 has no geometry shaders, so Gaussian mode draws instanced quads there)
+- It ships as an npm package, **`@codefine/splat-renderer`** (`engine/web/package`: version, [CHANGELOG](engine/web/package/CHANGELOG.md), [README](engine/web/package/README.md) and a standalone example). The web app installs it (`"@codefine/splat-renderer": "file:../engine/web/package"` in `packages/package.json`) and uses it in `EngineSplatViewer.jsx`; `packages/vite.config.js` serves its `dist/` at `/engine/` and copies it into the build. After pulling this change, run `npm install` in `packages` once
+- Web-specific code: `engine/web/` (entry point + CMake), `engine/web/package/` (the JavaScript API), and the `CODEFINE_GLES` blocks in `SplatRenderer.cpp` / `Shader.cpp` (WebGL2 has no geometry shaders, so Gaussian mode draws instanced quads there)
 
 ## How to use Engine
 The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), and **Assets / My Models / Console / Audio** tabs (bottom). Panels can be dragged, tabbed, floated or hidden from the Window menu; the layout is remembered between runs (Window > Reset Layout restores the default).
