@@ -150,7 +150,9 @@ Website load, local backend, Chrome (same machine): first byte 9 ms, DOM ready 9
 
 Web viewer, desktop (same laptop, Chrome, `fox.ply` 304,526 splats, engine renderer, orbiting): above 60 FPS throughout, up to 140 FPS (the display refresh rate). Within budget.
 
-Still to measure for the demo: engine desktop FPS, web viewer FPS on a phone, and the website load and API p95 from the deployed VM (`GET /api/v1/metrics/performance?window=24h`). The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
+Engine desktop editor (same laptop, 2026-11-08): about 130 FPS at the lowest, 160 FPS at the highest. Within budget (60 FPS).
+
+Still to measure for the demo: web viewer FPS on a phone, and the website load and API p95 from the deployed VM (`GET /api/v1/metrics/performance?window=24h`). The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
 
 ### Many users at once
 
