@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "migrate": "node src/backend/migrate.js",
     "test": "node --test --test-concurrency=1 \"src/backend/tests/*.test.js\"",
+    "perf": "node src/backend/perf-budget.js",
     "metrics:dev": "vite --config vite.metrics.config.js",
     "metrics:build": "vite build --config vite.metrics.config.js",
     "metrics:server": "node src/metrics-dashboard/server.js",

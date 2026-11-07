@@ -117,6 +117,38 @@ The engine uses the same accounts as the web app, so models made through the web
 -  The model used for training is taxing and requires a strong GPU, the model training is reliant on a CUDA GPU meaning the host system will always need to remain online, other options are being explored at the moment.
 -  The frame extractor can extract images but the quality and kind of images captured might not be compatible with colmap's requirements.
 
+## Performance budget
+
+Targets the product must meet, how each is measured, and the latest numbers.
+
+| Area | Target | How to measure |
+| --- | --- | --- |
+| Engine desktop editor (no backend needed) | **60 FPS** with the largest sample model (`fox.ply`, 304,526 splats), Gaussian mode | FPS readout in the status bar, or View > Stats Overlay (`engine/src/ui/Viewport.cpp`) |
+| Web viewer, desktop browser (model already downloaded, so rendering doesn't wait on the backend) | **60 FPS** while orbiting the same model | Chrome DevTools > Ctrl+Shift+P > "Show frame rendering stats", on `#/model/sample-fox` |
+| Web viewer, phone browser | **30 FPS** while orbiting | Same, with remote debugging (chrome://inspect) |
+| API, JSON routes | **p95 ≤ 200 ms** | `npm run perf` (in packages); live: `GET /api/v1/metrics/performance` (admins) |
+| API, sign-in | **p95 ≤ 500 ms** (password hashing is slow on purpose) | `npm run perf` |
+| Model download (largest sample, ~72 MB) | **p95 ≤ 3 s** on the machine running the backend | `npm run perf` |
+| Website load | **FCP ≤ 1.8 s, load ≤ 3 s** from the deployed VM | Browsers report it on every load (`pageLoadTiming.js`), shown under "page" in `GET /api/v1/metrics/performance` |
+
+### Latest measurements
+
+API, `npm run perf` on 2026-11-07 (AMD Ryzen 7 7435HS, Node 24, local backend on temporary data, one request at a time). All within budget:
+
+| Route | p50 | p95 | Budget (p95) |
+| --- | --- | --- | --- |
+| `GET /api/v1/catalog` | 0.9 ms | 1.6 ms | 200 ms |
+| `GET /api/v1/auth/me` | 0.9 ms | 1.5 ms | 200 ms |
+| `GET /api/v1/jobs` (34 jobs) | 9.4 ms | 11.1 ms | 200 ms |
+| `GET /api/v1/jobs/:id` | 0.7 ms | 1.1 ms | 200 ms |
+| `GET /api/v1/scenes` | 0.7 ms | 1.0 ms | 200 ms |
+| `POST /api/v1/auth/login` | 48 ms | 52 ms | 500 ms |
+| `GET .../result.ply` (fox, ~72 MB) | 220 ms | 267 ms | 3000 ms |
+
+Website load, local backend, Chrome (same machine): first byte 9 ms, DOM ready 96 ms, fully loaded 113 ms, 1.3 MB transferred.
+
+Still to measure for the demo: engine desktop FPS, web viewer FPS (desktop and phone), and the website load and API p95 from the deployed VM (`GET /api/v1/metrics/performance?window=24h`). The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
+
 ## Team
 
 Team Codefine GAM300-350
