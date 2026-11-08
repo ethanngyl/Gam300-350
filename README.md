@@ -98,6 +98,13 @@ The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), 
 
 ## Signing in to the Engine
 The engine uses the same accounts as the web app, so models made through the web app can be opened in the desktop editor.
+
+To sign in:
+1. Open the **My Models** tab on the bottom row and click **Sign In**
+2. Change the server address to the server you want, if needed
+3. Enter your account and password
+
+More details:
 - Start the backend first (`start.bat` / `start.sh` / Docker), then in the engine go to Account > Sign In, or click Sign In in the **My Models** tab
 - Server is the web app's address, `http://localhost:5005` by default. Point it at the machine that processed the models: with `AUTH_MODE=client`, accounts are on the VM but each machine keeps its own models
 - Signing in to another machine over plain `http://` sends your password unencrypted, so the engine asks before doing it. Use an `https://` address where there is one
@@ -116,6 +123,7 @@ The engine uses the same accounts as the web app, so models made through the web
 
 ## Current Issues
 -  The model used for training is taxing and requires a strong GPU, the model training is reliant on a CUDA GPU meaning the host system will always need to remain online, other options are being explored at the moment.
+-  Model training is not available on the deployed VM, because the VM has no GPU. To build models, run the backend on a machine with an NVIDIA GPU (see the Docker setup above).
 -  The frame extractor can extract images but the quality and kind of images captured might not be compatible with colmap's requirements.
 
 ## Performance budget
@@ -152,7 +160,20 @@ Web viewer, desktop (same laptop, Chrome, `fox.ply` 304,526 splats, engine rende
 
 Engine desktop editor (same laptop, 2026-11-08): about 130 FPS at the lowest, 160 FPS at the highest. Within budget (60 FPS).
 
-Still to measure for the demo: web viewer FPS on a phone, and the website load and API p95 from the deployed VM (`GET /api/v1/metrics/performance?window=24h`). The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
+Deployed VM, last 24 h (`GET /api/v1/metrics/performance?window=24h`, admins; live numbers there):
+
+| Metric | p95 | Budget | Result |
+| --- | --- | --- | --- |
+| Website first contentful paint (FCP) | 2.0 s | 1.8 s | **Over budget** |
+| Website fully loaded | 2.5 s | 3 s | Within budget |
+| API, slowest JSON route | 116.2 ms | 200 ms | Within budget |
+| API, sign-in | 200 ms | 500 ms | Within budget |
+
+FCP on the VM is 0.2 s over budget. Cause and plan: still to record.
+
+Web viewer, phone (2026-11-08, Chrome, `fox.ply` 304,526 splats, engine renderer, orbiting; measured with an on-page frame counter): 87 FPS at the lowest, 90 FPS at the highest (the display refresh rate). Within budget (30 FPS).
+
+The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
 
 ### Many users at once
 
