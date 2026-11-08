@@ -21,6 +21,7 @@ engine is configured; the Emscripten SDK downloads the first time
 engine/build-web.bat runs (start.bat calls it for you).
 
 Web app + backend (npm -- packages/package.json):
+- @codefine/splat-renderer (the engine's renderer compiled to WebAssembly; local package in engine/web/package, built by engine/build-web.bat)
 - @mkkellogg/gaussian-splats-3d ^0.4.7
 - ajv 8.17.1 (checks data against the JSON schemas in packages/src/backend/schemas)
 - express ^5.2.1
@@ -63,9 +64,9 @@ docs/architecture.md: how the frontend, backend layers and database fit together
 docs/data-schema.md: the database tables (diagram), naming / date / unit rules, and every saved file format with its version.
 docs/api-changelog.md: API versions (/api/v1 and the old, deprecated unversioned paths), every API change and every database migration.
 packages/src/backend/openapi.yaml: the API reference (OpenAPI 3.1) with an example request and response for every endpoint; open it in https://editor.swagger.io. Also served at /api/v1/openapi.yaml.
-Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters, performance). CI runs them on every push.
+Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters, performance, 30 users at once). CI runs them on every push.
 Lint (all blocking in CI): "npm run lint" in packages (ESLint), "ruff check --config ruff.toml tools" (Python), and engine/lint-cpp.sh (clang-tidy on the engine renderer; pip install clang-tidy==22.1.8).
-Performance: "npm run perf" (in packages) measures API p50 / p95 against the budget in README.md ("Performance budget"), on a temporary server; exits 1 if a route is over budget.
+Performance: "npm run perf" (in packages) measures API p50 / p95 against the budget in README.md ("Performance budget"), on a temporary server; exits 1 if a route is over budget. The latest measured numbers (engine, web viewer on desktop and phone, API, deployed VM) are in README.md under "Latest measurements".
 Load: "npm run load" (in packages) runs LOAD_USERS users (default 100) through a whole visit at the same time, LOAD_ROUNDS times (default 3), and reports failures and p95 under load. "npm test" also runs a 30-user concurrency test (concurrency.test.js).
 Performance: every API request is timed, and the website reports how long it took to load. Signed in as an admin, GET /api/v1/metrics/performance?window=1h (or 24h, 7d) shows p50 / p95 / p99 per route and for page loads on that machine. Kept 7 days (PERF_KEEP_DAYS).
 Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
@@ -79,6 +80,15 @@ packages/start.bat: Only starts the web application. It installs npm packages, b
   builds the web app, downloads COLMAP / Brush / cloudflared if missing, installs the Python packages, then starts the backend and a
   Cloudflare tunnel. Keep both windows it opens running while the site is in use.
 engine/run.bat: Only starts the engine (downloads Qt on the first run, then configures, builds and launches it).
+
+To run (Docker, any OS with Docker Desktop):
+docker compose -f docker/docker-compose.yml up -d --build (from the repo root), then open http://localhost:5005. Runs the web app and
+  the reconstruction backend with no Node / Python / tool installs. Add -f docker/docker-compose.gpu.yml on NVIDIA GPUs; without one,
+  training runs on the CPU and is very slow. The desktop engine is not included. Full commands (logs, tunnel, stop) are in README.md.
+
+Deployed VM:
+The VM has no GPU, so model training is not available there. Sign-in, accounts and viewing models work; to build models, run the
+backend on a machine with an NVIDIA GPU (start.bat, or Docker with the GPU file above).
 
 Other scripts (Windows):
 packages/start-metrics.bat: Starts the metrics dashboard (job timings, iterations, splat counts, hardware/GPU use) on http://localhost:5010.
@@ -159,6 +169,8 @@ Fewer iterations are faster; more give a sharper, more detailed model.
 - Fast: 5,000 iterations
 - Normal: 7,000 iterations (the website's default)
 - Detailed: 10,000 iterations
+These presets (and the minimum of 8 photos) are reference data in packages/src/backend/catalog/catalog.json, read by the website
+through GET /api/v1/catalog.
 The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from
 the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
@@ -269,8 +281,10 @@ Exporting:
 3) For mesh formats, choose how splats become geometry; a size estimate is shown, and your last choices are remembered.
 
 Account:
-1) Account > Sign In...: enter the server address, email and password from your web-app account; "Remember me on this PC" keeps you signed in.
-2) Account > Sign Out signs out.
+1) Open the My Models tab on the bottom row and click Sign In (or Account > Sign In...).
+2) Change the server address to the server you want, if needed (http://localhost:5005 by default).
+3) Enter your account and password from the web app. "Remember me on this PC" keeps you signed in for 7 days.
+4) Account > Sign Out signs out and deletes that account's downloaded models from the PC.
 
 Play/Stop sounds (Audio panel):
 1) Left-click one or more sounds in the list (Ctrl / Shift to select several), then press "Play Selected", or double-click a single sound.
