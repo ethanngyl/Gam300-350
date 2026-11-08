@@ -6,11 +6,21 @@ Gabriel Sebastian Putra (Backend Champion)
 Clement Ang (Engine Champion)
 
 Pre-Requisites:
-- Node.js (default installation settings): https://nodejs.org/en
-- Visual Studio Community 2022/2026 (with the CMake and C++ workloads): https://visualstudio.microsoft.com/downloads/
-- Python 3.10 or later: https://www.python.org/downloads/
+- Windows 10 or later (64-bit) for the engine and start.bat. The web app also runs on macOS and Linux (see "To run" below).
+- Node.js 22.13 or later (the current LTS with default installation settings is fine): https://nodejs.org/en
+  Older versions fail: the backend's database uses node:sqlite and the build uses Vite 8.
+- Visual Studio Community 2022/2026 with the "Desktop development with C++" workload (it includes the C++ CMake tools):
+  https://visualstudio.microsoft.com/downloads/ -- also needed to build Brush, even if you only run the web app.
+- Python 3.10 or later, with "Add python.exe to PATH" ticked: https://www.python.org/downloads/
 - Git: https://git-scm.com/download/win
+- A GPU to train models (Brush renders with the GPU; there is no CPU-only build). An NVIDIA GPU is recommended: COLMAP is
+  much faster with CUDA, and Docker GPU mode needs one.
+- Internet access on the first run, and several GB of free disk space (Qt, Emscripten SDK, Rust, COLMAP and Brush download once).
+- Installed automatically, no action needed: Rust (to build Brush), Qt, the Emscripten SDK, COLMAP, Brush, cloudflared.
 - Optional: NSIS (https://nsis.sourceforge.io), only needed if you want engine/package.bat to also build a Windows installer.
+- Optional: Docker Desktop (https://www.docker.com/products/docker-desktop/), only for the Docker setup below.
+- macOS / Linux, to build the web viewer's WebAssembly renderer: cmake, git and python3 (brew install cmake / sudo apt install
+  cmake git python3). On Linux, apt's Node.js is usually too old; use NodeSource (https://github.com/nodesource/distributions).
 
 Packages:
 

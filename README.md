@@ -35,10 +35,22 @@ The end goal of the project is to have as many additional features/solve current
 ## Prerequisites/How to Set up
 
 Application Installations:
-- Nodejs(Default Installation Settings): https://nodejs.org/en
-- Visual Studio Community 22/26(With CMake and C++ packages): https://visualstudio.microsoft.com/downloads/
-- Python 3.10 or later: https://www.python.org/downloads/
+- Windows 10 or later (64-bit) for the engine and `start.bat`. The web app also runs on macOS and Linux (see How to Run)
+- Node.js 22.13 or later (the current LTS with default installation settings is fine): https://nodejs.org/en. Older versions fail: the backend's database uses `node:sqlite` and the build uses Vite 8
+- Visual Studio Community 2022/2026 with the **Desktop development with C++** workload (it includes the C++ CMake tools): https://visualstudio.microsoft.com/downloads/. Also needed to build Brush, even if you only run the web app
+- Python 3.10 or later, with "Add python.exe to PATH" ticked (`start.bat` and `engine/run.bat` only look for Python on PATH): https://www.python.org/downloads/
 - Git: https://git-scm.com/download/win
+
+Hardware and first run:
+- A GPU to train models (Brush renders with the GPU; there is no CPU-only build). An NVIDIA GPU is recommended: COLMAP is much faster with CUDA, and Docker GPU mode needs one
+- Internet access on the first run, and several GB of free disk space (Qt, Emscripten SDK, Rust, COLMAP and Brush download once)
+
+Installed automatically, no action needed: Rust (to build Brush), Qt, the Emscripten SDK, COLMAP, Brush, cloudflared.
+
+Optional:
+- NSIS (https://nsis.sourceforge.io), only for `engine/package.bat` to also build a Windows installer
+- Docker Desktop (https://www.docker.com/products/docker-desktop/), only for Run with Docker
+- macOS / Linux, to build the web viewer's WebAssembly renderer: cmake, git and python3 (`brew install cmake` / `sudo apt install cmake git python3`). On Linux, apt's Node.js is usually too old; use NodeSource (https://github.com/nodesource/distributions)
 
 ## How to Run
 - Windows: Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
