@@ -6,9 +6,24 @@
     <title>CoDeFine - turn real objects into 3D assets</title>
     <link rel="icon" type="image/svg+xml" href="./GenesisIcon.svg">
 
+    <!-- Light / dark before the first paint (same key and default as ThemePreference.js). -->
+    <script>
+        (function () {
+            var preference = 'light';
+            try {
+                var saved = localStorage.getItem('genesis-theme');
+                if (saved === 'light' || saved === 'dark' || saved === 'system') preference = saved;
+            } catch (e) { /* storage blocked: keep the default */ }
+            if (preference === 'system') {
+                preference = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-theme', preference);
+        })();
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="root"></div>

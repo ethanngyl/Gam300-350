@@ -8,8 +8,9 @@
 \brief
 First-run walkthrough of the dashboard (Genesis design). The page is
 dimmed and a glowing spotlight is drawn around one item at a time (Home's
-Recent section, then each dock item from left to right), with a tooltip
-beside it: step count, title, a short line of text, and Skip / Next
+Recent section, then each navigation item in order), with a tooltip
+beside it (to the right of items in the desktop sidebar, above or below
+everything else): step count, title, a short line of text, and Skip / Next
 (Finish on the last step). Escape skips. If a step's item is not on the
 screen, its tooltip is shown in the middle of the page instead.
 In the mobile view the dock shows five tabs at a time, so each step slides
@@ -95,7 +96,7 @@ const WALKTHROUGH_STEPS = [
     {
         target: '.genesis-dock-avatar',
         title: 'Your account',
-        text: 'Your profile, plan and sound settings. You can replay this walkthrough from here.',
+        text: 'Your profile, plan, appearance and sound settings. You can replay this walkthrough from here.',
         guestText: 'Sign in here to save your work, choose a plan and send feedback.',
         placement: 'above',
     },
@@ -147,7 +148,14 @@ function Walkthrough({ isGuest = false, onClose }) {
                 return;
             }
             const rect = targetElement.getBoundingClientRect();
-            setTargetRect({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+            setTargetRect({
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height,
+                // Desktop sidebar (Dock.jsx): the tooltip goes to its right.
+                isInSidebar: Boolean(targetElement.closest('.genesis-sidebar-nav')),
+            });
         }
 
         const targetElement = document.querySelector(step.target);
@@ -187,7 +195,7 @@ function Walkthrough({ isGuest = false, onClose }) {
         setStepIndex((index) => index + 1);
     }
 
-    // Spotlight: the item plus padding. Dock items are round, so it is too.
+    // Spotlight: the item plus padding. Phone bar items are round, so it is too.
     let spotlightStyle = null;
     let tooltipStyle;
     const tooltipWidth = Math.min(TOOLTIP_WIDTH, window.innerWidth - SCREEN_MARGIN * 2);
@@ -198,15 +206,24 @@ function Walkthrough({ isGuest = false, onClose }) {
             top: targetRect.top - padding,
             width: targetRect.width + padding * 2,
             height: targetRect.height + padding * 2,
-            borderRadius: step.target.includes('dock') ? 999 : 14,
+            borderRadius: step.target.includes('dock') && !targetRect.isInSidebar ? 999 : 14,
         };
 
-        // Centred on the item, but kept inside the screen.
-        const centredLeft = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
-        const left = Math.max(SCREEN_MARGIN, Math.min(window.innerWidth - tooltipWidth - SCREEN_MARGIN, centredLeft));
-        tooltipStyle = step.placement === 'above'
-            ? { left, width: tooltipWidth, bottom: window.innerHeight - (targetRect.top - padding - TOOLTIP_GAP) }
-            : { left, width: tooltipWidth, top: targetRect.top + targetRect.height + padding + TOOLTIP_GAP };
+        if (targetRect.isInSidebar) {
+            // To the right of the sidebar item, level with it, kept on screen.
+            const top = Math.max(
+                SCREEN_MARGIN,
+                Math.min(window.innerHeight - 170 - SCREEN_MARGIN, targetRect.top + targetRect.height / 2 - 60),
+            );
+            tooltipStyle = { left: targetRect.left + targetRect.width + padding + TOOLTIP_GAP, top, width: tooltipWidth };
+        } else {
+            // Centred on the item, but kept inside the screen.
+            const centredLeft = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+            const left = Math.max(SCREEN_MARGIN, Math.min(window.innerWidth - tooltipWidth - SCREEN_MARGIN, centredLeft));
+            tooltipStyle = step.placement === 'above'
+                ? { left, width: tooltipWidth, bottom: window.innerHeight - (targetRect.top - padding - TOOLTIP_GAP) }
+                : { left, width: tooltipWidth, top: targetRect.top + targetRect.height + padding + TOOLTIP_GAP };
+        }
     } else {
         // Item not on screen: tooltip in the middle of the page.
         tooltipStyle = { left: '50%', top: '50%', width: tooltipWidth, transform: 'translate(-50%, -50%)' };

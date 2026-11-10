@@ -15,6 +15,7 @@
 #include "ui/MainWindow.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QSurfaceFormat>
 
 int main(int argc, char** argv) {
@@ -32,6 +33,15 @@ int main(int argc, char** argv) {
     // Identity used by QSettings (window layout, recent files, preferences).
     QApplication::setOrganizationName("CoDefine");
     QApplication::setApplicationName("Codefine Engine");
+    // GENESIS logo for every window's title bar, the taskbar and Alt+Tab.
+    // Each size is drawn for its own size (bolder lines on the small ones),
+    // so Qt picks the closest instead of scaling one image.
+    // (Compiled in by qt_add_resources in CMakeLists.txt.)
+    QIcon appIcon;
+    for (int size : {16, 24, 32, 48, 64, 128, 256}) {
+        appIcon.addFile(QStringLiteral(":/icons/genesis-%1.png").arg(size), QSize(size, size));
+    }
+    QApplication::setWindowIcon(appIcon);
     EditorTheme::Apply(app);
     // Click sound on every push/tool button in the editor and its dialogs.
     ButtonSounds buttonSounds;

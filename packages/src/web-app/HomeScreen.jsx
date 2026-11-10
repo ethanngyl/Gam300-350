@@ -8,20 +8,47 @@
 \brief
 Dashboard landing screen, laid out like the Genesis wireframe and focused
 on the user's own work: a welcome line and subtitle (plus a "New model"
-button on phones, as a bigger target than the dock's), then "Recent" with two
+button on phones, as a bigger target than the bottom bar's), then "Create a
+3D model" with three large cards (camera capture, upload photos straight
+into the capture batch, or the Frame Extractor for videos), then "Recent" with two
 tabs and a "View all" button. "Your files" shows the latest photo batches and opens the Photo
 Library; "Generated models" shows the latest finished models and opens one
 in the full-page viewer. Both come from GET /jobs. With nothing made yet,
 it shows a single "Create your first 3D model" card instead.
 **************************************************************************/
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 
 // How many cards each Recent tab shows.
 const RECENT_ITEM_COUNT = 10;
+
+// The three ways to start a model, shown as large cards in Create.
+const CREATE_OPTIONS = [
+    {
+        id: 'camera',
+        icon: 'camera',
+        title: 'Capture with camera',
+        text: 'Walk around your object and shoot it from every angle.',
+        hint: 'Phone or webcam',
+    },
+    {
+        id: 'photos',
+        icon: 'image',
+        title: 'Upload photos',
+        text: 'Use overlapping photos you already took of an object.',
+        hint: 'JPG, PNG, WEBP, HEIC',
+    },
+    {
+        id: 'video',
+        icon: 'video',
+        title: 'Extract from video',
+        text: 'Turn a video that orbits the object into clean frames.',
+        hint: 'MP4, MOV, WEBM',
+    },
+];
 
 const RECENT_TABS = [
     { id: 'files', label: 'Your files' },
@@ -42,7 +69,8 @@ function formatTimeAgo(timestamp) {
     return new Date(timestamp).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
 }
 
-function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
+function HomeScreen({ userName, onNewGeneration, onAddPhotos, onOpenExtractor, onOpenLibrary, onOpenModel }) {
+    const photoInputRef = useRef(null);
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
@@ -110,19 +138,72 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
         onNewGeneration();
     }
 
+    function handlePhotosChosen(event) {
+        const chosenFiles = Array.from(event.target.files ?? []);
+        // Clear so choosing the same files again still fires onChange.
+        event.target.value = '';
+        if (chosenFiles.length > 0) onAddPhotos(chosenFiles);
+    }
+
+    // A Create card was clicked (CREATE_OPTIONS ids).
+    function selectCreateOption(id) {
+        if (id === 'camera') {
+            startNewModel();
+            return;
+        }
+        playSound('tap');
+        if (id === 'photos') photoInputRef.current?.click();
+        else onOpenExtractor();
+    }
+
     return (
         <div className="home-screen">
-            <p className="eyebrow eyebrow-accent">Default workspace</p>
             <div className="home-heading-row">
                 <div>
+                    <p className="eyebrow eyebrow-accent">Default workspace</p>
                     <h1>Welcome back, {userName}</h1>
                     <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
                 </div>
-                {/* Phones only: a bigger New model button than the dock's icon. */}
+                {/* Phones only: a bigger New model button than the bar's icon. */}
                 <button className="forma-btn forma-btn-primary home-new-model" onClick={startNewModel}>
                     <Icon name="cubePlus" size={15} /> New model
                 </button>
             </div>
+
+            <section className="home-create" aria-labelledby="home-create-title">
+                <div className="home-create-header">
+                    <h2 id="home-create-title" className="home-section-title">Create a 3D model</h2>
+                    <p>Pick how you want to capture your object. Every option ends in the same reconstruction pipeline.</p>
+                </div>
+                <div className="home-create-grid">
+                    {CREATE_OPTIONS.map((option) => (
+                        <button
+                            key={option.id}
+                            type="button"
+                            className={`home-create-card is-${option.id}`}
+                            onClick={() => selectCreateOption(option.id)}
+                        >
+                            <span className="home-create-icon"><Icon name={option.icon} size={22} /></span>
+                            <span className="home-create-copy">
+                                <span className="home-create-title">{option.title}</span>
+                                <span className="home-create-text">{option.text}</span>
+                            </span>
+                            <span className="home-create-foot">
+                                <span className="home-create-hint">{option.hint}</span>
+                                <span className="home-create-arrow"><Icon name="arrow" size={16} /></span>
+                            </span>
+                        </button>
+                    ))}
+                </div>
+                <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePhotosChosen}
+                    style={{ display: 'none' }}
+                />
+            </section>
 
             <div className="home-recent-v2-header">
                 <div>

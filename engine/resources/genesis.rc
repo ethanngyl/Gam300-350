@@ -1,0 +1,6 @@
+// Windows resources for Codefine.exe.
+// The first ICON resource is the exe's icon: Explorer, the taskbar, desktop
+// and Start menu shortcuts, and the installer's Add/Remove Programs entry
+// (CPACK_NSIS_INSTALLED_ICON_NAME points at the exe).
+// genesis.ico is generated from icons/genesis-app-icon.svg (see icons/README.md).
+IDI_ICON1 ICON "icons/genesis.ico"

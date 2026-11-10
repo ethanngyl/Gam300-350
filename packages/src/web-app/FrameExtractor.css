@@ -64,7 +64,7 @@
     gap: 8px;
     padding: 28px 20px 24px;
     border: 1px dashed var(--forma-border-strong);
-    border-radius: 12px;
+    border-radius: var(--forma-r-lg);
     background: var(--forma-bg);
     text-align: center;
     cursor: pointer;
@@ -115,7 +115,7 @@
     gap: 12px;
     padding: 8px;
     border: 1px solid var(--forma-border);
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     background: var(--forma-panel-alt);
     min-width: 0;
 }
@@ -125,7 +125,7 @@
     width: 64px;
     aspect-ratio: 16 / 9;
     overflow: hidden;
-    border-radius: 4px;
+    border-radius: var(--forma-r-xs);
     background: var(--forma-bg);
 }
 
@@ -200,7 +200,7 @@
     padding: 0 12px;
     background: var(--forma-bg);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     font-family: var(--forma-font-mono);
     font-size: 0.72rem;
     letter-spacing: 0.08em;
@@ -311,7 +311,7 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: var(--forma-r-xs);
     border: 1px solid var(--forma-border-strong);
     color: var(--forma-text-muted);
     background: var(--forma-panel-alt);

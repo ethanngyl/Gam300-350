@@ -6,24 +6,21 @@
 \par Software Engineering Project 5
 \date 31-10-2026
 \brief
-Floating dock at the bottom of every dashboard page (Genesis "second
-layout"), replacing the top nav and sidebar. Left to right: "New model",
-which opens the camera capture page; "Add photos", which opens the file
-picker and hands the chosen photos to the capture page; the workspace
-pages (Home, Media Library, Photo Editor, Scene Builder, Frame
-Extractor, Model Viewer, Feedback); and the signed-in user, whose menu opens upwards
-and links to the account page, mutes / unmutes sound effects, replays
-the walkthrough, and signs out (or in, for guests). The avatar shows the user's profile photo if
-they set one on the account page (ProfilePhoto.js). Each item is an icon whose label slides out on
-hover or keyboard focus; the current page is highlighted. A switch in its
-own panel at the top-right corner ("Show Tab Labels" / "Hide Tab Labels")
-keeps every label showing instead, in one straight row (remembered on this
-browser). It only shows where that row fits, from 1160px wide; narrower
-windows keep the icons-only dock.
-On devices with a mouse, the dock fades and slides mostly out of view 3s
-after the pointer leaves it, and comes back when the pointer reaches the
-bottom of the screen or the dock gets keyboard focus. isPinned (set during
-the walkthrough) also keeps the dock in view.
+The app's main navigation. On desktop it is a sidebar down the left of
+every dashboard page (the "studio" layout). Top to bottom: the GENESIS
+logo with a button that collapses the sidebar to icons only (labels then
+show as tooltips; remembered on this browser); "New model", which opens
+the camera capture page; "Add photos", which opens the file picker and
+hands the chosen photos to the capture page; the workspace pages (Home,
+Media Library, Photo Editor, Scene Builder, Frame Extractor, Model
+Viewer, Feedback); and a footer with the Light / Dark / System switch
+(ThemeSwitch.jsx) and the signed-in user, whose menu opens upwards and
+links to the account page, mutes / unmutes sound effects, replays the
+walkthrough, and signs out (or in, for guests). The avatar shows the
+user's profile photo if they set one on the account page
+(ProfilePhoto.js). The current page is highlighted.
+The nav keeps the .genesis-dock class and the items' aria-labels, which
+Walkthrough.jsx uses to find them.
 In the mobile view (760px wide or less) it is a full-width bar instead,
 always in view: five tabs at a time, each an icon with a short label, and
 an arrow button on the right that slides to the next five (on the last
@@ -31,10 +28,12 @@ five it points back and returns to the first). The tabs can also be
 swiped. The page containing the current tab is shown when the page changes.
 **************************************************************************/
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Icon from './Icons.jsx';
 import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 import { useProfilePhoto } from './ProfilePhoto.js';
+import ThemeSwitch from './ThemeSwitch.jsx';
+import genesisLogo from './GenesisLogo.svg';
 
 const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', shortLabel: 'Home', icon: 'home' },
@@ -49,33 +48,24 @@ const WORKSPACE_ITEMS = [
 // Mobile tab order: the most used first, five per page.
 const MOBILE_WORKSPACE_ORDER = ['home', 'library', 'viewer', 'editor', 'scene', 'extractor', 'feedback'];
 
-// How long the dock waits after the pointer leaves before it fades.
-const IDLE_DELAY_MS = 3000;
-
-// Remembers "Show tab labels" on this browser.
-const SHOW_LABELS_KEY = 'genesis-dock-show-labels';
+// Remembers whether the sidebar is collapsed to icons on this browser.
+const COLLAPSED_KEY = 'genesis-sidebar-collapsed';
 
 // Storage can be blocked (private windows, site data off), so every access is wrapped.
-function loadShowLabels() {
+function loadIsCollapsed() {
     try {
-        return window.localStorage.getItem(SHOW_LABELS_KEY) === 'true';
+        return window.localStorage.getItem(COLLAPSED_KEY) === 'true';
     } catch {
         return false;
     }
 }
 
-function saveShowLabels(showLabels) {
+function saveIsCollapsed(isCollapsed) {
     try {
-        window.localStorage.setItem(SHOW_LABELS_KEY, String(showLabels));
+        window.localStorage.setItem(COLLAPSED_KEY, String(isCollapsed));
     } catch {
         // Storage unavailable: the choice lasts until the page is reloaded.
     }
-}
-
-// Only the desktop view fades the dock: it needs a mouse to bring the dock
-// back, and the mobile view keeps it in view at all times.
-function canFadeDock() {
-    return window.matchMedia?.('(hover: hover) and (pointer: fine) and (min-width: 761px)').matches ?? false;
 }
 
 // Same width as the mobile view in AppTheme.css.
@@ -100,21 +90,13 @@ function Dock({
     onOpenAccount,
     onShowWalkthrough,
     onSignOut,
-    isPinned = false,
 }) {
     const fileInputRef = useRef(null);
     const profileRef = useRef(null);
-    const idleTimerRef = useRef(null);
     const mobileScrollerRef = useRef(null);
-    const labelsToggleRef = useRef(null);
-    // Whether the last press on the tab labels switch was a finger (touch screens can't hover).
-    const wasLabelsTogglePressedByTouchRef = useRef(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-    const [isIdle, setIsIdle] = useState(false);
-    // Every item shows its full label, not just the icon (desktop view only).
-    const [showLabels, setShowLabels] = useState(loadShowLabels);
-    // Touch screens: the tab labels switch was tapped open (a mouse opens it by hovering).
-    const [isLabelsToggleOpen, setIsLabelsToggleOpen] = useState(false);
+    // Desktop sidebar narrowed to icons only (labels as tooltips).
+    const [isCollapsed, setIsCollapsed] = useState(loadIsCollapsed);
     // Mobile view: whether the last tabs are showing, so the arrow points back.
     const [isAtLastMobileTabs, setIsAtLastMobileTabs] = useState(false);
     const isMobile = useSyncExternalStore(subscribeToMobileView, isMobileView);
@@ -132,28 +114,6 @@ function Dock({
         setIsAtLastMobileTabs(false);
         setIsProfileMenuOpen(false);
     }
-
-    const clearIdleTimer = useCallback(() => {
-        if (idleTimerRef.current !== null) {
-            window.clearTimeout(idleTimerRef.current);
-            idleTimerRef.current = null;
-        }
-    }, []);
-
-    function showDock() {
-        clearIdleTimer();
-        setIsIdle(false);
-    }
-
-    // Starts the countdown to fade the dock (not while its menu is open).
-    function scheduleIdle() {
-        clearIdleTimer();
-        if (isProfileMenuOpen || isPinned || !canFadeDock()) return;
-        idleTimerRef.current = window.setTimeout(() => setIsIdle(true), IDLE_DELAY_MS);
-    }
-
-    // Stop any pending fade when the dock goes away (e.g. on sign out).
-    useEffect(() => clearIdleTimer, [clearIdleTimer]);
 
     // Close the profile menu on a click outside it or on Escape.
     useEffect(() => {
@@ -176,18 +136,6 @@ function Dock({
             document.removeEventListener('keydown', closeOnEscape);
         };
     }, [isProfileMenuOpen]);
-
-    // Touch screens: close the tab labels switch on a tap anywhere else.
-    useEffect(() => {
-        if (!isLabelsToggleOpen) return;
-
-        function closeWhenTappingOutside(event) {
-            if (!labelsToggleRef.current?.contains(event.target)) setIsLabelsToggleOpen(false);
-        }
-
-        document.addEventListener('pointerdown', closeWhenTappingOutside);
-        return () => document.removeEventListener('pointerdown', closeWhenTappingOutside);
-    }, [isLabelsToggleOpen]);
 
     // Mobile view: show the five tabs that hold the current page.
     useEffect(() => {
@@ -222,24 +170,11 @@ function Dock({
         else onNavigate(key);
     }
 
-    function handleLabelsToggleClick() {
-        // Read and clear the flag, so a later keyboard press (Enter / Space,
-        // which has no pointer press) isn't taken for a tap.
-        const wasPressedByTouch = wasLabelsTogglePressedByTouchRef.current;
-        wasLabelsTogglePressedByTouchRef.current = false;
-        // Touch screens: the first tap only opens it, so the user can see what it does.
-        if (wasPressedByTouch && !isLabelsToggleOpen) {
-            playSound('tap');
-            setIsLabelsToggleOpen(true);
-            return;
-        }
-        toggleShowLabels();
-    }
-
-    function toggleShowLabels() {
+    function toggleCollapsed() {
         playSound('tap');
-        saveShowLabels(!showLabels);
-        setShowLabels(!showLabels);
+        closeProfileMenu();
+        saveIsCollapsed(!isCollapsed);
+        setIsCollapsed(!isCollapsed);
     }
 
     // Mobile view: notes whether the tabs have reached the last page.
@@ -293,6 +228,13 @@ function Dock({
                 </div>
             </div>
             <div className="genesis-profile-divider" />
+            {/* The desktop sidebar has its own switch in the footer. */}
+            {isMobile && (
+                <>
+                    <ThemeSwitch className="genesis-profile-theme" />
+                    <div className="genesis-profile-divider" />
+                </>
+            )}
             <button
                 className="forma-account-menu-item"
                 onClick={() => {
@@ -392,78 +334,84 @@ function Dock({
         );
     }
 
-    const dockClassName = [
-        'genesis-dock',
-        isIdle && !isPinned && 'is-idle',
-        showLabels && 'is-labelled',
-    ].filter(Boolean).join(' ');
+    const sidebarClassName = ['genesis-dock', 'genesis-sidebar-nav', isCollapsed && 'is-collapsed']
+        .filter(Boolean)
+        .join(' ');
+
+    // Collapsed: the label shows as a tooltip instead.
+    const tooltip = (label) => (isCollapsed ? label : undefined);
 
     return (
-        <>
-            {/* Invisible strip along the bottom edge: reaching it brings a faded dock back. */}
-            <div className="genesis-dock-reveal" onPointerEnter={showDock} aria-hidden="true" />
+        <nav className={sidebarClassName} aria-label="Workspace">
+            <div className="genesis-sidebar-brand">
+                <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
+                <span className="genesis-sidebar-wordmark">GENESIS</span>
+                <button
+                    type="button"
+                    className="genesis-sidebar-collapse"
+                    onClick={toggleCollapsed}
+                    aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    aria-expanded={!isCollapsed}
+                    title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                    <Icon name="sidebar" size={16} />
+                </button>
+            </div>
 
-            <nav
-                className={dockClassName}
-                aria-label="Workspace"
-                onPointerEnter={showDock}
-                onPointerLeave={scheduleIdle}
-                onFocus={showDock}
-                onBlur={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget)) scheduleIdle();
-                }}
-            >
-                <div className="genesis-dock-group">
+            <div className="genesis-dock-group genesis-sidebar-actions">
+                <button
+                    className={isCapturePage ? 'genesis-dock-item is-primary is-active' : 'genesis-dock-item is-primary'}
+                    onClick={() => {
+                        playSound('tap');
+                        closeProfileMenu();
+                        onNewModel();
+                    }}
+                    aria-label="New model"
+                    aria-current={isCapturePage ? 'page' : undefined}
+                    title={tooltip('New model')}
+                >
+                    <Icon name="cubePlus" size={17} />
+                    <span className="genesis-dock-label">New model</span>
+                </button>
+                <button
+                    className="genesis-dock-item genesis-sidebar-secondary"
+                    onClick={() => {
+                        playSound('tap');
+                        closeProfileMenu();
+                        openFilePicker();
+                    }}
+                    aria-label="Add photos"
+                    title={tooltip('Add photos')}
+                >
+                    <Icon name="upload" size={17} />
+                    <span className="genesis-dock-label">Add photos</span>
+                </button>
+                {fileInput}
+            </div>
+
+            <span className="genesis-sidebar-heading">Workspace</span>
+            <div className="genesis-dock-group genesis-sidebar-pages">
+                {WORKSPACE_ITEMS.map((item) => (
                     <button
-                        className={isCapturePage ? 'genesis-dock-item is-primary is-active' : 'genesis-dock-item is-primary'}
+                        key={item.id}
+                        className={activeTab === item.id ? 'genesis-dock-item is-active' : 'genesis-dock-item'}
                         onClick={() => {
                             playSound('tap');
                             closeProfileMenu();
-                            onNewModel();
+                            onNavigate(item.id);
                         }}
-                        aria-label="New model"
-                        aria-current={isCapturePage ? 'page' : undefined}
+                        aria-label={item.label}
+                        aria-current={activeTab === item.id ? 'page' : undefined}
+                        title={tooltip(item.label)}
                     >
-                        <Icon name="cubePlus" size={17} />
-                        <span className="genesis-dock-label">New model</span>
+                        <Icon name={item.icon} size={17} />
+                        <span className="genesis-dock-label">{item.label}</span>
                     </button>
-                    <button
-                        className="genesis-dock-item"
-                        onClick={() => {
-                            playSound('tap');
-                            closeProfileMenu();
-                            openFilePicker();
-                        }}
-                        aria-label="Add photos"
-                    >
-                        <Icon name="upload" size={17} />
-                        <span className="genesis-dock-label">Add photos</span>
-                    </button>
-                    {fileInput}
-                </div>
+                ))}
+            </div>
 
-                <span className="genesis-dock-divider" aria-hidden="true" />
-
-                <div className="genesis-dock-group">
-                    {WORKSPACE_ITEMS.map((item) => (
-                        <button
-                            key={item.id}
-                            className={activeTab === item.id ? 'genesis-dock-item is-active' : 'genesis-dock-item'}
-                            onClick={() => {
-                                playSound('tap');
-                                closeProfileMenu();
-                                onNavigate(item.id);
-                            }}
-                            aria-label={item.label}
-                            aria-current={activeTab === item.id ? 'page' : undefined}
-                        >
-                            <Icon name={item.icon} size={17} />
-                            <span className="genesis-dock-label">{item.label}</span>
-                        </button>
-                    ))}
-                </div>
-
-                <span className="genesis-dock-divider" aria-hidden="true" />
+            <div className="genesis-sidebar-footer">
+                <ThemeSwitch isCompact={isCollapsed} className="genesis-sidebar-theme" />
 
                 <div className="genesis-dock-profile" ref={profileRef}>
                     {profileMenu}
@@ -476,43 +424,19 @@ function Dock({
                         }}
                         aria-expanded={isProfileMenuOpen}
                         aria-label={`${user.name}, account menu`}
+                        title={tooltip(user.name)}
                     >
                         <span className="forma-avatar genesis-dock-avatar-icon">
                             {profilePhoto ? <img src={profilePhoto} alt="" /> : <Icon name="user" size={15} />}
                         </span>
-                        <span className="genesis-dock-label">{user.name}</span>
+                        <span className="genesis-dock-label genesis-sidebar-identity">
+                            <strong>{user.name}</strong>
+                            <span>{user.isGuest ? 'Guest' : user.email}</span>
+                        </span>
                     </button>
                 </div>
-            </nav>
-
-            {/* Its own small panel in the top-right corner, apart from the dock. */}
-            <button
-                ref={labelsToggleRef}
-                type="button"
-                className={[
-                    'genesis-labels-toggle',
-                    showLabels && 'is-on',
-                    isLabelsToggleOpen && 'is-open',
-                ].filter(Boolean).join(' ')}
-                onPointerDown={(event) => {
-                    wasLabelsTogglePressedByTouchRef.current = event.pointerType === 'touch';
-                }}
-                onClick={handleLabelsToggleClick}
-                role="switch"
-                aria-checked={showLabels}
-                aria-label="Show tab labels"
-                title={showLabels ? 'Hide tab labels' : 'Show tab labels'}
-            >
-                <Icon name="menu" size={15} />
-                <span className="genesis-labels-toggle-text" aria-hidden="true">
-                    {showLabels ? 'Hide Tab Labels' : 'Show Tab Labels'}
-                </span>
-                <span className="genesis-labels-toggle-track" aria-hidden="true">
-                    <span className="genesis-labels-toggle-thumb" />
-                </span>
-                {showLabels && <span className="genesis-labels-toggle-dot" aria-hidden="true" />}
-            </button>
-        </>
+            </div>
+        </nav>
     );
 }
 

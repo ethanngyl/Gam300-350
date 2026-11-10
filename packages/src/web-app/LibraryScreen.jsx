@@ -200,7 +200,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use New model in the dock below to create one.'}
+                                : 'No generated models yet. Use New model to create one.'}
                         </p>
                     )}
 

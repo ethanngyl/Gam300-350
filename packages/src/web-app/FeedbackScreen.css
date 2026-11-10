@@ -81,7 +81,7 @@
 .feedback-types {
     display: flex;
     padding: 3px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border);
 }
@@ -95,7 +95,7 @@
     min-width: 0;
     padding: 10px 4px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
     background: transparent;
     color: var(--forma-text-muted);
     font-family: inherit;
@@ -134,7 +134,7 @@
     min-height: 160px;
     resize: vertical;
     padding: 12px 14px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border-strong);
     background: var(--forma-bg);
     color: var(--forma-text);
@@ -168,7 +168,7 @@
 
 .feedback-screen .feedback-error {
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     background: rgba(var(--forma-red-rgb), 0.12);
     border: 1px solid rgba(var(--forma-red-rgb), 0.4);
     color: var(--forma-red);
@@ -239,7 +239,7 @@
     justify-content: center;
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: var(--forma-r-lg);
     background: rgba(var(--forma-accent-rgb), 0.14);
     border: 1px solid rgba(var(--forma-accent-rgb), 0.4);
     color: var(--forma-teal-text);
@@ -348,7 +348,7 @@
     flex-direction: column;
     gap: 10px;
     padding: 14px 16px;
-    border-radius: 10px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border);
     background: var(--forma-panel-alt);
     min-width: 0;
@@ -368,7 +368,7 @@
     align-items: center;
     gap: 5px;
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: var(--forma-r-xs);
     font-family: var(--forma-font-mono);
     font-size: 0.68rem;
     letter-spacing: 0.04em;

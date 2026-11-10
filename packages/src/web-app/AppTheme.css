@@ -1,49 +1,143 @@
 /* ============================================================
-   GENESIS theme - neutral charcoal with blue accent and amber highlight
+   GENESIS theme - "Aurora"
+   Near-black, slightly cool surfaces; one signature violet accent that
+   runs into cyan on primary actions; soft rounded geometry and glass
+   overlays on media. The variable names are unchanged from the old
+   charcoal/blue theme (--forma-blue is now the accent, whatever its hue)
+   so every screen picks the new look up from here.
    ============================================================ */
 
-:root {
+/* Dark is the base set. In the light theme the 3D canvases and the camera
+   preview re-declare it, so they and everything on them stay dark. */
+:root,
+:root[data-theme='light'] :is(.model-viewer, .scene-builder-viewport, .capture-viewport) {
+    color-scheme: dark;
     /* ----- Fonts (loaded in index.html) ----- */
-    --forma-font: 'Inter', system-ui, sans-serif;
-    --forma-font-mono: 'JetBrains Mono', monospace;
+    --forma-font: 'Geist', 'Inter', system-ui, sans-serif;
+    --forma-font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
     /* ----- Surfaces, darkest to lightest ----- */
-    --forma-bg: #0d0d0f;
-    --forma-sidebar: #121214;
-    --forma-panel: #18181b;
-    --forma-panel-alt: #202024;
-    --forma-panel-raised: #2a2a2f;
-    --forma-border: #242428;
-    --forma-border-strong: #34343a;
+    --forma-bg: #09090c;
+    --forma-sidebar: #0e0e12;
+    --forma-panel: #131318;
+    --forma-panel-alt: #1a1a21;
+    --forma-panel-raised: #24242d;
+    --forma-border: #1f1f27;
+    --forma-border-strong: #2e2e39;
     /* ----- Text ----- */
-    --forma-text: #f4f4f5;
-    --forma-text-soft: #d4d4d8;
-    --forma-heading: #fafafa;
-    --forma-text-muted: #a1a1aa;
-    --forma-text-dim: #8b8b94;
+    --forma-text: #ededf2;
+    --forma-text-soft: #cfcfd8;
+    --forma-heading: #ffffff;
+    --forma-text-muted: #9d9dab;
+    --forma-text-dim: #7c7c8a;
     /* Text on top of an accent or coral fill */
     --forma-on-accent: #ffffff;
     --forma-on-coral: #1a1204;
     /* ----- Accents ----- */
-    --forma-blue: #3b82f6;
-    --forma-blue-hover: #4f8df7;
-    --forma-teal-text: #73a7ff;
-    --forma-coral: #f59e0b;
-    --forma-green: #4fc4a6;
-    --forma-red: #f06f60;
-    --forma-red-text: var(--forma-red-text);
-    --forma-purple: #a78bfa;
-    --forma-orange: #f97316;
+    --forma-blue: #7c6cff;
+    --forma-blue-hover: #8d7fff;
+    --forma-teal-text: #ada4ff;
+    --forma-cyan: #4cc9f0;
+    --forma-coral: #ffb547;
+    --forma-green: #3fd8a4;
+    --forma-red: #ff6b6b;
+    --forma-red-text: #ff8e8e;
+    --forma-purple: #c49bff;
+    --forma-orange: #ff8a3d;
     /* ----- Same colours as R, G, B for see-through tints:
              rgba(var(--forma-accent-rgb), 0.16) ----- */
-    --forma-accent-rgb: 59, 130, 246;
-    --forma-accent-light-rgb: 115, 167, 255;
-    --forma-coral-rgb: 245, 158, 11;
-    --forma-red-rgb: 240, 111, 96;
-    --forma-green-rgb: 79, 196, 166;
-    --forma-purple-rgb: 167, 139, 250;
-    --forma-orange-rgb: 249, 115, 22;
-    --forma-bg-rgb: 13, 13, 15;
-    --forma-backdrop-rgb: 5, 5, 7;
+    --forma-accent-rgb: 124, 108, 255;
+    --forma-accent-light-rgb: 173, 164, 255;
+    --forma-cyan-rgb: 76, 201, 240;
+    --forma-coral-rgb: 255, 181, 71;
+    --forma-red-rgb: 255, 107, 107;
+    --forma-green-rgb: 63, 216, 164;
+    --forma-purple-rgb: 196, 155, 255;
+    --forma-orange-rgb: 255, 138, 61;
+    --forma-bg-rgb: 9, 9, 12;
+    --forma-panel-rgb: 19, 19, 24;
+    --forma-backdrop-rgb: 4, 4, 6;
+    /* ----- Signature gradient (primary actions, highlights) ----- */
+    --forma-gradient: linear-gradient(135deg, #7c6cff 0%, #6a8bff 52%, #4cc9f0 100%);
+    --forma-gradient-hover: linear-gradient(135deg, #8d7fff 0%, #7b99ff 52%, #63d3f3 100%);
+    /* ----- Shape ----- */
+    --forma-r-xs: 6px;
+    --forma-r-sm: 8px;
+    --forma-r-md: 12px;
+    --forma-r-lg: 16px;
+    --forma-r-xl: 22px;
+    /* ----- Elevation ----- */
+    --forma-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --forma-shadow-md: 0 10px 28px -6px rgba(0, 0, 0, 0.55);
+    --forma-shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
+    --forma-shadow-glow: 0 8px 28px -6px rgba(124, 108, 255, 0.55);
+    --forma-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    --forma-glass: rgba(19, 19, 24, 0.72);
+    --forma-edge: rgba(255, 255, 255, 0.08);
+    --forma-focus-ring: 0 0 0 3px rgba(124, 108, 255, 0.35);
+    /* Segmented controls: the track and the selected option on it. */
+    --forma-seg-track: var(--forma-panel);
+    --forma-seg-thumb: var(--forma-panel-raised);
+    /* Glow behind the top of each page. */
+    --forma-aurora: 0.13;
+    /* ----- Motion ----- */
+    --forma-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ----- Light "studio" theme: <html data-theme="light"> (ThemePreference.js) ----- */
+:root[data-theme='light'] {
+    color-scheme: light;
+    /* Surfaces */
+    --forma-bg: #f5f5f8;
+    --forma-sidebar: #ffffff;
+    --forma-panel: #ffffff;
+    --forma-panel-alt: #f1f1f5;
+    --forma-panel-raised: #e8e8ee;
+    --forma-border: #e6e6ec;
+    --forma-border-strong: #d5d5de;
+    /* Text */
+    --forma-text: #1b1b24;
+    --forma-text-soft: #33333f;
+    --forma-heading: #0c0c12;
+    --forma-text-muted: #5d5d6c;
+    --forma-text-dim: #7a7a89;
+    --forma-on-accent: #ffffff;
+    --forma-on-coral: #1a1204;
+    /* Accents, a step darker so they read on white */
+    --forma-blue: #6a55f5;
+    --forma-blue-hover: #5b46e6;
+    --forma-teal-text: #5a44e0;
+    --forma-cyan: #0ea5c9;
+    --forma-coral: #c27400;
+    --forma-green: #0d9467;
+    --forma-red: #e5484d;
+    --forma-red-text: #cf2f35;
+    --forma-purple: #8352f0;
+    --forma-orange: #dc600a;
+    --forma-accent-rgb: 106, 85, 245;
+    --forma-accent-light-rgb: 90, 68, 224;
+    --forma-cyan-rgb: 14, 165, 201;
+    --forma-coral-rgb: 214, 132, 0;
+    --forma-red-rgb: 229, 72, 77;
+    --forma-green-rgb: 13, 148, 103;
+    --forma-purple-rgb: 131, 82, 240;
+    --forma-orange-rgb: 220, 96, 10;
+    --forma-bg-rgb: 245, 245, 248;
+    --forma-panel-rgb: 255, 255, 255;
+    --forma-backdrop-rgb: 18, 18, 28;
+    --forma-gradient: linear-gradient(135deg, #6a55f5 0%, #5a78f5 52%, #22b8e0 100%);
+    --forma-gradient-hover: linear-gradient(135deg, #5b46e6 0%, #4d6ae8 52%, #12a9d2 100%);
+    /* Elevation: soft, cool shadows */
+    --forma-shadow-sm: 0 1px 2px rgba(20, 20, 50, 0.07);
+    --forma-shadow-md: 0 12px 28px -10px rgba(20, 20, 50, 0.16);
+    --forma-shadow-lg: 0 24px 60px -16px rgba(20, 20, 50, 0.24);
+    --forma-shadow-glow: 0 8px 24px -8px rgba(106, 85, 245, 0.45);
+    --forma-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    --forma-glass: rgba(255, 255, 255, 0.8);
+    --forma-edge: rgba(20, 20, 50, 0.08);
+    --forma-focus-ring: 0 0 0 3px rgba(106, 85, 245, 0.22);
+    --forma-seg-track: var(--forma-panel-alt);
+    --forma-seg-thumb: #ffffff;
+    --forma-aurora: 0.06;
 }
 
 html {
@@ -56,6 +150,8 @@ html {
     background: var(--forma-bg);
     color: var(--forma-text);
     font-family: var(--forma-font);
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
 }
 
     /* App.css (old theme) styles bare h1/h2/h3/p; neutralise that inside the new screens. */
@@ -158,13 +254,13 @@ html {
 .forma-logo-home:focus-visible {
     outline: 2px solid var(--forma-blue);
     outline-offset: 4px;
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
 }
 
 .forma-logo-icon {
     width: 30px;
     height: 30px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border-strong);
     color: var(--forma-coral);
@@ -197,7 +293,7 @@ html {
     color: var(--forma-text-muted);
     font-size: 0.82rem;
     padding: 7px 12px;
-    border-radius: 7px;
+    border-radius: var(--forma-r-sm);
     cursor: pointer;
     font-family: inherit;
     white-space: nowrap;
@@ -241,7 +337,7 @@ html {
     width: 220px;
     background: var(--forma-panel);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 10px;
+    border-radius: var(--forma-r-md);
     padding: 12px;
     z-index: 50;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
@@ -269,7 +365,7 @@ html {
     font-family: inherit;
     font-size: 0.84rem;
     padding: 8px;
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
     cursor: pointer;
     text-align: left;
 }
@@ -316,7 +412,7 @@ html {
     gap: 10px;
     width: 100%;
     padding: 9px 10px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     border: 1px solid transparent;
     border-left: 2px solid transparent;
     background: transparent;
@@ -356,7 +452,7 @@ html {
     font-size: 0.84rem;
     font-weight: 600;
     padding: 9px 16px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border-strong);
     background: var(--forma-panel-alt);
     color: var(--forma-text);
@@ -391,7 +487,7 @@ html {
     font-size: 0.64rem;
     letter-spacing: 0.06em;
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: var(--forma-r-xs);
     text-transform: uppercase;
     border: 1px solid transparent;
 }
@@ -411,7 +507,7 @@ html {
 .forma-card {
     background: var(--forma-panel);
     border: 1px solid var(--forma-border);
-    border-radius: 10px;
+    border-radius: var(--forma-r-md);
     padding: 20px;
     color: var(--forma-text);
     font-family: inherit;
@@ -465,13 +561,13 @@ html {
     background: linear-gradient(120deg, var(--forma-panel) 0%, var(--forma-panel-alt) 100%);
     border: 1px solid var(--forma-border-strong);
     border-left: 3px solid var(--forma-coral);
-    border-radius: 12px;
+    border-radius: var(--forma-r-lg);
 }
 
 .home-banner-icon {
     width: 46px;
     height: 46px;
-    border-radius: 10px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border-strong);
     background: rgba(255, 255, 255, 0.04);
     color: var(--forma-coral);
@@ -524,7 +620,7 @@ html {
 .home-banner-camera {
     width: 56px;
     height: 56px;
-    border-radius: 14px;
+    border-radius: var(--forma-r-lg);
     border: none;
     background: var(--forma-coral);
     color: var(--forma-on-coral);
@@ -575,7 +671,7 @@ html {
 .home-tool-icon {
     width: 36px;
     height: 36px;
-    border-radius: 9px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border-strong);
     display: flex;
     align-items: center;
@@ -652,7 +748,7 @@ html {
 .home-recent-thumb {
     width: 52px;
     height: 52px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     background: var(--forma-panel-alt);
     color: var(--forma-text-dim);
     display: flex;
@@ -718,7 +814,7 @@ html {
     display: flex;
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border);
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     padding: 3px;
 }
 
@@ -729,7 +825,7 @@ html {
     font-family: inherit;
     font-size: 0.82rem;
     padding: 7px 16px;
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
     cursor: pointer;
     /* Fixed width, so the bold active tab doesn't shift the toolbar. */
     min-width: 110px;
@@ -748,7 +844,7 @@ html {
     gap: 8px;
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     padding: 0 12px;
     color: var(--forma-text-muted);
 }
@@ -885,7 +981,7 @@ html {
     padding: 4px;
     background: var(--forma-panel-raised);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
 }
 
@@ -896,7 +992,7 @@ html {
     gap: 9px;
     padding: 8px 10px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
     background: transparent;
     color: var(--forma-text);
     font-family: inherit;
@@ -952,7 +1048,7 @@ html {
     font-family: inherit;
     font-size: 0.9rem;
     padding: 9px 12px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border-strong);
     background: var(--forma-panel-alt);
     color: var(--forma-text);
@@ -1126,7 +1222,7 @@ html {
         width: 100%;
         aspect-ratio: 1;
         object-fit: cover;
-        border-radius: 8px;
+        border-radius: var(--forma-r-md);
         border: 1px solid var(--forma-border);
         display: block;
     }
@@ -1184,7 +1280,7 @@ html {
     font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     padding: 5px 12px;
-    border-radius: 5px;
+    border-radius: var(--forma-r-xs);
     cursor: pointer;
 }
 
@@ -1236,7 +1332,7 @@ html {
     margin: 4px 12px 8px;
     background: var(--forma-panel-alt);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 5px;
+    border-radius: var(--forma-r-xs);
     color: var(--forma-text);
     font-family: var(--forma-font-mono);
     font-size: 0.72rem;
@@ -1255,7 +1351,7 @@ html {
     align-items: center;
     gap: 6px;
     padding: 5px 8px;
-    border-radius: 4px;
+    border-radius: var(--forma-r-xs);
     font-family: var(--forma-font-mono);
     font-size: 0.74rem;
     color: var(--forma-text-muted);
@@ -1324,7 +1420,7 @@ html {
     font-family: var(--forma-font-mono);
     font-size: 0.7rem;
     padding: 9px;
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1459,7 +1555,7 @@ html {
     padding: 4px;
     background: var(--forma-panel);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
@@ -1470,7 +1566,7 @@ html {
     width: 100%;
     background: none;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--forma-r-xs);
     color: var(--forma-text);
     font-family: var(--forma-font-mono);
     font-size: 0.74rem;
@@ -1509,7 +1605,7 @@ html {
     max-height: min(560px, 100%);
     background: var(--forma-sidebar);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     overflow: hidden;
 }
 
@@ -1550,7 +1646,7 @@ html {
     width: 100%;
     background: none;
     border: none;
-    border-radius: 5px;
+    border-radius: var(--forma-r-xs);
     color: var(--forma-text);
     font-family: var(--forma-font-mono);
     font-size: 0.76rem;
@@ -1651,7 +1747,7 @@ html {
         width: 72px;
         background: var(--forma-panel-alt);
         border: 1px solid var(--forma-border);
-        border-radius: 3px;
+        border-radius: var(--forma-r-xs);
         color: var(--forma-teal-text);
         font-family: var(--forma-font-mono);
         font-size: 0.7rem;
@@ -1680,7 +1776,7 @@ html {
         font-weight: 500;
         background: var(--forma-panel-alt);
         padding: 2px 8px;
-        border-radius: 3px;
+        border-radius: var(--forma-r-xs);
     }
 
 .scene-component-grid {
@@ -1760,7 +1856,7 @@ html {
     max-width: 400px;
     background: var(--forma-panel);
     border: 1px solid var(--forma-border-strong);
-    border-radius: 14px;
+    border-radius: var(--forma-r-lg);
     padding: 32px;
     display: flex;
     flex-direction: column;
@@ -1799,7 +1895,7 @@ html {
     .login-field input {
         background: var(--forma-panel-alt);
         border: 1px solid var(--forma-border-strong);
-        border-radius: 8px;
+        border-radius: var(--forma-r-md);
         color: var(--forma-text);
         font-family: inherit;
         font-size: 0.92rem;
@@ -2007,7 +2103,7 @@ html {
     width: 38px;
     height: 38px;
     flex: none;
-    border-radius: 10px;
+    border-radius: var(--forma-r-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2063,7 +2159,7 @@ html {
 .home-stat {
     background: var(--forma-panel);
     border: 1px solid var(--forma-border);
-    border-radius: 10px;
+    border-radius: var(--forma-r-md);
     padding: 18px;
 }
 
@@ -2097,7 +2193,7 @@ html {
 
     .genesis-page .btn,
     .genesis-overlay .btn {
-        border-radius: 8px;
+        border-radius: var(--forma-r-md);
         font-family: inherit;
     }
 
@@ -2213,7 +2309,7 @@ html {
     justify-content: center;
     width: 24px;
     height: 24px;
-    border-radius: 6px;
+    border-radius: var(--forma-r-sm);
     background: rgba(var(--forma-bg-rgb), 0.85);
     border: 1px solid var(--forma-border-strong);
     color: var(--forma-teal-text);
@@ -2421,7 +2517,7 @@ html {
     height: 36px;
     flex: none;
     margin-bottom: 14px;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border-strong);
     background: var(--forma-panel);
     color: var(--forma-text-muted);
@@ -2489,7 +2585,7 @@ html {
     gap: 10px;
     width: 100%;
     padding: 8px;
-    border-radius: 10px;
+    border-radius: var(--forma-r-md);
     border: 1px solid transparent;
     background: transparent;
     color: var(--forma-text);
@@ -2553,7 +2649,7 @@ html {
     right: 0;
     bottom: calc(100% + 8px);
     padding: 14px;
-    border-radius: 12px;
+    border-radius: var(--forma-r-lg);
     background: var(--forma-panel);
     border: 1px solid var(--forma-border-strong);
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
@@ -2693,7 +2789,7 @@ html {
     width: 38px;
     height: 38px;
     flex: none;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     border: 1px solid var(--forma-border-strong);
     background: var(--forma-panel-alt);
     color: var(--forma-text);
@@ -3091,7 +3187,7 @@ html {
 
     .login-hero-steps li {
         padding: 9px 14px;
-        border-radius: 8px;
+        border-radius: var(--forma-r-md);
         border: 1px solid var(--forma-border-strong);
         background: rgba(var(--forma-bg-rgb), 0.6);
         font-size: 0.8rem;
@@ -3165,12 +3261,10 @@ html {
 }
 
 /* ============================================================
-   Dock layout (Genesis second layout)
-   No top nav or sidebar: the page fills the screen and a floating
-   dock sits at the bottom centre (Dock.jsx). Items are icons whose
-   labels slide out on hover / focus. On mouse devices the dock fades
-   and slides mostly out of view when idle (.is-idle) and comes back
-   when the pointer reaches the bottom edge (.genesis-dock-reveal).
+   Navigation (Dock.jsx)
+   Base rules for the nav items, shared by the phone bar below. The
+   desktop sidebar (.genesis-sidebar-nav) is laid out in the "Studio
+   layout" section at the end of the file.
    Kept after the sidebar and responsive sections so these rules win.
    ============================================================ */
 
@@ -3200,29 +3294,12 @@ html {
     padding: 6px;
     border-radius: 999px;
     border: 1px solid var(--forma-border-strong);
-    background: rgba(24, 24, 27, 0.82);
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    background: var(--forma-glass);
+    box-shadow: var(--forma-shadow-lg), var(--forma-hairline);
     backdrop-filter: blur(16px) saturate(140%);
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     transform: translateX(-50%);
     transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease;
-}
-
-    /* Faded: only a sliver shows above the bottom edge. */
-    .genesis-dock.is-idle {
-        opacity: 0.48;
-        transform: translate(-50%, calc(100% + 9px));
-    }
-
-/* Invisible strip along the bottom edge that brings a faded dock back. */
-.genesis-dock-reveal {
-    position: fixed;
-    left: 50%;
-    bottom: 0;
-    z-index: 69;
-    width: min(640px, 90vw);
-    height: 20px;
-    transform: translateX(-50%);
 }
 
 .genesis-dock-group {
@@ -3322,212 +3399,6 @@ html {
         color: var(--forma-on-accent);
     }
 
-/* ---------- "Show tab labels": every label stays out ---------- */
-
-/* The labelled dock is always one straight row, so it only shows labels
-   where that row fits: from 1160px wide (tighter from 1160 to 1319px).
-   Narrower windows keep the icons-only dock and hide the switch. */
-@media (min-width: 1160px) {
-    .genesis-dock.is-labelled .genesis-dock-item {
-        padding-right: 15px;
-    }
-
-    .genesis-dock.is-labelled .genesis-dock-label {
-        max-width: 150px;
-        margin-left: 9px;
-        opacity: 1;
-    }
-
-    .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
-        padding-right: 3px;
-    }
-
-    .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
-        margin-right: 10px;
-    }
-}
-
-@media (min-width: 1160px) and (max-width: 1319px) {
-    .genesis-dock.is-labelled {
-        gap: 4px;
-    }
-
-        .genesis-dock.is-labelled .genesis-dock-group {
-            gap: 2px;
-        }
-
-        .genesis-dock.is-labelled .genesis-dock-item {
-            padding-left: 8px;
-            padding-right: 10px;
-            font-size: 0.72rem;
-        }
-
-        .genesis-dock.is-labelled .genesis-dock-label {
-            margin-left: 6px;
-        }
-
-        .genesis-dock.is-labelled .genesis-dock-item.genesis-dock-avatar {
-            padding-left: 3px;
-            padding-right: 3px;
-        }
-
-        .genesis-dock.is-labelled .genesis-dock-avatar .genesis-dock-label {
-            max-width: 110px;
-            margin-right: 8px;
-        }
-}
-
-/* The switch's own panel, top-right, styled like the dock. Just a small
-   round icon button until it is hovered, focused with the keyboard or
-   tapped (.is-open), then it slides open to the left to show its text and
-   switch, so it doesn't cover the pages' own buttons. */
-.genesis-labels-toggle {
-    position: fixed;
-    top: 8px;
-    right: 12px;
-    z-index: 70;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 32px;
-    max-width: 32px; /* only the icon shows */
-    padding: 0 0 0 7.5px; /* centres the 15px icon in the 32px circle */
-    overflow: hidden;
-    border-radius: 999px;
-    border: 1px solid var(--forma-border-strong);
-    background: rgba(24, 24, 27, 0.82);
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(16px) saturate(140%);
-    -webkit-backdrop-filter: blur(16px) saturate(140%);
-    color: var(--forma-text-soft);
-    cursor: pointer;
-    transition: max-width 0.28s cubic-bezier(0.22, 1, 0.36, 1), padding 0.28s ease, border-color 0.22s ease, color 0.22s ease;
-}
-
-    .genesis-labels-toggle > svg {
-        flex: none;
-    }
-
-    .genesis-labels-toggle:hover,
-    .genesis-labels-toggle.is-on {
-        color: var(--forma-heading);
-    }
-
-    .genesis-labels-toggle:focus-visible {
-        outline: none;
-        border-color: var(--forma-blue);
-    }
-
-    /* Open. Hover only counts with a mouse; a tap sets .is-open instead. */
-    .genesis-labels-toggle:focus-visible,
-    .genesis-labels-toggle.is-open {
-        max-width: 240px;
-        padding-right: 12px;
-    }
-
-@media (hover: hover) {
-    .genesis-labels-toggle:hover {
-        max-width: 240px;
-        padding-right: 12px;
-    }
-}
-
-/* Text and switch fade in as it opens. */
-.genesis-labels-toggle .genesis-labels-toggle-text,
-.genesis-labels-toggle .genesis-labels-toggle-track {
-    flex: none;
-    opacity: 0;
-    transition: opacity 0.18s ease, background-color 0.22s ease, border-color 0.22s ease;
-}
-
-.genesis-labels-toggle:focus-visible :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track),
-.genesis-labels-toggle.is-open :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track) {
-    opacity: 1;
-}
-
-@media (hover: hover) {
-    .genesis-labels-toggle:hover :is(.genesis-labels-toggle-text, .genesis-labels-toggle-track) {
-        opacity: 1;
-    }
-}
-
-/* Blue dot on the icon while labels are on, so the setting shows when closed. */
-.genesis-labels-toggle-dot {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--forma-blue);
-    box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.95);
-    transition: opacity 0.18s ease;
-}
-
-.genesis-labels-toggle:focus-visible .genesis-labels-toggle-dot,
-.genesis-labels-toggle.is-open .genesis-labels-toggle-dot {
-    opacity: 0;
-}
-
-@media (hover: hover) {
-    .genesis-labels-toggle:hover .genesis-labels-toggle-dot {
-        opacity: 0;
-    }
-}
-
-/* Model Viewer's Open .ply file reaches the top-right corner, so its row
-   leaves room for the switch (shown from 1160px wide). */
-@media (min-width: 1160px) {
-    .library-toolbar.model-viewer-toolbar {
-        padding-right: 56px;
-    }
-}
-
-/* Hidden below 1160px wide. After the rules above so display: none wins. */
-@media (max-width: 1159px) {
-    .genesis-labels-toggle {
-        display: none;
-    }
-}
-
-.genesis-labels-toggle-text {
-    font-family: var(--forma-font);
-    font-size: 0.78rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.genesis-labels-toggle-track {
-    position: relative;
-    width: 30px;
-    height: 16px;
-    border-radius: 999px;
-    background: var(--forma-panel-raised);
-    border: 1px solid var(--forma-border-strong);
-    transition: background-color 0.22s ease, border-color 0.22s ease;
-}
-
-.genesis-labels-toggle-thumb {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--forma-text-soft);
-    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.22s ease;
-}
-
-.genesis-labels-toggle.is-on .genesis-labels-toggle-track {
-    background: var(--forma-blue);
-    border-color: rgba(var(--forma-accent-rgb), 0.45);
-}
-
-.genesis-labels-toggle.is-on .genesis-labels-toggle-thumb {
-    transform: translateX(14px);
-    background: var(--forma-on-accent);
-}
-
 /* ---------- Signed-in user ---------- */
 
 .genesis-dock-profile {
@@ -3588,12 +3459,6 @@ html {
 /* ---------- Mobile view: smaller items, never fades ---------- */
 
 @media (max-width: 760px) {
-    /* Also undoes a fade started before the window was made narrow. */
-    .genesis-dock.is-idle {
-        opacity: 1;
-        transform: translateX(-50%);
-    }
-
     .genesis-main {
         padding-bottom: 72px;
     }
@@ -3656,7 +3521,7 @@ html {
     max-width: none;
     gap: 4px;
     padding: 4px;
-    border-radius: 20px;
+    border-radius: var(--forma-r-xl);
     transform: none;
 }
 
@@ -3686,7 +3551,7 @@ html {
     justify-content: center;
     gap: 3px;
     padding: 0 2px;
-    border-radius: 14px;
+    border-radius: var(--forma-r-lg);
     border: 1px solid transparent;
     background: transparent;
     color: var(--forma-text-soft);
@@ -3766,7 +3631,7 @@ html {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 14px;
+    border-radius: var(--forma-r-lg);
     border: 1px solid var(--forma-border-strong);
     background: var(--forma-panel-raised);
     color: var(--forma-heading);
@@ -3799,4 +3664,1062 @@ html {
     .genesis-main {
         padding-bottom: 84px;
     }
+}
+
+/* ============================================================
+   Aurora refresh layer
+   Visual polish only (colour, shape, depth, motion) shared by every
+   screen. It comes last, after each screen's own CSS file and the
+   responsive and dock sections, so these rules win. It sets no layout
+   (sizes, grids, positions) apart from the card covers, so the
+   responsive rules above still apply.
+   Patterns drawn from 3D-capture apps: covers first on cards with lift
+   and glass status chips, pill controls, and a glass dock.
+   ============================================================ */
+
+/* ---------- Page backdrop: soft aurora glow behind the content ---------- */
+
+.genesis-shell {
+    background:
+        radial-gradient(1100px 420px at 50% -160px, rgba(var(--forma-accent-rgb), var(--forma-aurora)), transparent 70%),
+        radial-gradient(700px 360px at 100% -80px, rgba(var(--forma-cyan-rgb), calc(var(--forma-aurora) * 0.55)), transparent 70%),
+        var(--forma-bg);
+}
+
+::selection {
+    background: rgba(var(--forma-accent-rgb), 0.38);
+    color: var(--forma-heading);
+}
+
+.forma-app,
+.genesis-login,
+.genesis-page {
+    accent-color: var(--forma-blue);
+    scrollbar-color: var(--forma-panel-raised) transparent;
+    scrollbar-width: thin;
+}
+
+/* ---------- Type ---------- */
+
+.genesis-main h1 {
+    letter-spacing: -0.03em;
+}
+
+.genesis-main h2,
+.genesis-main h3 {
+    letter-spacing: -0.015em;
+}
+
+.eyebrow {
+    font-size: 0.64rem;
+    letter-spacing: 0.14em;
+    font-weight: 500;
+}
+
+.eyebrow-accent {
+    background: var(--forma-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    width: fit-content;
+}
+
+/* ---------- Buttons: pills, gradient primary ---------- */
+
+.forma-btn {
+    border-radius: 999px;
+    border-color: var(--forma-border-strong);
+    background: var(--forma-panel-alt);
+    box-shadow: var(--forma-hairline);
+    transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.22s ease, transform 0.18s var(--forma-ease), filter 0.18s ease;
+}
+
+    .forma-btn:hover:not(:disabled) {
+        background: var(--forma-panel-raised);
+        border-color: color-mix(in srgb, var(--forma-border-strong) 65%, var(--forma-text-dim));
+    }
+
+    .forma-btn:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+.forma-btn-primary {
+    background: var(--forma-gradient);
+    border-color: transparent;
+    color: var(--forma-on-accent);
+    box-shadow: var(--forma-hairline), 0 4px 14px -6px rgba(var(--forma-accent-rgb), 0.6);
+}
+
+    .forma-btn-primary:hover:not(:disabled) {
+        background: var(--forma-gradient-hover);
+        border-color: transparent;
+        box-shadow: var(--forma-hairline), var(--forma-shadow-glow);
+    }
+
+    .forma-btn-primary:disabled {
+        opacity: 0.4;
+        filter: saturate(0.6);
+    }
+
+/* ---------- Cards ---------- */
+
+.forma-card {
+    border-radius: var(--forma-r-lg);
+    border-color: var(--forma-border);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.022), transparent 120px), var(--forma-panel);
+    box-shadow: var(--forma-hairline);
+}
+
+/* Cover-first media cards (Home recents, Library models / photos):
+   taller covers, a lift and a slow zoom on hover. */
+.home-file-card,
+.library-item {
+    transition: transform 0.28s var(--forma-ease), box-shadow 0.28s ease, border-color 0.2s ease;
+}
+
+    .home-file-card:hover,
+    .library-item-button:hover:not(:disabled),
+    .library-item-actionable:hover,
+    .library-item-actionable:focus-visible {
+        transform: translateY(-3px);
+        border-color: rgba(var(--forma-accent-rgb), 0.55);
+        box-shadow: var(--forma-hairline), var(--forma-shadow-md), 0 0 0 1px rgba(var(--forma-accent-rgb), 0.18);
+    }
+
+.home-file-preview,
+.library-thumb {
+    overflow: hidden;
+    border-bottom-color: transparent;
+}
+
+/* Model covers and the Photo Library collage stay the same size. */
+.library-thumb,
+.library-photo-thumbgrid {
+    height: auto;
+    aspect-ratio: 4 / 3;
+}
+
+/* Home recents are mostly phone photo sets, so a portrait cover. */
+.home-file-preview {
+    aspect-ratio: 4 / 5;
+}
+
+    .home-file-preview img,
+    .library-thumb-image {
+        transition: transform 0.6s var(--forma-ease);
+    }
+
+    /* Darkens the foot of the cover so the chips on it stay readable. */
+    .home-file-preview::after,
+    .library-thumb::after {
+        content: '';
+        position: absolute;
+        inset: auto 0 0 0;
+        height: 45%;
+        background: linear-gradient(to top, rgba(var(--forma-bg-rgb), 0.55), transparent);
+        pointer-events: none;
+    }
+
+.home-file-card:hover .home-file-preview img,
+.library-item:hover .library-thumb-image:not(.is-cutout) {
+    transform: scale(1.045);
+}
+
+.home-file-type {
+    z-index: 1;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border-color: var(--forma-edge);
+    background: var(--forma-glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--forma-heading);
+}
+
+.home-file-kind {
+    font-family: var(--forma-font);
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+
+.library-item-meta {
+    font-family: var(--forma-font);
+    font-size: 0.72rem;
+}
+
+/* ---------- Status chips: pill with a dot, glass on covers ---------- */
+
+.forma-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--forma-font);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 4px 9px 4px 8px;
+    border-radius: 999px;
+}
+
+    .forma-badge::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+    }
+
+.forma-badge-ready {
+    color: var(--forma-green);
+    background: rgba(var(--forma-green-rgb), 0.14);
+    border-color: rgba(var(--forma-green-rgb), 0.35);
+}
+
+.forma-badge-processing {
+    color: var(--forma-coral);
+    background: rgba(var(--forma-coral-rgb), 0.14);
+    border-color: rgba(var(--forma-coral-rgb), 0.35);
+}
+
+    .forma-badge-processing::before {
+        animation: aurora-pulse 1.4s ease-in-out infinite;
+    }
+
+.library-thumb .forma-badge {
+    background: rgba(var(--forma-bg-rgb), 0.6);
+    border-color: var(--forma-edge);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+@keyframes aurora-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .forma-badge-processing::before {
+        animation: none;
+    }
+
+    .home-file-card,
+    .library-item,
+    .home-file-preview img,
+    .library-thumb-image {
+        transition: none;
+    }
+}
+
+/* ---------- Segmented controls: one pill track ---------- */
+
+.home-recent-tabs {
+    display: inline-flex;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid var(--forma-border);
+    border-radius: 999px;
+    background: var(--forma-seg-track);
+}
+
+.home-recent-tab {
+    padding: 6px 14px;
+    margin-bottom: 0;
+    border-bottom: none;
+    border-radius: 999px;
+    font-weight: 500;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+    .home-recent-tab.is-active {
+        background: var(--forma-seg-thumb);
+        color: var(--forma-heading);
+        box-shadow: var(--forma-shadow-sm), var(--forma-hairline);
+    }
+
+.library-subtabs {
+    border-radius: 999px;
+    padding: 4px;
+    background: var(--forma-seg-track);
+}
+
+.library-subtab {
+    border-radius: 999px;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+    .library-subtab.is-active {
+        background: var(--forma-seg-thumb);
+        color: var(--forma-heading);
+        box-shadow: var(--forma-shadow-sm), var(--forma-hairline);
+    }
+
+.forma-tab {
+    border-radius: 999px;
+}
+
+/* Screen-local segmented controls follow the same pill track. */
+.feedback-types,
+.scene-builder-segmented,
+.capture-mode-toggle {
+    border-radius: 999px;
+    padding: 4px;
+    background: var(--forma-seg-track);
+}
+
+.feedback-type,
+.scene-builder-segmented button,
+.capture-mode-btn {
+    border-radius: 999px;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+    .feedback-type.is-active,
+    .capture-mode-btn.is-active {
+        background: var(--forma-seg-thumb);
+        color: var(--forma-heading);
+        box-shadow: var(--forma-shadow-sm), var(--forma-hairline);
+    }
+
+    .scene-builder-segmented button.is-active {
+        background: var(--forma-gradient);
+    }
+
+.capture-page .capture-btn {
+    background: var(--forma-gradient);
+    border-color: transparent;
+}
+
+/* ---------- Fields: rounded, accent focus ring ---------- */
+
+.library-search,
+.library-sort {
+    border-radius: 999px;
+    background: var(--forma-panel);
+    border-color: var(--forma-border-strong);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+    .library-search:focus-within,
+    .library-sort:focus-within {
+        border-color: rgba(var(--forma-accent-rgb), 0.7);
+        box-shadow: var(--forma-focus-ring);
+    }
+
+.library-toolbar {
+    border-bottom-color: transparent;
+}
+
+.login-field input,
+.action-dialog-input,
+.feedback-textarea {
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+    .login-field input:focus,
+    .action-dialog-input:focus,
+    .feedback-textarea:focus {
+        border-color: rgba(var(--forma-accent-rgb), 0.7);
+        box-shadow: var(--forma-focus-ring);
+    }
+
+/* ---------- Floating surfaces: menus, dialogs ---------- */
+
+.context-menu {
+    border-radius: var(--forma-r-md);
+    background: var(--forma-glass);
+    border-color: var(--forma-edge);
+    box-shadow: var(--forma-shadow-lg), var(--forma-hairline);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+.action-dialog {
+    border-radius: var(--forma-r-xl);
+    box-shadow: var(--forma-shadow-lg), var(--forma-hairline);
+}
+
+.action-dialog-backdrop {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+/* ---------- Dock: glass bar, gradient New model ---------- */
+
+.genesis-dock {
+    border-color: var(--forma-edge);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.genesis-dock-item.is-active {
+    background: rgba(var(--forma-accent-rgb), 0.18);
+    color: var(--forma-heading);
+    box-shadow: inset 0 0 0 1px rgba(var(--forma-accent-rgb), 0.35);
+}
+
+.genesis-dock-item.is-primary,
+.genesis-dock-item.is-primary.is-active {
+    border-color: transparent;
+    background: var(--forma-gradient);
+    box-shadow: 0 6px 18px -6px rgba(var(--forma-accent-rgb), 0.75);
+}
+
+    .genesis-dock-item.is-primary:hover,
+    .genesis-dock-item.is-primary:focus-visible {
+        background: var(--forma-gradient-hover);
+    }
+
+/* ============================================================
+   Studio layout
+   Desktop (761px and wider): a fixed sidebar down the left (Dock.jsx,
+   .genesis-sidebar-nav) beside the scrolling page. It can collapse to
+   icons only (.is-collapsed). Phones keep the bottom bar above.
+   Also: Home's Create panel, the Light / Dark / System switch
+   (ThemeSwitch.jsx), and the dark 3D canvases in the light theme.
+   Last in the file, so these rules win.
+   ============================================================ */
+
+/* ---------- Shell: sidebar + page ---------- */
+
+@media (min-width: 761px) {
+    .genesis-shell {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    .genesis-shell > .genesis-sidebar-nav {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .genesis-shell > .genesis-body {
+        grid-column: 2;
+        grid-row: 1;
+        min-height: 0;
+    }
+
+    /* No floating dock to clear any more. */
+    .genesis-main {
+        padding-bottom: 32px;
+    }
+}
+
+/* ---------- Sidebar ---------- */
+
+.genesis-dock.genesis-sidebar-nav {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    z-index: 60;
+    transform: none;
+    width: 256px;
+    max-width: none;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 16px 14px 14px;
+    border: none;
+    border-right: 1px solid var(--forma-border);
+    border-radius: 0;
+    background: var(--forma-sidebar);
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    transition: width 0.3s var(--forma-ease), padding 0.3s var(--forma-ease);
+}
+
+.genesis-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 4px 18px;
+}
+
+    .genesis-sidebar-brand .forma-logo-icon {
+        flex: none;
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--forma-r-md);
+        background: var(--forma-gradient);
+        box-shadow: var(--forma-shadow-glow);
+    }
+
+        .genesis-sidebar-brand .forma-logo-icon img {
+            width: 20px;
+            height: 20px;
+            filter: brightness(0) invert(1);
+        }
+
+.genesis-sidebar-wordmark {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    color: var(--forma-heading);
+}
+
+.genesis-sidebar-collapse,
+.theme-switch-cycle {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: var(--forma-r-sm);
+    background: transparent;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+    .genesis-sidebar-collapse:hover,
+    .theme-switch-cycle:hover {
+        background: var(--forma-panel-alt);
+        color: var(--forma-heading);
+    }
+
+/* Items: full-width rows with icon and label. */
+.genesis-sidebar-nav .genesis-dock-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+}
+
+.genesis-sidebar-nav .genesis-dock-item,
+.genesis-sidebar-nav .genesis-dock-item:hover,
+.genesis-sidebar-nav .genesis-dock-item:focus-visible {
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: var(--forma-r-md);
+    font-size: 0.86rem;
+    font-weight: 500;
+}
+
+.genesis-sidebar-nav .genesis-dock-item {
+    color: var(--forma-text-muted);
+}
+
+    .genesis-sidebar-nav .genesis-dock-item:hover {
+        background: var(--forma-panel-alt);
+        color: var(--forma-heading);
+    }
+
+    .genesis-sidebar-nav .genesis-dock-item.is-active {
+        background: rgba(var(--forma-accent-rgb), 0.1);
+        color: var(--forma-teal-text);
+        font-weight: 600;
+        box-shadow: none;
+    }
+
+        .genesis-sidebar-nav .genesis-dock-item.is-active svg {
+            color: var(--forma-blue);
+        }
+
+/* Labels always show (the old dock slid them out on hover). */
+.genesis-sidebar-nav .genesis-dock-label,
+.genesis-sidebar-nav .genesis-dock-item:hover .genesis-dock-label,
+.genesis-sidebar-nav .genesis-dock-item:focus-visible .genesis-dock-label {
+    max-width: none;
+    margin: 0;
+    opacity: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* New model (gradient) and Add photos (outlined), as real buttons. */
+.genesis-sidebar-actions {
+    padding-bottom: 18px;
+    gap: 8px !important;
+}
+
+    .genesis-sidebar-nav .genesis-sidebar-actions .genesis-dock-item {
+        justify-content: center;
+        height: 42px;
+        font-weight: 600;
+    }
+
+    .genesis-sidebar-nav .genesis-dock-item.is-primary,
+    .genesis-sidebar-nav .genesis-dock-item.is-primary:hover {
+        color: var(--forma-on-accent);
+        background: var(--forma-gradient);
+        box-shadow: var(--forma-hairline), 0 6px 18px -8px rgba(var(--forma-accent-rgb), 0.8);
+    }
+
+        .genesis-sidebar-nav .genesis-dock-item.is-primary:hover {
+            background: var(--forma-gradient-hover);
+        }
+
+        .genesis-sidebar-nav .genesis-dock-item.is-primary svg {
+            color: inherit;
+        }
+
+    .genesis-sidebar-nav .genesis-sidebar-secondary {
+        border-color: var(--forma-border-strong);
+        background: var(--forma-panel);
+        color: var(--forma-text);
+        box-shadow: var(--forma-shadow-sm);
+    }
+
+.genesis-sidebar-heading {
+    padding: 6px 12px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--forma-text-dim);
+    white-space: nowrap;
+}
+
+/* Footer: theme switch, then the signed-in user. */
+.genesis-sidebar-footer {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 16px;
+}
+
+.genesis-sidebar-nav .genesis-dock-item.genesis-dock-avatar,
+.genesis-sidebar-nav .genesis-dock-item.genesis-dock-avatar:hover {
+    height: auto;
+    padding: 8px;
+    border: 1px solid var(--forma-border);
+    background: var(--forma-panel);
+}
+
+    .genesis-sidebar-nav .genesis-dock-item.genesis-dock-avatar:hover,
+    .genesis-sidebar-nav .genesis-dock-item.genesis-dock-avatar[aria-expanded='true'] {
+        background: var(--forma-panel-alt);
+    }
+
+.genesis-sidebar-nav .genesis-dock-avatar-icon {
+    flex: none;
+    width: 34px;
+    height: 34px;
+}
+
+.genesis-sidebar-identity {
+    display: flex !important;
+    flex-direction: column;
+    min-width: 0;
+    text-align: left;
+    line-height: 1.25;
+}
+
+    .genesis-sidebar-identity strong {
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: var(--forma-heading);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .genesis-sidebar-identity span {
+        font-size: 0.72rem;
+        color: var(--forma-text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+/* The account menu opens upwards from the footer. */
+.genesis-sidebar-nav .genesis-dock-profile .genesis-profile-menu {
+    left: 0;
+    right: auto;
+    bottom: calc(100% + 10px);
+    width: 260px;
+}
+
+/* ---------- Sidebar collapsed to icons ---------- */
+
+.genesis-dock.genesis-sidebar-nav.is-collapsed {
+    width: 76px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+.genesis-sidebar-nav.is-collapsed .genesis-sidebar-brand {
+    flex-direction: column;
+    gap: 12px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.genesis-sidebar-nav.is-collapsed :is(.genesis-sidebar-wordmark, .genesis-sidebar-heading, .genesis-dock-label) {
+    display: none;
+}
+
+.genesis-sidebar-nav.is-collapsed .genesis-dock-item,
+.genesis-sidebar-nav.is-collapsed .genesis-dock-item:hover {
+    justify-content: center;
+    padding: 0;
+}
+
+.genesis-sidebar-nav.is-collapsed .genesis-dock-item.genesis-dock-avatar {
+    padding: 4px;
+    border-color: transparent;
+    background: transparent;
+}
+
+.genesis-sidebar-nav.is-collapsed .theme-switch-cycle {
+    align-self: center;
+    width: 40px;
+    height: 40px;
+}
+
+.genesis-sidebar-nav.is-collapsed .genesis-sidebar-heading + .genesis-dock-group {
+    padding-top: 4px;
+    border-top: 1px solid var(--forma-border);
+}
+
+/* Collapsed: the account menu opens to the right of the sidebar. */
+.genesis-sidebar-nav.is-collapsed .genesis-dock-profile .genesis-profile-menu {
+    left: calc(100% + 14px);
+    bottom: 0;
+}
+
+/* The menu reaches past the sidebar, which would clip it. */
+.genesis-dock.genesis-sidebar-nav:has(.genesis-profile-menu) {
+    overflow: visible;
+}
+
+/* ---------- Light / Dark / System switch ---------- */
+
+.theme-switch {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--forma-border);
+    border-radius: 999px;
+    background: var(--forma-seg-track);
+}
+
+.theme-switch-option {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+    .theme-switch-option:hover {
+        color: var(--forma-heading);
+    }
+
+    .theme-switch-option.is-active {
+        background: var(--forma-seg-thumb);
+        color: var(--forma-heading);
+        box-shadow: var(--forma-shadow-sm), var(--forma-hairline);
+    }
+
+/* In the phone bar's account menu. */
+.genesis-profile-theme {
+    margin: 4px 0;
+}
+
+/* Account page: Appearance */
+.account-appearance {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.account-appearance-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.account-appearance-switch {
+    width: min(320px, 100%);
+}
+
+    .account-appearance-switch .theme-switch-option {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+
+/* ---------- Home: page header and Create panel ---------- */
+
+.home-screen {
+    max-width: 1560px;
+    margin: 0 auto;
+}
+
+.home-heading-row {
+    align-items: flex-end;
+}
+
+@media (min-width: 761px) {
+    .home-heading-row {
+        margin-bottom: 32px;
+    }
+}
+
+/* App.css (old theme) pads and rules every bare <section>; not this one. */
+.home-create {
+    margin: 0 0 40px;
+    padding: 0;
+    border: none;
+    text-align: left;
+}
+
+.home-create-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 24px;
+    margin-bottom: 16px;
+}
+
+    .home-create-header .home-section-title {
+        margin-bottom: 0 !important;
+    }
+
+    .home-create-header p {
+        color: var(--forma-text-muted);
+        font-size: 0.86rem;
+    }
+
+.home-create-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.home-create-card {
+    --tint-rgb: var(--forma-accent-rgb);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+    min-height: 210px;
+    padding: 22px;
+    border: 1px solid var(--forma-border);
+    border-radius: var(--forma-r-xl);
+    background: var(--forma-panel);
+    color: var(--forma-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: var(--forma-shadow-sm), var(--forma-hairline);
+    transition: transform 0.28s var(--forma-ease), box-shadow 0.28s ease, border-color 0.2s ease;
+}
+
+    .home-create-card.is-photos {
+        --tint-rgb: 20, 184, 166;
+    }
+
+    .home-create-card.is-video {
+        --tint-rgb: 255, 116, 77;
+    }
+
+    /* Soft tint glowing from the top-right corner. */
+    .home-create-card::before {
+        content: '';
+        position: absolute;
+        inset: -40% -30% auto auto;
+        width: 70%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(var(--tint-rgb), 0.18), transparent 70%);
+        pointer-events: none;
+        transition: transform 0.5s var(--forma-ease);
+    }
+
+    .home-create-card:hover {
+        transform: translateY(-3px);
+        border-color: rgba(var(--tint-rgb), 0.5);
+        box-shadow: var(--forma-shadow-md), 0 0 0 1px rgba(var(--tint-rgb), 0.15);
+    }
+
+        .home-create-card:hover::before {
+            transform: scale(1.25);
+        }
+
+.home-create-icon {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--forma-r-lg);
+    background: var(--forma-gradient);
+    color: #ffffff;
+    box-shadow: 0 10px 22px -10px rgba(var(--tint-rgb), 0.9);
+}
+
+.home-create-card.is-photos .home-create-icon {
+    background: linear-gradient(135deg, #14b8a6 0%, #22c3e6 100%);
+}
+
+.home-create-card.is-video .home-create-icon {
+    background: linear-gradient(135deg, #ff8a3d 0%, #ff4f8b 100%);
+}
+
+.home-create-copy {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.home-create-title {
+    font-size: 1.08rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    color: var(--forma-heading);
+}
+
+.home-create-text {
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--forma-text-muted);
+}
+
+.home-create-foot {
+    position: relative;
+    margin-top: auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.home-create-hint {
+    font-family: var(--forma-font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    color: var(--forma-text-dim);
+}
+
+.home-create-arrow {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--forma-border);
+    color: var(--forma-text-muted);
+    transition: transform 0.28s var(--forma-ease), background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.home-create-card:hover .home-create-arrow {
+    transform: translateX(3px);
+    border-color: transparent;
+    background: rgba(var(--tint-rgb), 0.14);
+    color: rgb(var(--tint-rgb));
+}
+
+@media (max-width: 1100px) {
+    .home-create-card {
+        min-height: 0;
+    }
+}
+
+@media (max-width: 900px) {
+    .home-create-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+    }
+
+    /* One row each: icon, text, arrow. */
+    .home-create-card {
+        flex-direction: row;
+        align-items: center;
+        gap: 14px;
+        padding: 16px;
+        border-radius: var(--forma-r-lg);
+    }
+
+    .home-create-hint {
+        display: none;
+    }
+
+    .home-create-foot {
+        width: auto;
+        margin: 0 0 0 auto;
+    }
+
+    .home-create-icon {
+        flex: none;
+        width: 44px;
+        height: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-create-card,
+    .home-create-card::before,
+    .home-create-arrow {
+        transition: none;
+    }
+}
+
+/* ---------- Light theme touches ---------- */
+
+/* The 3D canvases and camera preview stay dark (their tokens are the
+   dark set, see the top of the file); give them a dark backdrop. */
+:root[data-theme='light'] :is(.scene-builder-viewport, .capture-viewport) {
+    background: var(--forma-bg);
+    color: var(--forma-text);
+}
+
+/* Cards on a light page read as white sheets with a soft shadow. */
+:root[data-theme='light'] .forma-card {
+    box-shadow: var(--forma-shadow-sm);
+}
+
+:root[data-theme='light'] .home-file-card:hover,
+:root[data-theme='light'] .library-item-button:hover:not(:disabled),
+:root[data-theme='light'] .library-item-actionable:hover {
+    box-shadow: var(--forma-shadow-md), 0 0 0 1px rgba(var(--forma-accent-rgb), 0.18);
+}
+
+/* The cover scrim and the chips on covers stay dark over photos. */
+:root[data-theme='light'] :is(.home-file-preview, .library-thumb)::after {
+    background: linear-gradient(to top, rgba(10, 10, 16, 0.35), transparent);
+}
+
+:root[data-theme='light'] .library-thumb .forma-badge {
+    background: rgba(255, 255, 255, 0.86);
 }

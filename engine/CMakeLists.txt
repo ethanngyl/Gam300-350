@@ -55,8 +55,34 @@ source_group(
 # ======================= Target Creation =========================
 
 # Create executable
-add_executable(${CMAKE_PROJECT_NAME} ${APP_SRC} 
+add_executable(${CMAKE_PROJECT_NAME} ${APP_SRC}
 "src/main.cpp")
+
+# ======================= Application Icon =========================
+# The GENESIS logo (resources/icons, generated from genesis-app-icon.svg).
+#  - Windows: genesis.rc embeds genesis.ico in the exe (Explorer, taskbar,
+#    shortcuts, and the installer's Add/Remove Programs entry).
+#  - Qt: the PNGs are compiled in as resources under :/icons and set as the
+#    window icon in main.cpp (title bar, Alt+Tab, and Linux / macOS).
+if(WIN32)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE resources/genesis.rc)
+endif()
+
+# importDependencies() finds Qt inside a function; find Core again here
+# (cached) so qt_add_resources is available in this scope.
+find_package(Qt6 REQUIRED COMPONENTS Core)
+qt_add_resources(${CMAKE_PROJECT_NAME} "app_icons"
+    PREFIX "/icons"
+    BASE "resources/icons/png"
+    FILES
+        resources/icons/png/genesis-16.png
+        resources/icons/png/genesis-24.png
+        resources/icons/png/genesis-32.png
+        resources/icons/png/genesis-48.png
+        resources/icons/png/genesis-64.png
+        resources/icons/png/genesis-128.png
+        resources/icons/png/genesis-256.png
+)
 
 # MSVC-only: disable noisy integer conversion warnings
 #  - C4244: converting larger numeric types to smaller ones (possible loss of data)
@@ -281,6 +307,9 @@ if(CODEFINE_MAKENSIS)
     set(CPACK_NSIS_DISPLAY_NAME "Genesis Alpha Build")
     set(CPACK_NSIS_PACKAGE_NAME "Genesis Alpha Build")
     set(CPACK_NSIS_INSTALLED_ICON_NAME "Codefine.exe")
+    # The installer and uninstaller themselves also show the GENESIS logo.
+    set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/genesis.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/genesis.ico")
     set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Codefine.exe")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
     # Backslashes are escaped twice: once for this file, once for the

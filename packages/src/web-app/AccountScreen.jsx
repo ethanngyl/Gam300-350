@@ -13,7 +13,7 @@ the section. Sections:
 - My account: profile photo (saved in this browser, see ProfilePhoto.js),
   name, email, password ("Change password" opens ChangePasswordDialog;
   Google-only accounts, per GET /api/v1/auth/me/account, have none), role,
-  member since, "Show walkthrough" (replays the dock tour), and log out.
+  member since, "Show walkthrough" (replays the workspace tour), and log out.
   Guests see a sign-in card instead.
 - Plans: Genesis Free / Plus / Pro compared side by side. A prototype:
   everyone is on Free and paid plans cannot be chosen yet.
@@ -32,6 +32,7 @@ import Icon from './Icons.jsx';
 import { playSound, setSoundMuted, setSoundVolume, useSoundSettings } from '../audio/Audio.js';
 import { removeProfilePhoto, saveProfilePhoto, useProfilePhoto } from './ProfilePhoto.js';
 import ChangePasswordDialog from './ChangePasswordDialog.jsx';
+import ThemeSwitch from './ThemeSwitch.jsx';
 import './AccountScreen.css';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -46,7 +47,13 @@ const SECTION_GROUPS = [
             { id: 'usage', label: 'Usage', icon: 'cube' },
         ],
     },
-    { label: 'Preferences', sections: [{ id: 'sound', label: 'Sound', icon: 'volume' }] },
+    {
+        label: 'Preferences',
+        sections: [
+            { id: 'appearance', label: 'Appearance', icon: 'sun' },
+            { id: 'sound', label: 'Sound', icon: 'volume' },
+        ],
+    },
 ];
 
 // Prototype plans; not final plan details. Everyone is on Free for now.
@@ -349,7 +356,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                 <div className="forma-card acct-card acct-logout">
                     <div>
                         <h2 className="acct-card-title">Walkthrough</h2>
-                        <p className="acct-muted">Take the quick tour of the dock again.</p>
+                        <p className="acct-muted">Take the quick tour of the workspace again.</p>
                     </div>
                     <button
                         className="forma-btn"
@@ -468,6 +475,27 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
         );
     }
 
+    function renderAppearanceSection() {
+        return (
+            <>
+                <div className="acct-section-heading">
+                    <p className="eyebrow eyebrow-accent">Preferences</p>
+                    <h1 className="acct-title">Appearance</h1>
+                    <p className="acct-subtitle">Choose how Genesis looks. 3D views stay dark in both themes.</p>
+                </div>
+                <div className="forma-card account-appearance">
+                    <div className="account-appearance-text">
+                        <span className="account-sound-title">Theme</span>
+                        <span className="account-sound-hint">
+                            System follows your device&apos;s light or dark setting. Saved for this browser.
+                        </span>
+                    </div>
+                    <ThemeSwitch className="account-appearance-switch" />
+                </div>
+            </>
+        );
+    }
+
     function renderSoundSection() {
         return (
             <>
@@ -552,6 +580,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                 {activeSection === 'account' && renderAccountSection()}
                 {activeSection === 'plans' && renderPlansSection()}
                 {activeSection === 'usage' && renderUsageSection()}
+                {activeSection === 'appearance' && renderAppearanceSection()}
                 {activeSection === 'sound' && renderSoundSection()}
             </div>
         </div>

@@ -72,7 +72,7 @@
     width: 34px;
     height: 34px;
     flex: none;
-    border-radius: 9px;
+    border-radius: var(--forma-r-md);
     border: 1px solid transparent;
     background: transparent;
     color: var(--forma-text-dim);
@@ -145,7 +145,7 @@
     position: relative;
     aspect-ratio: 4 / 3;
     overflow: hidden;
-    border-radius: 14px;
+    border-radius: var(--forma-r-lg);
     border: 1px solid var(--forma-border);
     background: radial-gradient(ellipse at 50% 42%, #24242b 0%, #141417 60%, #0f0f12 100%);
 }
@@ -176,7 +176,7 @@
 .model-viewer .btn {
     padding: 7px 12px;
     font-size: 0.76rem;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
 }
 
 /* Phones: no splat count in the viewer (Details lists it), and Gaussian,
@@ -254,7 +254,7 @@
     .model-photos-more {
         width: 100%;
         aspect-ratio: 1;
-        border-radius: 7px;
+        border-radius: var(--forma-r-sm);
         object-fit: cover;
         background: var(--forma-panel-alt);
     }
@@ -318,7 +318,7 @@
     justify-content: center;
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: var(--forma-r-lg);
     background: rgba(var(--forma-red-rgb), 0.14);
     border: 1px solid rgba(var(--forma-red-rgb), 0.4);
     color: var(--forma-red);

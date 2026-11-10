@@ -110,7 +110,7 @@
     aspect-ratio: 1;
     padding: 0;
     border: 2px solid transparent;
-    border-radius: 8px;
+    border-radius: var(--forma-r-md);
     overflow: hidden;
     background: var(--forma-panel-alt);
     cursor: pointer;
@@ -175,7 +175,7 @@
         max-width: 880px;
         max-height: 85vh;
         border: 1px solid var(--forma-border-strong);
-        border-radius: 14px;
+        border-radius: var(--forma-r-lg);
         overflow: hidden;
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
     }

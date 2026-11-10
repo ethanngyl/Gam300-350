@@ -61,6 +61,8 @@ const ICON_PATHS = {
     arrowLeft: <path d="M19 12H5M11 6l-6 6 6 6" />,
     download: (<><path d="M12 4v11" /><path d="m7 10 5 5 5-5" /><path d="M5 19h14" /></>),
     fullscreen: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
+    monitor: (<><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>),
+    sidebar: (<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></>),
 };
 
 function Icon({ name, size = 16 }) {

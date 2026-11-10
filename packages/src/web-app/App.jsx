@@ -8,13 +8,14 @@
 \brief
 Top-level app shell. Shows the login screen until a user is signed in
 (session kept in localStorage). Once signed in it renders the GENESIS
-dashboard (a floating dock at the bottom, laid out like the Genesis second
-layout) with these pages above it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, Frame Extractor, Feedback, Capture and Account. Capture
-opens from the dock's New model button, or from Add photos with the
-chosen photos already in the batch; its "Review photos first" hands the
-batch to the Photo Editor. The first time each account signs in on this
-browser, the walkthrough (Walkthrough.jsx) tours the dock; "Show
+dashboard (a sidebar on the left on desktop, a bar at the bottom on
+phones; both from Dock.jsx) beside these pages: Home, Library, Photo
+Editor, Scene Builder, Model Viewer, Frame Extractor, Feedback, Capture
+and Account. Capture opens from the sidebar's or Home's New model, or
+from Add photos with the chosen photos already in the batch; its "Review
+photos first" hands the batch to the Photo Editor. The first time each
+account signs in on this browser, the walkthrough (Walkthrough.jsx) tours
+the sidebar; "Show
 walkthrough" on the account page or in the account menu replays it.
 Opening a model (from Home, the Media Library or the Model Viewer, a .ply
 from the user's computer, or a build that just finished, from photos or
@@ -595,6 +596,8 @@ function App() {
                         <HomeScreen
                             userName={currentUser.name}
                             onNewGeneration={() => goToTab('capture')}
+                            onAddPhotos={addPhotosToCapture}
+                            onOpenExtractor={() => goToTab('extractor')}
                             onOpenLibrary={openLibrary}
                             onOpenModel={openModel}
                         />
@@ -680,7 +683,6 @@ function App() {
             {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
 
             <Dock
-                isPinned={isWalkthroughOpen}
                 // The model page belongs with the Model Viewer.
                 activeTab={activeTab === 'model' ? 'viewer' : activeTab}
                 onNavigate={goToTab}
