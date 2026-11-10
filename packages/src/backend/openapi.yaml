@@ -1,0 +1,1948 @@
+openapi: 3.1.0
+info:
+  title: Genesis backend API
+  version: 1.0.0
+  summary: Turn photos or videos of an object into a 3D Gaussian Splat model.
+  description: |
+    The HTTP API of the Genesis backend (packages/src/backend), used by the
+    website, the engine and the curl test client (packages/api-tests).
+
+    **Versions.** Every path below is under `/api/v1`. The same routes also
+    answer at the old unversioned paths (`/auth/me`, ...): those are
+    deprecated and send `Deprecation` and `Link: rel="successor-version"`
+    headers. In the legacy shape, users', account and feedback dates are ISO
+    text instead of milliseconds. Changes are listed in docs/api-changelog.md:
+    a breaking change means `/api/v2`, and v1 keeps working.
+
+    **Signing in.** `POST /auth/login` (or `/auth/signup`) sets an HttpOnly
+    session cookie, `genesis_session`, which every protected call sends back.
+    Without it, protected calls answer 401. Passwords are stored only as
+    salted scrypt hashes, and session tokens only as SHA-256 hashes.
+
+    **Machine to machine.** The `/library/...` routes, `/register` and
+    `/verify-account` are for the team's own backends talking to the VM: they
+    need the shared key (`X-Auth-Key`) and say which user they act for
+    (`X-Act-As-User`). A team machine answers its users' requests by passing
+    them on to these.
+
+    **Formats.** Dates are UTC epoch milliseconds, sizes are bytes, ids are
+    UUIDs (see docs/data-schema.md). Errors are `{ "error": "..." }`. JSON
+    request bodies may be up to 2 MB (a saved scene of 500 objects fits).
+servers:
+  - url: /api/v1
+    description: The same server that serves the website (http://localhost:5005 locally)
+tags:
+  - name: Auth
+    description: Signing up, in and out
+  - name: Account
+    description: The signed-in user's account page
+  - name: Jobs
+    description: Reconstruction jobs (a photo batch and the 3D model made from it)
+  - name: Scenes
+    description: Scene Builder scenes saved to the account
+  - name: Feedback
+    description: Feedback from the website, and the admins' inbox
+  - name: Catalog
+    description: Reference data and API documentation
+  - name: Metrics
+    description: API response times and website load times (p50 / p95 / p99), per machine
+  - name: VM
+    description: Machine-to-machine routes on the VM (shared key required)
+
+paths:
+  # ------------------------------------------------------------------ Auth
+  /auth/signup:
+    post:
+      tags: [Auth]
+      operationId: signUp
+      summary: Create an account and sign in
+      description: New accounts are role `user`. At most 10 sign-ups per IP address per hour.
+      security: []
+      requestBody:
+        $ref: '#/components/requestBodies/SignUp'
+      responses:
+        '201':
+          description: Created and signed in
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+              examples: { user: { $ref: '#/components/examples/User' } }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: The email is already registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: An account with that email already exists. }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: logIn
+      summary: Sign in
+      description: |
+        Unknown email and wrong password get the same 401. After 10 wrong
+        passwords in 15 minutes the email is locked until the window ends (429),
+        and each IP address may try 30 times per 15 minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                remember: { type: boolean, description: true keeps the login for 7 days after the browser closes }
+            example: { email: alice@example.com, password: correct-horse-battery, remember: true }
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+              examples: { user: { $ref: '#/components/examples/User' } }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Wrong email or password
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Incorrect email or password. }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getMe
+      summary: Who is signed in
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: The signed-in user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+              examples: { user: { $ref: '#/components/examples/User' } }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags: [Account]
+      operationId: renameMe
+      summary: Change the display name
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/Rename'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logOut
+      summary: Sign out
+      description: Deletes the session and clears the cookie. Safe when already signed out.
+      security: []
+      responses:
+        '204':
+          description: Signed out
+          headers:
+            Set-Cookie:
+              description: Clears the session cookie
+              schema: { type: string }
+              example: genesis_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
+  /auth/google:
+    get:
+      tags: [Auth]
+      operationId: startGoogleSignIn
+      summary: Start Google sign-in (browser navigation)
+      description: |
+        On the VM, redirects to Google's account chooser with a one-use state
+        cookie. On other machines, redirects to the VM's /auth/google.
+      security: []
+      responses:
+        '302':
+          description: Redirect to Google (or the VM)
+          headers:
+            Location:
+              schema: { type: string }
+              example: https://accounts.google.com/o/oauth2/v2/auth?client_id=1234.apps.googleusercontent.com&redirect_uri=https%3A%2F%2Fvm.example%2Fauth%2Fgoogle%2Fcallback&response_type=code&scope=openid+email+profile&state=Qk2x9fW1&prompt=select_account
+        '503':
+          description: Google sign-in isn't set up here
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Google sign-in is not available here. }
+  /auth/google/callback:
+    get:
+      tags: [Auth]
+      operationId: finishGoogleSignIn
+      summary: Google's redirect back after sign-in
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string }, example: 4/0AVG7fiQ-code-from-google }
+        - { name: state, in: query, schema: { type: string }, example: Qk2x9fW1 }
+        - { name: error, in: query, schema: { type: string }, example: access_denied }
+      responses:
+        '302':
+          description: Signed in (to /) or failed (to /?login=google_failed or google_denied)
+          headers:
+            Location:
+              schema: { type: string }
+              example: /
+        '503':
+          description: Google sign-in isn't set up here
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Google sign-in is not available here. }
+
+  # --------------------------------------------------------------- Account
+  /auth/me/account:
+    get:
+      tags: [Account]
+      operationId: getAccount
+      summary: The account page's details
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/me/password:
+    post:
+      tags: [Account]
+      operationId: changePassword
+      summary: Change the password
+      description: Wrong current passwords count towards the login limit. Every other browser signed in to the account is signed out.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/ChangePassword'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/NoPassword'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/me/avatar:
+    get:
+      tags: [Account]
+      operationId: getAvatar
+      summary: The profile photo
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/Avatar'
+        '304':
+          description: Unchanged since the ETag sent in If-None-Match
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NoAvatar'
+    put:
+      tags: [Account]
+      operationId: setAvatar
+      summary: Set the profile photo
+      description: The body is the image itself (a real JPEG or PNG, at most 256 KB).
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/Avatar'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      tags: [Account]
+      operationId: deleteAvatar
+      summary: Remove the profile photo
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/me/storage:
+    get:
+      tags: [Account]
+      operationId: getStorage
+      summary: How much the user's jobs take up
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/Storage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+  # ------------------------------------------------------------------ Jobs
+  /upload:
+    post:
+      tags: [Jobs]
+      operationId: uploadPhotos
+      summary: Start a job from photos
+      description: |
+        8 or more JPEG / PNG photos (at most 300, 30 MB each). Returns at once;
+        COLMAP and Brush run in the background, so poll GET /jobs/{id}.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [images]
+              properties:
+                images: { type: array, items: { type: string, format: binary } }
+                trainIters: { type: integer, minimum: 1000, maximum: 30000, description: Training iterations (a catalog preset) }
+                removeBackground: { type: string, enum: ['true', 'false'] }
+            example: { images: [0001.jpg, 0002.jpg, 0003.jpg, 0004.jpg, 0005.jpg, 0006.jpg, 0007.jpg, 0008.jpg], trainIters: 7000, removeBackground: 'false' }
+      responses:
+        '202':
+          description: The job started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, imageCount]
+                properties:
+                  id: { type: string }
+                  imageCount: { type: integer }
+              example: { id: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, imageCount: 24 }
+        '400':
+          description: Fewer than 8 photos, or a file that isn't a real JPEG / PNG
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Need at least 8 photos (got 5). More overlapping photos = better reconstruction. }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /jobs/from-media:
+    post:
+      tags: [Jobs]
+      operationId: uploadMedia
+      summary: Start a job from videos or animated GIFs
+      description: Frames are extracted on the server, then the same pipeline runs. Up to 10 files, 2048 MB each.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [media]
+              properties:
+                media: { type: array, items: { type: string, format: binary } }
+                fps: { type: number, description: Frames per second to extract (at most 30) }
+                maxFrames: { type: integer, description: Most frames to extract }
+                trainIters: { type: integer, minimum: 1000, maximum: 30000 }
+                removeBackground: { type: string, enum: ['true', 'false'] }
+            example: { media: [turntable.mp4], fps: 2, maxFrames: 120, trainIters: 7000, removeBackground: 'true' }
+      responses:
+        '202':
+          description: The job started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: string }
+              example: { id: 0b9d4e6a-2f1c-4a8b-b3d5-6e7f8a9b0c1d }
+        '400':
+          description: No usable video or GIF
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: '"notes.mp4" isn''t a video or GIF file.' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /jobs:
+    get:
+      tags: [Jobs]
+      operationId: listJobs
+      summary: The user's jobs, newest first
+      description: Admins see every job. Where the jobs come from is set by JOB_SOURCES (this machine, the VM's library, sample jobs).
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/JobList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /jobs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [Jobs]
+      operationId: getJob
+      summary: Poll a job
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/JobStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+    patch:
+      tags: [Jobs]
+      operationId: renameJob
+      summary: Rename a job (its model and photo batch)
+      description: An empty name resets it to the default.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/RenameJob'
+      responses:
+        '200':
+          $ref: '#/components/responses/JobRenamed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '409':
+          $ref: '#/components/responses/RenameBlocked'
+    delete:
+      tags: [Jobs]
+      operationId: cancelJob
+      summary: Cancel a running job
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/JobCancelled'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '409':
+          $ref: '#/components/responses/JobFinished'
+  /jobs/{id}/files:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    delete:
+      tags: [Jobs]
+      operationId: deleteJob
+      summary: Delete a job for good (photos, model, everything)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/JobDeleted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '502':
+          description: The VM's copy couldn't be deleted (team machine)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Couldn't delete it from the shared library. Try again shortly. }
+  /jobs/{id}/images/{name}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+      - $ref: '#/components/parameters/ImageName'
+    get:
+      tags: [Jobs]
+      operationId: getJobImage
+      summary: One of a job's photos
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/Photo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+  /jobs/{id}/result.ply:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [Jobs]
+      operationId: getJobModel
+      summary: Download the finished model (.ply)
+      description: Supports byte ranges (`Range`), HEAD and ETag.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Range'
+      responses:
+        '200':
+          $ref: '#/components/responses/Model'
+        '206':
+          $ref: '#/components/responses/ModelRange'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ResultNotReady'
+  /jobs/{id}/cover.webp:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [Jobs]
+      operationId: getJobCover
+      summary: The job's cut-out card cover
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/Cover'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NoCover'
+
+  # ---------------------------------------------------------------- Scenes
+  /scenes:
+    get:
+      tags: [Scenes]
+      operationId: listScenes
+      summary: The user's scenes, newest first
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/SceneList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      tags: [Scenes]
+      operationId: createScene
+      summary: Save a new scene
+      description: Any format version; an older one is converted to version 1. The server picks the id and dates.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/SceneInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/Scene'
+        '400':
+          $ref: '#/components/responses/BadScene'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /scenes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/SceneId'
+    get:
+      tags: [Scenes]
+      operationId: getScene
+      summary: Load a scene exactly as it was saved
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          $ref: '#/components/responses/Scene'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/SceneNotFound'
+    put:
+      tags: [Scenes]
+      operationId: saveScene
+      summary: Save a scene (creating it under this id if new)
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/SceneInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/Scene'
+        '400':
+          $ref: '#/components/responses/BadScene'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/SceneNotFound'
+        '422':
+          $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+    delete:
+      tags: [Scenes]
+      operationId: deleteScene
+      summary: Delete a scene
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/SceneNotFound'
+
+  # -------------------------------------------------------------- Feedback
+  /feedback:
+    post:
+      tags: [Feedback]
+      operationId: sendFeedback
+      summary: Send feedback
+      description: At most 10 per account per hour. Stored in the VM's database.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        $ref: '#/components/requestBodies/Feedback'
+      responses:
+        '201':
+          $ref: '#/components/responses/FeedbackCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      tags: [Feedback]
+      operationId: listFeedback
+      summary: The admins' feedback inbox, newest first
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/FeedbackCategory'
+        - $ref: '#/components/parameters/FeedbackBefore'
+      responses:
+        '200':
+          $ref: '#/components/responses/FeedbackPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+  # --------------------------------------------------------------- Catalog
+  /catalog:
+    get:
+      tags: [Catalog]
+      operationId: getCatalog
+      summary: Reference data and limits
+      description: Feedback categories, training presets, the photo minimum and the upload limits. Public.
+      security: []
+      responses:
+        '200':
+          description: The catalog
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogResponse' }
+              example:
+                version: 1
+                minPhotos: 8
+                feedbackCategories:
+                  - { id: bug, label: Bug report, icon: triangle, placeholder: 'What did you do, what did you expect, and what happened instead?' }
+                  - { id: idea, label: Idea, icon: sparkle, placeholder: 'What would you like GENESIS to do, and what problem would it solve?' }
+                  - { id: other, label: Other, icon: message, placeholder: Tell us what you think of GENESIS. }
+                feedbackMessage: { minLength: 10, maxLength: 1000 }
+                trainingPresets:
+                  - { id: fast, label: Fast, iterations: 5000 }
+                  - { id: normal, label: Normal, iterations: 7000 }
+                  - { id: detailed, label: Detailed, iterations: 10000 }
+                defaultTrainingPreset: normal
+                limits: { maxPhotos: 300, maxPhotoSizeMB: 30, maxMediaFiles: 10, maxMediaSizeMB: 2048, maxFrameFps: 30, minTrainIters: 1000, maxTrainIters: 30000, maxAvatarKB: 256 }
+  /openapi.yaml:
+    get:
+      tags: [Catalog]
+      operationId: getOpenApi
+      summary: This document
+      security: []
+      responses:
+        '200':
+          description: The OpenAPI document (YAML)
+          content:
+            application/yaml:
+              schema: { type: string }
+              example: "openapi: 3.1.0\ninfo:\n  title: Genesis backend API\n  ..."
+
+  # --------------------------------------------------------------- Metrics
+  /metrics/page-load:
+    post:
+      tags: [Metrics]
+      operationId: reportPageLoad
+      summary: Report how long the website took to load
+      description: |
+        Sent once per page load by the website (navigator.sendBeacon), from the
+        browser's Navigation Timing. Public, because the page loads before
+        anyone signs in. Each measure is in ms from 0 to 120000; others are
+        ignored. At most 30 reports per IP address per minute.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttfb: { type: number, minimum: 0, maximum: 120000, description: Time to the first byte of the page }
+                fcp: { type: number, minimum: 0, maximum: 120000, description: First contentful paint }
+                domContentLoaded: { type: number, minimum: 0, maximum: 120000, description: HTML parsed and scripts run }
+                load: { type: number, minimum: 0, maximum: 120000, description: Everything loaded (the load event finished) }
+            example: { ttfb: 42.5, fcp: 310.2, domContentLoaded: 288.9, load: 642.1 }
+      responses:
+        '204':
+          description: Recorded
+        '400':
+          description: No valid measure was sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Send at least one of ttfb, fcp, domContentLoaded, load, in ms (0-120000).' }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+  /metrics/performance:
+    get:
+      tags: [Metrics]
+      operationId: getPerformance
+      summary: API response times and website load times (admins)
+      description: |
+        p50 / p95 / p99, mean, slowest and counts, per API route (slowest p95
+        first) and per page-load measure, for this machine. Times are in ms.
+        Percentiles come from per-minute histograms, so they are accurate to
+        within their time range (about +-25%); counts, means and maximums
+        are exact. Measurements are kept PERF_KEEP_DAYS days (default 7).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: window
+          in: query
+          required: false
+          description: How far back to look (default 24h)
+          schema: { enum: ['1h', '24h', '7d'] }
+          example: 24h
+      responses:
+        '200':
+          description: The report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PerformanceReport' }
+              example:
+                window: 24h
+                from: 1792800000000
+                to: 1792886400000
+                api:
+                  - { route: 'GET /jobs/:id/result.ply', count: 41, errors: 0, mean: 3120.4, p50: 2410.7, p95: 8650.2, p99: 11800.0, max: 12391.6 }
+                  - { route: 'POST /upload', count: 6, errors: 0, mean: 1840.2, p50: 1630.0, p95: 2900.4, p99: 2980.1, max: 3001.7 }
+                  - { route: 'GET /jobs/:id', count: 1287, errors: 0, mean: 4.1, p50: 3.2, p95: 9.8, p99: 18.5, max: 41.0 }
+                pageLoad:
+                  - { metric: ttfb, count: 120, mean: 61.3, p50: 48.0, p95: 140.2, p99: 260.4, max: 402.0 }
+                  - { metric: fcp, count: 118, mean: 402.7, p50: 351.0, p95: 820.5, p99: 1310.0, max: 1622.4 }
+                  - { metric: domContentLoaded, count: 120, mean: 380.4, p50: 330.6, p95: 790.1, p99: 1180.0, max: 1490.3 }
+                  - { metric: load, count: 120, mean: 911.0, p50: 760.2, p95: 1980.4, p99: 2700.8, max: 3302.1 }
+        '400':
+          description: An unknown window
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'window must be one of 1h, 24h, 7d.' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # -------------------------------------------------------------------- VM
+  /register:
+    post:
+      tags: [VM]
+      operationId: vmRegister
+      summary: Create an account on the VM (for a team machine's sign-up)
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string, minLength: 6 }
+            example: { name: Alice, email: alice@example.com, password: correct-horse-battery }
+      responses:
+        '201':
+          description: Created; the id is the account's id everywhere
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VmUser' }
+              example: { id: 7, email: alice@example.com, name: Alice, role: user }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '409':
+          description: The email is already registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: An account with that email already exists. }
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /verify-account:
+    post:
+      tags: [VM]
+      operationId: vmVerifyAccount
+      summary: Check a password on the VM (for a team machine's sign-in)
+      description: Unknown email and wrong password both give `{ valid false }`.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+            example: { email: alice@example.com, password: correct-horse-battery }
+      responses:
+        '200':
+          description: Whether the password is right, and the account if so
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - { $ref: '#/components/schemas/VmUser' }
+                      - type: object
+                        required: [valid]
+                        properties: { valid: { const: true } }
+                  - type: object
+                    required: [valid]
+                    properties: { valid: { const: false } }
+              examples:
+                right: { value: { valid: true, id: 7, email: alice@example.com, name: Alice, role: user } }
+                wrong: { value: { valid: false } }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /library/jobs:
+    get:
+      tags: [VM]
+      operationId: vmListJobs
+      summary: The user's jobs in the VM's library
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/JobList'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /library/jobs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [VM]
+      operationId: vmGetJob
+      summary: Poll a job in the VM's library
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/JobStatus'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+    patch:
+      tags: [VM]
+      operationId: vmRenameJob
+      summary: Rename a job in the VM's library
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      requestBody:
+        $ref: '#/components/requestBodies/RenameJob'
+      responses:
+        '200':
+          $ref: '#/components/responses/JobRenamed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '409':
+          $ref: '#/components/responses/RenameBlocked'
+    delete:
+      tags: [VM]
+      operationId: vmCancelJob
+      summary: Cancel a job running on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/JobCancelled'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '409':
+          $ref: '#/components/responses/JobFinished'
+    put:
+      tags: [VM]
+      operationId: vmStoreJob
+      summary: Store a finished job sent by a team machine
+      description: |
+        Photos must be real JPEG / PNG, the model a .ply, the cover a WebP (a bad
+        cover is dropped). Replaces an earlier copy. No X-Act-As-User: the owner
+        is in the form.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [images, result, status]
+              properties:
+                images: { type: array, items: { type: string, format: binary } }
+                result: { type: string, format: binary, description: The model (.ply) }
+                metrics: { type: string, format: binary, description: metrics.json }
+                cover: { type: string, format: binary, description: cover.webp }
+                status: { type: string, description: The job's status.json as text }
+                ownerId: { type: string, description: The owner's user id (empty = admin-only) }
+                origin: { type: string, description: The sending machine's name }
+            example: { images: [0000.jpg, 0001.jpg], result: result.ply, metrics: metrics.json, status: '{"version":1,"id":"7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23","status":"done","name":"Fox"}', ownerId: '7', origin: bryans-pc }
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, bytes]
+                properties:
+                  id: { type: string }
+                  bytes: { type: integer }
+              example: { id: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, bytes: 48211932 }
+        '400':
+          description: Missing or fake files
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: result.ply is not a .ply file. }
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '409':
+          description: A job with this id is still running on the VM
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: A job with this id is still running on the VM. }
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '507':
+          description: The VM is low on disk space
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: The VM is low on disk space (1.4 GB free). }
+  /library/jobs/{id}/files:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    delete:
+      tags: [VM]
+      operationId: vmDeleteJob
+      summary: Delete a job from the VM's library
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/JobDeleted'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+  /library/jobs/{id}/images/{name}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+      - $ref: '#/components/parameters/ImageName'
+    get:
+      tags: [VM]
+      operationId: vmGetJobImage
+      summary: A photo from the VM's library
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/Photo'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/ImageNotFound'
+  /library/jobs/{id}/result.ply:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [VM]
+      operationId: vmGetJobModel
+      summary: A model from the VM's library
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+        - $ref: '#/components/parameters/Range'
+      responses:
+        '200':
+          $ref: '#/components/responses/Model'
+        '206':
+          $ref: '#/components/responses/ModelRange'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/ResultNotReady'
+  /library/jobs/{id}/cover.webp:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [VM]
+      operationId: vmGetJobCover
+      summary: A card cover from the VM's library
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/Cover'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/NoCover'
+  /library/account:
+    get:
+      tags: [VM]
+      operationId: vmGetAccount
+      summary: An account's details on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+    patch:
+      tags: [VM]
+      operationId: vmRenameAccount
+      summary: Change an account's name on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      requestBody:
+        $ref: '#/components/requestBodies/Rename'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+  /library/account/password:
+    post:
+      tags: [VM]
+      operationId: vmChangePassword
+      summary: Change an account's password on the VM
+      description: Signs out every session on the VM.
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      requestBody:
+        $ref: '#/components/requestBodies/ChangePassword'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '409':
+          $ref: '#/components/responses/NoPassword'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+  /library/account/avatar:
+    get:
+      tags: [VM]
+      operationId: vmGetAvatar
+      summary: An account's profile photo on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/Avatar'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/NoAvatar'
+    put:
+      tags: [VM]
+      operationId: vmSetAvatar
+      summary: Set an account's profile photo on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      requestBody:
+        $ref: '#/components/requestBodies/Avatar'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+    delete:
+      tags: [VM]
+      operationId: vmDeleteAvatar
+      summary: Remove an account's profile photo on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+  /library/account/storage:
+    get:
+      tags: [VM]
+      operationId: vmGetStorage
+      summary: How much an account's jobs take up on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/Storage'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+  /library/feedback:
+    post:
+      tags: [VM]
+      operationId: vmSendFeedback
+      summary: Store feedback sent on a team machine
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/FeedbackInput' }
+                - type: object
+                  properties:
+                    origin: { type: string, description: The team machine's name }
+            example: { category: bug, message: The upload bar stops at 99% on large batches., origin: bryans-pc }
+      responses:
+        '201':
+          $ref: '#/components/responses/FeedbackCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+    get:
+      tags: [VM]
+      operationId: vmListFeedback
+      summary: The feedback inbox on the VM (admins)
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+        - $ref: '#/components/parameters/FeedbackCategory'
+        - $ref: '#/components/parameters/FeedbackBefore'
+      responses:
+        '200':
+          $ref: '#/components/responses/FeedbackPage'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /library/scenes:
+    get:
+      tags: [VM]
+      operationId: vmListScenes
+      summary: An account's scenes on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/SceneList'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+    post:
+      tags: [VM]
+      operationId: vmCreateScene
+      summary: Save a new scene on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      requestBody:
+        $ref: '#/components/requestBodies/SceneInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/Scene'
+        '400':
+          $ref: '#/components/responses/BadScene'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '422':
+          $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+  /library/scenes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/SceneId'
+    get:
+      tags: [VM]
+      operationId: vmGetScene
+      summary: Load a scene on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '200':
+          $ref: '#/components/responses/Scene'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/SceneNotFound'
+    put:
+      tags: [VM]
+      operationId: vmSaveScene
+      summary: Save a scene on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      requestBody:
+        $ref: '#/components/requestBodies/SceneInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/Scene'
+        '400':
+          $ref: '#/components/responses/BadScene'
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/SceneNotFound'
+        '422':
+          $ref: '#/components/responses/SceneTooNew'
+        '413':
+          $ref: '#/components/responses/BodyTooLarge'
+    delete:
+      tags: [VM]
+      operationId: vmDeleteScene
+      summary: Delete a scene on the VM
+      security: [{ authorityKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActAsUser'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/KeyOrUserRefused'
+        '404':
+          $ref: '#/components/responses/SceneNotFound'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: genesis_session
+      description: Set by POST /auth/login or /auth/signup (HttpOnly). Browsers send it automatically; other clients send it back as a Cookie header.
+    authorityKey:
+      type: apiKey
+      in: header
+      name: X-Auth-Key
+      description: The shared AUTH_API_KEY (team machines -> VM only). Never sent by browsers.
+
+  headers:
+    SessionCookie:
+      description: The session cookie (HttpOnly; Secure over HTTPS). Without "remember" it ends when the browser closes.
+      schema: { type: string }
+      example: genesis_session=Q2x4b1h3cXZ...; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax
+
+  parameters:
+    JobId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[\w-]+$' }
+      example: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23
+    ImageName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[\w.-]+\.(jpe?g|png)$' }
+      example: 0000.jpg
+    SceneId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[\w-]{1,64}$' }
+      example: 3d1f5c2e-8a4b-4e6f-9c0d-1a2b3c4d5e6f
+    Range:
+      name: Range
+      in: header
+      required: false
+      schema: { type: string }
+      example: bytes=0-4095
+    ActAsUser:
+      name: X-Act-As-User
+      in: header
+      required: true
+      description: The id of the user the team machine is acting for. The VM looks the user (and their role) up in its own database.
+      schema: { type: integer }
+      example: 7
+    FeedbackCategory:
+      name: category
+      in: query
+      required: false
+      description: Only this category (a catalog id); anything else means all
+      schema: { type: string }
+      example: bug
+    FeedbackBefore:
+      name: before
+      in: query
+      required: false
+      description: Only messages older than this id ("Load more")
+      schema: { type: integer }
+      example: 120
+
+  requestBodies:
+    SignUp:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, email, password]
+            properties:
+              name: { type: string }
+              email: { type: string }
+              password: { type: string, minLength: 6 }
+              remember: { type: boolean }
+          example: { name: Alice, email: alice@example.com, password: correct-horse-battery, remember: true }
+    Rename:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string, minLength: 1, maxLength: 80 }
+          example: { name: Alice Tan }
+    RenameJob:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name: { type: string, maxLength: 80, description: Empty resets to the default name }
+          example: { name: Fox on the desk }
+    ChangePassword:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [currentPassword, newPassword]
+            properties:
+              currentPassword: { type: string }
+              newPassword: { type: string, minLength: 6 }
+          example: { currentPassword: correct-horse-battery, newPassword: staple-battery-horse-7 }
+    Avatar:
+      required: true
+      content:
+        image/jpeg:
+          schema: { type: string, format: binary }
+          example: (a 256 x 256 JPEG, as raw bytes)
+        image/png:
+          schema: { type: string, format: binary }
+          example: (a PNG, as raw bytes)
+    Feedback:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FeedbackInput' }
+          example: { category: bug, message: The upload bar stops at 99% on large batches. }
+    SceneInput:
+      required: true
+      description: A scene of any format version. Version 0 is the browser-only format (no format / version fields).
+      content:
+        application/json:
+          schema: { type: object }
+          examples:
+            version1:
+              summary: A version 1 scene
+              value:
+                format: genesis.scene
+                version: 1
+                id: 3d1f5c2e-8a4b-4e6f-9c0d-1a2b3c4d5e6f
+                name: Living room
+                createdAt: 1791101700000
+                updatedAt: 1791188100000
+                background: '#18181b'
+                renderMode: splats
+                objects:
+                  - { objectId: obj-1, jobId: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, name: Fox, position: [1, 0, -2.5], rotation: [0, 90, 0], scale: [1.5, 1.5, 1.5], trim: { strength: 0.3, minOpacity: 0.1, maxSplatSize: 0, density: 0 }, isHidden: false }
+            version0:
+              summary: A version 0 scene (converted when saved)
+              value:
+                name: Living room
+                background: '#18181b'
+                renderMode: splats
+                objects:
+                  - { objectId: obj-1, jobId: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, name: Fox, position: [1, 0, -2.5], rotation: [0, 90, 0], scale: [1.5, 1.5, 1.5] }
+
+  responses:
+    Unauthorized:
+      description: Not signed in (no session cookie, or it has expired)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Please sign in first. }
+    Forbidden:
+      description: Signed in, but not an admin
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Only admins can do this. }
+    KeyRefused:
+      description: The shared key is missing or wrong
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Unauthorized. }
+    KeyOrUserRefused:
+      description: The shared key is missing or wrong, or X-Act-As-User names no known user
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Unauthorized. }
+    NotAuthority:
+      description: This server is not the VM (AUTH_MODE isn't authority)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: This server is not the account authority. }
+    BadRequest:
+      description: The request's input is invalid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Enter a valid email address. }
+    BodyTooLarge:
+      description: A JSON body over the server's limit (2 MB; config.maxJsonBodyMB)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: That request is too large. }
+    TooLarge:
+      description: A file or message is over its limit
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: That file is too large -- each photo must be under 30 MB. }
+    TooManyAttempts:
+      description: A rate limit was reached (Retry-After says when to try again)
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          example: 840
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Too many attempts. Try again in 14 minutes. }
+    Unavailable:
+      description: A team machine can't reach the VM, or the service isn't set up here
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: The account service is unavailable. Try again shortly. }
+    NoPassword:
+      description: The account signs in with Google only
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: This account signs in with Google, so it has no password to change. }
+    Account:
+      description: The account's details
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Account' }
+          example:
+            name: Alice
+            email: alice@example.com
+            role: user
+            createdAt: 1791101700000
+            memberSince: 4 October 2026
+            emailVerified: false
+            passwordChangedAt: 1792666200000
+            signInMethods: { password: true, google: false }
+            photoVersion: 1792666300000
+    Avatar:
+      description: The profile photo (ETag; no-cache)
+      headers:
+        ETag:
+          schema: { type: string }
+          example: '"avatar-7-1792666300000"'
+      content:
+        image/jpeg:
+          schema: { type: string, format: binary }
+          example: (JPEG bytes)
+        image/png:
+          schema: { type: string, format: binary }
+          example: (PNG bytes)
+    NoAvatar:
+      description: No profile photo is set
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: No profile photo. }
+    Storage:
+      description: Bytes used by the user's own jobs
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [usedBytes, models, jobs]
+            properties:
+              usedBytes: { type: integer, minimum: 0 }
+              models: { type: integer, minimum: 0, description: Finished jobs }
+              jobs: { type: integer, minimum: 0, description: All jobs, including failed and running }
+          example: { usedBytes: 734003200, models: 6, jobs: 9 }
+    JobList:
+      description: The jobs, newest first
+      content:
+        application/json:
+          schema:
+            type: array
+            items: { $ref: './schemas/job-summary.schema.json' }
+          example:
+            - id: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23
+              name: Fox on the desk
+              status: done
+              phase: done
+              progress: 1
+              detail: null
+              error: null
+              createdAt: 1791101700000
+              updatedAt: 1791102900000
+              imageCount: 2
+              hasResult: true
+              thumbnail: /api/v1/jobs/7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23/images/0000.jpg
+              cover: /api/v1/jobs/7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23/cover.webp
+              images:
+                - { name: 0000.jpg, url: /api/v1/jobs/7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23/images/0000.jpg }
+                - { name: 0001.jpg, url: /api/v1/jobs/7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23/images/0001.jpg }
+    JobStatus:
+      description: The job's state (the last 40 log lines in logTail)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/JobStatus' }
+          example:
+            id: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23
+            status: running
+            phase: training
+            progress: 0.62
+            detail: null
+            error: null
+            updatedAt: 1791102300000
+            imageCount: 24
+            removeBackground: false
+            hasResult: false
+            logTail: ['Training step 4200 / 7000']
+    JobNotFound:
+      description: No such job, or it isn't the caller's (someone else's job is 404, not 403)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: job not found }
+    JobRenamed:
+      description: Renamed
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, name, sampleFile]
+            properties:
+              id: { type: string }
+              name: { type: ['string', 'null'] }
+              sampleFile: { type: string, description: The model's copy in the engine's samples folder }
+          example: { id: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, name: Fox on the desk, sampleFile: Fox on the desk.ply }
+    RenameBlocked:
+      description: The engine's copy of the model couldn't be renamed (open in another program)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Couldn't rename 7f3c2a10.ply in the engine samples folder (EBUSY). Close any program using it and try again. }
+    JobCancelled:
+      description: Cancelled (also when it already was)
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, status]
+            properties:
+              id: { type: string }
+              status: { const: cancelled }
+          example: { id: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, status: cancelled }
+    JobFinished:
+      description: The job already finished
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: job already done }
+    JobDeleted:
+      description: Deleted for good
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, deleted]
+            properties:
+              id: { type: string }
+              deleted: { const: true }
+          example: { id: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, deleted: true }
+    Photo:
+      description: The photo
+      content:
+        image/jpeg:
+          schema: { type: string, format: binary }
+          example: (JPEG bytes)
+        image/png:
+          schema: { type: string, format: binary }
+          example: (PNG bytes)
+    ImageNotFound:
+      description: No such photo, or the job isn't the caller's
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: image not found }
+    Model:
+      description: The whole model
+      headers:
+        Accept-Ranges:
+          schema: { type: string }
+          example: bytes
+      content:
+        application/octet-stream:
+          schema: { type: string, format: binary }
+          example: "ply\nformat binary_little_endian 1.0\nelement vertex 412873\n... (binary splat data)"
+    ModelRange:
+      description: The requested byte range (the viewer first reads bytes 0-4095)
+      headers:
+        Content-Range:
+          schema: { type: string }
+          example: bytes 0-4095/48211932
+      content:
+        application/octet-stream:
+          schema: { type: string, format: binary }
+          example: "ply\nformat binary_little_endian 1.0\n... (the first 4096 bytes)"
+    ResultNotReady:
+      description: No finished model (still running, failed, or not the caller's)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: result not ready }
+    Cover:
+      description: The cut-out cover (WebP), cached for a day
+      content:
+        image/webp:
+          schema: { type: string, format: binary }
+          example: (WebP bytes)
+    NoCover:
+      description: No cover (no background masks); show the first photo instead
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: no cover }
+    SceneList:
+      description: Scene summaries, newest first
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: object
+              required: [id, name, updatedAt, objectCount]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                updatedAt: { type: integer }
+                objectCount: { type: integer, minimum: 0 }
+          example:
+            - { id: 3d1f5c2e-8a4b-4e6f-9c0d-1a2b3c4d5e6f, name: Living room, updatedAt: 1791188100000, objectCount: 3 }
+    Scene:
+      description: The scene exactly as saved (format version 1)
+      content:
+        application/json:
+          schema: { $ref: './schemas/scene.v1.schema.json' }
+          example:
+            format: genesis.scene
+            version: 1
+            id: 3d1f5c2e-8a4b-4e6f-9c0d-1a2b3c4d5e6f
+            name: Living room
+            createdAt: 1791101700000
+            updatedAt: 1791188100000
+            background: '#18181b'
+            renderMode: splats
+            objects:
+              - { objectId: obj-1, jobId: 7f3c2a10-5b7e-4c1d-9a2e-0c4b8d6e1f23, name: Fox, position: [1, 0, -2.5], rotation: [0, 90, 0], scale: [1.5, 1.5, 1.5], trim: { strength: 0.3, minOpacity: 0.1, maxSplatSize: 0, density: 0 }, isHidden: false }
+    BadScene:
+      description: Not a valid scene
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: 'The scene is not valid: /objects/0/position must NOT have fewer than 3 items' }
+    SceneTooNew:
+      description: Saved by a newer format version than this server reads
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: This scene was saved by a newer version (format 2; this server reads up to 1). }
+    SceneNotFound:
+      description: No such scene, or it isn't the caller's
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: scene not found }
+    FeedbackCreated:
+      description: Stored
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id]
+            properties:
+              id: { type: integer }
+          example: { id: 121 }
+    FeedbackPage:
+      description: One page of feedback (50), newest first
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FeedbackPage' }
+          example:
+            items:
+              - { id: 121, name: Alice, email: alice@example.com, category: bug, message: The upload bar stops at 99% on large batches., origin: bryans-pc, createdAt: 1792666500000 }
+            hasMore: false
+
+  examples:
+    User:
+      value: { name: Alice, email: alice@example.com, role: user, createdAt: 1791101700000, memberSince: 4 October 2026 }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string, description: A message that can be shown to the user }
+    User:
+      type: object
+      required: [name, email, role, createdAt, memberSince]
+      properties:
+        name: { type: string }
+        email: { type: string }
+        role: { enum: [user, admin] }
+        createdAt: { type: integer, description: UTC epoch milliseconds }
+        memberSince: { type: string, description: e.g. "4 October 2026" }
+    VmUser:
+      type: object
+      required: [id, email, name, role]
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        name: { type: string }
+        role: { enum: [user, admin] }
+    Account:
+      type: object
+      required: [name, email, role, createdAt, memberSince, emailVerified, passwordChangedAt, signInMethods, photoVersion]
+      properties:
+        name: { type: string }
+        email: { type: string }
+        role: { enum: [user, admin] }
+        createdAt: { type: integer }
+        memberSince: { type: string }
+        emailVerified: { type: boolean, description: true for Google accounts (Google checked the address) }
+        passwordChangedAt: { type: ['integer', 'null'], description: null if never changed since sign-up }
+        signInMethods:
+          type: object
+          required: [password, google]
+          properties:
+            password: { type: boolean }
+            google: { type: boolean }
+        photoVersion: { type: ['integer', 'null'], description: Changes with each new photo; null when there is none }
+    JobStatus:
+      type: object
+      required: [id, status, phase, progress, detail, error, updatedAt, imageCount, removeBackground, hasResult, logTail]
+      properties:
+        id: { type: string }
+        status: { enum: [queued, running, done, error, cancelled] }
+        phase: { type: ['string', 'null'] }
+        progress: { type: number, minimum: 0, maximum: 1 }
+        detail: { type: ['string', 'null'] }
+        error: { type: ['string', 'null'] }
+        updatedAt: { type: ['number', 'null'] }
+        imageCount: { type: ['integer', 'null'] }
+        removeBackground: { type: boolean }
+        hasResult: { type: boolean }
+        logTail: { type: array, items: { type: string } }
+    FeedbackInput:
+      type: object
+      required: [category, message]
+      properties:
+        category: { type: string, description: A catalog feedback category id (bug, idea, other) }
+        message: { type: string, minLength: 10, maxLength: 1000 }
+    FeedbackPage:
+      type: object
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, name, email, category, message, origin, createdAt]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              email: { type: string }
+              category: { type: string }
+              message: { type: string }
+              origin: { type: ['string', 'null'] }
+              createdAt: { type: integer }
+        hasMore: { type: boolean }
+    CatalogResponse:
+      type: object
+      required: [version, minPhotos, feedbackCategories, feedbackMessage, trainingPresets, defaultTrainingPreset, limits]
+      properties:
+        version: { $ref: './schemas/catalog.schema.json#/properties/version' }
+        minPhotos: { $ref: './schemas/catalog.schema.json#/properties/minPhotos' }
+        feedbackCategories: { $ref: './schemas/catalog.schema.json#/properties/feedbackCategories' }
+        feedbackMessage: { $ref: './schemas/catalog.schema.json#/properties/feedbackMessage' }
+        trainingPresets: { $ref: './schemas/catalog.schema.json#/properties/trainingPresets' }
+        defaultTrainingPreset: { $ref: './schemas/catalog.schema.json#/properties/defaultTrainingPreset' }
+        limits:
+          type: object
+          required: [maxPhotos, maxPhotoSizeMB, maxMediaFiles, maxMediaSizeMB, maxFrameFps, minTrainIters, maxTrainIters, maxAvatarKB]
+          properties:
+            maxPhotos: { type: integer }
+            maxPhotoSizeMB: { type: number }
+            maxMediaFiles: { type: integer }
+            maxMediaSizeMB: { type: number }
+            maxFrameFps: { type: number }
+            minTrainIters: { type: integer }
+            maxTrainIters: { type: integer }
+            maxAvatarKB: { type: number }
+    PerformanceReport:
+      type: object
+      required: [window, from, to, api, pageLoad]
+      properties:
+        window: { enum: ['1h', '24h', '7d'] }
+        from: { type: integer, description: UTC epoch ms }
+        to: { type: integer, description: UTC epoch ms }
+        api:
+          type: array
+          description: One entry per route ("METHOD /pattern", the same for /api/v1 and the legacy paths; "(no route)" for unknown paths), slowest p95 first
+          items:
+            type: object
+            required: [route, count, errors, mean, p50, p95, p99, max]
+            properties:
+              route: { type: string }
+              count: { type: integer, minimum: 1 }
+              errors: { type: integer, minimum: 0, description: Replies with a 5xx status }
+              mean: { type: number }
+              p50: { type: number }
+              p95: { type: number }
+              p99: { type: number }
+              max: { type: number }
+        pageLoad:
+          type: array
+          items:
+            type: object
+            required: [metric, count, mean, p50, p95, p99, max]
+            properties:
+              metric: { enum: [ttfb, fcp, domContentLoaded, load] }
+              count: { type: integer, minimum: 1 }
+              mean: { type: number }
+              p50: { type: number }
+              p95: { type: number }
+              p99: { type: number }
+              max: { type: number }

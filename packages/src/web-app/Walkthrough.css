@@ -1,0 +1,121 @@
+/* ============================================================
+   Walkthrough - first-run tour of the dashboard (Walkthrough.jsx)
+   Uses the --forma-* variables from AppTheme.css. The spotlight's huge
+   shadow dims everything around the highlighted item; positions are
+   set inline from the item's place on screen.
+   ============================================================ */
+
+.walkthrough {
+    position: fixed;
+    inset: 0;
+    z-index: 200; /* above the dock (70) and its menu */
+    font-family: var(--forma-font);
+}
+
+/* Catches clicks so the page can't be used mid-tour. */
+.walkthrough-blocker {
+    position: absolute;
+    inset: 0;
+}
+
+    /* No spotlight (item not on screen): dim the page here instead. */
+    .walkthrough-blocker.is-dimmed {
+        background: rgba(9, 9, 11, 0.74);
+    }
+
+.walkthrough-spotlight {
+    position: absolute;
+    pointer-events: none;
+    border: 1px solid rgba(147, 197, 253, 0.78);
+    box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.32), 0 0 24px 4px rgba(96, 165, 250, 0.42), 0 0 52px 12px rgba(59, 130, 246, 0.2), 0 0 0 9999px rgba(9, 9, 11, 0.74);
+    transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
+}
+
+.walkthrough-tooltip {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 15px 16px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--forma-border-strong);
+    background: var(--forma-panel);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58);
+    transition: left 0.3s ease, top 0.3s ease, bottom 0.3s ease;
+}
+
+.walkthrough-progress {
+    font-family: var(--forma-font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    color: var(--forma-text-dim);
+}
+
+.walkthrough-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.walkthrough .walkthrough-text {
+    margin: 0;
+    max-width: none;
+    font-family: inherit;
+    font-size: 0.84rem;
+    line-height: 1.55;
+    color: var(--forma-text-muted);
+}
+
+.walkthrough-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.walkthrough-skip,
+.walkthrough-next {
+    min-height: 36px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.walkthrough-skip {
+    flex: 1;
+    border: 1px solid var(--forma-border-strong);
+    background: transparent;
+    color: var(--forma-text-soft);
+}
+
+    .walkthrough-skip:hover {
+        border-color: var(--forma-text-dim);
+        color: var(--forma-heading);
+    }
+
+.walkthrough-next {
+    flex: 1.35;
+    border: 1px solid rgba(var(--forma-accent-rgb), 0.45);
+    background: var(--forma-blue);
+    color: var(--forma-on-accent);
+}
+
+    .walkthrough-next:hover {
+        background: var(--forma-blue-hover);
+    }
+
+    .walkthrough-skip:focus-visible,
+    .walkthrough-next:focus-visible {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 2px;
+    }
+
+@media (prefers-reduced-motion: reduce) {
+    .walkthrough-spotlight,
+    .walkthrough-tooltip {
+        transition: none;
+    }
+}

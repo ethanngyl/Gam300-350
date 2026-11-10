@@ -6,8 +6,8 @@
 \par Software Engineering Project 5
 \date 23-10-2026
 \brief
-Implements BackendClient: sign-in / sign-out against the backend's /auth
-routes, remembering the session in QSettings, the /jobs listing and the
+Implements BackendClient: sign-in / sign-out against the backend's
+/api/v1/auth routes, remembering the session in QSettings, the /jobs listing and the
 result.ply download into a per-account cache folder. The session token is
 sent back as the same "genesis_session" cookie the browser uses, so the
 backend needs no engine-specific routes and applies its usual rules
@@ -36,6 +36,10 @@ namespace {
     const QByteArray kSessionCookie = QByteArrayLiteral("genesis_session");
 
     const QString kDefaultServer = QStringLiteral("http://localhost:5005");
+
+    // Every request goes to the versioned API (docs/api-changelog.md); must
+    // match API_V1_PREFIX in packages/src/backend/adapters/apiVersions.js.
+    const QString kApiPrefix = QStringLiteral("/api/v1");
 
     // A request fails if no data arrives for this long.
     constexpr int kTransferTimeoutMs = 30000;
@@ -153,7 +157,7 @@ QString BackendClient::savedEmail() const {
 
 QNetworkRequest BackendClient::MakeRequest(const QUrl& server, const QString& path, const QByteArray& token) {
     QUrl url = server;
-    url.setPath(server.path() + path);
+    url.setPath(server.path() + kApiPrefix + path);
     QNetworkRequest request(url);
     if (!token.isEmpty()) {
         request.setHeader(QNetworkRequest::CookieHeader,

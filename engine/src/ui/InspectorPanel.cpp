@@ -422,6 +422,8 @@ void InspectorPanel::syncFromModel() {
                 m_rotation[axis]->setValue(degrees[axis]);
             }
         }
+        // Read back after any rounding by the spin boxes
+        m_shownRotation = glm::vec3(m_rotation[0]->value(), m_rotation[1]->value(), m_rotation[2]->value());
     }
 
     // The scale of each axis is the length of its matrix column.
@@ -504,15 +506,21 @@ void InspectorPanel::writeRotation(int editedAxis)
         return; //an axis has no length, so there is nothing to rotate
     }
 
-    //Only the edited field is trusted. The others can be stale while a field has focus (sync is paused then),
-    //so they come from the model's current rotation instead of being written back over a gizmo or Undo change.
-    glm::vec3 degrees = glm::degrees(glm::eulerAngles(glm::quat_cast(current)));
+    //Only the edited field is trusted. The others can be stale while a field has focus (sync is paused then).
+    //Start from the angles last shown if they still describe the model. Only when the model changed underneath
+    //(gizmo, Undo) are they re-read from the matrix. Always re-reading would mix sets of angles: Y = 120 comes
+    //back as X = 180, Y = 60, Z = 180, and swapping in a new X on top of that flips the model.
+    glm::vec3 degrees = m_shownRotation;
+    if (MaxDifference(current, RotationFromDegrees(degrees)) > 1e-3f) {
+        degrees = glm::degrees(glm::eulerAngles(glm::quat_cast(current)));
+    }
     degrees[editedAxis] = static_cast<float>(m_rotation[editedAxis]->value());
     for (int axis = 0; axis < 3; ++axis) {
         if (axis == editedAxis) continue;
         const QSignalBlocker block(m_rotation[axis]);
         m_rotation[axis]->setValue(degrees[axis]);
     }
+    m_shownRotation = glm::vec3(m_rotation[0]->value(), m_rotation[1]->value(), m_rotation[2]->value());
     const glm::mat3 wanted = RotationFromDegrees(degrees);
     //Same orientation already (e.g. the fields were just refreshed from the model), nothing to do
     if (MaxDifference(current, wanted) < 1e-4f) {

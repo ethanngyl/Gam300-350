@@ -18,6 +18,12 @@ Finds the newest .ply file Brush exported in an <id>_out folder, ignoring
 result.ply. The names are zero-padded (splat_00500, splat_07000), so an 
 alphabetical sort puts the highest iteration last. Returns null if the folder 
 is missing or has no .ply files.
+- setImageNameSource(fn)
+Where photo names come from when a job has no images/ folder (the VM keeps
+photos in the database with FILE_STORE=db). Set by server.js.
+- setModelSource(fn)
+How to tell a job's model is in the database when its result file is gone
+(the VM with FILE_STORE=db), so the job stays done. Set by server.js.
 - scanJob(id, jobsDir)
 Builds one job record from its folder.
 - scanJobs(jobsDir)
@@ -50,7 +56,44 @@ export const IMAGE_EXT_RE = /\.(jpe?g|png)$/i
 // Job ids become path segments, so only plain filename characters are accepted.
 export const JOB_ID_RE = /^[\w-]+$/
 
+// Where to find a job's photo names when its images/ folder is gone (the VM
+// with FILE_STORE=db keeps photos in the database). Set by server.js, so
+// this file stays free of database code.
+let imageNameSource = null
+// The same for a job's model: says whether the database holds it when its
+// result file is gone. Without it, such a job would be marked "missing".
+let modelSource = null
+
 // ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Tells scanJob where photo names come from when a job has no images/
+    folder (or it is empty).
+  \param fn
+    function(jobId) -> string[] of photo names, or null
+*/
+/************************************************************************/
+export function setImageNameSource(fn)
+{
+  imageNameSource = fn
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Tells scanJob how to check for a job's model when its result file is
+    not on disk. The job then keeps its result path (still used for its
+    name and status.json) and stays done.
+  \param fn
+    function(jobId) -> bool, true if the model is stored elsewhere, or null
+*/
+/************************************************************************/
+export function setModelSource(fn)
+{
+  modelSource = fn
+}
 
 /************************************************************************/
 /*!
@@ -129,9 +172,18 @@ export async function scanJob(id, jobsDir = config.jobsDir)
   try 
   {
     const jobDir = path.join(jobsDir, id)
-    const names = (await fsp.readdir(path.join(jobDir, 'images')))
-      .filter((n) => IMAGE_EXT_RE.test(n))
-      .sort()
+    let names = []
+    try
+    {
+      names = (await fsp.readdir(path.join(jobDir, 'images')))
+        .filter((n) => IMAGE_EXT_RE.test(n))
+        .sort()
+    }
+    catch
+    {
+      // No images/ folder: the photos may be in the database (below).
+    }
+    if (names.length === 0 && imageNameSource) names = imageNameSource(id)
     if (names.length === 0) return null
 
     const st = await fsp.stat(jobDir)
@@ -153,7 +205,7 @@ export async function scanJob(id, jobsDir = config.jobsDir)
       progress = saved.progress ?? 0
       error = saved.error ?? null
       resultPath = saved.result ? path.join(jobsDir, saved.result) : null
-      if (resultPath && !(await exists(resultPath))) resultPath = null
+      if (resultPath && !(await exists(resultPath)) && !modelSource?.(id)) resultPath = null
       needsWrite = false
 
       if (status === 'running' || (status === 'queued' && hasColmapFiles)) 

@@ -21,7 +21,7 @@ const IMAGE_TYPES_BY_EXTENSION = {
 };
 
 export async function fetchLibraryBatches() {
-    const res = await fetch('/jobs');
+    const res = await fetch('/api/v1/jobs');
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const jobs = await res.json();
     return jobs.filter((job) => Array.isArray(job.images) && job.images.length > 0);

@@ -68,7 +68,7 @@ struct Mesh {
 };
 
 std::array<uint8_t, 4> ColorBytes(const SplatVertex& s) {
-    auto toByte = [](float v) { return static_cast<uint8_t>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+    auto toByte = [](float v) { return static_cast<uint8_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
     return { toByte(s.color.r), toByte(s.color.g), toByte(s.color.b), toByte(s.alpha) };
 }
 
@@ -282,9 +282,9 @@ void WriteObj(Writer& w, const Mesh& mesh) {
     }
     for (size_t i = 0; i < mesh.indices.size(); i += 3) {
         w.text("f ");
-        w.number(static_cast<uint64_t>(mesh.indices[i] + 1)); w.text(" ");
-        w.number(static_cast<uint64_t>(mesh.indices[i + 1] + 1)); w.text(" ");
-        w.number(static_cast<uint64_t>(mesh.indices[i + 2] + 1)); w.text("\n");
+        w.number(static_cast<uint64_t>(mesh.indices[i]) + 1); w.text(" ");
+        w.number(static_cast<uint64_t>(mesh.indices[i + 1]) + 1); w.text(" ");
+        w.number(static_cast<uint64_t>(mesh.indices[i + 2]) + 1); w.text("\n");
     }
 }
 
@@ -323,7 +323,7 @@ bool WriteGlb(Writer& w, const Mesh& mesh, std::string& error) {
     std::vector<std::array<uint16_t, 4>> colors(vertexCount);
     std::array<uint16_t, 256> lut{};
     for (int i = 0; i < 256; ++i) {
-        lut[i] = static_cast<uint16_t>(SrgbToLinear(i / 255.0f) * 65535.0f + 0.5f);
+        lut[i] = static_cast<uint16_t>(std::lround(SrgbToLinear(i / 255.0f) * 65535.0f));
     }
     for (size_t i = 0; i < vertexCount; ++i) {
         const auto& c = mesh.colors[i];

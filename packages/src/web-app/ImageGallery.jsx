@@ -84,7 +84,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         /************************************************************************/
         async function load() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!cancelled) setJobs(data);

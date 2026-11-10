@@ -1,4 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 125.01 109.59" role="img" aria-label="Genesis">
-  <path fill="#4097aa" d="M113.48 27.4 66.03 0 18.58 27.4v54.79l47.45 27.4 47.45-27.4V27.4ZM82.92 86.82H45.58L26.91 54.48l18.67-32.34h37.34l18.67 32.34-18.67 32.34Z"/>
-  <path fill="#fa9483" d="M79.79 34.25H48.7a5 5 0 0 0-5 5v31.09a5 5 0 0 0 5 5h31.09a5 5 0 0 0 5-5V39.25a5 5 0 0 0-5-5ZM64.25 64.75a10.27 10.27 0 1 1 0-20.54 10.27 10.27 0 0 1 0 20.54Z"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 115.31 133.15">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #ffffff;
+      }
+
+      .cls-2 {
+        stroke: #ffffff;
+        stroke-miterlimit: 10;
+        stroke-width: 3px;
+      }
+
+      .cls-2, .cls-3 {
+        fill: none;
+      }
+
+      .cls-4 {
+        clip-path: url(#clippath);
+      }
+    </style>
+    <clipPath id="clippath">
+      <polygon class="cls-3" points="115.31 99.86 115.31 33.29 57.66 0 0 33.29 0 99.86 57.66 133.15 115.31 99.86"/>
+    </clipPath>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g class="cls-4">
+      <g>
+        <polyline class="cls-2" points=".9 101.7 .9 33.87 1.41 33.56 61.58 -1.17"/>
+        <polyline class="cls-2" points="7.98 106.35 7.98 37.72 8.49 37.41 66.29 4.02"/>
+        <polyline class="cls-2" points="15.07 111.13 15.07 41.57 15.58 41.26 73.38 7.87"/>
+        <polyline class="cls-2" points="22.16 115.33 22.16 45.41 22.67 45.11 80.47 11.72"/>
+        <polyline class="cls-2" points="29.24 118.89 29.24 49.26 29.75 48.96 87.55 15.57"/>
+        <polyline class="cls-2" points="36.33 124.66 36.33 53.11 36.84 52.81 94.64 19.42"/>
+        <polyline class="cls-2" points="43.41 127.46 43.41 56.96 43.93 56.66 101.73 23.27"/>
+        <polyline class="cls-2" points="50.52 130.24 50.52 60.44 51.03 60.13 108.83 26.75"/>
+        <g>
+          <polygon class="cls-1" points="115.92 30.25 115.92 100.05 115.41 100.35 57.61 133.74 57.61 63.94 58.12 63.64 115.92 30.25"/>
+          <polygon class="cls-2" points="115.92 30.25 115.92 100.05 115.41 100.35 57.61 133.74 57.61 63.94 58.12 63.64 115.92 30.25"/>
+        </g>
+      </g>
+    </g>
+  </g>
 </svg>

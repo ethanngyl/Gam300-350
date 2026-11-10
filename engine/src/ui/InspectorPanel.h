@@ -105,6 +105,9 @@ private:
     //Transform to display in inspect
     std::array<QDoubleSpinBox*, 3> m_position{};
     std::array<QDoubleSpinBox*, 3> m_rotation{}; // Euler angles in degrees
+    // The angles the rotation fields last showed for the model. Several sets of angles give the same orientation,
+    // so writeRotation keeps editing this set while it still matches the model, instead of re-reading the matrix.
+    glm::vec3 m_shownRotation{0.0f};
     std::array<QDoubleSpinBox*, 3> m_scale{};
 
     QDoubleSpinBox* m_minAlpha = nullptr;

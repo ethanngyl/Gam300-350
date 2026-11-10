@@ -3,7 +3,8 @@ setlocal enabledelayedexpansion
 
 :: Builds the engine renderer for the browser (WebAssembly) and drops
 :: codefine-engine.js / codefine-engine.wasm into
-:: packages\src\web-app\public\engine, where the web app's viewer picks it up.
+:: engine\web\package\dist (the @codefine/splat-renderer package), which the
+:: web app installs and its viewer uses.
 :: Re-run after changing anything in src\splat, src\gfx or web\.
 
 :: Pause at the end when double-clicked so the output stays visible.
@@ -70,7 +71,7 @@ echo Building codefine-engine.wasm...
 if errorlevel 1 goto :error
 
 echo.
-echo Done. Output: packages\src\web-app\public\engine\
+echo Done. Output: engine\web\package\dist\
 if defined DOUBLECLICK pause
 exit /b 0
 

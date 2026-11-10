@@ -5,153 +5,306 @@ Bryan Lim (Frontend Champion)
 Gabriel Sebastian Putra (Backend Champion)
 Clement Ang (Engine Champion)
 
-Pre-Requisities:
-- Nodejs(Default Installation Settings): https://nodejs.org/en
-- Visual Studio Community 22/26(With CMake and C++ packages): https://visualstudio.microsoft.com/downloads/
-- Python 3.10 or later: https://www.python.org/downloads/
+Pre-Requisites:
+- Windows 10 or later (64-bit) for the engine and start.bat. The web app also runs on macOS and Linux (see "To run" below).
+- Node.js 22.13 or later (the current LTS with default installation settings is fine): https://nodejs.org/en
+  Older versions fail: the backend's database uses node:sqlite and the build uses Vite 8.
+- Visual Studio Community 2022/2026 with the "Desktop development with C++" workload (it includes the C++ CMake tools):
+  https://visualstudio.microsoft.com/downloads/ -- also needed to build Brush, even if you only run the web app.
+- Python 3.10 or later, with "Add python.exe to PATH" ticked: https://www.python.org/downloads/
 - Git: https://git-scm.com/download/win
+- A GPU to train models (Brush renders with the GPU; there is no CPU-only build). An NVIDIA GPU is recommended: COLMAP is
+  much faster with CUDA, and Docker GPU mode needs one.
+- Internet access on the first run, and several GB of free disk space (Qt, Emscripten SDK, Rust, COLMAP and Brush download once).
+- Installed automatically, no action needed: Rust (to build Brush), Qt, the Emscripten SDK, COLMAP, Brush, cloudflared.
+- Optional: NSIS (https://nsis.sourceforge.io), only needed if you want engine/package.bat to also build a Windows installer.
+- Optional: Docker Desktop (https://www.docker.com/products/docker-desktop/), only for the Docker setup below.
+- macOS / Linux, to build the web viewer's WebAssembly renderer: cmake, git and python3 (brew install cmake / sudo apt install
+  cmake git python3). On Linux, apt's Node.js is usually too old; use NodeSource (https://github.com/nodesource/distributions).
 
 Packages:
 
-You do not need to install any of these by hand. The npm packages install when
-you run packages/start.bat; the Python packages and Qt install when you run
+You do not need to install any of these by hand. The npm and Python packages
+install when you run packages/start.bat; Qt installs when you run
 engine/run.bat; the C++ libraries are fetched by CMake the first time the
-engine is configured.
+engine is configured; the Emscripten SDK downloads the first time
+engine/build-web.bat runs (start.bat calls it for you).
 
 Web app + backend (npm -- packages/package.json):
+- @codefine/splat-renderer (the engine's renderer compiled to WebAssembly; local package in engine/web/package, built by engine/build-web.bat)
 - @mkkellogg/gaussian-splats-3d ^0.4.7
+- ajv 8.17.1 (checks data against the JSON schemas in packages/src/backend/schemas)
 - express ^5.2.1
 - file-type ^22.1.0
-- marked ^18.0.14
 - multer ^2.3.0
 - react ^19.2.8
 - react-dom ^19.2.8
 - three ^0.186.0
-  dev tools: @eslint/js, @types/react, @types/react-dom, @vitejs/plugin-react,
+  dev tools: @apidevtools/swagger-parser (OpenAPI checks in the tests),
+             @eslint/js, @types/react, @types/react-dom, @vitejs/plugin-react,
              eslint, eslint-plugin-react-hooks, eslint-plugin-react-refresh,
              globals, vite
 
-Python (tools/requirements.txt):
-- yt-dlp[default] >=2025.11.12
-- opencv-python >=4.8.0
-- aqtinstall (installed into a venv by engine/run.bat to download Qt)
+Python (tools/requirements.txt, installed by packages/start.bat):
+- opencv-python >=4.8.0 (Frame Extractor)
+- rembg >=2.0.60 and pillow >=10.0.0 (optional "Remove background"; the segmentation model downloads on first use)
+- onnxruntime: start.bat installs onnxruntime-gpu on NVIDIA GPUs and plain onnxruntime elsewhere
+- aqtinstall (installed into a separate venv by engine/run.bat to download Qt)
 
 Engine C++ libraries (fetched automatically by CMake / FetchContent):
 - GLM 1.0.1
 - GLEW (glew-cmake)
 - FreeType 2.14.1
 - Dear ImGui 1.89.9-docking
+- ImGuizmo (move / rotate / scale gizmos in the viewport)
 - stb (image loader, header-only)
-- nlohmann/json 3.11.3
 - Lua 5.4.7
 - happly (.ply reader/writer, header-only)
 - FMOD Studio API (Windows x64, bundled in engine/Library)
-- Qt 6.8.3 (msvc2022_64, downloaded by engine/run.bat on first run)
+- Qt 6.8.3 (msvc2022_64: Core, Gui, Widgets, OpenGL, OpenGLWidgets, Network; downloaded by engine/run.bat on first run)
 
-External tools (downloaded automatically into tools/ on first run):
-- COLMAP (structure-from-motion / multi-view stereo)
-- Brush (Gaussian splatting trainer)
-- cloudflared (public tunnel for sharing the web app)
+External tools (downloaded automatically on first run):
+- COLMAP (structure-from-motion / multi-view stereo) -- into tools/. The CPU-only build is fetched on machines without an NVIDIA GPU.
+- Brush 1.0.0 (Gaussian splatting trainer) -- built from source into tools/ (about 10-15 minutes, one time).
+- cloudflared (public tunnel for sharing the web app) -- into tools/.
+- Emscripten SDK (compiles the engine renderer to WebAssembly for the web app's viewer) -- into engine/Library/emsdk, a few hundred MB, one time.
+
+Architecture and API:
+docs/architecture.md: how the frontend, backend layers and database fit together, and every API endpoint.
+docs/data-schema.md: the database tables (diagram), naming / date / unit rules, and every saved file format with its version.
+docs/api-changelog.md: API versions (/api/v1 and the old, deprecated unversioned paths), every API change and every database migration.
+packages/src/backend/openapi.yaml: the API reference (OpenAPI 3.1) with an example request and response for every endpoint; open it in https://editor.swagger.io. Also served at /api/v1/openapi.yaml.
+Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters, performance, 30 users at once). CI runs them on every push.
+Lint (all blocking in CI): "npm run lint" in packages (ESLint), "ruff check --config ruff.toml tools" (Python), and engine/lint-cpp.sh (clang-tidy on the engine renderer; pip install clang-tidy==22.1.8).
+Performance: "npm run perf" (in packages) measures API p50 / p95 against the budget in README.md ("Performance budget"), on a temporary server; exits 1 if a route is over budget. The latest measured numbers (engine, web viewer on desktop and phone, API, deployed VM) are in README.md under "Latest measurements".
+Load: "npm run load" (in packages) runs LOAD_USERS users (default 100) through a whole visit at the same time, LOAD_ROUNDS times (default 3), and reports failures and p95 under load. "npm test" also runs a 30-user concurrency test (concurrency.test.js).
+Performance: every API request is timed, and the website reports how long it took to load. Signed in as an admin, GET /api/v1/metrics/performance?window=1h (or 24h, 7d) shows p50 / p95 / p99 per route and for page loads on that machine. Kept 7 days (PERF_KEEP_DAYS).
+Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
+packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
+packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
+features.txt: a full list of the current features of the web app and engine.
 
 To run (For Windows):
-run-all.bat: Double clicking this will install all required packages and run both the web application as well as the engine
-start.bat: Located in the packages folder, only starts the web-application
-run.bat: Located in the engine folder, only starts the engine
+run-all.bat: Double-click to install all required packages and run both the web application and the engine (each opens in its own window).
+packages/start.bat: Only starts the web application. It installs npm packages, builds the engine's WebAssembly renderer (engine/build-web.bat),
+  builds the web app, downloads COLMAP / Brush / cloudflared if missing, installs the Python packages, then starts the backend and a
+  Cloudflare tunnel. Keep both windows it opens running while the site is in use.
+engine/run.bat: Only starts the engine (downloads Qt on the first run, then configures, builds and launches it).
+
+To run (Docker, any OS with Docker Desktop):
+docker compose -f docker/docker-compose.yml up -d --build (from the repo root), then open http://localhost:5005. Runs the web app and
+  the reconstruction backend with no Node / Python / tool installs. Add -f docker/docker-compose.gpu.yml on NVIDIA GPUs; without one,
+  training runs on the CPU and is very slow. The desktop engine is not included. Full commands (logs, tunnel, stop) are in README.md.
+
+Deployed VM:
+The VM has no GPU, so model training is not available there. Sign-in, accounts and viewing models work; to build models, run the
+backend on a machine with an NVIDIA GPU (start.bat, or Docker with the GPU file above).
+
+Other scripts (Windows):
+packages/start-metrics.bat: Starts the metrics dashboard (job timings, iterations, splat counts, hardware/GPU use) on http://localhost:5010.
+engine/build-web.bat: Rebuilds just the engine's WebAssembly renderer used by the web app's 3D viewer. If it fails, the viewer falls back to the three.js renderer.
+engine/package.bat: Makes a portable build of the engine, plus a Windows installer if NSIS is installed.
+clean.bat: Deep clean -- removes all build artifacts so the next run rebuilds from scratch.
 
 To run (For macOS):
-start.sh: Located in the packages folder, open a terminal in that folder and run "./start.sh" to start the web application
-Note: The engine has no macOS support at the moment (Windows only), so there is no engine launcher for macOS. Compatibility to be researched and added in M2 due
-to FMOD's multiple versions for different operating systems abd incompatibility with the fetch function for CMAKE.
+packages/start.sh: Open a terminal in the packages folder and run "./start.sh" to start the web application.
+Note: The desktop engine has no macOS support at the moment (Windows only), so there is no engine launcher for macOS. FMOD ships a
+different build per operating system and the current CMake fetch setup only handles the Windows one. The engine's WebAssembly
+renderer (engine/build-web.sh) still builds, so the web app's 3D viewer works on macOS.
 
 To run (For Linux):
-start-linux.sh: Located in the packages folder, open a terminal in that folder and run "./start-linux.sh" to start the web-application. The first run installs COLMAP via apt, so it will ask for your sudo password.
-Note: The engine has no Linux support at the moment (Windows only), so there is no engine launcher for Linux. Compatibility to be researched and added in M2.
-to FMOD's multiple versions for different operating systems abd incompatibility with the fetch function for CMAKE.
+packages/start-linux.sh: Open a terminal in the packages folder and run "./start-linux.sh" to start the web application. The first run
+installs COLMAP via apt, so it will ask for your sudo password. Building the WebAssembly renderer needs cmake, git and python3
+(sudo apt install cmake git python3).
+Note: The desktop engine has no Linux support at the moment (Windows only), for the same FMOD reason as macOS.
+
 
 Testing the Website:
 
-Navigation:
-0. The web application can be accessed via http://localhost:5005 or the cloudflare link provided.
-1. Left-click the top navigation bar buttons (Home, Library, Photo Editor) to cycle through tabs. Confirm each tab loads its own content and the active tab is visually highlighted.
-2. On the Home tab, under Features, left-click each card and confirm it opens the right page:
-   - Media Library → opens the Library tab (3D Models view)
-   - Photo Editor → opens the Photo Editor tab
-   - YouTube Extractor → opens the YouTube extractor page
-   - Image Gallery → opens a list of past jobs, each showing a job ID, status (e.g. "cancelled," "done"), photo count, and a thumbnail grid of that job's uploaded photos
+Signing in:
+0. The web application can be accessed via http://localhost:5005 or the Cloudflare link printed by start.bat.
+1. On the login screen, create an account (email and password) or sign in. "Continue as guest" also works, but guests cannot send
+   feedback or manage an account. "Continue with Google" and "Forgot password" are not implemented yet and only show a message.
+2. On first sign-in a short walkthrough of the dock plays. It can be replayed later from the account menu or the Account page.
 
-Scanning an object — camera capture:
+Navigation (the dock):
+3. Every page has a floating dock at the bottom of the screen. From left to right: "New model", "Add photos", the pages (Home, Media
+   Library, Photo Editor, Scene Builder, Frame Extractor, Model Viewer, Feedback), then your avatar.
+4. Hover over an icon and confirm its label slides out. Click each page and confirm it opens and its icon is highlighted.
+5. On a wide window (1160px or more), use the "Show Tab Labels" / "Hide Tab Labels" switch at the top-right to keep every label showing.
+6. With a mouse, move the pointer away from the dock and confirm it slides mostly out of view after about 3 seconds, and comes back
+   when the pointer reaches the bottom of the screen.
+7. Click your avatar and confirm the menu opens upwards with: Account, mute / unmute sound, replay walkthrough, sign out.
+8. Phone / narrow window (760px or less): the dock becomes a full-width bar that is always visible.
 
-3. From Home, click "New Generation" (or the "Drop images to upload" box in the sidebar) to open the capture screen.
-4. Confirm the browser asks for camera permission, and once granted, the live camera feed appears in the preview box.
-5. Manual mode (default):
-   - Click "Capture photo" and confirm a thumbnail appears below, with a "Photo captured" confirmation message.
-   - Repeat a few times and confirm the photo count updates correctly.
-   - Click the × on a thumbnail and confirm it's removed from the batch.
-6. Auto-capture mode:
-   - Switch to "Auto capture."
-   - Set the interval (e.g. 2s) and the max photo count from their dropdowns.
-   - Click "Start auto-capture" and confirm photos are taken automatically on the chosen interval, with the running count shown (e.g. "12/50").
-   - Click "Stop auto-capture" and confirm it actually stops.
-   - Let it run to the max count and confirm it stops itself automatically once the cap is reached.
-7. Click "Back to dashboard" mid-capture and confirm it returns you to the Home tab, and that the camera indicator (browser tab icon or OS camera indicator) turns off — this checks the camera is actually released, not just hidden.
+Home:
+9. With no models yet, Home shows a "Create your first 3D model" card. Once you have some, it shows a "Recent" section with
+   "Your files" and "Generated models" tabs, and "View all".
 
-Uploading existing photos instead of scanning live:
+Scanning an object -- camera capture:
+10. Click "New model" in the dock to open the capture screen.
+11. Confirm the browser asks for camera permission and, once granted, the live camera feed appears in the preview box.
+12. Manual mode (default):
+    - Click "Capture photo" (or press Space) and confirm a thumbnail appears below.
+    - Repeat a few times and confirm the photo count updates.
+    - Click the x on a thumbnail and confirm it is removed from the batch.
+13. Auto-capture mode:
+    - Switch to "Auto capture".
+    - Set the interval (0.5s to 5s) and the max photo count.
+    - Click "Start auto-capture" (or press Space) and confirm photos are taken on the chosen interval, with a running count (e.g. "12/50").
+    - Click "Stop auto-capture" and confirm it stops.
+    - Let it run to the max count and confirm it stops by itself.
+14. Each photo is checked in the background for blur, bad exposure and near-duplicates; problem photos are outlined.
+15. Click "Back to dashboard" mid-capture and confirm you return to Home and the camera indicator (browser tab or OS) turns off --
+    this checks the camera is actually released, not just hidden.
 
-8. Re-open the capture screen. Click "Browse files" and select several images from your computer — confirm they're added to the batch with an "N photos uploaded" confirmation.
-9. Drag a group of image files from your file explorer directly onto the upload box and drop them — confirm the box highlights while dragging, and the files are added the same way as the file picker.
+Adding existing photos instead of scanning live:
+16. Click "Add photos" in the dock and pick several images -- confirm they open on the capture screen as a batch.
+17. On the capture screen, "Browse files" adds more, and dragging images from your file explorer onto the upload box adds them too
+    (the box highlights while dragging). Photos can also be added from your Media Library.
 
-Training a 3D model:
+Photo Editor:
+18. On the capture screen, click "Review photos first" to open the batch in the Photo Editor.
+19. Confirm the same photo checks are shown, and each photo can be kept or left out.
+20. Try the edits: auto fix, brightness, contrast, warmth, tint, auto colour, pick a neutral spot, sharpen, crop. They apply to the
+    whole batch, or to one photo on desktop.
+21. Confirm it warns about strong settings, lost highlight or shadow detail, and large or mixed crops.
+22. "Use original photos" ignores all edits (the originals are never changed). "Back to camera" returns the photos to the capture screen.
 
-10. With fewer than the minimum required photos in the batch, confirm the "Train model" button is disabled and a message tells you how many more photos are needed.
-11. Add enough photos to pass the minimum, then click "Train model."
-12. Confirm the app moves to a processing screen showing live progress (phase name and percentage) as the backend runs COLMAP and trains the Gaussian splat.
-13. Let it run to completion and confirm it automatically advances to the result screen once done.
-14. On the result screen, confirm the rendered 3D model appears and can be orbited/zoomed with the mouse.
-15. Test the result screen's buttons: "New scan" (starts over), "Download .ply" (downloads the file), and "Back to dashboard."
-16. Failure case: try training with too few photos and confirm the processing screen shows a clear error message rather than hanging or crashing.
-17. While a model is processing, click "Cancel" and confirm the job actually stops on the backend (not just visually — check it isn't still consuming GPU afterward if you can observe this).
+Building a 3D model:
 
-18. On the YouTube extractor page, paste a valid YouTube video link and click "Extract frames."
-19. Confirm it rejects invalid input: a non-YouTube URL, a playlist link, or a channel link should show an error message instead of submitting.
-20. Adjust the fps field and confirm higher values pull more frames (slower) and lower values pull fewer (faster).
-21. Confirm the status area updates live through each phase (extracting frames, detecting features, matching images, recovering camera poses, training, finalizing) with a progress bar.
-22. Once finished, confirm a "Download result (.ply)" link appears and works.
-23. Navigate away ("Back to dashboard") while a YouTube job is still running, then check the backend doesn't keep processing it unwatched.
+Model detail (training iterations):
+The "Model detail" slider (on the capture screen, the Photo Editor and the Frame Extractor) sets how many training iterations Brush runs.
+Fewer iterations are faster; more give a sharper, more detailed model.
+- Fast: 5,000 iterations
+- Normal: 7,000 iterations (the website's default)
+- Detailed: 10,000 iterations
+These presets (and the minimum of 8 photos) are reference data in packages/src/backend/catalog/catalog.json, read by the website
+through GET /api/v1/catalog.
+The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from
+the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
-Click sounds:
+"Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
 
-24. Confirm the top navigation buttons play a click sound.
-25. Confirm the Home tab's feature cards play a click sound.
-26. Confirm "Back to dashboard" button in the app plays a click sound.
+23. With no photos in the batch, confirm "Use this batch" and "Review photos first" are disabled.
+24. Add photos taken all the way around the object, then click "Use this batch (N photos)".
+25. Confirm the processing screen shows the live step, iteration counter, progress bar, elapsed time and a step tracker while the
+    backend runs COLMAP and trains the Gaussian splat.
+26. When it finishes, confirm you are asked to name the model, then the model page opens.
+27. On the model page, confirm the 3D model renders and can be orbited / zoomed, and try: the pencil (rename), full screen,
+    "Download .ply", "Add to scene", "Open in Media Library", Rename and Delete.
+28. Failure case: try building with a poor photo set and confirm the processing screen explains the failure with tips instead of hanging.
+29. While a model is processing, click "Cancel" (or leave the screen any other way) and confirm the job stops on the backend, not just
+    visually -- check it is no longer using the GPU if you can.
 
-Known limitations to note while testing (not bugs)
+Frame Extractor:
+30. Open Frame Extractor from the dock. Drop or browse for videos or animated GIFs (MP4, MOV, WEBM, MKV, AVI, MPEG, GIF; up to 10
+    files, 2 GB each) and confirm they are listed.
+31. Confirm invalid input is rejected: a photo or text file shows an error, and a text file renamed to .mp4 is refused by the server.
+32. Adjust the frames-per-second field: higher values pull more frames (slower), lower values fewer (faster). At least 8 frames are needed.
+33. Click "Process media" and confirm the processing screen shows the upload first, then each phase (extracting frames, detecting
+    features, matching images, recovering camera poses, training, finalizing), with Cancel available throughout.
+34. When it finishes, confirm the model opens on the model page and "Download .ply" works.
+35. After a failed or cancelled build, confirm the Frame Extractor form comes back filled in with your previous files and settings.
 
-- Scene Builder tab is currently disabled — do not expect to find it in the navigation.
-- COLMAP can fail on photo sets with poor overlap or low quality; this is an expected pipeline limitation, not a website bug. 
+Media Library:
+36. "3D Models": a searchable, sortable grid (Newest, Oldest, Name, Last edited) with Ready / Processing status. Covers show the object
+    cut out of one of its photos.
+37. Right-click a model to rename or delete it; deleting also removes its photo batch.
+38. "Photo Library": photo batches grouped by job, with search and sort; click a photo to download it.
+
+Model Viewer:
+39. Pick any finished model, or open a local .ply file, and confirm it opens in the viewer.
+40. The viewer uses the engine's WebAssembly renderer by default and falls back to (or can be switched to) the three.js renderer.
+    Confirm the choice is remembered after a reload.
+
+Scene Builder:
+41. Add models from the library (or "Add to scene" on a model page) and confirm they all show in one 3D viewport.
+42. Select a model and move, rotate and scale it with the gizmo; dragging elsewhere orbits the camera. W/A/S/D slide it along the
+    ground relative to the camera (hold Shift for bigger steps).
+43. Try drop to floor, duplicate, delete, undo / redo, then save the scene and reopen it.
+44. Desktop: the outliner (with hide), the inspector (exact values), snapping, background colour and keyboard shortcuts.
+    Phone: a bottom toolbar and bottom sheets, with a limit on how many models a scene holds.
+
+Account and feedback:
+45. Account page: profile card and profile photo, change password, sound effects on / off and volume, usage stats (models, photos,
+    failed builds, queue), replay walkthrough, log out.
+46. Admins see every user's models; normal users see only their own.
+47. Feedback page (signed in): pick a type, write feedback and send it; confirm the "Thanks for your feedback" message.
+
+Sounds:
+48. Confirm dock buttons, Home and model-page buttons play a tap / back sound; the camera plays a shutter sound; a finished build plays
+    a success sound and a failed one an error sound.
+49. Mute from the account menu or turn sound off on the Account page, and confirm the sounds stop.
+
+Known limitations to note while testing (not bugs):
+- "Continue with Google" and "Forgot password" only show a message.
+- Scene Builder: clean-up, render mode, reset view, screenshot and an exact drop to floor are waiting on scene functions in the
+  WebAssembly engine. Scenes are saved only in this browser (localStorage): the backend has scene routes (/api/v1/scenes),
+  but the web app doesn't use them yet (SCENES_API_READY in SceneStorage.js).
+- COLMAP can fail on photo sets with poor overlap or low quality; this is an expected pipeline limitation, not a website bug.
 
 
-Engine Guide:
+Engine Guide (Genesis Alpha Build, Windows only):
 
-Loading .ply model:
-1) Left click on .ply file within PLY FILES menu to select .ply model
-2) Left Click load button
-3) You can click the refresh button to show new .ply files added to the engine/assets/samples folder after you have added them there
+Help > Controls (F1) inside the engine lists every shortcut.
 
-Moving model:
-1) Left click on model within Loaded Splats menu
-2) Press WASD/Arrow Keys to move selected model around
+Viewport camera:
+- Right mouse drag: orbit
+- Left mouse drag: pan (when not grabbing a gizmo)
+- Mouse wheel: zoom
+- Home: recenter camera (View > Recenter Camera)
+- View > Render Mode: Point Cloud (Ctrl+1) or Gaussian Splat (Ctrl+2); also on the toolbar
+- View > Stats Overlay: toggles the stats overlay
 
-Play/Stop Sounds:
-1) Left Click on sound in Audio menu
-2) Press Play Select
-3) Press Stop All to stop all currently playing sounds
+Loading .ply models:
+1) File > Import Splat... (Ctrl+O), or drag and drop .ply files onto the window, or File > Open Recent.
+2) Assets panel: lists the .ply files in engine/assets/samples (finished web-app builds are copied there automatically). Filter the
+   list and load from it; it updates by itself when files are added to the folder.
+3) My Models panel: after Account > Sign In, lists the models you made in the web app (admins see everyone's) and downloads them
+   to a per-user cache.
+4) File > Trim Splats on Import: optionally cleans models up as they load (see Trimming).
+Files load on a background thread, so the editor stays responsive.
 
-Loading Audio Files:
-1) You can select which folder to load the audio files from under "Choose folder", the default folder path is under engine/assets/audio
-2) You can load a specific audio file that is not in the selected folder with the "Play File Not Listed" button
+Selecting and editing models:
+1) Left-click a model in the Scene panel to select it. Esc (viewport focused) or Edit > Deselect clears the selection.
+2) With the viewport focused, Q / W / E / R switch between the Pan, Translate, Rotate and Scale tools. Drag the gizmo in the viewport to
+   move, rotate or scale the selected model.
+3) Arrow keys nudge the selected model: Up / Down along X, Left / Right along Z.
+4) Inspector panel: name, splat count, exact position, rotation and scale, and per-model trim values.
+5) Edit menu: Rename (F2), Delete (Delete), Hide/Show Model (Ctrl+H), Reset Position.
+6) Undo (Ctrl+Z) / Redo (Ctrl+Y) cover moves, rotations, scales and inspector edits.
 
-Login In to Account:
-1) Open the My Models tab on the bottom row and click Sign In
-2) Change server address to the desired server if required
-3) Enter your account and password
+Crop box:
+1) Edit > Add Crop Box (Ctrl+B) adds a box around the selected model.
+2) Move / scale the box with the gizmo (nudges move the box while it is active).
+3) Choose whether it removes what is outside or inside (Edit > Crop Box Removes Inside), or toggle Crop Box Moves Contents (Ctrl+Shift+B).
+4) Press Enter (viewport focused) or Edit > Apply / Confirm Crop Box to apply it.
 
+Trimming:
+- Removes low-opacity splats, crops a percentage off each end of every axis, and drops splats in sparse regions.
+- Edit > Trim Settings... sets the global defaults; the Inspector sets values for each model.
+
+Exporting:
+1) File > Export... (Ctrl+E).
+2) Choose the selected model or the whole scene, and a format: Gaussian .ply, .splat, point-cloud .ply, .obj, .glb or .stl.
+3) For mesh formats, choose how splats become geometry; a size estimate is shown, and your last choices are remembered.
+
+Account:
+1) Open the My Models tab on the bottom row and click Sign In (or Account > Sign In...).
+2) Change the server address to the server you want, if needed (http://localhost:5005 by default).
+3) Enter your account and password from the web app. "Remember me on this PC" keeps you signed in for 7 days.
+4) Account > Sign Out signs out and deletes that account's downloaded models from the PC.
+
+Play/Stop sounds (Audio panel):
+1) Left-click one or more sounds in the list (Ctrl / Shift to select several), then press "Play Selected", or double-click a single sound.
+   Several sounds can play at once; the live count shows next to the buttons.
+2) Press "Stop All" to stop all currently playing sounds.
+3) "Choose Folder..." picks which folder to list audio files from; the default is engine/assets/audio.
+4) "Play File..." plays a specific audio file that is not in the listed folder.
+5) Clicking any button in the editor (including toolbar buttons and dialog buttons) plays a short UI click sound.
+
+Panels and layout:
+- Scene, Inspector, Assets, My Models, Console and Audio are dockable panels. Open or close them from the Window menu, drag them to
+  rearrange, and use Window > Reset Layout to restore the default. The layout is saved between runs.
+- Console panel: shows engine output and Qt logs, colour-coded.

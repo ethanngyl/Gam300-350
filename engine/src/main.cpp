@@ -10,6 +10,7 @@
  * Copyright 2026 DigiPen Institute of Technology Singapore.
  * All rights reserved.
  ******************************************************************************/
+#include "ui/ButtonSounds.h"
 #include "ui/EditorTheme.h"
 #include "ui/MainWindow.h"
 
@@ -32,6 +33,8 @@ int main(int argc, char** argv) {
     QApplication::setOrganizationName("CoDefine");
     QApplication::setApplicationName("Codefine Engine");
     EditorTheme::Apply(app);
+    // Click sound on every push/tool button in the editor and its dialogs.
+    ButtonSounds buttonSounds;
 
     MainWindow window;
     window.show();

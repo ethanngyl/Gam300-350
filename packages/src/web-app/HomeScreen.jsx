@@ -8,7 +8,7 @@
 \brief
 Dashboard landing screen, laid out like the Genesis wireframe and focused
 on the user's own work: a welcome line and subtitle (plus a "New model"
-button on phones, where the sidebar is a drawer), then "Recent" with two
+button on phones, as a bigger target than the dock's), then "Recent" with two
 tabs and a "View all" button. "Your files" shows the latest photo batches and opens the Photo
 Library; "Generated models" shows the latest finished models and opens one
 in the full-page viewer. Both come from GET /jobs. With nothing made yet,
@@ -53,7 +53,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
 
         async function loadJobs() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!isCancelled) {
@@ -118,9 +118,9 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     <h1>Welcome back, {userName}</h1>
                     <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
                 </div>
-                {/* Phones only: on wider screens New model is in the sidebar. */}
+                {/* Phones only: a bigger New model button than the dock's icon. */}
                 <button className="forma-btn forma-btn-primary home-new-model" onClick={startNewModel}>
-                    <Icon name="camera" size={15} /> New model
+                    <Icon name="cubePlus" size={15} /> New model
                 </button>
             </div>
 
@@ -164,7 +164,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     <h3>Create your first 3D model</h3>
                     <p>Take or upload photos of an object from every angle, and GENESIS builds the model for you.</p>
                     <button className="forma-btn forma-btn-primary" onClick={startNewModel}>
-                        <Icon name="plus" size={14} /> New model
+                        <Icon name="cubePlus" size={14} /> New model
                     </button>
                 </div>
             )}

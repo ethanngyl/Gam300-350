@@ -10,7 +10,7 @@
 \brief
 The reconstruction engine. It holds the in-memory job store and runs the
 photos -> COLMAP -> Brush -> normalized .ply pipeline for each job, plus the
-YouTube frame extraction step in front of it. It starts and tracks every tool
+media frame extraction step in front of it. It starts and tracks every tool
 process (COLMAP, Brush, python) so jobs can be cancelled and nothing is left
 running on the GPU when the server stops.
 - makeJob(id)
@@ -30,20 +30,21 @@ job had already finished.
 - run(job, bin, args, { cwd, onData, timeoutMs })
 Starts a tool process, streams its output into the job log, and resolves on
 exit code 0 or rejects with a readable error otherwise.
-- canonicalYoutubeUrl(input)
-Turns any single-video YouTube link into https://www.youtube.com/watch?v=<id>,
-or returns null for anything else (playlists, channels, other sites).
-- extractYoutubeFrames(job, url, { fps, maxFrames })
-Runs tools/youtube_frames.py to download a video and save frames into the
-job's images/ folder. Returns the number of frames written.
+- extractMediaFrames(job, { fps, maxFrames })
+Runs tools/extract_frames.py on the job's uploaded media/ files to save frames
+into its images/ folder, then deletes the uploads. Returns the number of frames
+written.
 - generateMasks(job, imagesDir, jobDir)
 Runs tools/make_masks.py to write foreground masks for every photo, so COLMAP
 and Brush ignore the background. Only used when job.removeBackground is set.
-- runYoutubePipeline(job, url, opts)
-Extracts the frames, checks there are at least 8, then runs runPipeline.
+- runMediaPipeline(job, opts)
+Extracts the frames, checks there are at least catalog.minPhotos (8), then
+runs runPipeline.
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
 training, normalizing the .ply, and copying it into the engine's samples.
+- setSkipSampleCopy(flag)
+Turns off the engine samples copy (the VM keeps models in the database).
 - sampleFileName(job)
 The job's filename in the engine's samples folder.
 - pickSampleFileName(job, name)
@@ -52,10 +53,8 @@ The samples filename to use for a job's display name after a rename.
 Rebuilds an in-memory job from a record scanned off disk (see scan.js).
 - pruneJob(job)
 After a job finishes: deletes COLMAP/Brush working files, keeping only the
-photos, status.json, the final model and metrics.json.
-- setOnJobDone(fn)
-Registers what runs after each successful job (server.js: send it to the
-VM's shared library).
+photos, status.json, the final model, metrics.json and cover.webp. Called by
+server.js (afterJobEnds) once the cover has been made from the masks.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -63,6 +62,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { catalog } from './catalog.js'
 import { config } from './config.js'
 import { recordPlyMetrics, startGpuSampler, startPhase } from './metrics.js'
 import { highestRawPly, IMAGE_EXT_RE } from './scan.js'
@@ -178,8 +178,7 @@ const liveChildren = new Set()
 /************************************************************************/
 /*!
   \brief
-    Terminate every live tool process (and their own children, e.g. the
-    yt-dlp/ffmpeg that youtube_frames.py spawns). Synchronous on purpose
+    Terminate every live tool process (and their own children). Synchronous on purpose
     so it is safe to call from process 'exit' handlers, where async work
     never runs.
   \return
@@ -215,7 +214,7 @@ function killChild(child) {
             })
         } else {
             // Children are spawned detached (own process group) so killing the
-            // negative pid takes the whole group, e.g. python + yt-dlp + ffmpeg.
+            // negative pid takes the whole group, e.g. COLMAP and its helpers.
             try {
                 process.kill(-child.pid, 'SIGKILL')
             } catch {
@@ -301,7 +300,7 @@ function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
         job.child = child
 
         // Optional watchdog: kill the tool if it runs longer than timeoutMs (used
-        // for the YouTube download/extract). timedOut is read by the close handler
+        // for the frame extraction). timedOut is read by the close handler
         // below to reject with a clear "timed out" message; the log line surfaces
         // the same in the job log. clearTimeout is a no-op when timer is null.
         let timedOut = false
@@ -343,101 +342,51 @@ function run(job, bin, args, { cwd, onData, timeoutMs, env } = {}) {
     })
 }
 
-const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/
-const YT_HOSTS = new Set([
-    'youtube.com',
-    'www.youtube.com',
-    'm.youtube.com',
-    'music.youtube.com',
-    'youtube-nocookie.com',
-    'www.youtube-nocookie.com',
-])
-
 /************************************************************************/
 /*!
   \brief
-    Rebuild a single-video YouTube URL from its ID alone. This also strips
-    list=/index= so yt-dlp can never be handed a playlist.
-    tools/youtube_frames.py applies the same rule.
-  \param input
-    string
-    The link the user entered
-  \return
-    https://www.youtube.com/watch?v=<id> for a single-video YouTube URL,
-    null for anything else (other hosts, playlists, channels, bad IDs).
-*/
-/************************************************************************/
-export function canonicalYoutubeUrl(input) {
-    let u
-    try {
-        u = new URL(String(input).trim())
-    } catch {
-        return null
-    }
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
-    if (u.username || u.password || u.port) return null
-    const host = u.hostname.toLowerCase()
-    let id = null
-    if (host === 'youtu.be') id = u.pathname.split('/')[1]
-    else if (YT_HOSTS.has(host)) {
-        if (u.pathname === '/watch') id = u.searchParams.get('v')
-        else id = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/]+)/)?.[1]
-    }
-    return id && YT_ID_RE.test(id) ? `https://www.youtube.com/watch?v=${id}` : null
-}
-
-/************************************************************************/
-/*!
-  \brief
-    Extract frames from a YouTube URL into a job's images/ directory by
-    running tools/youtube_frames.py. The script reports
-    "PROGRESS <stage> <0..1>" lines, which drive job.detail, and
+    Extract frames from a job's uploaded media/ files into its images/
+    directory by running tools/extract_frames.py. The script reports
+    "PROGRESS extract <0..1>" lines, which drive job.detail, and
     "ERROR: ..." lines, which become the job's error instead of a bare
-    exit code.
+    exit code. The uploads are deleted afterwards, whatever the outcome:
+    only the frames are needed from here on.
   \param job
     The job to extract frames for
-  \param url
-    string
-    The canonical YouTube video URL
   \param fps
     number
-    Optional. Frames per second to extract, defaults to config.ytFps
+    Optional. Frames per second to extract, defaults to config.frameFps
   \param maxFrames
     number
-    Optional. Cap on frames extracted, defaults to config.ytMaxFrames
+    Optional. Cap on frames extracted, defaults to config.frameMaxFrames
   \return
     The number of frames written to images/.
 */
 /************************************************************************/
-export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
+export async function extractMediaFrames(job, { fps, maxFrames } = {}) {
     const jobDir = path.join(config.jobsDir, job.id)
     const imagesDir = path.join(jobDir, 'images')
+    const mediaDir = path.join(jobDir, 'media')
     await fsp.mkdir(imagesDir, { recursive: true })
 
     job.status = 'running'
     startPhase(job, 'extract')
-    job.metrics.ytFps = fps ?? config.ytFps
-    job.metrics.ytMaxFrames = maxFrames ?? config.ytMaxFrames
+    job.metrics.frameFps = fps ?? config.frameFps
+    job.metrics.frameMaxFrames = maxFrames ?? config.frameMaxFrames
     job.phase = 'extract'
     job.progress = 0
-    job.detail = 'Fetching video info…'
+    job.detail = 'Reading your files…'
     saveJob(job)
 
     // Extraction owns the 0..0.05 slice of the bar (COLMAP starts at 0.05);
-    // job.detail carries the finer-grained per-stage percentage.
+    // job.detail carries the finer-grained percentage.
     let scriptError = null
     const onData = (line) => {
-        const p = line.match(/^PROGRESS (download|extract) ([\d.]+)/)
+        const p = line.match(/^PROGRESS extract ([\d.]+)/)
         if (p) {
-            const frac = Number(p[2])
-            const pct = Math.round(frac * 100)
-            if (p[1] === 'download') {
-                job.progress = 0.03 * frac
-                job.detail = `Downloading video… ${pct}%`
-            } else {
-                job.progress = 0.03 + 0.02 * frac
-                job.detail = `Extracting frames… ${pct}%`
-            }
+            const frac = Number(p[1])
+            job.progress = 0.05 * frac
+            job.detail = `Extracting frames… ${Math.round(frac * 100)}%`
             saveJob(job, { throttle: true })
             return
         }
@@ -446,26 +395,28 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
     }
 
     try {
+        // Named 0000.mp4, 0001.mov, ... on upload, so sorting keeps their order.
+        const mediaFiles = (await fsp.readdir(mediaDir)).sort().map((name) => path.join(mediaDir, name))
         await run(
             job,
             config.pythonBin,
             [
-                config.ytScript,
-                url,
+                config.frameScript,
+                ...mediaFiles,
                 '--output', imagesDir,
-                '--fps', String(fps ?? config.ytFps),
-                '--max-frames', String(maxFrames ?? config.ytMaxFrames),
-                '--max-duration', String(config.ytMaxDurationSec),
-                // Lets yt-dlp use this very Node binary as its JavaScript runtime.
-                '--node-path', process.execPath,
+                '--fps', String(fps ?? config.frameFps),
+                '--max-frames', String(maxFrames ?? config.frameMaxFrames),
             ],
-            { onData, timeoutMs: config.ytTimeoutMin * 60_000 },
+            { onData, timeoutMs: config.frameTimeoutMin * 60_000 },
         )
     } catch (err) {
         if (scriptError && !job.cancelled) throw new Error(scriptError, { cause: err })
         throw err
     } finally {
         job.detail = null
+        // Retries: on Windows a just-killed tool can hold its file for a moment.
+        await fsp.rm(mediaDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+            .catch((err) => appendLog(job, `Could not delete the uploaded media: ${err.message}`))
     }
 
     const frames = (await fsp.readdir(imagesDir)).filter((f) =>
@@ -477,30 +428,27 @@ export async function extractYoutubeFrames(job, url, { fps, maxFrames } = {}) {
 /************************************************************************/
 /*!
   \brief
-    Create a reconstruction job seeded from a YouTube URL: extract frames,
+    Run a reconstruction job seeded from uploaded media: extract frames,
     then run the normal reconstruction pipeline. Intended to be called in
     the background (not awaited) after responding to the client.
   \param job
     The job to run
-  \param url
-    string
-    The canonical YouTube video URL
   \param opts
     object
-    Optional { fps, maxFrames }, passed to extractYoutubeFrames
+    Optional { fps, maxFrames }, passed to extractMediaFrames
   \return
-    nothing; sets the job to error if fewer than 8 frames were extracted
-    or extraction failed
+    nothing; sets the job to error if fewer than catalog.minPhotos frames
+    were extracted or extraction failed
 */
 /************************************************************************/
-export async function runYoutubePipeline(job, url, opts = {}) {
+export async function runMediaPipeline(job, opts = {}) {
     try {
-        const count = await extractYoutubeFrames(job, url, opts)
+        const count = await extractMediaFrames(job, opts)
         job.imageCount = count
         saveJob(job)
-        if (count < 8) {
+        if (count < catalog.minPhotos) {
             throw new Error(
-                `Extracted only ${count} frame(s). Need at least 8 for a reconstruction — ` +
+                `Extracted only ${count} frame(s). Need at least ${catalog.minPhotos} for a reconstruction — ` +
                 'try a longer clip or a higher fps.',
             )
         }
@@ -764,8 +712,11 @@ export async function runPipeline(job) {
         // Best-effort copy into the engine's samples folder, so a finished scan can
         // be opened straight from the native viewer's file browser (main.cpp scans
         // assets/samples/ for *.ply on launch). Never fails the job -- the result is
-        // still servable from resultPath/the Download button either way.
-        try {
+        // still servable from resultPath/the Download button either way. Skipped
+        // on the VM with FILE_STORE=db, which keeps no model files on disk.
+        if (skipSampleCopy) {
+            appendLog(job, 'Model will be stored in the database (no engine samples copy).')
+        } else try {
             fs.mkdirSync(config.engineSamplesDir, { recursive: true })
             const enginePath = path.join(config.engineSamplesDir, sampleFileName(job))
             fs.copyFileSync(job.resultPath, enginePath)
@@ -779,15 +730,9 @@ export async function runPipeline(job) {
     job.status = 'done'
     appendLog(job, `\nDone. Result: ${job.resultPath}`)
     saveJob(job)
-
-    // Only the photos and the final model are kept (see pruneJob), then
-    // whoever registered for finished jobs (server.js: send it to the VM).
-    await pruneJob(job)
-    if (onJobDone) {
-      Promise.resolve()
-        .then(() => onJobDone(job))
-        .catch((err) => console.error(`[backend] after-done step failed for job ${job.id}:`, err))
-    }
+    // Tidying up (cover, pruneJob, sending to the VM, moving photos into
+    // the database) is done by server.js once this promise settles, in an
+    // order that keeps the photos and masks until the cover is made.
   } catch (err) {
     if (job.cancelled) return // cancelJob already set status/error
     job.status = 'error'
@@ -795,6 +740,24 @@ export async function runPipeline(job) {
     appendLog(job, `\nERROR: ${err.message}`)
     saveJob(job)
   }
+}
+
+// Set on the VM with FILE_STORE=db (see setSkipSampleCopy).
+let skipSampleCopy = false
+
+/************************************************************************/
+/*!
+  \brief
+    Turns off copying finished models into the engine's samples folder
+    (the VM with FILE_STORE=db keeps models in the database instead).
+  \param flag
+    bool
+  \return
+    nothing
+*/
+/************************************************************************/
+export function setSkipSampleCopy(flag) {
+    skipSampleCopy = flag
 }
 
 // Names Windows won't accept as a filename, with or without an extension.
@@ -845,23 +808,6 @@ export function pickSampleFileName(job, name) {
     const isOwnFile = preferred.toLowerCase() === sampleFileName(job).toLowerCase()
     if (isOwnFile || !fs.existsSync(path.join(config.engineSamplesDir, preferred))) return preferred
     return `${base}_${shortId}.ply`
-}
-
-// Called with each job that finishes successfully (set by setOnJobDone).
-let onJobDone = null
-
-/************************************************************************/
-/*!
-  \brief
-    Registers a function to run after each job finishes successfully (after
-    pruneJob). server.js uses it to send the job to the VM's shared library.
-    Errors it throws are logged and never affect the job.
-  \param fn
-    function(job), or null to remove it
-*/
-/************************************************************************/
-export function setOnJobDone(fn) {
-  onJobDone = fn
 }
 
 /************************************************************************/

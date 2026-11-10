@@ -1,0 +1,381 @@
+/* ============================================================
+   Model page - GENESIS theme (ModelScreen.jsx)
+   Uses the --forma-* variables from AppTheme.css.
+   Mobile-first: header, actions, viewer, then the detail cards in one
+   column. From 981px the cards sit in a column beside the viewer.
+   ============================================================ */
+
+.model-screen {
+    padding: 16px 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-family: var(--forma-font);
+}
+
+    /* App.css still styles bare h1, h2, p and dl with the old theme, so reset them here. */
+    .model-screen :is(h1, h2, p, dl, dd) {
+        font-family: inherit;
+        max-width: none;
+        margin: 0;
+    }
+
+.model-back {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: var(--forma-text-muted);
+    font-family: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .model-back:hover {
+        color: var(--forma-heading);
+    }
+
+/* ---------- Header ---------- */
+
+.model-head {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.model-head-text {
+    min-width: 0;
+}
+
+.model-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+
+.model-screen .model-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.model-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--forma-text-dim);
+    cursor: pointer;
+}
+
+    .model-icon-btn:hover {
+        border-color: var(--forma-border-strong);
+        background: var(--forma-panel-alt);
+        color: var(--forma-heading);
+    }
+
+.model-badge {
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--forma-green-rgb), 0.55);
+    background: rgba(var(--forma-green-rgb), 0.14);
+    color: var(--forma-green);
+    font-family: var(--forma-font-mono);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+    .model-badge.is-local {
+        border-color: rgba(var(--forma-accent-rgb), 0.5);
+        background: rgba(var(--forma-accent-rgb), 0.14);
+        color: var(--forma-teal-text);
+    }
+
+.model-screen .model-meta {
+    margin-top: 6px;
+    font-family: var(--forma-font-mono);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--forma-text-dim);
+}
+
+/* Phones: Download across the top, Add to scene under it. */
+.model-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+    .model-actions .forma-btn {
+        justify-content: center;
+        padding: 11px 16px;
+    }
+
+        .model-actions .forma-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+.model-download {
+    text-decoration: none;
+}
+
+/* ---------- Viewer ---------- */
+
+.model-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+}
+
+.model-viewer {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--forma-border);
+    background: radial-gradient(ellipse at 50% 42%, #24242b 0%, #141417 60%, #0f0f12 100%);
+}
+
+    /* Full screen (the button): the card fills the screen without its frame. */
+    .model-viewer:fullscreen {
+        aspect-ratio: auto;
+        border: none;
+        border-radius: 0;
+    }
+
+.model-fullscreen {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 11;
+    border-color: var(--forma-border-strong);
+    background: rgba(var(--forma-bg-rgb), 0.75);
+    color: var(--forma-text-soft);
+}
+
+.model-viewer-hint {
+    display: none;
+}
+
+/* The viewer's own buttons (renderer switch, engine view controls), smaller
+   than the full-page versions so they fit inside the card. */
+.model-viewer .btn {
+    padding: 7px 12px;
+    font-size: 0.76rem;
+    border-radius: 8px;
+}
+
+/* Phones: no splat count in the viewer (Details lists it), and Gaussian,
+   Point cloud and Reset view stay on one line. */
+@media (max-width: 760px) {
+    .model-viewer .engine-viewer-count {
+        display: none;
+    }
+
+    .model-viewer .engine-viewer-controls {
+        flex-wrap: nowrap;
+        gap: 6px !important; /* beats the inline gap */
+    }
+
+        .model-viewer .engine-viewer-controls .btn {
+            padding: 7px 10px;
+            white-space: nowrap;
+        }
+}
+
+/* ---------- Side cards ---------- */
+
+.model-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+
+.model-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.model-screen .model-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--forma-heading);
+}
+
+.model-screen .model-muted {
+    color: var(--forma-text-muted);
+    font-size: 0.88rem;
+    line-height: 1.55;
+}
+
+.model-screen .model-details {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 9px 14px;
+    font-size: 0.84rem;
+}
+
+.model-details dt {
+    color: var(--forma-text-muted);
+}
+
+.model-screen .model-details dd {
+    color: var(--forma-text);
+    text-align: right;
+}
+
+.model-screen .model-file-name {
+    overflow-wrap: anywhere;
+}
+
+.model-photos {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+}
+
+    .model-photos img,
+    .model-photos-more {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 7px;
+        object-fit: cover;
+        background: var(--forma-panel-alt);
+    }
+
+.model-photos-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--forma-text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.model-link {
+    align-self: flex-start;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+    .model-link:hover {
+        text-decoration: underline;
+    }
+
+.model-manage {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+    .model-manage .forma-btn {
+        justify-content: center;
+    }
+
+.model-screen .model-delete {
+    color: var(--forma-red);
+}
+
+    .model-screen .model-delete:hover {
+        border-color: var(--forma-red);
+    }
+
+/* ---------- Model not found ---------- */
+
+.model-missing {
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.model-missing-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(var(--forma-red-rgb), 0.14);
+    border: 1px solid rgba(var(--forma-red-rgb), 0.4);
+    color: var(--forma-red);
+}
+
+/* ---------- Tablets and up ---------- */
+
+@media (min-width: 761px) {
+    .model-screen {
+        padding: 28px 40px 24px;
+        gap: 16px;
+    }
+
+        .model-screen .model-title {
+            font-size: 2rem;
+        }
+
+    /* Name on the left, actions on the right. */
+    .model-head {
+        flex-direction: row;
+        align-items: flex-end;
+        justify-content: space-between;
+    }
+
+    .model-actions {
+        display: flex;
+        flex: none;
+    }
+
+    .model-viewer-hint {
+        display: block;
+        position: absolute;
+        left: 12px;
+        bottom: 14px;
+        z-index: 1;
+        pointer-events: none;
+        font-size: 0.72rem;
+        color: var(--forma-text-dim);
+    }
+}
+
+/* ---------- Wide screens: cards beside the viewer ---------- */
+
+@media (min-width: 981px) {
+    .model-body {
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 18px;
+        align-items: start;
+    }
+
+        .model-body.is-local {
+            grid-template-columns: minmax(0, 1fr) 280px;
+        }
+
+    /* As tall as the screen allows (minus header, page padding and dock). */
+    .model-viewer {
+        aspect-ratio: auto;
+        height: max(420px, calc(100dvh - 260px));
+    }
+}

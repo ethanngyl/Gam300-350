@@ -2,7 +2,7 @@
 
 > Team CoDefine - Real World Object Scanning to 3D Model Conversion
 
-Capture/Takes in real-world object images and turns it into an interactable 3D model. The front-end scans an object either via a camera, uploaded files or a youtube video from multiple angles; the Python back-end will then reconstruct it with photogrammetry + Gaussian splatting pipeline; the custom renderer displays the final result.
+Capture/Takes in real-world object images and turns it into an interactable 3D model. The web app scans an object either via a camera, uploaded photos or uploaded videos from multiple angles; the Node.js back-end then reconstructs it with a photogrammetry (COLMAP) + Gaussian splatting (Brush) pipeline; the custom renderer displays the final result.
 
 ---
 
@@ -10,9 +10,9 @@ Capture/Takes in real-world object images and turns it into an interactable 3D m
 
 This project takes a set of photographs of a physical object and produces a 3D asset that can be viewed in a custom renderer. It is built as three loosely-coupled parts so the team can work on them in parallel:
 
-- **Front-end (scanner):** a mobile app that captures overlapping photos of an object from many angles. Early development targets small objects on a rotating stand (spinning-photo-booth style) for controlled, repeatable captures.
-- **Back-end (reconstruction pipeline):** a Python service that runs the captured images through COLMAP (structure-from-motion + multi-view stereo) to recover camera poses and a point cloud, then through Gaussian Splatting, and exports a renderable 3D asset.
-- **Engine (renderer/visualizer):** a custom 3D renderer that loads and displays the reconstructed asset.
+- **Front-end (scanner):** a React web app (desktop and phone browsers) that captures overlapping photos of an object from many angles, or takes uploaded photos / videos. Early development targets small objects on a rotating stand (spinning-photo-booth style) for controlled, repeatable captures.
+- **Back-end (API + reconstruction pipeline):** a Node.js / Express service with a versioned JSON API (`/api/v1`) and a SQLite database. It runs the captured images through COLMAP (structure-from-motion) to recover camera poses and a point cloud, then trains a Gaussian splat with Brush, and exports a renderable `.ply`. Small Python tools (`tools/`) handle frame extraction from videos.
+- **Engine (renderer/visualizer):** a custom C++ 3D renderer that loads and displays the reconstructed asset, as a desktop editor and compiled to WebAssembly for the web app's viewer.
 
 The end goal of the project is to have as many additional features/solve current problems that similar existing applications are having in the market.
 
@@ -20,18 +20,37 @@ The end goal of the project is to have as many additional features/solve current
 
 | Part | Stack |
 | --- | --- |
-| Scanner (front-end) | Mobile app _(framework TBD)_ |
-| Reconstruction | Python, COLMAP _(external — see below)_, Gaussian Splatting |
-| API / orchestration | Python _(e.g. FastAPI)_ |
-| Renderer (engine) | Custom 3D renderer _(target TBD — native C++/OpenGL or web)_ |
+| Scanner (front-end) | React 19 web app, built with Vite; Three.js viewer |
+| Reconstruction | COLMAP _(external — see below)_, Brush (Gaussian splatting trainer); Python tools for frame extraction |
+| API / orchestration | Node.js + Express, SQLite (`node:sqlite`); versioned API at `/api/v1` ([OpenAPI](packages/src/backend/openapi.yaml), [changelog](docs/api-changelog.md)) |
+| Renderer (engine) | C++20, Qt 6 + OpenGL desktop editor (CMake); the splat renderer also compiles to WebAssembly / WebGL2 (Emscripten) |
+
+## Documentation
+- [Project wiki](https://github.com/ethanngyl/Gam300-350/wiki)
+- [Architecture](docs/architecture.md): layers, diagram and every API route
+- [Data schema](docs/data-schema.md): tables, naming, units and file formats
+- [API changelog](docs/api-changelog.md): API versions, changes and database migrations
+- [features.txt](features.txt): the full feature list, and README.txt for testing steps
 
 ## Prerequisites/How to Set up
 
 Application Installations:
-- Nodejs(Default Installation Settings): https://nodejs.org/en
-- Visual Studio Community 22/26(With CMake and C++ packages): https://visualstudio.microsoft.com/downloads/
-- Python 3.10 or later: https://www.python.org/downloads/
+- Windows 10 or later (64-bit) for the engine and `start.bat`. The web app also runs on macOS and Linux (see How to Run)
+- Node.js 22.13 or later (the current LTS with default installation settings is fine): https://nodejs.org/en. Older versions fail: the backend's database uses `node:sqlite` and the build uses Vite 8
+- Visual Studio Community 2022/2026 with the **Desktop development with C++** workload (it includes the C++ CMake tools): https://visualstudio.microsoft.com/downloads/. Also needed to build Brush, even if you only run the web app
+- Python 3.10 or later, with "Add python.exe to PATH" ticked (`start.bat` and `engine/run.bat` only look for Python on PATH): https://www.python.org/downloads/
 - Git: https://git-scm.com/download/win
+
+Hardware and first run:
+- A GPU to train models (Brush renders with the GPU; there is no CPU-only build). An NVIDIA GPU is recommended: COLMAP is much faster with CUDA, and Docker GPU mode needs one
+- Internet access on the first run, and several GB of free disk space (Qt, Emscripten SDK, Rust, COLMAP and Brush download once)
+
+Installed automatically, no action needed: Rust (to build Brush), Qt, the Emscripten SDK, COLMAP, Brush, cloudflared.
+
+Optional:
+- NSIS (https://nsis.sourceforge.io), only for `engine/package.bat` to also build a Windows installer
+- Docker Desktop (https://www.docker.com/products/docker-desktop/), only for Run with Docker
+- macOS / Linux, to build the web viewer's WebAssembly renderer: cmake, git and python3 (`brew install cmake` / `sudo apt install cmake git python3`). On Linux, apt's Node.js is usually too old; use NodeSource (https://github.com/nodesource/distributions)
 
 ## How to Run
 - Windows: Double click start.bat in the packages folder, any missing packages will be automatically installed by the script
@@ -39,7 +58,7 @@ Application Installations:
 - Ubuntu / Linux (x86_64): Open a terminal in the packages folder and enter "./start-linux.sh" (the first run installs COLMAP via apt, so it will ask for your sudo password)
 
 ## Run with Docker
-Runs the web app + reconstruction backend (COLMAP, Brush, YouTube extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
+Runs the web app + reconstruction backend (COLMAP, Brush, frame extractor) in a container, no Node/Python/tool installs needed. Requires Docker Desktop.
 - Docker files live in the `docker/` folder. Open a terminal in the repo root
 - Start: `docker compose -f docker/docker-compose.yml up -d --build`, then open http://localhost:5005
 - Logs: `docker compose -f docker/docker-compose.yml logs -f app`
@@ -68,12 +87,13 @@ Builds a Release copy that runs on any Windows PC, with no Visual Studio, Qt or 
 
 ## Engine renderer in the web app
 The web app's 3D viewer can render with the engine's own splat renderer (`engine/src/splat`, `engine/src/gfx`) compiled to WebAssembly, instead of the Three.js viewer.
-- The start scripts (`start.bat`, `start.sh`, `start-linux.sh`) build it automatically. The first run downloads the Emscripten SDK into `engine/Library/emsdk` (a few hundred MB); later runs only rebuild what changed. Output goes to `packages/src/web-app/public/engine/`
+- The start scripts (`start.bat`, `start.sh`, `start-linux.sh`) build it automatically. The first run downloads the Emscripten SDK into `engine/Library/emsdk` (a few hundred MB); later runs only rebuild what changed. Output goes to `engine/web/package/dist/`
 - To build it on its own: double click `engine/build-web.bat` (Windows), or run `./engine/build-web.sh` (macOS / Linux, needs `git`, `python3` and `cmake`: `brew install cmake` / `sudo apt install cmake git python3`)
 - Re-run it after changing anything in `engine/src/splat`, `engine/src/gfx` or `engine/web`. Docker builds it automatically
 - In the viewer, switch between **Engine renderer** and **Three.js renderer** (bottom left), and between Gaussian / Point cloud (bottom right). If the engine hasn't been built, or the browser has no WebGL2, the Three.js viewer is used
 - Controls: drag to orbit, right-drag or Shift-drag to pan, scroll or pinch to zoom, double-click to reset the view
-- Web-specific code: `engine/web/` (entry point + CMake), and the `CODEFINE_GLES` blocks in `SplatRenderer.cpp` / `Shader.cpp` (WebGL2 has no geometry shaders, so Gaussian mode draws instanced quads there)
+- It ships as an npm package, **`@codefine/splat-renderer`** (`engine/web/package`: version, [CHANGELOG](engine/web/package/CHANGELOG.md), [README](engine/web/package/README.md) and a standalone example). The web app installs it (`"@codefine/splat-renderer": "file:../engine/web/package"` in `packages/package.json`) and uses it in `EngineSplatViewer.jsx`; `packages/vite.config.js` serves its `dist/` at `/engine/` and copies it into the build. After pulling this change, run `npm install` in `packages` once
+- Web-specific code: `engine/web/` (entry point + CMake), `engine/web/package/` (the JavaScript API), and the `CODEFINE_GLES` blocks in `SplatRenderer.cpp` / `Shader.cpp` (WebGL2 has no geometry shaders, so Gaussian mode draws instanced quads there)
 
 ## How to use Engine
 The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), and **Assets / My Models / Console / Audio** tabs (bottom). Panels can be dragged, tabbed, floated or hidden from the Window menu; the layout is remembered between runs (Window > Reset Layout restores the default).
@@ -90,6 +110,13 @@ The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), 
 
 ## Signing in to the Engine
 The engine uses the same accounts as the web app, so models made through the web app can be opened in the desktop editor.
+
+To sign in:
+1. Open the **My Models** tab on the bottom row and click **Sign In**
+2. Change the server address to the server you want, if needed
+3. Enter your account and password
+
+More details:
 - Start the backend first (`start.bat` / `start.sh` / Docker), then in the engine go to Account > Sign In, or click Sign In in the **My Models** tab
 - Server is the web app's address, `http://localhost:5005` by default. Point it at the machine that processed the models: with `AUTH_MODE=client`, accounts are on the VM but each machine keeps its own models
 - Signing in to another machine over plain `http://` sends your password unencrypted, so the engine asks before doing it. Use an `https://` address where there is one
@@ -98,17 +125,78 @@ The engine uses the same accounts as the web app, so models made through the web
 - "Remember me" keeps you signed in for 7 days. Only the session is saved (in the engine's settings), never the password
 - Sign Out deletes that account's downloaded models from the PC (`%APPDATA%/CoDefine/Codefine Engine/remote-models`), so the next person can't open them
 - Local files are not affected: the **Assets** panel and File > Import still open any .ply on disk. Note the backend also copies every finished model into `engine/assets/samples`, so on the machine running the backend, the Assets panel shows every user's models
-- Code: `engine/src/net/BackendClient` (sign-in, model list, downloads), `engine/src/ui/LoginDialog` and `engine/src/ui/RemoteModelsPanel`. The engine signs in with the same session cookie as the browser, so it needs no engine-specific backend routes
+- Code: `engine/src/net/BackendClient` (sign-in, model list, downloads), `engine/src/ui/LoginDialog` and `engine/src/ui/RemoteModelsPanel`. The engine signs in with the same session cookie as the browser and calls the same `/api/v1` routes, so it needs no engine-specific backend routes
 
 ## Current Features
 - Basic Frontend, allows for navigation to image capturing/uploading page
 - Capable of generating a downloadable .ply file from uploaded images
-- Youtube frame image extractor, images per frame can be modified
+- Frame extractor for uploaded videos and GIFs, frames per second can be modified
 - Accounts shared by the web app and the desktop engine: users only see, rename and delete their own models; admins can access all of them
 
 ## Current Issues
 -  The model used for training is taxing and requires a strong GPU, the model training is reliant on a CUDA GPU meaning the host system will always need to remain online, other options are being explored at the moment.
--  The youtube frame extractor can extract images but the quality and kind of images captured might not be compatible with colmap's requirements.
+-  Model training is not available on the deployed VM, because the VM has no GPU. To build models, run the backend on a machine with an NVIDIA GPU (see the Docker setup above).
+-  The frame extractor can extract images but the quality and kind of images captured might not be compatible with colmap's requirements.
+
+## Performance budget
+
+Targets the product must meet, how each is measured, and the latest numbers.
+
+| Area | Target | How to measure |
+| --- | --- | --- |
+| Engine desktop editor (no backend needed) | **60 FPS** with the largest sample model (`fox.ply`, 304,526 splats), Gaussian mode | FPS readout in the status bar, or View > Stats Overlay (`engine/src/ui/Viewport.cpp`) |
+| Web viewer, desktop browser (model already downloaded, so rendering doesn't wait on the backend) | **60 FPS** while orbiting the same model | Chrome DevTools (F12) > ⋮ > More tools > Rendering > tick "Frame Rendering Stats", on `#/model/sample-fox` |
+| Web viewer, phone browser | **30 FPS** while orbiting | Same, with remote debugging (chrome://inspect) |
+| API, JSON routes | **p95 ≤ 200 ms** | `npm run perf` (in packages); live: `GET /api/v1/metrics/performance` (admins) |
+| API, sign-in | **p95 ≤ 500 ms** (password hashing is slow on purpose) | `npm run perf` |
+| Model download (largest sample, ~72 MB) | **p95 ≤ 3 s** on the machine running the backend | `npm run perf` |
+| Website load | **FCP ≤ 1.8 s, load ≤ 3 s** from the deployed VM | Browsers report it on every load (`pageLoadTiming.js`), shown under "page" in `GET /api/v1/metrics/performance` |
+
+### Latest measurements
+
+API, `npm run perf` on 2026-11-07 (AMD Ryzen 7 7435HS, Node 24, local backend on temporary data, one request at a time). All within budget:
+
+| Route | p50 | p95 | Budget (p95) |
+| --- | --- | --- | --- |
+| `GET /api/v1/catalog` | 0.9 ms | 1.6 ms | 200 ms |
+| `GET /api/v1/auth/me` | 0.9 ms | 1.5 ms | 200 ms |
+| `GET /api/v1/jobs` (34 jobs) | 9.4 ms | 11.1 ms | 200 ms |
+| `GET /api/v1/jobs/:id` | 0.7 ms | 1.1 ms | 200 ms |
+| `GET /api/v1/scenes` | 0.7 ms | 1.0 ms | 200 ms |
+| `POST /api/v1/auth/login` | 48 ms | 52 ms | 500 ms |
+| `GET .../result.ply` (fox, ~72 MB) | 220 ms | 267 ms | 3000 ms |
+
+Website load, local backend, Chrome (same machine): first byte 9 ms, DOM ready 96 ms, fully loaded 113 ms, 1.3 MB transferred.
+
+Web viewer, desktop (same laptop, Chrome, `fox.ply` 304,526 splats, engine renderer, orbiting): above 60 FPS throughout, up to 140 FPS (the display refresh rate). Within budget.
+
+Engine desktop editor (same laptop, 2026-11-08): about 130 FPS at the lowest, 160 FPS at the highest. Within budget (60 FPS).
+
+Deployed VM, last 24 h (`GET /api/v1/metrics/performance?window=24h`, admins; live numbers there):
+
+| Metric | p95 | Budget | Result |
+| --- | --- | --- | --- |
+| Website first contentful paint (FCP) | 2.0 s | 1.8 s | **Over budget** |
+| Website fully loaded | 2.5 s | 3 s | Within budget |
+| API, slowest JSON route | 116.2 ms | 200 ms | Within budget |
+| API, sign-in | 200 ms | 500 ms | Within budget |
+
+FCP on the VM is 0.2 s over budget. Cause and plan: still to record.
+
+Web viewer, phone (2026-11-08, Chrome, `fox.ply` 304,526 splats, engine renderer, orbiting; measured with an on-page frame counter): 87 FPS at the lowest, 90 FPS at the highest (the display refresh rate). Within budget (30 FPS).
+
+The local numbers above are the server's own speed; over the network to the VM, the model download depends mostly on bandwidth (72 MB takes about 6 s at 100 Mbit/s). If a target is missed, record the real cause (device GPU, network, splat count) and the plan here.
+
+### Many users at once
+
+How we test that the app stays up and correct with many users at the same time:
+
+- **`npm test` (every push, in CI):** `concurrency.test.js` runs 30 users through a whole visit at the same moment (sign up, account, catalog, jobs, create / list / edit / read / delete a scene, feedback, sign out), each from their own IP address. It checks there are no failed requests and no 5xx, each user only ever sees their own scene, the database totals add up (30 accounts, 30 feedback, 0 scenes left), 25 simultaneous edits of one scene all succeed without deadlocking, and the server still answers within 1 s afterwards. Every test has a time limit, so a freeze fails instead of hanging.
+- **`npm run load` (in packages):** the same visit for `LOAD_USERS` users at once (default 100) over `LOAD_ROUNDS` rounds (default 3), with p50 / p95 per route under that load. Exits with 1 on any failure.
+
+Latest `npm run load` (2026-11-08, same laptop, 100 users at once x 3 rounds = 3,600 requests): **0 failed requests, 0 server errors**, about 690 requests/s, server answering in 1 ms afterwards. Under that load the light routes (catalog, jobs, scenes, feedback) stay at p95 45-240 ms.
+
+Cause and plan: sign-up and sign-in are the slow part under a burst (p95 about 0.9 s with 100 sign-ups in the same second), and requests right behind them wait too. Password hashing (scrypt) is asynchronous but runs on the Node.js worker thread pool, which has 4 threads by default, so 100 sign-ups queue there. Measured with `UV_THREADPOOL_SIZE=16`: sign-up p95 858 -> 470 ms, `GET /auth/me` p95 791 -> 321 ms, throughput +31%. Fix: `UV_THREADPOOL_SIZE=16` is set on the VM (pm2, since 2026-11-08) and in the Docker image. To set it on another machine: `UV_THREADPOOL_SIZE=16 pm2 restart server --update-env`, then `pm2 save`.
 
 ## Team
 

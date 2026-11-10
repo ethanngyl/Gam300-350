@@ -5,7 +5,7 @@
 #
 #  Builds the engine renderer for the browser and drops
 #  codefine-engine.js / codefine-engine.wasm into
-#  packages/src/web-app/public/engine, where the web app's viewer
+#  engine/web/package/dist (the @codefine/splat-renderer package), which the web app's viewer
 #  picks it up. Re-run after changing anything in src/splat,
 #  src/gfx or web/. The first run downloads the Emscripten SDK
 #  into Library/emsdk (gitignored, a few hundred MB).
@@ -63,4 +63,4 @@ echo "Building codefine-engine.wasm..."
 cmake --build build-web -j 4 || fail "Web build failed. See errors above."
 
 echo
-echo "Done. Output: packages/src/web-app/public/engine/"
+echo "Done. Output: engine/web/package/dist/"

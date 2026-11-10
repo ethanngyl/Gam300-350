@@ -39,7 +39,7 @@ namespace {
         if (values.empty()) return 0.0f;
 
         const float t = std::clamp(pct, 0.0f, 100.0f) / 100.0f;
-        const size_t index = static_cast<size_t>(t * static_cast<float>(values.size() - 1) + 0.5f);
+        const size_t index = static_cast<size_t>(std::lround(t * static_cast<float>(values.size() - 1)));
         std::nth_element(values.begin(), values.begin() + index, values.end());
         return values[index];
     }
@@ -53,8 +53,8 @@ std::vector<uint8_t> ComputeKeepMask(const std::vector<SplatVertex>& splats, con
     for (size_t i = 0; i < splats.size(); ++i) {
         const SplatVertex& s = splats[i];
         if (!IsFinite(s)) { keep[i] = 0; continue; }
-        if (params.minAlpha > 0.0f && s.alpha < params.minAlpha) keep[i] = 0;
-        else if (params.maxSize > 0.0f && s.pointSize > params.maxSize) keep[i] = 0;
+        if ((params.minAlpha > 0.0f && s.alpha < params.minAlpha) ||
+            (params.maxSize > 0.0f && s.pointSize > params.maxSize)) keep[i] = 0;
     }
 
     //Crop each axis to the central percentile range
