@@ -3,6 +3,7 @@
    ============================================================ */
 
 :root {
+    color-scheme: dark;
     /* ----- Fonts (loaded in index.html) ----- */
     --forma-font: 'Inter', system-ui, sans-serif;
     --forma-font-mono: 'JetBrains Mono', monospace;
@@ -30,7 +31,7 @@
     --forma-coral: #f59e0b;
     --forma-green: #4fc4a6;
     --forma-red: #f06f60;
-    --forma-red-text: var(--forma-red-text);
+    --forma-red-text: #ff8c7c;
     --forma-purple: #a78bfa;
     --forma-orange: #f97316;
     /* ----- Same colours as R, G, B for see-through tints:
@@ -44,7 +45,53 @@
     --forma-orange-rgb: 249, 115, 22;
     --forma-bg-rgb: 13, 13, 15;
     --forma-backdrop-rgb: 5, 5, 7;
+    /* ----- Floating glass panels (the dock, the tab labels switch) ----- */
+    --forma-glass: rgba(24, 24, 27, 0.82);
+    --forma-glass-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    /* Hover tint on dark-on-light rows */
+    --forma-hover-tint: rgba(255, 255, 255, 0.04);
 }
+
+    /* ----- Light theme (Account > Appearance, AppearanceSettings.js sets
+         data-theme on <html>). Same names, light values. ----- */
+    :root[data-theme="light"] {
+        color-scheme: light;
+        --forma-bg: #f4f4f6;
+        --forma-sidebar: #ffffff;
+        --forma-panel: #ffffff;
+        --forma-panel-alt: #f0f0f3;
+        --forma-panel-raised: #e6e6ea;
+        --forma-border: #e2e2e7;
+        --forma-border-strong: #cfcfd6;
+        --forma-text: #18181b;
+        --forma-text-soft: #3f3f46;
+        --forma-heading: #09090b;
+        --forma-text-muted: #52525b;
+        --forma-text-dim: #6b6b75;
+        --forma-on-accent: #ffffff;
+        --forma-on-coral: #1a1204;
+        --forma-blue: #2563eb;
+        --forma-blue-hover: #1d4ed8;
+        --forma-teal-text: #1d5fd6;
+        --forma-coral: #b45309;
+        --forma-green: #0f8a6c;
+        --forma-red: #d63a2b;
+        --forma-red-text: #c2321f;
+        --forma-purple: #7c3aed;
+        --forma-orange: #c2410c;
+        --forma-accent-rgb: 37, 99, 235;
+        --forma-accent-light-rgb: 29, 95, 214;
+        --forma-coral-rgb: 217, 119, 6;
+        --forma-red-rgb: 214, 58, 43;
+        --forma-green-rgb: 15, 138, 108;
+        --forma-purple-rgb: 124, 58, 237;
+        --forma-orange-rgb: 194, 65, 12;
+        --forma-bg-rgb: 244, 244, 246;
+        --forma-backdrop-rgb: 24, 24, 27;
+        --forma-glass: rgba(255, 255, 255, 0.86);
+        --forma-glass-shadow: 0 14px 36px rgba(24, 24, 27, 0.14), inset 0 1px rgba(255, 255, 255, 0.7);
+        --forma-hover-tint: rgba(24, 24, 27, 0.05);
+    }
 
 html {
     background: var(--forma-bg);
@@ -328,7 +375,7 @@ html {
 }
 
     .genesis-side-item:hover {
-        background: rgba(255, 255, 255, 0.04);
+        background: var(--forma-hover-tint);
     }
 
     .genesis-side-item.is-active {
@@ -473,7 +520,7 @@ html {
     height: 46px;
     border-radius: 10px;
     border: 1px solid var(--forma-border-strong);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--forma-hover-tint);
     color: var(--forma-coral);
     display: flex;
     align-items: center;
@@ -1940,7 +1987,7 @@ html {
 
 .account-stats {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
 }
 
@@ -2243,6 +2290,38 @@ html {
     text-transform: uppercase;
     color: var(--forma-text-muted);
 }
+
+    /* Build status, with a dot in the status colour (HomeScreen.jsx fileStatus). */
+    .home-file-kind.is-processing,
+    .home-file-kind.is-failed,
+    .home-file-kind.is-cancelled {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+        .home-file-kind.is-processing::before,
+        .home-file-kind.is-failed::before,
+        .home-file-kind.is-cancelled::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            flex: none;
+        }
+
+    .home-file-kind.is-processing {
+        color: var(--forma-coral);
+    }
+
+    .home-file-kind.is-failed {
+        color: var(--forma-red);
+    }
+
+    .home-file-kind.is-cancelled {
+        color: var(--forma-text-dim);
+    }
 
 .home-file-time {
     font-size: 0.72rem;
@@ -2714,8 +2793,7 @@ html {
 
 @media (max-width: 1100px) {
     .home-tool-grid,
-    .home-recent-grid,
-    .account-stats {
+    .home-recent-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -3200,8 +3278,8 @@ html {
     padding: 6px;
     border-radius: 999px;
     border: 1px solid var(--forma-border-strong);
-    background: rgba(24, 24, 27, 0.82);
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    background: var(--forma-glass);
+    box-shadow: var(--forma-glass-shadow);
     backdrop-filter: blur(16px) saturate(140%);
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     transform: translateX(-50%);
@@ -3395,8 +3473,8 @@ html {
     overflow: hidden;
     border-radius: 999px;
     border: 1px solid var(--forma-border-strong);
-    background: rgba(24, 24, 27, 0.82);
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    background: var(--forma-glass);
+    box-shadow: var(--forma-glass-shadow);
     backdrop-filter: blur(16px) saturate(140%);
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     color: var(--forma-text-soft);
@@ -3460,7 +3538,7 @@ html {
     height: 6px;
     border-radius: 50%;
     background: var(--forma-blue);
-    box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.95);
+    box-shadow: 0 0 0 2px var(--forma-panel);
     transition: opacity 0.18s ease;
 }
 
