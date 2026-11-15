@@ -31,6 +31,28 @@ to the API is recorded here, newest first.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
 
+## v1 additions: 2026-11-15 (nothing breaks)
+
+"Forgot password?" with an emailed 6-digit code:
+- **`POST /auth/forgot-password`:** body `{ email }`. Emails a code if the
+  email has an account, and answers `202 { message }` either way.
+  - The code works once, for 15 minutes (`RESET_CODE_TTL_MIN`), and a new
+    request replaces it.
+  - Limits: one request per email per minute and 3 per hour, 10 per IP
+    address per hour.
+  - Answers 503 if email isn't set up (`SMTP_*`).
+- **`POST /auth/reset-password`:** body `{ email, code, newPassword }`.
+  Answers `200 { message }`.
+  - A wrong, expired or unknown code gives the same 400, and 5 wrong codes
+    end the code.
+  - On success: every session of the account is signed out, and the owner is
+    emailed that the password changed.
+- **`POST /password-reset/request`, `POST /password-reset/confirm`:** VM
+  only, shared key. A team machine passes both requests on to them, so only
+  the VM needs the email settings.
+- Database migration 6 (`006_password_resets.sql`) adds the
+  `password_resets` table.
+
 ## v1 additions: 2026-11-07 (nothing breaks)
 
 - `POST /metrics/page-load`: the website reports how long it took to load

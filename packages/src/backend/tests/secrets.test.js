@@ -31,7 +31,9 @@ const SECRET_PATTERNS = [
   ['AWS access key', 'AKIA[0-9A-Z]{16}'],
   ['Slack token', 'xox[baprs]-[A-Za-z0-9-]{10,}'],
   ['private key', '-----BEGIN [A-Z ]*PRIVATE KEY-----'],
-  ['secret setting', '(AUTH_API_KEY|CLIENT_SECRET|_SECRET|_PASSWORD|_TOKEN|API_KEY)[ ]*[=:][ ]*["\']?[A-Za-z0-9_+/=-]{16,}'],
+  ['secret setting', '(AUTH_API_KEY|CLIENT_SECRET|_SECRET|_PASS(WORD)?|_TOKEN|API_KEY)[ ]*[=:][ ]*["\']?[A-Za-z0-9_+/=-]{16,}'],
+  // A Gmail app password: four groups of four letters (SMTP_PASS).
+  ['Gmail app password', 'SMTP_PASS[ ]*[=:][ ]*["\']?[a-z]{4}[ ]?[a-z]{4}[ ]?[a-z]{4}[ ]?[a-z]{4}'],
 ]
 const PLACEHOLDER_RE = /paste|your[-_]|example|placeholder|changeme|<[^>]+>/i
 
@@ -75,6 +77,6 @@ test('.env files are ignored by git, and none is tracked', () =>
 
 test('the frontend never mentions the server-only secrets', () =>
 {
-  const run = git('grep', '-nIE', 'AUTH_API_KEY|X-Auth-Key|GOOGLE_CLIENT_SECRET|client_secret', '--', 'packages/src/web-app')
+  const run = git('grep', '-nIE', 'AUTH_API_KEY|X-Auth-Key|GOOGLE_CLIENT_SECRET|client_secret|SMTP_PASS', '--', 'packages/src/web-app')
   assert.equal(run.stdout.trim(), '', 'the web app must not know the shared key or the Google secret')
 })

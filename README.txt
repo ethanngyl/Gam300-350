@@ -79,6 +79,11 @@ Lint (all blocking in CI): "npm run lint" in packages (ESLint), "ruff check --co
 Performance: "npm run perf" (in packages) measures API p50 / p95 against the budget in README.md ("Performance budget"), on a temporary server; exits 1 if a route is over budget. The latest measured numbers (engine, web viewer on desktop and phone, API, deployed VM) are in README.md under "Latest measurements".
 Load: "npm run load" (in packages) runs LOAD_USERS users (default 100) through a whole visit at the same time, LOAD_ROUNDS times (default 3), and reports failures and p95 under load. "npm test" also runs a 30-user concurrency test (concurrency.test.js).
 Performance: every API request is timed, and the website reports how long it took to load. Signed in as an admin, GET /api/v1/metrics/performance?window=1h (or 24h, 7d) shows p50 / p95 / p99 per route and for page loads on that machine. Kept 7 days (PERF_KEEP_DAYS).
+Password reset email: "Forgot password?" emails a 6-digit code from a Gmail account. Only the VM sends it (team machines ask the
+  VM). On the team's Gmail account turn on 2-Step Verification, then Google Account > Security > App passwords > create one. In
+  the VM's packages/src/backend/.env set SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=<the Gmail address>,
+  SMTP_PASS=<the app password> and MAIL_FROM=Genesis <the Gmail address>, restart, then check with
+  "npm run mail:test -- you@example.com" (in packages). Codes work once, for 15 minutes.
 Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
 packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
 packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
@@ -124,7 +129,9 @@ Testing the Website:
 Signing in:
 0. The web application can be accessed via http://localhost:5005 or the Cloudflare link printed by start.bat.
 1. On the login screen, create an account (email and password) or sign in. "Continue as guest" also works, but guests cannot send
-   feedback or manage an account. "Continue with Google" and "Forgot password" are not implemented yet and only show a message.
+   feedback or manage an account. "Continue with Google" is not implemented yet and only shows a message.
+   "Forgot password?" emails a 6-digit code: enter it with a new password, then sign in. It needs email set up on the machine that
+   holds the accounts (the VM): see "Password reset email" below.
 2. On first sign-in a short walkthrough of the dock plays. It can be replayed later from the account menu or the Account page.
 
 Navigation (the dock):
@@ -238,7 +245,8 @@ Sounds:
 49. Mute from the account menu or turn sound off on the Account page, and confirm the sounds stop.
 
 Known limitations to note while testing (not bugs):
-- "Continue with Google" and "Forgot password" only show a message.
+- "Continue with Google" only shows a message.
+- "Forgot password?" answers that it isn't set up until the VM has the Gmail settings (SMTP_*) in its .env.
 - Scene Builder: clean-up, render mode, reset view, screenshot and an exact drop to floor are waiting on scene functions in the
   WebAssembly engine. Scenes are saved only in this browser (localStorage): the backend has scene routes (/api/v1/scenes),
   but the web app doesn't use them yet (SCENES_API_READY in SceneStorage.js).

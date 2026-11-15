@@ -549,4 +549,22 @@ export const config = {
     // Google's OAuth 2.0 endpoints (fixed by Google, see services/google.js).
     googleAuthUrl: process.env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
     googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
+
+    // --- Email (password reset codes; the VM, or a machine in local mode) ------
+    // An SMTP server to send from, e.g. Gmail: smtp.gmail.com, port 465, the
+    // Gmail address and an app password (Google Account > Security > App
+    // passwords). The password is a secret: .env only. No host = "Forgot
+    // password?" is off here (team machines ask the VM instead).
+    smtpHost: (process.env.SMTP_HOST || '').trim(),
+    smtpPort: Number(process.env.SMTP_PORT) || 465,
+    smtpUser: process.env.SMTP_USER || '',
+    smtpPass: process.env.SMTP_PASS || '',
+    // The sender shown in the email, e.g. "Genesis <genesis.team@gmail.com>".
+    // Default: the SMTP user.
+    mailFrom: process.env.MAIL_FROM || process.env.SMTP_USER || '',
+    // Tests and development: write each email to a file in this folder
+    // instead of sending it.
+    mailOutboxDir: process.env.MAIL_OUTBOX_DIR || '',
+    // How long a password reset code works, in minutes.
+    resetCodeTtlMin: Number(process.env.RESET_CODE_TTL_MIN) || 15,
 }

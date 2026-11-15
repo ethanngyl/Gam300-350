@@ -139,7 +139,10 @@ needs the shared key.
 | GET | `/auth/me/storage` | user | 200 `{ usedBytes, models, jobs }` |
 | GET | `/auth/google` | anyone | 302 to Google (VM), or to the VM's `/auth/google` |
 | GET | `/auth/google/callback` | Google's redirect | 302 to `/` (signed in) or `/?login=...` |
+| POST | `/auth/forgot-password` | anyone | 202 `{ message }` (the same whether or not the account exists); emails a 6-digit code; 400 / 429 / 503 |
+| POST | `/auth/reset-password` | anyone | 200 `{ message }`; body `{ email, code, newPassword }`; signs the account out everywhere; 400 / 429 |
 | POST | `/register`, `/verify-account` | team machines (shared key) | create an account / check a password |
+| POST | `/password-reset/request`, `/password-reset/confirm` | team machines (shared key) | "Forgot password?" for a team machine's user; the VM sends the email |
 
 ### Jobs (models and their photos)
 
