@@ -23,7 +23,8 @@ import { after, before, describe, test } from 'node:test'
 import { call, openDb, sessionCookie, signUp, startServer, tempDir } from './helpers.js'
 
 const PASSWORD = 'correct-horse-battery'
-const NEW_PASSWORD = 'a-brand-new-password'
+// Under 16 characters, so secrets.test.js doesn't take it for a real one.
+const NEW_PASSWORD = 'new-pass-1234'
 const KEY = 'test-shared-key-0123456789'
 // RESET_CODE_TTL_MIN for the tests: 6 seconds, so expiry can be tested.
 const TTL_MIN = 0.1
