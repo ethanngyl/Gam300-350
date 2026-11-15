@@ -31,6 +31,28 @@ to the API is recorded here, newest first.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
 
+## v1 additions: 2026-11-14 (nothing breaks)
+
+Google sign-in started on a team machine's website now ends there, instead
+of on the VM's website:
+- **`GET /auth/google`:** on the VM, takes two optional query parameters,
+  `return_to` (the team machine's `/api/v1/auth/google/finish`) and
+  `return_state`. A team machine sends both.
+  - The VM accepts `return_to` only on a loopback address or an origin in
+    `GOOGLE_RETURN_ORIGINS`, with exactly that path. Any other is ignored,
+    and the sign-in ends on the VM as before.
+  - After Google, the VM sends the browser to `return_to` with a one-time
+    `code` (or an `error`) and the `state`. It starts no VM session.
+- **`GET /auth/google/finish`** (team machines): checks the state against
+  its cookie, redeems the code with the VM, copies the account and starts a
+  session.
+- **`POST /redeem-google-code`** (VM, shared key): trades a one-time code
+  for `{ id, email, name, role }`. Each code works once, for 60 seconds.
+
+The Google console needs no change: Google still only redirects to the VM's
+`GOOGLE_REDIRECT_URI`. A team machine on a newer build than the VM still
+works, because the old VM ignores `return_to`, so update the VM first.
+
 ## v1 additions: 2026-11-07 (nothing breaks)
 
 - `POST /metrics/page-load`: the website reports how long it took to load
