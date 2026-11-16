@@ -31,6 +31,7 @@ import Icon from './Icons.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
 import SplatViewer from './SplatViewer.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 import { readPlyInfo } from './plyHeader.js';
 import { playSound } from '../audio/Audio.js';
 import './ModelScreen.css';
@@ -269,7 +270,7 @@ function ModelScreen({
                             <h2 className="model-card-title">Source photos</h2>
                             <div className="model-photos">
                                 {photos.slice(0, PHOTO_PREVIEW_COUNT).map((photo) => (
-                                    <img key={photo.name} src={photo.url} alt="" loading="lazy" />
+                                    <img key={photo.name} src={smallPhotoUrl(photo.url)} alt="" loading="lazy" />
                                 ))}
                                 {photos.length > PHOTO_PREVIEW_COUNT && (
                                     <span className="model-photos-more">+{photos.length - PHOTO_PREVIEW_COUNT}</span>

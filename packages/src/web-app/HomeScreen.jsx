@@ -19,6 +19,7 @@ it shows a single "Create your first 3D model" card instead.
 import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
 
 // How many cards each Recent tab shows.
@@ -91,7 +92,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
             id: job.id,
             name: jobDisplayName(job, 'Photos'),
             ...fileStatus(job),
-            coverUrl: job.images[0].url,
+            coverUrl: smallPhotoUrl(job.images[0].url),
             createdAt: job.createdAt,
         }));
 
@@ -102,7 +103,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
             id: job.id,
             name: jobDisplayName(job, 'Model'),
             kind: '3D model',
-            coverUrl: job.images?.[0]?.url ?? null,
+            coverUrl: smallPhotoUrl(job.images?.[0]?.url),
             createdAt: job.createdAt,
         }));
 

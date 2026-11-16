@@ -495,10 +495,18 @@ paths:
       tags: [Jobs]
       operationId: getJobImage
       summary: One of a job's photos
+      description: >-
+        The original photo, or with `size=small` a small WebP copy (480 px on
+        the longest side) for cards and grids. The copy is made the first
+        time it is asked for; if it can't be made, the original is sent.
       security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PhotoSize'
       responses:
         '200':
           $ref: '#/components/responses/Photo'
+        '400':
+          $ref: '#/components/responses/BadPhotoSize'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1028,9 +1036,12 @@ paths:
       security: [{ authorityKey: [] }]
       parameters:
         - $ref: '#/components/parameters/ActAsUser'
+        - $ref: '#/components/parameters/PhotoSize'
       responses:
         '200':
           $ref: '#/components/responses/Photo'
+        '400':
+          $ref: '#/components/responses/BadPhotoSize'
         '401':
           $ref: '#/components/responses/KeyOrUserRefused'
         '404':
@@ -1350,6 +1361,13 @@ components:
       required: true
       schema: { type: string, pattern: '^[\w.-]+\.(jpe?g|png)$' }
       example: 0000.jpg
+    PhotoSize:
+      name: size
+      in: query
+      required: false
+      description: '`small`: a small WebP copy (480 px on the longest side) instead of the original.'
+      schema: { type: string, enum: [small] }
+      example: small
     SceneId:
       name: id
       in: path
@@ -1691,6 +1709,15 @@ components:
         image/png:
           schema: { type: string, format: binary }
           example: (PNG bytes)
+        image/webp:
+          schema: { type: string, format: binary }
+          example: (WebP bytes, with size=small)
+    BadPhotoSize:
+      description: '`size` isn''t `small`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: size must be "small" }
     ImageNotFound:
       description: No such photo, or the job isn't the caller's
       content:

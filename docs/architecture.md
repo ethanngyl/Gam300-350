@@ -152,7 +152,7 @@ needs the shared key.
 | PATCH | `/jobs/:id` | owner | 200 `{ id, name, sampleFile }` (rename) |
 | DELETE | `/jobs/:id` | owner | 200 cancelled; 409 if already finished |
 | DELETE | `/jobs/:id/files` | owner | 200 `{ id, deleted: true }` |
-| GET | `/jobs/:id/images/:name` | owner | the photo (binary) |
+| GET | `/jobs/:id/images/:name` | owner | the photo (binary); `?size=small`: a small WebP copy (480 px, `tools/make_thumbs.py`, kept in `<id>_out/thumbs/`), or the original if none can be made |
 | GET / HEAD | `/jobs/:id/result.ply` | owner | the model (binary, byte ranges supported) |
 | GET | `/jobs/:id/cover.webp` | owner | the card cover (binary); 404 if none |
 | PUT | `/library/jobs/:id` | team machines (shared key) | 201 `{ id, bytes }`. Stores a finished job on the VM |

@@ -15,7 +15,7 @@ Used by both the Photo Editor and Camera Capture.
 import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
-import { downloadLibraryPhoto, fetchLibraryBatches } from './LibraryPhotos.js';
+import { downloadLibraryPhoto, fetchLibraryBatches, smallPhotoUrl } from './LibraryPhotos.js';
 import './LibraryPhotoPicker.css';
 
 function photoKey(jobId, imageName) {
@@ -200,7 +200,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                                                 aria-pressed={isSelected}
                                                 aria-label={image.name}
                                             >
-                                                <img src={image.url} alt="" loading="lazy" />
+                                                <img src={smallPhotoUrl(image.url)} alt="" loading="lazy" decoding="async" />
                                                 <span className="library-picker-tick">
                                                     {isSelected && <Icon name="check" size={13} />}
                                                 </span>

@@ -474,6 +474,9 @@ export const config = {
     // Cuts the object out of a photo with those masks, for the Library card
     // (GET /jobs/:id/cover.webp, see make_cover.py).
     coverScript: process.env.COVER_SCRIPT || path.join(toolsDir, 'make_cover.py'),
+    // Small WebP copies of a job's photos for the website's cards and grids
+    // (GET /jobs/:id/images/:name?size=small, see make_thumbs.py).
+    thumbScript: process.env.THUMB_SCRIPT || path.join(toolsDir, 'make_thumbs.py'),
 
     // --- Shared library on the VM ----------------------------------------------
     // Client machines send each finished job (photos + result.ply) to the VM,
