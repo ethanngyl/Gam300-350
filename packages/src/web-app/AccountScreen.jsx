@@ -18,10 +18,12 @@ the section. Sections:
 - Plans: Genesis Free / Plus / Pro compared side by side. A prototype:
   everyone is on Free and paid plans cannot be chosen yet.
 - Usage: workspace stats counted from GET /jobs (models, photos, failed
-  builds, processing queue).
+  builds).
+- Appearance: theme (dark, light or follow the device) and "Show tab
+  labels" for the dock, saved in this browser (AppearanceSettings.js).
 - Sound: sound effects on/off and volume, saved in this browser.
 - buildUsageStats(jobs)
-Turns the GET /jobs list into the four usage cards.
+Turns the GET /jobs list into the three usage cards.
 - AccountScreen({ user, onSignOut, onShowWalkthrough })
 React component. onSignOut signs out (or, for guests, goes to sign in);
 onShowWalkthrough replays the walkthrough.
@@ -31,6 +33,7 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { playSound, setSoundMuted, setSoundVolume, useSoundSettings } from '../audio/Audio.js';
 import { removeProfilePhoto, saveProfilePhoto, useProfilePhoto } from './ProfilePhoto.js';
+import { setShowTabLabels, setTheme, useAppearanceSettings } from './AppearanceSettings.js';
 import ChangePasswordDialog from './ChangePasswordDialog.jsx';
 import './AccountScreen.css';
 
@@ -46,7 +49,20 @@ const SECTION_GROUPS = [
             { id: 'usage', label: 'Usage', icon: 'cube' },
         ],
     },
-    { label: 'Preferences', sections: [{ id: 'sound', label: 'Sound', icon: 'volume' }] },
+    {
+        label: 'Preferences',
+        sections: [
+            { id: 'appearance', label: 'Appearance', icon: 'palette' },
+            { id: 'sound', label: 'Sound', icon: 'volume' },
+        ],
+    },
+];
+
+// Account > Appearance theme buttons, in order.
+const THEME_OPTIONS = [
+    { id: 'dark', label: 'Dark', icon: 'moon' },
+    { id: 'light', label: 'Light', icon: 'sun' },
+    { id: 'system', label: 'System', icon: 'monitor' },
 ];
 
 // Prototype plans; not final plan details. Everyone is on Free for now.
@@ -79,7 +95,7 @@ const PLANS = [
     },
 ];
 
-// Turns the GET /jobs list into the four usage cards. The backend has no
+// Turns the GET /jobs list into the three usage cards. The backend has no
 // scene storage yet, so the third card counts failed builds instead.
 function buildUsageStats(jobs) {
     const weekAgo = Date.now() - ONE_WEEK_MS;
@@ -87,23 +103,13 @@ function buildUsageStats(jobs) {
 
     const finishedJobs = jobs.filter((job) => job.status === 'done');
     const failedJobs = jobs.filter((job) => job.status === 'error');
-    const runningJobs = jobs.filter((job) => job.status === 'running');
-    const queuedJobs = jobs.filter((job) => job.status === 'queued');
 
     const countPhotos = (jobList) => jobList.reduce((total, job) => total + (job.imageCount ?? 0), 0);
-
-    let queueNote = 'Nothing running';
-    if (runningJobs.length > 0) {
-        queueNote = queuedJobs.length > 0 ? `1 building, ${queuedJobs.length} waiting` : '1 building now';
-    } else if (queuedJobs.length > 0) {
-        queueNote = `${queuedJobs.length} waiting to start`;
-    }
 
     return [
         { value: finishedJobs.length, label: 'Models Generated', note: `+${finishedJobs.filter(isThisWeek).length} this week` },
         { value: countPhotos(jobs), label: 'Photos Uploaded', note: `+${countPhotos(jobs.filter(isThisWeek))} this week` },
         { value: failedJobs.length, label: 'Failed Builds', note: failedJobs.length > 0 ? 'Try again with more photos' : 'No failed builds' },
-        { value: runningJobs.length + queuedJobs.length, label: 'Processing Queue', note: queueNote },
     ];
 }
 
@@ -120,6 +126,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
     const [passwordNotice, setPasswordNotice] = useState(null);
     const photoInputRef = useRef(null);
     const { isMuted, volume } = useSoundSettings();
+    const { theme, showTabLabels } = useAppearanceSettings();
     const profilePhoto = useProfilePhoto(user.email);
     const volumePercent = Math.round(volume * 100);
     const currentPlan = PLANS.find((plan) => plan.id === CURRENT_PLAN_ID);
@@ -468,6 +475,67 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
         );
     }
 
+    function renderAppearanceSection() {
+        return (
+            <>
+                <div className="acct-section-heading">
+                    <p className="eyebrow eyebrow-accent">Preferences</p>
+                    <h1 className="acct-title">Appearance</h1>
+                    <p className="acct-subtitle">How Genesis looks on this browser.</p>
+                </div>
+                <div className="forma-card account-sound">
+                    <div className="account-sound-row acct-theme-row">
+                        <span className="account-sound-icon">
+                            <Icon name={theme === 'light' ? 'sun' : theme === 'system' ? 'monitor' : 'moon'} size={18} />
+                        </span>
+                        <span className="account-sound-text">
+                            <span className="account-sound-title">Theme</span>
+                            <span className="account-sound-hint">Light, dark, or follow your device.</span>
+                        </span>
+                        <div className="acct-theme-choices" role="radiogroup" aria-label="Theme">
+                            {THEME_OPTIONS.map((option) => (
+                                <button
+                                    key={option.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={theme === option.id}
+                                    className={theme === option.id ? 'acct-theme-choice is-active' : 'acct-theme-choice'}
+                                    onClick={() => {
+                                        playSound('tap');
+                                        setTheme(option.id);
+                                    }}
+                                >
+                                    <Icon name={option.icon} size={14} />
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <label className="account-sound-row">
+                        <span className="account-sound-icon">
+                            <Icon name="menu" size={18} />
+                        </span>
+                        <span className="account-sound-text">
+                            <span className="account-sound-title">Show tab labels</span>
+                            <span className="account-sound-hint">Names next to the icons in the dock, on wide screens. Saved for this browser.</span>
+                        </span>
+                        <input
+                            type="checkbox"
+                            className="forma-switch"
+                            checked={showTabLabels}
+                            onChange={(event) => {
+                                playSound('tap');
+                                setShowTabLabels(event.target.checked);
+                            }}
+                            aria-label="Show tab labels"
+                        />
+                    </label>
+                </div>
+            </>
+        );
+    }
+
     function renderSoundSection() {
         return (
             <>
@@ -552,6 +620,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                 {activeSection === 'account' && renderAccountSection()}
                 {activeSection === 'plans' && renderPlansSection()}
                 {activeSection === 'usage' && renderUsageSection()}
+                {activeSection === 'appearance' && renderAppearanceSection()}
                 {activeSection === 'sound' && renderSoundSection()}
             </div>
         </div>

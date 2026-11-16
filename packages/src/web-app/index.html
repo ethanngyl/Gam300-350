@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CoDeFine - turn real objects into 3D assets</title>
     <link rel="icon" type="image/svg+xml" href="./GenesisIcon.svg">
+    <script>
+        // Applies the saved theme before the first paint (see AppearanceSettings.js).
+        try {
+            var savedTheme = localStorage.getItem('genesis-theme');
+            var prefersLight = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches;
+            var isLight = savedTheme === 'light' || (savedTheme === 'system' && prefersLight);
+            document.documentElement.dataset.theme = isLight ? 'light' : 'dark';
+        } catch (err) {
+            document.documentElement.dataset.theme = 'dark';
+        }
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

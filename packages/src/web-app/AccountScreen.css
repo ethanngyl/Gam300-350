@@ -538,6 +538,74 @@
     margin-bottom: 0;
 }
 
+/* ---------- Appearance: theme choice (Dark / Light / System) ---------- */
+
+/* On narrow screens the three buttons drop below the title. */
+.acct-theme-row {
+    flex-wrap: wrap;
+    cursor: default;
+}
+
+.acct-theme-choices {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    border: 1px solid var(--forma-border);
+    background: var(--forma-panel-alt);
+}
+
+.acct-theme-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+    .acct-theme-choice:hover {
+        color: var(--forma-text);
+    }
+
+    .acct-theme-choice.is-active {
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .acct-theme-choice:focus-visible {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 1px;
+    }
+
+/* Leaves the title room before the buttons wrap below it. */
+.acct-theme-row .account-sound-text {
+    flex-basis: 180px;
+}
+
+/* Phones: the theme buttons get their own full-width row, and the three
+   usage cards stack. */
+@media (max-width: 560px) {
+    .acct-theme-choices {
+        flex-basis: 100%;
+    }
+
+    .acct-theme-choice {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .acct-screen .account-stats {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 @media (min-width: 1200px) {
     .acct-plans {
         grid-template-columns: repeat(3, minmax(0, 1fr));
