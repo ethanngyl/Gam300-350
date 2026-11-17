@@ -9,9 +9,10 @@
 Dashboard landing screen, laid out like the Genesis wireframe and focused
 on the user's own work: a welcome line and subtitle (plus a "New model"
 button on phones, as a bigger target than the dock's), then "Recent" with two
-tabs and a "View all" button. "Your files" shows the latest photo batches and opens the Photo
-Library; "Generated models" shows the latest finished models and opens one
-in the full-page viewer. Both come from GET /jobs. With nothing made yet,
+tabs and a "View all" button. "Your files" shows the latest photo batches
+(tagged with their build's status: source photos, processing, failed or
+cancelled) and opens the Photo Library; "Generated models" shows the latest
+finished models and opens one in the full-page viewer. Both come from GET /jobs. With nothing made yet,
 it shows a single "Create your first 3D model" card instead.
 **************************************************************************/
 
@@ -27,6 +28,16 @@ const RECENT_TABS = [
     { id: 'files', label: 'Your files' },
     { id: 'models', label: 'Generated models' },
 ];
+
+// The tag under a photo batch's name, from its job's status. Failed and
+// cancelled builds used to show as "Processing" forever.
+function fileStatus(job) {
+    const photoCount = job.images.length;
+    if (job.status === 'done') return { kind: `Source photos \u00B7 ${photoCount}`, statusClassName: null };
+    if (job.status === 'error') return { kind: `Failed \u00B7 ${photoCount} photos`, statusClassName: 'is-failed' };
+    if (job.status === 'cancelled') return { kind: `Cancelled \u00B7 ${photoCount} photos`, statusClassName: 'is-cancelled' };
+    return { kind: 'Processing', statusClassName: 'is-processing' };
+}
 
 // "Just now", "5m ago", "3h ago", "Yesterday", "4d ago", or a date.
 function formatTimeAgo(timestamp) {
@@ -79,7 +90,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
         .map((job) => ({
             id: job.id,
             name: jobDisplayName(job, 'Photos'),
-            kind: job.status === 'done' ? `Source photos \u00B7 ${job.images.length}` : 'Processing',
+            ...fileStatus(job),
             coverUrl: job.images[0].url,
             createdAt: job.createdAt,
         }));
@@ -196,7 +207,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                             </span>
                             <span className="home-file-copy">
                                 <span className="home-file-name">{item.name}</span>
-                                <span className="home-file-kind">{item.kind}</span>
+                                <span className={item.statusClassName ? `home-file-kind ${item.statusClassName}` : 'home-file-kind'}>{item.kind}</span>
                                 <span className="home-file-time">{formatTimeAgo(item.createdAt)}</span>
                             </span>
                         </button>
