@@ -19,6 +19,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "net/BackendClient.h"
 #include "splat/CropBox.h"
 #include "splat/SplatExporter.h"
+#include "splat/SplatGenerator.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
 #include "splat/SplatTrimmer.h"
@@ -41,6 +42,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QDockWidget>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
@@ -368,6 +370,10 @@ void MainWindow::createActions() {
     m_trimSettingsAction->setStatusTip("Edit the default splat trim values used for new imports");
     connect(m_trimSettingsAction, &QAction::triggered, this, [this] { showTrimDialog(); });
 
+    m_stressTestSphereAction = new QAction("Generate Stress Test &Sphere (1M)", this);
+    m_stressTestSphereAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
+    connect(m_stressTestSphereAction, &QAction::triggered, this, [this] { generateStressTestSphere(); });
+
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
@@ -401,6 +407,8 @@ void MainWindow::createMenus() {
     editMenu->addAction(m_cropMoveContentsAction);
     editMenu->addSeparator();
     editMenu->addAction(m_trimSettingsAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_stressTestSphereAction);
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
     QMenu* renderModeMenu = viewMenu->addMenu("Render &Mode");
@@ -761,6 +769,35 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     }
     qInfo("Imported %s (%s).", qPrintable(fileName), qPrintable(summary));
     statusBar()->showMessage(QString("Imported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
+}
+
+void MainWindow::generateStressTestSphere() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer) {
+        return; // GL not ready
+    }
+    if (renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
+        QMessageBox::warning(this, "Scene Full",
+                             QString("The scene already holds the maximum of %1 models.\nDelete a model to make room.")
+                                 .arg(SplatRenderer::kMaxModels));
+        return;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+    const std::vector<SplatVertex> splats = splat_generate::GenerateSphereSplats();
+    const qint64 generateMs = timer.restart();
+    renderer->SetSplats(splats, "StressTestSphere");
+    const qint64 uploadMs = timer.elapsed();
+
+    selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+    refreshScenePanels();
+
+    const QString message = QString("Generated stress test sphere (%1 splats): generate %2 ms, load %3 ms")
+                                .arg(QLocale().toString(static_cast<qulonglong>(splats.size())))
+                                .arg(generateMs).arg(uploadMs);
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
 }
 
 void MainWindow::showTrimDialog() {
