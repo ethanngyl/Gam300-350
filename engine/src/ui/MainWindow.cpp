@@ -374,8 +374,9 @@ void MainWindow::createActions() {
     m_stressTestSphereAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
     connect(m_stressTestSphereAction, &QAction::triggered, this, [this] { generateStressTestSphere(); });
 
-    m_devModeAction = new QAction("Toggle Developer Mode", this);
-    m_devModeAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
+    m_devModeAction = new QAction(this);
+    m_devModeAction->setStatusTip("Click to toggle developer mode, which shows the developer-only tabs");
+    updateDevModeAction(); //Sets the initial text from m_devMode
     connect(m_devModeAction, &QAction::triggered, this, [this] { toggleDevMode(); });
 
     m_resetLayoutAction = new QAction("&Reset Layout", this);
@@ -1159,6 +1160,12 @@ void MainWindow::exportModels() {
 void MainWindow::toggleDevMode()
 {
     m_devMode = !m_devMode;
+    updateDevModeAction();
+}
+
+void MainWindow::updateDevModeAction()
+{
+    m_devModeAction->setText(m_devMode ? "Developer Mode: &On" : "Developer Mode: &Off");
 }
 
 void MainWindow::refreshScenePanels() {

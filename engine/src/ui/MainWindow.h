@@ -107,6 +107,8 @@ private:
     void exportModels();
     //Toggles developer mode
     void toggleDevMode();
+    //Refreshes the dev mode menu text to match m_devMode
+    void updateDevModeAction();
 
     // Rebuilds the outliner/inspector from the renderer and updates which
     // scene actions are enabled.
