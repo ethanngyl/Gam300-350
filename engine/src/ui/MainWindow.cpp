@@ -33,6 +33,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/OutlinerPanel.h"
 #include "ui/RemoteModelsPanel.h"
 #include "ui/TrimDialog.h"
+#include "ui/StressTestPanel.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -499,7 +500,7 @@ void MainWindow::createDocks() {
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
-    m_stressTestDock = new QWidget(this); //Empty for now, the stress test controls go here
+    m_stressTestDock = new StressTestPanel(this); //Empty for now, the stress test controls go here
     QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestDock, Qt::BottomDockWidgetArea);
 
     tabifyDockWidget(assetsDock, modelsDock);
