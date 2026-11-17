@@ -24,7 +24,8 @@ std::vector<SplatVertex> GenerateSphereSplats(size_t count, float radius, const 
     constexpr float kPi = 3.14159265358979323846f;
     const float goldenAngle = kPi * (3.0f - std::sqrt(5.0f));
 
-    //Average spacing between neighbouring points on the surface; splats are sized to just overlap
+    //Average spacing between neighbouring points on the surface, splats are sized to just overlap
+    //4(Pi)r^2 - Surface area
     const float spacing = std::sqrt(4.0f * kPi * radius * radius / static_cast<float>(count));
     const float splatScale = spacing * 0.5f;
 
@@ -35,6 +36,7 @@ std::vector<SplatVertex> GenerateSphereSplats(size_t count, float radius, const 
         const float theta = goldenAngle * static_cast<float>(i);
         const glm::vec3 normal(ring * std::cos(theta), y, ring * std::sin(theta));
 
+        //Set values
         SplatVertex v{};
         v.position = center + normal * radius;
         v.pointSize = splatScale;

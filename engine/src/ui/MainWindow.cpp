@@ -374,6 +374,10 @@ void MainWindow::createActions() {
     m_stressTestSphereAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
     connect(m_stressTestSphereAction, &QAction::triggered, this, [this] { generateStressTestSphere(); });
 
+    m_devModeAction = new QAction("Toggle Developer Mode", this);
+    m_devModeAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
+    connect(m_devModeAction, &QAction::triggered, this, [this] { toggleDevMode(); });
+
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
@@ -408,6 +412,7 @@ void MainWindow::createMenus() {
     editMenu->addSeparator();
     editMenu->addAction(m_trimSettingsAction);
     editMenu->addSeparator();
+    editMenu->addAction(m_devModeAction);
     editMenu->addAction(m_stressTestSphereAction);
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
@@ -1149,6 +1154,11 @@ void MainWindow::exportModels() {
         statusBar()->showMessage(QString("Exported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
     });
     m_exportThread->start();
+}
+
+void MainWindow::toggleDevMode()
+{
+    m_devMode = !m_devMode;
 }
 
 void MainWindow::refreshScenePanels() {

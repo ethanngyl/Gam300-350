@@ -105,6 +105,8 @@ private:
     // Asks for export options and a file name, then writes the selected
     // model (or the whole scene) on a worker thread.
     void exportModels();
+    //Toggles developer mode
+    void toggleDevMode();
 
     // Rebuilds the outliner/inspector from the renderer and updates which
     // scene actions are enabled.
@@ -170,6 +172,7 @@ private:
     QAction* m_accountInfoAction = nullptr;
     QAction* m_signInAction = nullptr;
     QAction* m_signOutAction = nullptr;
+    QAction* m_devModeAction = nullptr;
 
     // Connection to the web app's backend (accounts, uploaded models).
     BackendClient* m_backend = nullptr;
@@ -189,4 +192,7 @@ private:
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
+
+    //Dev mode
+    bool m_devMode = false;
 };
