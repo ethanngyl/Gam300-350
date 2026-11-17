@@ -125,6 +125,7 @@ MainWindow::MainWindow() {
 
     m_defaultLayout = saveState(kLayoutVersion);
     restoreSettings();
+    updateDevModeAction(); //restoreState can bring back a saved dock visibility, so re-apply dev mode
 
     //A finished gizmo drag is one undo step
     m_viewport->onTransformEdited = [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
@@ -385,6 +386,7 @@ void MainWindow::createActions() {
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
+        updateDevModeAction(); //The default layout was saved with the dev dock visible, so re-apply dev mode
     });
 }
 
@@ -500,8 +502,8 @@ void MainWindow::createDocks() {
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
-    m_stressTestDock = new StressTestPanel(this); //Empty for now, the stress test controls go here
-    QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestDock, Qt::BottomDockWidgetArea);
+    m_stressTestPanel = new StressTestPanel(this); //Empty for now, the stress test controls go here
+    QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestPanel, Qt::BottomDockWidgetArea);
 
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);
@@ -1172,7 +1174,18 @@ void MainWindow::toggleDevMode()
 
 void MainWindow::updateDevModeAction()
 {
-    m_devModeAction->setText(m_devMode ? "Developer Mode: &On" : "Developer Mode: &Off");
+    if (m_devModeAction)
+        m_devModeAction->setText(m_devMode ? "Developer Mode: &On" : "Developer Mode: &Off");
+
+    //This can run before the dock is created, so check it exists first
+    if (m_stressTestPanel) {
+        //The panel's parent is the QDockWidget that addPanelDock wrapped it in
+        if (auto* dock = qobject_cast<QDockWidget*>(m_stressTestPanel->parentWidget())) {
+            dock->setVisible(m_devMode);
+            //Also hide its entry in the Window menu so it can't be reopened outside dev mode
+            dock->toggleViewAction()->setVisible(m_devMode);
+        }
+    }
 }
 
 void MainWindow::refreshScenePanels() {

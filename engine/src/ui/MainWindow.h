@@ -143,7 +143,7 @@ private:
     ConsolePanel* m_console = nullptr;
     AudioPanel* m_audio = nullptr;
     RemoteModelsPanel* m_remoteModels = nullptr;
-    StressTestPanel* m_stressTestDock = nullptr;
+    StressTestPanel* m_stressTestPanel = nullptr; //Dev mode only, its dock is shown/hidden by updateDevModeAction
     QList<QDockWidget*> m_docks;
     QToolBar* m_toolBar = nullptr;
 
