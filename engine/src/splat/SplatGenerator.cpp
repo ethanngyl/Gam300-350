@@ -38,7 +38,7 @@ std::vector<SplatVertex> GenerateSphereSplats(size_t count, float radius, const 
         SplatVertex v{};
         v.position = center + normal * radius;
         v.pointSize = splatScale;
-        v.color = glm::vec3(0,0,0);
+        v.color = normal * 0.5f + glm::vec3(0.5f);
         v.alpha = 1.0f;
         v.modelID = 0.0f;
         v.scale = glm::vec3(splatScale);
