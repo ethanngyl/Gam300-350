@@ -22,6 +22,10 @@ The per-job settings a new job is sent with, within the server's limits.
 Makes the job's card cover (<id>_out/cover.webp) with tools/make_cover.py
 the first time it is asked for: the object cut out of a photo with the
 job's background masks. Concurrent requests share one run.
+- queueBuild(job) / refreshQueue()
+Puts a job's build (masks + COLMAP + Brush) in line (jobQueue.js), so only
+config.maxRunningJobs run at once. Waiting jobs are 'queued', with their
+place in job.detail. refreshQueue() lets go of jobs cancelled while waiting.
 - afterJobEnds(job)
 Runs once a job is done, failed or cancelled: makes the cover while the
 photos and masks exist, tidies up working files (pruneJob), sends the job
@@ -37,16 +41,85 @@ import { promisify } from 'node:util'
 import { config } from '../config.js'
 import { requestCleanup } from '../cleanup.js'
 import { moveImagesToDb, moveModelToDb } from '../dbstore.js'
+import { createJobQueue } from '../jobQueue.js'
 import { syncPendingJobs } from '../library.js'
-import { jobs, pruneJob, restoreJob } from '../pipeline.js'
+import { jobs, pruneJob, restoreJob, runPipeline } from '../pipeline.js'
 import { scanJob } from '../scan.js'
+import { saveJob } from '../status.js'
 import { clientAuthProblem } from './authority.js'
 
 const filesInDb = config.filesInDb
 
 export const MAX_JOB_NAME_LENGTH = 80
 
+// Builds waiting their turn; see queueBuild.
+const buildQueue = createJobQueue({ maxRunning: config.maxRunningJobs, onChange: showPlacesInLine })
+
 // ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Shows each waiting job its place in line: status 'queued' (the
+    website shows "Waiting to start") and how many builds are ahead in
+    job.detail. A video job keeps its finished extraction on the bar.
+  \param waitingJobs
+    The waiting jobs, first in line first
+  \return
+    nothing
+*/
+/************************************************************************/
+function showPlacesInLine(waitingJobs)
+{
+  const { running } = buildQueue.snapshot()
+  waitingJobs.forEach((job, index) =>
+  {
+    const ahead = running + index
+    const detail = `Waiting for ${ahead} build${ahead === 1 ? '' : 's'} ahead of yours`
+    if (job.status === 'queued' && job.detail === detail) return
+    job.status = 'queued'
+    job.phase = 'upload'
+    job.progress = job.source === 'media' ? 0.05 : 0
+    job.detail = detail
+    saveJob(job)
+  })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Puts a job's build (background masks, COLMAP, Brush) in line: it
+    starts now if fewer than config.maxRunningJobs builds are running,
+    else when the ones ahead have ended. First come, first served.
+  \param job
+    The job to build (its photos are in jobs/<id>/images/)
+  \return
+    Promise that settles once the build has ended (never rejects), or once
+    the job was cancelled while waiting
+*/
+/************************************************************************/
+export function queueBuild(job)
+{
+  return buildQueue.enqueue(job, () =>
+  {
+    job.detail = null
+    return runPipeline(job)
+  })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Lets go of jobs cancelled while waiting, so the others' places update
+    straight away. Call after cancelJob.
+  \return
+    nothing
+*/
+/************************************************************************/
+export function refreshQueue()
+{
+  buildQueue.refresh()
+}
 
 /************************************************************************/
 /*!

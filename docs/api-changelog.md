@@ -31,6 +31,17 @@ to the API is recorded here, newest first.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
 
+## Builds wait in line: 2026-11-17 (no API change)
+
+- A machine runs `MAX_RUNNING_JOBS` builds at once (default 1). `POST /upload`
+  and `POST /jobs/from-media` still answer 202 straight away. A job that has
+  to wait reads `status: "queued"` in `GET /jobs/:id`, with its place in
+  `detail` ("Waiting for 1 build ahead of yours"), until its turn comes.
+  `queued` was already a status; only how long a job can stay in it changed.
+- `DELETE /jobs/:id` on a waiting job cancels it, and it never starts.
+- After a restart, waiting jobs are built in their original order. Before,
+  they were never started.
+
 ## v1 additions: 2026-11-07 (nothing breaks)
 
 - `POST /metrics/page-load`: the website reports how long it took to load

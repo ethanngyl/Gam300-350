@@ -184,6 +184,11 @@ through GET /api/v1/catalog.
 The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from
 the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
+Builds run one at a time on each machine. Start a second build while one is running, and it shows "Waiting to start" with how
+many builds are ahead of it, then starts by itself when its turn comes. Cancelling it while it waits takes it out of the line.
+If the backend restarts, waiting builds start again in their original order; a build that was running is marked interrupted.
+To run two builds at once on a GPU with plenty of memory, set MAX_RUNNING_JOBS=2 in packages/src/backend/.env.
+
 "Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
 
 23. With no photos in the batch, confirm "Use this batch" and "Review photos first" are disabled.

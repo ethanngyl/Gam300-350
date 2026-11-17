@@ -157,6 +157,20 @@ needs the shared key.
 | GET | `/jobs/:id/cover.webp` | owner | the card cover (binary); 404 if none |
 | PUT | `/library/jobs/:id` | team machines (shared key) | 201 `{ id, bytes }`. Stores a finished job on the VM |
 
+**Build queue.** Each machine runs `MAX_RUNNING_JOBS` builds at once (default
+1). A build is background masking, then COLMAP, then Brush, all sharing one
+GPU. More builds wait in line, first come first served (`jobQueue.js`,
+`queueBuild` in `services/jobs.js`).
+- **While a job waits:** it reads `status: 'queued'`, with
+  `detail: "Waiting for N builds ahead of yours"`. The website shows
+  "Waiting to start".
+- **Cancelling or deleting a waiting job** takes it out of the line.
+- **Videos and GIFs:** frame extraction runs straight away (it uses the CPU),
+  and only the build after it waits.
+- **After a restart:** builds still waiting (a `queued` `status.json`) rejoin
+  the line, oldest first, with their settings. A build that had started is
+  marked interrupted.
+
 ### Feedback
 
 | Method | Path | Who | Reply |

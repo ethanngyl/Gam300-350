@@ -257,6 +257,11 @@ export async function scanJob(id, jobsDir = config.jobsDir)
       source: saved?.source ?? null,
       name: saved?.name ?? null,
       sampleFile: saved?.sampleFile ?? null,
+      // A waiting job's settings, so it can be built after a restart.
+      removeBackground: saved?.removeBackground === true,
+      trainIters: Number.isInteger(saved?.trainIters) ? saved.trainIters : null,
+      // Whether status.json was there (server.js only resumes those).
+      hasRecord: Boolean(saved),
       // birthtime is 0 on some filesystems; fall back to mtime.
       createdAt: saved?.createdAt ?? (st.birthtimeMs || st.mtimeMs),
       updatedAt: saved?.updatedAt ?? st.mtimeMs,

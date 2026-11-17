@@ -31,13 +31,13 @@ import { config } from '../config.js'
 import { getDbImage, getDbModelInfo, isJobSynced, setJobOwner, unmarkJobSynced } from '../db.js'
 import { deleteJobData } from '../cleanup.js'
 import { forwardToVm, proxyToVm } from '../library.js'
-import { cancelJob, makeJob, pickSampleFileName, runMediaPipeline, runPipeline, sampleFileName } from '../pipeline.js'
+import { cancelJob, makeJob, pickSampleFileName, runMediaPipeline, sampleFileName } from '../pipeline.js'
 import { IMAGE_EXT_RE, JOB_ID_RE } from '../scan.js'
 import { saveJob } from '../status.js'
 import { requireJobAccess, requireUser } from '../middleware/session.js'
 import { assignJobId, mediaUpload, onlyImages, onlyMedia, removeJobIfAborted, upload } from '../middleware/uploads.js'
 import { sendDbModel } from '../middleware/sendDbModel.js'
-import { MAX_JOB_NAME_LENGTH, afterJobEnds, ensureCover, frameOptions, getJob, parseTrainIters } from '../services/jobs.js'
+import { MAX_JOB_NAME_LENGTH, afterJobEnds, ensureCover, frameOptions, getJob, parseTrainIters, queueBuild, refreshQueue } from '../services/jobs.js'
 import { listJobs } from '../adapters/jobSources/index.js'
 import { catalog } from '../catalog.js'
 
@@ -78,9 +78,10 @@ router.post('/upload', requireUser, assignJobId, upload.array('images', config.m
     // Optional multipart text field: training iteration cap (Fast / Normal / Detailed).
     job.trainIters = parseTrainIters(req.body?.trainIters)
     saveJob(job) // gives upload-only jobs a status record from the start
-    // fire-and-forget; do not await. Settles once the job is done, failed
-    // or cancelled (never rejects), then its files are tidied up.
-    runPipeline(job).finally(() => afterJobEnds(job))
+    // fire-and-forget; do not await. Waits its turn if other builds are
+    // running (queueBuild), and settles once the job is done, failed or
+    // cancelled (never rejects), then its files are tidied up.
+    queueBuild(job).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
@@ -180,7 +181,8 @@ router.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, me
     saveJob(job)
 
     // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
-    runMediaPipeline(job, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
+    // The frames are extracted now; the build after them waits its turn.
+    runMediaPipeline(job, frameOptions(fps, maxFrames), queueBuild).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id })
 })
 
@@ -234,10 +236,13 @@ router.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, 
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
   if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
-  if (!cancelJob(job)) 
+  if (!cancelJob(job))
   {
     return res.status(409).json({ error: `job already ${job.status}` })
   }
+  // A job cancelled while waiting leaves the line now, so the jobs behind
+  // it see their new place.
+  refreshQueue()
   res.json({ id: job.id, status: job.status })
 })
 
@@ -389,6 +394,7 @@ router.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, 
     // Cancels it if still running, then removes its folders, samples copy and
     // database photos / model (the same as the VM's clean-up, cleanup.js).
     await deleteJobData(job)
+    refreshQueue()
     res.json({ id: job.id, deleted: true })
   }
   catch (err)

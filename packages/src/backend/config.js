@@ -407,6 +407,11 @@ export const config = {
     colmapBin,
     brushBin,
 
+    // Builds (masks + COLMAP + Brush) running at once on this machine; more
+    // wait in line (jobQueue.js). They share one GPU, so 1 unless it has the
+    // memory for more.
+    maxRunningJobs: Math.max(1, Math.floor(Number(process.env.MAX_RUNNING_JOBS)) || 1),
+
     // Training knobs. Fewer iterations = faster demo, lower quality.
     trainIters: Number(process.env.TRAIN_ITERS) || 10000,
     // Bounds for a per-job iteration cap sent by the site (Fast / Normal /
