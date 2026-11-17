@@ -142,6 +142,7 @@ private:
     ConsolePanel* m_console = nullptr;
     AudioPanel* m_audio = nullptr;
     RemoteModelsPanel* m_remoteModels = nullptr;
+    QWidget* m_stressTestDock = nullptr;
     QList<QDockWidget*> m_docks;
     QToolBar* m_toolBar = nullptr;
 

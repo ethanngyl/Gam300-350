@@ -499,9 +499,13 @@ void MainWindow::createDocks() {
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
+    m_stressTestDock = new QWidget(this); //Empty for now, the stress test controls go here
+    QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestDock, Qt::BottomDockWidgetArea);
+
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);
     tabifyDockWidget(consoleDock, audioDock);
+    tabifyDockWidget(audioDock, stressTestDock);
     assetsDock->raise();
 
     resizeDocks({ sceneDock, inspectorDock }, { 260, 300 }, Qt::Horizontal);
