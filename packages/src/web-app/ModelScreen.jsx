@@ -10,25 +10,29 @@ Page for one 3D model, shown inside the dashboard (the dock stays) when a
 model is opened from Home, the Media Library or the Model Viewer, and when
 a build finishes. Top: a back link to where it was opened from, the
 model's name (pencil to rename), a Ready badge, when it was made and how
-many photos it used, then Download .ply and Add to scene. Below, the 3D
+many photos it used, then Download .ply, Export .obj (ExportObjDialog, the
+engine's OBJ export in the browser) and Add to scene. Below, the 3D
 viewer fills a large card (SplatViewer, embedded, with its renderer and
 view controls, plus a full-screen button); beside it on wider screens, and
 under it on phones: Details (photos, background removal, splat count, file
 size, file format), Source photos (with "Open in Media Library") and Manage (Rename,
 Delete). Rename and delete use the Library's dialog and calls (mediaApi).
 A .ply opened from the user's computer uses the same page with only the
-viewer and its file details.
+viewer, its file details and Export .obj. A .obj opened from the user's
+computer is shown with ObjViewer, with its vertex and triangle counts.
 Right after a build, showNamePrompt asks for the model's name first.
 - ModelScreen({ jobId, localFile, backLabel, showNamePrompt, onNamePromptClose,
   onBack, onOpenPhotos, onAddToScene, onDeleted })
 React component. jobId for a server model, or localFile ({ url, name,
-sizeBytes }) for a .ply from the user's computer.
+sizeBytes }) for a .ply or .obj from the user's computer.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
 import ActionDialog from './ActionDialog.jsx';
 import Icon from './Icons.jsx';
+import ExportObjDialog from './ExportObjDialog.jsx';
 import NameModelPrompt from './NameModelPrompt.jsx';
+import ObjViewer from './ObjViewer.jsx';
 import SplatViewer from './SplatViewer.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
 import { readPlyInfo } from './plyHeader.js';
@@ -69,16 +73,24 @@ function ModelScreen({
     const [loadError, setLoadError] = useState(null);
     // From the .ply header: { splatCount, fileSizeBytes }.
     const [plyInfo, setPlyInfo] = useState(null);
+    // From ObjViewer once a .obj is loaded: { vertexCount, triangleCount }.
+    const [objInfo, setObjInfo] = useState(null);
+    const [isExportOpen, setIsExportOpen] = useState(false);
     // Rename / delete dialog (ActionDialog props), or null.
     const [dialog, setDialog] = useState(null);
     // Bumped to load the model again (after naming it).
     const [reloadCount, setReloadCount] = useState(0);
     const viewerCardRef = useRef(null);
 
-    const plyUrl = jobId ? `/api/v1/jobs/${jobId}/result.ply` : localFile?.url;
+    // Server models are always .ply; a local file is whatever the user picked.
+    const isObj = !jobId && /\.obj$/i.test(localFile?.name ?? '');
+    const modelUrl = jobId ? `/api/v1/jobs/${jobId}/result.ply` : localFile?.url;
+    const plyUrl = isObj ? null : modelUrl;
     const modelName = jobId
         ? (model ? jobDisplayName(model, 'Model') : 'Loading...')
         : localFile?.name;
+    // Exported file name: the model's name, or the local file's without its extension.
+    const exportName = jobId ? (model?.name || 'model') : (localFile?.name ?? 'model').replace(/\.[^.]+$/, '');
 
     useEffect(() => {
         if (!jobId) return;
@@ -219,6 +231,15 @@ function ModelScreen({
                         </a>
                         <button
                             className="forma-btn"
+                            onClick={() => {
+                                playSound('tap');
+                                setIsExportOpen(true);
+                            }}
+                        >
+                            <Icon name="cube" size={15} /> Export .obj
+                        </button>
+                        <button
+                            className="forma-btn"
                             disabled={!model}
                             onClick={() => {
                                 playSound('confirm');
@@ -229,12 +250,28 @@ function ModelScreen({
                         </button>
                     </div>
                 )}
+                {!jobId && plyUrl && (
+                    <div className="model-actions">
+                        <button
+                            className="forma-btn forma-btn-primary"
+                            onClick={() => {
+                                playSound('tap');
+                                setIsExportOpen(true);
+                            }}
+                        >
+                            <Icon name="cube" size={15} /> Export .obj
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className={jobId ? 'model-body' : 'model-body is-local'}>
                 <div className="model-viewer" ref={viewerCardRef}>
                     {/* Both renderers show their own loading progress. */}
                     {plyUrl && <SplatViewer url={plyUrl} isEmbedded />}
+                    {isObj && modelUrl && (
+                        <ObjViewer url={modelUrl} sizeBytes={localFile?.sizeBytes} isEmbedded onInfo={setObjInfo} />
+                    )}
                     <button className="model-icon-btn model-fullscreen" onClick={toggleFullScreen} aria-label="Full screen" title="Full screen">
                         <Icon name="fullscreen" size={16} />
                     </button>
@@ -251,13 +288,19 @@ function ModelScreen({
                             {jobId && model?.removeBackground != null && (
                                 <><dt>Background removed</dt><dd>{model.removeBackground ? 'Yes' : 'No'}</dd></>
                             )}
-                            {plyInfo?.splatCount != null && (
+                            {!isObj && plyInfo?.splatCount != null && (
                                 <><dt>Splats</dt><dd>{plyInfo.splatCount.toLocaleString()}</dd></>
+                            )}
+                            {isObj && objInfo && (
+                                <><dt>Vertices</dt><dd>{objInfo.vertexCount.toLocaleString()}</dd></>
+                            )}
+                            {isObj && objInfo?.triangleCount > 0 && (
+                                <><dt>Triangles</dt><dd>{objInfo.triangleCount.toLocaleString()}</dd></>
                             )}
                             {fileSizeText && (
                                 <><dt>File size</dt><dd>{fileSizeText}</dd></>
                             )}
-                            <dt>File format</dt><dd>.ply</dd>
+                            <dt>File format</dt><dd>{isObj ? '.obj' : '.ply'}</dd>
                             {!jobId && (
                                 <><dt>File</dt><dd className="model-file-name">{localFile?.name}</dd></>
                             )}
@@ -304,6 +347,15 @@ function ModelScreen({
             </div>
 
             {dialog && <ActionDialog {...dialog} onCancel={() => setDialog(null)} />}
+            {isExportOpen && plyUrl && (
+                <ExportObjDialog
+                    plyUrl={plyUrl}
+                    fileName={exportName}
+                    splatCount={plyInfo?.splatCount}
+                    sizeBytes={plyInfo?.fileSizeBytes ?? localFile?.sizeBytes}
+                    onClose={() => setIsExportOpen(false)}
+                />
+            )}
             {showNamePrompt && jobId && (
                 <NameModelPrompt
                     jobId={jobId}
