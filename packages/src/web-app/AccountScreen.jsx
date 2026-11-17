@@ -6,31 +6,47 @@
 \par Software Engineering Project 5
 \date 24-10-2026
 \brief
-Account page, laid out like the Genesis account settings design: a side
-menu (the user's photo, name and plan on top, then the sections) and the
-chosen section beside it. On phones the menu becomes a row of tabs above
-the section. Sections:
+Account settings, laid out like the Genesis Figma: a side menu (the
+user's photo, name and plan on top, the sections, and Log out at the
+bottom) and the chosen section beside it. On wider screens it opens as a
+window over the page it was opened from (isModal; the X or Escape closes
+it); on phones it is a page, and the menu becomes a row of tabs above the
+section. Sections:
+- Profile: the user's photo, name, plan and email, counts of their models
+  and photos, and their models and photo batches (from GET /jobs).
 - My account: profile photo (saved in this browser, see ProfilePhoto.js),
   name, email, password ("Change password" opens ChangePasswordDialog;
-  Google-only accounts, per GET /api/v1/auth/me/account, have none), role,
-  member since, "Show walkthrough" (replays the dock tour), and log out.
+  Google-only accounts, per GET /api/v1/auth/me/account, have none),
+  sign-in methods, role, member since, "Show walkthrough", and log out.
   Guests see a sign-in card instead.
+- Billing: the current plan and this month's models. Paid plans aren't
+  available yet, so there is no payment method or billing history.
 - Plans: Genesis Free / Plus / Pro compared side by side. A prototype:
   everyone is on Free and paid plans cannot be chosen yet.
-- Usage: workspace stats counted from GET /jobs (models, photos, failed
+- Storage: the plan's storage (storage used isn't reported by the server
+  yet) and workspace stats counted from GET /jobs (models, photos, failed
   builds, processing queue).
-- Sound: sound effects on/off and volume, saved in this browser.
+- Notifications: which notifications the user wants, saved in this
+  browser. None are sent yet; the choices are kept for when they are.
+- Appearance: the theme (dark, light or follow the device, see
+  AppearanceSettings.js) and sound effects on/off and volume, saved in
+  this browser.
 - buildUsageStats(jobs)
-Turns the GET /jobs list into the four usage cards.
-- AccountScreen({ user, onSignOut, onShowWalkthrough })
+Turns the GET /jobs list into the three usage cards.
+- AccountScreen({ user, isModal, onClose, onOpenModel, onOpenLibrary,
+  onSignOut, onShowWalkthrough })
 React component. onSignOut signs out (or, for guests, goes to sign in);
-onShowWalkthrough replays the walkthrough.
+onShowWalkthrough replays the walkthrough; onOpenModel / onOpenLibrary
+open a model or the Photo Library from the Profile section.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
+import { jobDisplayName } from './mediaApi.js';
+import { CURRENT_PLAN_ID, PLANS } from './plans.js';
 import { playSound, setSoundMuted, setSoundVolume, useSoundSettings } from '../audio/Audio.js';
 import { removeProfilePhoto, saveProfilePhoto, useProfilePhoto } from './ProfilePhoto.js';
+import { setTheme, useAppearanceSettings } from './AppearanceSettings.js';
 import ChangePasswordDialog from './ChangePasswordDialog.jsx';
 import './AccountScreen.css';
 
@@ -38,48 +54,76 @@ const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Side menu, in groups like the design.
 const SECTION_GROUPS = [
-    { label: 'Account', sections: [{ id: 'account', label: 'My account', icon: 'settings' }] },
+    {
+        label: 'Account',
+        sections: [
+            { id: 'profile', label: 'Profile', icon: 'user' },
+            { id: 'account', label: 'My account', icon: 'lock' },
+        ],
+    },
     {
         label: 'Plan',
         sections: [
-            { id: 'plans', label: 'Plans', icon: 'layers' },
-            { id: 'usage', label: 'Usage', icon: 'cube' },
+            { id: 'billing', label: 'Billing', icon: 'creditCard' },
+            { id: 'plans', label: 'Plans', icon: 'sparkle' },
+            { id: 'storage', label: 'Storage', icon: 'database' },
         ],
     },
-    { label: 'Preferences', sections: [{ id: 'sound', label: 'Sound', icon: 'volume' }] },
-];
-
-// Prototype plans; not final plan details. Everyone is on Free for now.
-const CURRENT_PLAN_ID = 'free';
-const PLANS = [
     {
-        id: 'free',
-        name: 'Genesis Free',
-        description: 'Everything you need to get started.',
-        storage: '8 GB',
-        models: '12',
-        formats: ['.ply'],
-    },
-    {
-        id: 'plus',
-        name: 'Genesis Plus',
-        description: 'More room for bigger projects.',
-        storage: '16 GB',
-        models: '32',
-        formats: ['.ply', '.splat', 'point-cloud .ply'],
-    },
-    {
-        id: 'pro',
-        name: 'Genesis Pro',
-        description: 'Unlimited models and every export format.',
-        storage: '32 GB',
-        models: 'Unlimited*',
-        formats: ['.ply', '.splat', 'point-cloud .ply', '.obj', '.glb', '.stl'],
-        isFeatured: true,
+        label: 'Preferences',
+        sections: [
+            { id: 'notifications', label: 'Notifications', icon: 'bell' },
+            { id: 'appearance', label: 'Appearance', icon: 'sun' },
+        ],
     },
 ];
 
-// Turns the GET /jobs list into the four usage cards. The backend has no
+// Account > Appearance theme choices, in order (AppearanceSettings.js).
+const THEME_OPTIONS = [
+    { id: 'light', label: 'Light', icon: 'sun' },
+    { id: 'dark', label: 'Dark', icon: 'moon' },
+    { id: 'system', label: 'Match system', icon: 'monitor' },
+];
+
+// Account > Notifications: each choice can go by email and/or in the app.
+const NOTIFICATION_GROUPS = [
+    {
+        label: 'Your work',
+        items: [
+            { id: 'modelReady', title: 'Model ready', hint: 'When a model finishes processing and is ready to view.' },
+            { id: 'processingFailed', title: 'Processing failed', hint: "When a model can't be built from your photos." },
+            { id: 'storageAlmostFull', title: 'Storage almost full', hint: "When you've used most of your cloud storage." },
+        ],
+    },
+    {
+        label: 'From Genesis',
+        items: [
+            { id: 'productUpdates', title: 'Product updates', hint: 'New features and improvements.' },
+            { id: 'tips', title: 'Tips and tutorials', hint: 'Short guides on getting better scans.' },
+        ],
+    },
+];
+const NOTIFICATION_PREFS_KEY = 'genesis-notification-prefs';
+
+// Saved notification choices: { [id]: { email, inApp } }. Everything is on
+// until the user changes it. Storage can be blocked, so it is wrapped.
+function loadNotificationPrefs() {
+    try {
+        return JSON.parse(window.localStorage.getItem(NOTIFICATION_PREFS_KEY)) ?? {};
+    } catch {
+        return {};
+    }
+}
+
+function saveNotificationPrefs(prefs) {
+    try {
+        window.localStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(prefs));
+    } catch {
+        // Storage unavailable: the choices last until the page is reloaded.
+    }
+}
+
+// Turns the GET /jobs list into the three usage cards. The backend has no
 // scene storage yet, so the third card counts failed builds instead.
 function buildUsageStats(jobs) {
     const weekAgo = Date.now() - ONE_WEEK_MS;
@@ -87,39 +131,34 @@ function buildUsageStats(jobs) {
 
     const finishedJobs = jobs.filter((job) => job.status === 'done');
     const failedJobs = jobs.filter((job) => job.status === 'error');
-    const runningJobs = jobs.filter((job) => job.status === 'running');
-    const queuedJobs = jobs.filter((job) => job.status === 'queued');
 
     const countPhotos = (jobList) => jobList.reduce((total, job) => total + (job.imageCount ?? 0), 0);
-
-    let queueNote = 'Nothing running';
-    if (runningJobs.length > 0) {
-        queueNote = queuedJobs.length > 0 ? `1 building, ${queuedJobs.length} waiting` : '1 building now';
-    } else if (queuedJobs.length > 0) {
-        queueNote = `${queuedJobs.length} waiting to start`;
-    }
 
     return [
         { value: finishedJobs.length, label: 'Models Generated', note: `+${finishedJobs.filter(isThisWeek).length} this week` },
         { value: countPhotos(jobs), label: 'Photos Uploaded', note: `+${countPhotos(jobs.filter(isThisWeek))} this week` },
         { value: failedJobs.length, label: 'Failed Builds', note: failedJobs.length > 0 ? 'Try again with more photos' : 'No failed builds' },
-        { value: runningJobs.length + queuedJobs.length, label: 'Processing Queue', note: queueNote },
     ];
 }
 
-function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
+function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibrary, onSignOut, onShowWalkthrough }) {
     const [activeSection, setActiveSection] = useState('account');
+    const [profileTab, setProfileTab] = useState('models');
+    const [notificationPrefs, setNotificationPrefs] = useState(loadNotificationPrefs);
     const [jobs, setJobs] = useState([]);
     const [statsStatus, setStatsStatus] = useState('loading');
     const [photoError, setPhotoError] = useState(null);
     const [planNotice, setPlanNotice] = useState(null);
-    // Whether the account has a password (false: Google sign-in only); null
-    // until GET /auth/me/account answers, and then the button just shows.
-    const [hasPassword, setHasPassword] = useState(null);
+    // How the account signs in: { password, google }, or null until
+    // GET /auth/me/account answers (the password button just shows).
+    const [signInMethods, setSignInMethods] = useState(null);
+    // false: Google sign-in only, so there is no password to change.
+    const hasPassword = signInMethods ? signInMethods.password !== false : null;
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [passwordNotice, setPasswordNotice] = useState(null);
     const photoInputRef = useRef(null);
     const { isMuted, volume } = useSoundSettings();
+    const { theme } = useAppearanceSettings();
     const profilePhoto = useProfilePhoto(user.email);
     const volumePercent = Math.round(volume * 100);
     const currentPlan = PLANS.find((plan) => plan.id === CURRENT_PLAN_ID);
@@ -159,7 +198,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                 const res = await fetch('/api/v1/auth/me/account');
                 if (!res.ok) return;
                 const account = await res.json();
-                if (!isCancelled) setHasPassword(account.signInMethods?.password !== false);
+                if (!isCancelled && account.signInMethods) setSignInMethods(account.signInMethods);
             } catch {
                 // Keep the button.
             }
@@ -172,6 +211,28 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
     }, [user.isGuest, user.email]);
 
     const usageStats = buildUsageStats(jobs);
+    const finishedJobs = jobs.filter((job) => job.status === 'done');
+    const photoBatches = jobs.filter((job) => (job.images?.length ?? 0) > 0);
+    const photoCount = jobs.reduce((total, job) => total + (job.imageCount ?? 0), 0);
+
+    // Escape closes the window (not while the change password dialog is open).
+    useEffect(() => {
+        if (!isModal) return undefined;
+        function closeOnEscape(event) {
+            if (event.key === 'Escape' && !isChangingPassword) onClose();
+        }
+        window.addEventListener('keydown', closeOnEscape);
+        return () => window.removeEventListener('keydown', closeOnEscape);
+    }, [isModal, isChangingPassword, onClose]);
+
+    function setNotificationPref(id, channel, isOn) {
+        playSound('tap');
+        setNotificationPrefs((prefs) => {
+            const next = { ...prefs, [id]: { email: true, inApp: true, ...prefs[id], [channel]: isOn } };
+            saveNotificationPrefs(next);
+            return next;
+        });
+    }
 
     async function handlePhotoChosen(event) {
         const chosenFile = event.target.files?.[0];
@@ -324,6 +385,15 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                             </>
                         )}
                     </div>
+                    {signInMethods && (
+                        <div className="acct-row">
+                            <dt>Sign-in methods</dt>
+                            <dd className="acct-sign-in-methods">
+                                {signInMethods.password !== false && <span><Icon name="mail" size={14} /> Email and password</span>}
+                                {signInMethods.google && <span><Icon name="check" size={14} /> Google {'\u00b7'} connected</span>}
+                            </dd>
+                        </div>
+                    )}
                     {user.role === 'admin' && (
                         <div className="acct-row">
                             <dt>Role</dt>
@@ -349,7 +419,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                 <div className="forma-card acct-card acct-logout">
                     <div>
                         <h2 className="acct-card-title">Walkthrough</h2>
-                        <p className="acct-muted">Take the quick tour of the dock again.</p>
+                        <p className="acct-muted">Take the quick tour of the workspace again.</p>
                     </div>
                     <button
                         className="forma-btn"
@@ -446,14 +516,159 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
         );
     }
 
-    function renderUsageSection() {
+    function renderSectionHeading(eyebrow, title, subtitle) {
+        return (
+            <div className="acct-section-heading">
+                <p className="eyebrow eyebrow-accent">{eyebrow}</p>
+                <h1 className="acct-title">{title}</h1>
+                {subtitle && <p className="acct-subtitle">{subtitle}</p>}
+            </div>
+        );
+    }
+
+    function renderProfileSection() {
+        const items = profileTab === 'models' ? finishedJobs : photoBatches;
         return (
             <>
-                <div className="acct-section-heading">
-                    <p className="eyebrow eyebrow-accent">Usage</p>
-                    <h1 className="acct-title">Workspace usage</h1>
-                    <p className="acct-subtitle">What you have built so far.</p>
+                <div className="forma-card acct-card acct-profile-head">
+                    {renderAvatar('acct-avatar-large', 40)}
+                    <div className="acct-profile-identity">
+                        <h1 className="acct-title">
+                            {user.name}
+                            <span className="acct-plan-chip">{user.isGuest ? 'Guest' : currentPlan.name.replace('Genesis ', '')}</span>
+                        </h1>
+                        <p className="acct-muted">{user.email}</p>
+                    </div>
                 </div>
+
+                <div className="forma-card acct-profile-stats">
+                    <div><strong>{statsStatus === 'ready' ? finishedJobs.length : '-'}</strong><span>Models</span></div>
+                    <div><strong>{statsStatus === 'ready' ? photoBatches.length : '-'}</strong><span>Photo batches</span></div>
+                    <div><strong>{statsStatus === 'ready' ? photoCount : '-'}</strong><span>Photos</span></div>
+                </div>
+
+                <div className="acct-tabs" role="tablist">
+                    {[['models', 'Models', finishedJobs.length], ['photos', 'Source photos', photoBatches.length]].map(([id, label, count]) => (
+                        <button
+                            key={id}
+                            type="button"
+                            role="tab"
+                            aria-selected={profileTab === id}
+                            className={profileTab === id ? 'acct-tab is-active' : 'acct-tab'}
+                            onClick={() => {
+                                playSound('tap');
+                                setProfileTab(id);
+                            }}
+                        >
+                            {label} <span>{count}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {statsStatus === 'error' && <p className="acct-muted">Could not load your work. Is the server running?</p>}
+                {statsStatus === 'ready' && items.length === 0 && (
+                    <p className="acct-muted">{profileTab === 'models' ? 'No finished models yet.' : 'No photos yet.'}</p>
+                )}
+                <div className="acct-profile-grid">
+                    {items.map((job) => (
+                        <button
+                            key={job.id}
+                            type="button"
+                            className="acct-profile-item"
+                            onClick={() => {
+                                playSound('tap');
+                                if (profileTab === 'models') onOpenModel(job.id);
+                                else onOpenLibrary('photos');
+                            }}
+                        >
+                            <span className="acct-profile-cover">
+                                {job.images?.[0]
+                                    ? <img src={job.images[0].url} alt="" loading="lazy" />
+                                    : <Icon name="cube" size={22} />}
+                            </span>
+                            <strong>{jobDisplayName(job, profileTab === 'models' ? 'Model' : 'Photos')}</strong>
+                            <span>{profileTab === 'models' ? '3D model' : `${job.images.length} photos`}</span>
+                        </button>
+                    ))}
+                </div>
+            </>
+        );
+    }
+
+    function renderBillingSection() {
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        const modelsThisMonth = finishedJobs.filter((job) => job.createdAt >= monthStart.getTime()).length;
+        return (
+            <>
+                {renderSectionHeading('Plan', 'Billing', 'Your plan and payments.')}
+                <div className="forma-card acct-card acct-billing-plan">
+                    <div>
+                        <p className="acct-label">Current plan</p>
+                        <h2 className="acct-card-title">{currentPlan.name}</h2>
+                        <p className="acct-muted">No payment needed. Paid plans are coming later.</p>
+                    </div>
+                    <button type="button" className="forma-btn forma-btn-primary" onClick={() => openSection('plans')}>
+                        Change plan
+                    </button>
+                </div>
+                <div className="acct-summary-grid">
+                    <div className="forma-card acct-summary">
+                        <p className="acct-label">Storage</p>
+                        <strong>{'\u2014'} of {currentPlan.storage}</strong>
+                        <span className="acct-muted">Storage use coming soon</span>
+                    </div>
+                    <div className="forma-card acct-summary">
+                        <p className="acct-label">Models this month</p>
+                        <strong>{statsStatus === 'ready' ? modelsThisMonth : '-'} of {currentPlan.models}</strong>
+                    </div>
+                    <div className="forma-card acct-summary">
+                        <p className="acct-label">Billing cycle</p>
+                        <strong>None</strong>
+                        <span className="acct-muted">Free plan</span>
+                    </div>
+                </div>
+                <div className="forma-card acct-card">
+                    <h2 className="acct-card-title">Payment method</h2>
+                    <p className="acct-muted">No payment method. You can add one when paid plans are available.</p>
+                </div>
+                <div className="forma-card acct-card">
+                    <h2 className="acct-card-title">Billing history</h2>
+                    <p className="acct-muted">No invoices yet.</p>
+                </div>
+            </>
+        );
+    }
+
+    function renderStorageSection() {
+        return (
+            <>
+                {renderSectionHeading('Plan', 'Cloud storage', `${currentPlan.name} includes ${currentPlan.storage}.`)}
+                <div className="acct-summary-grid is-four">
+                    <div className="forma-card acct-summary">
+                        <p className="acct-label">Used</p>
+                        <strong>{'\u2014'}</strong>
+                        <span className="acct-muted">Coming soon</span>
+                    </div>
+                    <div className="forma-card acct-summary">
+                        <p className="acct-label">Plan storage</p>
+                        <strong>{currentPlan.storage}</strong>
+                    </div>
+                    <div className="forma-card acct-summary">
+                        <p className="acct-label">Models</p>
+                        <strong>{statsStatus === 'ready' ? finishedJobs.length : '-'}</strong>
+                    </div>
+                    <div className="forma-card acct-summary">
+                        <p className="acct-label">Photos</p>
+                        <strong>{statsStatus === 'ready' ? photoCount : '-'}</strong>
+                    </div>
+                </div>
+                <p className="acct-notice" role="note">
+                    How much storage you've used will show here once the server reports it.
+                </p>
+
+                <h2 className="acct-subheading">Workspace usage</h2>
                 {statsStatus === 'error' && <p className="acct-muted">Could not load usage. Is the server running?</p>}
                 <div className="account-stats">
                     {usageStats.map((stat) => (
@@ -468,21 +683,78 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
         );
     }
 
-    function renderSoundSection() {
+    function renderNotificationsSection() {
         return (
             <>
-                <div className="acct-section-heading">
-                    <p className="eyebrow eyebrow-accent">Preferences</p>
-                    <h1 className="acct-title">Sound</h1>
-                    <p className="acct-subtitle">Choose how Genesis sounds.</p>
+                {renderSectionHeading('Preferences', 'Notifications', 'Choose what you hear about. Saved for this browser.')}
+                {NOTIFICATION_GROUPS.map((group) => (
+                    <div key={group.label} className="forma-card acct-card acct-notification-group">
+                        <p className="acct-label">{group.label}</p>
+                        {group.items.map((item) => {
+                            const pref = { email: true, inApp: true, ...notificationPrefs[item.id] };
+                            return (
+                                <div key={item.id} className="acct-notification-row">
+                                    <div>
+                                        <strong>{item.title}</strong>
+                                        <span className="acct-muted">{item.hint}</span>
+                                    </div>
+                                    {[['email', 'Email'], ['inApp', 'In app']].map(([channel, label]) => (
+                                        <label key={channel} className="acct-switch-label">
+                                            {label}
+                                            <input
+                                                type="checkbox"
+                                                className="forma-switch"
+                                                checked={pref[channel]}
+                                                onChange={(event) => setNotificationPref(item.id, channel, event.target.checked)}
+                                                aria-label={`${item.title}: ${label}`}
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+                <p className="acct-notice" role="note">Genesis doesn't send notifications yet. Your choices are kept for when it does.</p>
+            </>
+        );
+    }
+
+    function renderAppearanceSection() {
+        return (
+            <>
+                {renderSectionHeading('Preferences', 'Appearance', 'How Genesis looks and sounds on this browser.')}
+                <div className="forma-card acct-card">
+                    <p className="acct-label">Theme</p>
+                    <div className="acct-theme-options" role="radiogroup" aria-label="Theme">
+                        {THEME_OPTIONS.map((option) => (
+                            <button
+                                key={option.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={theme === option.id}
+                                className={theme === option.id ? 'acct-theme-option is-active' : 'acct-theme-option'}
+                                onClick={() => {
+                                    playSound('tap');
+                                    setTheme(option.id);
+                                }}
+                            >
+                                <span className={`acct-theme-swatch is-${option.id}`} aria-hidden="true" />
+                                <span className="acct-theme-name">
+                                    <Icon name={option.icon} size={14} /> {option.label}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
+
                 <div className="forma-card account-sound">
                     <label className="account-sound-row">
                         <span className="account-sound-icon">
                             <Icon name={isMuted ? 'volumeOff' : 'volume'} size={18} />
                         </span>
                         <span className="account-sound-text">
-                            <span className="account-sound-title">Sound effects</span>
+                            <span className="account-sound-title">UI sounds</span>
                             <span className="account-sound-hint">Button clicks and alerts. Saved for this browser.</span>
                         </span>
                         <input
@@ -495,7 +767,7 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                                 // Play once when turning on, so the user hears it worked.
                                 if (isTurningOn) playSound('tap');
                             }}
-                            aria-label="Sound effects"
+                            aria-label="UI sounds"
                         />
                     </label>
 
@@ -519,8 +791,8 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
         );
     }
 
-    return (
-        <div className="acct-screen">
+    const screen = (
+        <div className={isModal ? 'acct-screen is-modal' : 'acct-screen'}>
             <nav className="forma-card acct-menu" aria-label="Account sections">
                 <div className="acct-menu-user">
                     {renderAvatar('acct-avatar-small', 18)}
@@ -546,13 +818,57 @@ function AccountScreen({ user, onSignOut, onShowWalkthrough }) {
                         ))}
                     </div>
                 ))}
+
+                <button
+                    type="button"
+                    className="acct-menu-item acct-menu-logout"
+                    onClick={() => {
+                        playSound('back');
+                        onSignOut();
+                    }}
+                >
+                    <Icon name={user.isGuest ? 'user' : 'logout'} size={16} />
+                    <span>{user.isGuest ? 'Sign in' : 'Log out'}</span>
+                </button>
             </nav>
 
             <div className="acct-content">
+                {isModal && (
+                    <button
+                        type="button"
+                        className="acct-close"
+                        aria-label="Close account settings"
+                        onClick={() => {
+                            playSound('back');
+                            onClose();
+                        }}
+                    >
+                        <Icon name="close" size={16} />
+                    </button>
+                )}
+                {activeSection === 'profile' && renderProfileSection()}
                 {activeSection === 'account' && renderAccountSection()}
+                {activeSection === 'billing' && renderBillingSection()}
                 {activeSection === 'plans' && renderPlansSection()}
-                {activeSection === 'usage' && renderUsageSection()}
-                {activeSection === 'sound' && renderSoundSection()}
+                {activeSection === 'storage' && renderStorageSection()}
+                {activeSection === 'notifications' && renderNotificationsSection()}
+                {activeSection === 'appearance' && renderAppearanceSection()}
+            </div>
+        </div>
+    );
+
+    if (!isModal) return screen;
+
+    return (
+        <div
+            className="acct-modal-backdrop"
+            onPointerDown={(event) => {
+                // A press on the dimmed page around the window closes it.
+                if (event.target === event.currentTarget) onClose();
+            }}
+        >
+            <div className="acct-modal" role="dialog" aria-modal="true" aria-label="Account settings">
+                {screen}
             </div>
         </div>
     );

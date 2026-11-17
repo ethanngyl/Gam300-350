@@ -6,27 +6,51 @@
 \par Software Engineering Project 5
 \date 26-10-2026
 \brief
-Dashboard landing screen, laid out like the Genesis wireframe and focused
-on the user's own work: a welcome line and subtitle (plus a "New model"
-button on phones, as a bigger target than the dock's), then "Recent" with two
-tabs and a "View all" button. "Your files" shows the latest photo batches and opens the Photo
-Library; "Generated models" shows the latest finished models and opens one
-in the full-page viewer. Both come from GET /jobs. With nothing made yet,
+Dashboard landing screen, laid out like the Genesis Figma: a banner
+("Welcome back, <name>" / "What do you want to turn into 3D?") with three
+ways to start (Add photos opens the file picker and hands the photos to
+the capture page; Frames from video opens the Video Extractor; Build a
+scene opens the Scene Builder), then "Recent" with two tabs and a "View
+all" link. Phones keep their welcome line and "New model" button instead
+of the banner (a bigger target than the dock's). "Your files" shows the
+latest photo batches (tagged with their build's status: source photos,
+processing, failed or cancelled) and opens the Photo Library; "Generated
+models" shows the latest finished models and opens one in the full-page
+viewer. Both come from GET /jobs. With nothing made yet,
 it shows a single "Create your first 3D model" card instead.
 **************************************************************************/
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
+import './HomeScreen.css';
 
 // How many cards each Recent tab shows.
 const RECENT_ITEM_COUNT = 10;
+
+// The banner's ways to start. 'photos' opens the file picker; the others
+// open that page.
+const START_ACTIONS = [
+    { id: 'photos', title: 'Add photos', hint: '40\u201380 overlapping shots', icon: 'upload' },
+    { id: 'extractor', title: 'Frames from video', hint: 'Pick frames from a walkaround video', icon: 'play' },
+    { id: 'scene', title: 'Build a scene', hint: 'Arrange models in a space', icon: 'cube' },
+];
 
 const RECENT_TABS = [
     { id: 'files', label: 'Your files' },
     { id: 'models', label: 'Generated models' },
 ];
+
+// The tag under a photo batch's name, from its job's status. Failed and
+// cancelled builds used to show as "Processing" forever.
+function fileStatus(job) {
+    const photoCount = job.images.length;
+    if (job.status === 'done') return { kind: `Source photos \u00B7 ${photoCount}`, statusClassName: null };
+    if (job.status === 'error') return { kind: `Failed \u00B7 ${photoCount} photos`, statusClassName: 'is-failed' };
+    if (job.status === 'cancelled') return { kind: `Cancelled \u00B7 ${photoCount} photos`, statusClassName: 'is-cancelled' };
+    return { kind: 'Processing', statusClassName: 'is-processing' };
+}
 
 // "Just now", "5m ago", "3h ago", "Yesterday", "4d ago", or a date.
 function formatTimeAgo(timestamp) {
@@ -42,7 +66,8 @@ function formatTimeAgo(timestamp) {
     return new Date(timestamp).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
 }
 
-function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
+function HomeScreen({ userName, onNewGeneration, onAddPhotos, onNavigate, onOpenLibrary, onOpenModel }) {
+    const photoInputRef = useRef(null);
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
@@ -79,7 +104,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
         .map((job) => ({
             id: job.id,
             name: jobDisplayName(job, 'Photos'),
-            kind: job.status === 'done' ? `Source photos \u00B7 ${job.images.length}` : 'Processing',
+            ...fileStatus(job),
             coverUrl: job.images[0].url,
             createdAt: job.createdAt,
         }));
@@ -110,10 +135,45 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
         onNewGeneration();
     }
 
+    function startAction(actionId) {
+        playSound('tap');
+        if (actionId === 'photos') photoInputRef.current?.click();
+        else onNavigate(actionId);
+    }
+
+    function handlePhotosChosen(event) {
+        const chosenFiles = Array.from(event.target.files ?? []);
+        // Clear so choosing the same photos again still fires onChange.
+        event.target.value = '';
+        if (chosenFiles.length > 0) onAddPhotos(chosenFiles);
+    }
+
     return (
         <div className="home-screen">
-            <p className="eyebrow eyebrow-accent">Default workspace</p>
-            <div className="home-heading-row">
+            <section className="home-hero" aria-labelledby="home-hero-title">
+                <span className="home-hero-art" aria-hidden="true" />
+                <p className="home-hero-eyebrow">Welcome back, {userName}</p>
+                <h1 id="home-hero-title" className="home-hero-title">What do you want to turn into 3D?</h1>
+                <div className="home-hero-actions">
+                    {START_ACTIONS.map((action) => (
+                        <button
+                            key={action.id}
+                            type="button"
+                            className="home-hero-action"
+                            onClick={() => startAction(action.id)}
+                        >
+                            <span className="home-hero-action-icon"><Icon name={action.icon} size={18} /></span>
+                            <span className="home-hero-action-title">{action.title}</span>
+                            <span className="home-hero-action-hint">{action.hint}</span>
+                        </button>
+                    ))}
+                </div>
+                <input ref={photoInputRef} type="file" accept="image/*" multiple hidden onChange={handlePhotosChosen} />
+            </section>
+
+            {/* Phones: the welcome line and a big New model button instead of the banner. */}
+            <p className="eyebrow eyebrow-accent home-phone-only">Default workspace</p>
+            <div className="home-heading-row home-phone-only">
                 <div>
                     <h1>Welcome back, {userName}</h1>
                     <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
@@ -125,7 +185,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
             </div>
 
             <div className="home-recent-v2-header">
-                <div>
+                <div className="home-recent-title-row">
                     <h2 className="home-section-title">Recent</h2>
                     <div className="home-recent-tabs" role="tablist">
                         {RECENT_TABS.map((tab) => (
@@ -145,13 +205,13 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     </div>
                 </div>
                 <button
-                    className="forma-btn home-view-all"
+                    className="home-view-all-link"
                     onClick={() => {
                         playSound('tap');
                         onOpenLibrary(isShowingFiles ? 'photos' : 'models');
                     }}
                 >
-                    View all {isShowingFiles ? 'files' : 'models'}
+                    View all {isShowingFiles ? 'files' : 'models'} <Icon name="chevronRight" size={14} />
                 </button>
             </div>
 
@@ -196,8 +256,10 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                             </span>
                             <span className="home-file-copy">
                                 <span className="home-file-name">{item.name}</span>
-                                <span className="home-file-kind">{item.kind}</span>
-                                <span className="home-file-time">{formatTimeAgo(item.createdAt)}</span>
+                                <span className="home-file-meta">
+                                    <span className={item.statusClassName ? `home-file-kind ${item.statusClassName}` : 'home-file-kind'}>{item.kind}</span>
+                                    <span className="home-file-time">{formatTimeAgo(item.createdAt)}</span>
+                                </span>
                             </span>
                         </button>
                     ))}

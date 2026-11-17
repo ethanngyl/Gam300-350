@@ -147,6 +147,8 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
 
     return (
         <div className="library-screen">
+            {/* Wider screens only (Pages.css); phones keep the tabs as the heading. */}
+            <h1 className="page-title">Media Library</h1>
             <div className="library-toolbar">
                 <div className="library-subtabs">
                     <button
@@ -165,7 +167,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                             onSubTabChange('photos');
                         }}
                     >
-                        Photo Library
+                        Photos
                     </button>
                 </div>
 
@@ -200,7 +202,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use New model in the dock below to create one.'}
+                                : 'No generated models yet. Use New model to create one.'}
                         </p>
                     )}
 

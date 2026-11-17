@@ -18,7 +18,8 @@ onStartBuild({ files, fps, trainIters, removeBackground }). App opens the
 full-screen processing screen (Processing.jsx), the same one photo builds
 use, which shows the upload as its first step and then the build's progress;
 a finished model opens on the model page. The file rules and the upload live
-in mediaJobs.js. There is no Back button; the dock handles navigation.
+in mediaJobs.js. There is no Back button; the sidebar (or the dock on
+phones) handles navigation.
 - FrameExtractor({ onStartBuild, initialDraft, notice })
 initialDraft ({ files, fps, trainIters, removeBackground }, from App) fills
 the form in again after a failed or cancelled build. notice is a message
@@ -152,7 +153,7 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
             <div className="fx-heading">
                 <div>
                     <div className="eyebrow eyebrow-accent">Frame capture</div>
-                    <h1 className="fx-title">Frame Extractor</h1>
+                    <h1 className="fx-title">Video Extractor</h1>
                     <p className="fx-subtitle">
                         Upload videos that orbit an object. We extract evenly spaced frames and
                         run them through the same reconstruction pipeline, so no live camera

@@ -1,7 +1,8 @@
 /*!************************************************************************
 \file ModelViewerScreen.jsx
 \author Xiong Yang
-\par DP email: xiong.yang@digipen.edu
+\par DP email1: xiong.yang@digipen.edu
+\par DP email2: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
 \date 15-10-2026
@@ -74,6 +75,8 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
 
     return (
         <div className="library-screen">
+            {/* Wider screens only (Pages.css); phones keep the tab as the heading. */}
+            <h1 className="page-title">Model Viewer</h1>
             <div className="library-toolbar model-viewer-toolbar">
                 <div className="library-subtabs">
                     <span className="library-subtab is-active">Model Viewer</span>
