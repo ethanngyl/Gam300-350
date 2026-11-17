@@ -38,6 +38,7 @@ class QToolBar;
 #include "splat/SplatTrimmer.h"
 
 struct SplatVertex;
+struct GenerationFollowUp;
 class SplatModel;
 
 class AssetBrowserPanel;
@@ -104,6 +105,10 @@ private:
     // Asks for export options and a file name, then writes the selected
     // model (or the whole scene) on a worker thread.
     void exportModels();
+    // Saves a copy of a newly generated model (downloaded to plyPath) into the
+    // folder the Generate Model dialog chose: the .ply as-is, or converted to .obj
+    // on a worker thread.
+    void saveGeneratedCopy(const QString& plyPath, const GenerationFollowUp& followUp);
 
     // Rebuilds the outliner/inspector from the renderer and updates which
     // scene actions are enabled.
@@ -143,6 +148,7 @@ private:
     //Actions.
     QAction* m_importAction = nullptr;
     QAction* m_exportAction = nullptr;
+    QAction* m_generateAction = nullptr;
     QAction* m_exitAction = nullptr;
     QAction* m_renameAction = nullptr;
     QAction* m_deleteAction = nullptr;
@@ -184,6 +190,7 @@ private:
     QStringList m_pendingImports;
     QPointer<QThread> m_loadThread;
     QPointer<QThread> m_exportThread;
+    QPointer<QThread> m_copyThread; // saving a generated model's .obj copy
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout

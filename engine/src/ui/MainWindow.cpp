@@ -39,6 +39,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QCloseEvent>
 #include <QDir>
 #include <QDockWidget>
+#include <QFile>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
@@ -175,7 +176,7 @@ MainWindow::MainWindow() {
 
 MainWindow::~MainWindow() {
     // Never destroy a running QThread: wait for an in-flight import or export to finish.
-    for (QThread* thread : { m_loadThread.data(), m_exportThread.data() }) {
+    for (QThread* thread : { m_loadThread.data(), m_exportThread.data(), m_copyThread.data() }) {
         if (thread) {
             thread->wait();
             delete thread;
@@ -207,6 +208,19 @@ void MainWindow::createActions() {
     m_exportAction->setStatusTip("Convert the selected model or the whole scene to .glb, .obj, .ply, .stl or .splat");
     m_exportAction->setEnabled(false); // until a model is loaded
     connect(m_exportAction, &QAction::triggered, this, [this] { exportModels(); });
+
+    m_generateAction = new QAction(s->standardIcon(QStyle::SP_ArrowUp), "&Generate Model...", this);
+    m_generateAction->setShortcut(QKeySequence("Ctrl+G"));
+    m_generateAction->setStatusTip("Build a new model from photos or a video on the server, like the web app, "
+                                   "and import it or save it as .ply / .obj");
+    connect(m_generateAction, &QAction::triggered, this, [this] {
+        // The build's progress is shown in My Models, so bring it into view.
+        if (QDockWidget* dock = qobject_cast<QDockWidget*>(m_remoteModels->parentWidget())) {
+            dock->show();
+            dock->raise();
+        }
+        m_remoteModels->showGenerateDialog();
+    });
 
     m_exitAction = new QAction("E&xit", this);
     m_exitAction->setShortcut(QKeySequence("Ctrl+Q"));
@@ -379,6 +393,7 @@ void MainWindow::createMenus() {
     fileMenu->addAction(m_importAction);
     fileMenu->addAction(m_trimOnImportAction);
     m_recentMenu = fileMenu->addMenu("Open &Recent");
+    fileMenu->addAction(m_generateAction);
     fileMenu->addSeparator();
     fileMenu->addAction(m_exportAction);
     fileMenu->addSeparator();
@@ -433,6 +448,7 @@ void MainWindow::createToolBar() {
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
     m_toolBar->addAction(m_importAction);
+    m_toolBar->addAction(m_generateAction);
     m_toolBar->addAction(m_exportAction);
     m_toolBar->addSeparator();
 
@@ -504,6 +520,7 @@ void MainWindow::createDocks() {
     connect(m_assets, &AssetBrowserPanel::importRequested, this, &MainWindow::importSplat);
     connect(m_remoteModels, &RemoteModelsPanel::importRequested, this, &MainWindow::importSplat);
     connect(m_remoteModels, &RemoteModelsPanel::signInRequested, this, [this] { showSignIn(); });
+    connect(m_remoteModels, &RemoteModelsPanel::saveCopyRequested, this, &MainWindow::saveGeneratedCopy);
     connect(m_outliner, &OutlinerPanel::selectionChanged, this, &MainWindow::selectModel);
     connect(m_outliner, &OutlinerPanel::renameRequested, this, &MainWindow::renameModel);
     connect(m_outliner, &OutlinerPanel::deleteRequested, this, [this](int index) {
@@ -611,6 +628,17 @@ void MainWindow::saveSettings() const {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    // Unlike a server build, a build on this PC dies with the engine.
+    if (m_remoteModels && m_remoteModels->isBuildingLocally()) {
+        const auto answer = QMessageBox::question(
+            this, "Model Still Building",
+            "A model is still being built on this PC. Quit anyway? The build is stopped and nothing is kept.",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            event->ignore();
+            return;
+        }
+    }
     saveSettings();
     m_pendingImports.clear(); // don't start anything new while shutting down
     QMainWindow::closeEvent(event);
@@ -1029,6 +1057,79 @@ void MainWindow::setRenderMode(int mode) {
     if (SplatRenderer* renderer = m_viewport->renderer()) {
         renderer->SetRenderMode(renderMode);
     }
+}
+
+void MainWindow::saveGeneratedCopy(const QString& plyPath, const GenerationFollowUp& followUp) {
+    const bool asObj = followUp.copy != GenerationFollowUp::Copy::GaussianPly;
+    const QString extension = asObj ? QStringLiteral(".obj") : QStringLiteral(".ply");
+    const QDir folder(followUp.copyFolder);
+    if (!folder.mkpath(".")) {
+        qWarning("Couldn't create %s for the model copy.", qPrintable(QDir::toNativeSeparators(followUp.copyFolder)));
+        QMessageBox::warning(this, "Save Copy Failed",
+                             QString("The folder %1 could not be created.").arg(QDir::toNativeSeparators(followUp.copyFolder)));
+        return;
+    }
+
+    // "<model>.obj", or "<model> (2).obj" etc. so an earlier copy is never overwritten.
+    const QString baseName = QFileInfo(plyPath).completeBaseName();
+    QString dest = folder.filePath(baseName + extension);
+    for (int n = 2; QFileInfo::exists(dest); ++n) {
+        dest = folder.filePath(QString("%1 (%2)%3").arg(baseName).arg(n).arg(extension));
+    }
+    const QString fileName = QFileInfo(dest).fileName();
+
+    if (!asObj) {
+        // The server's .ply as-is: it keeps the view-dependent colour an export would drop.
+        if (!QFile::copy(plyPath, dest)) {
+            qWarning("Couldn't save %s.", qPrintable(QDir::toNativeSeparators(dest)));
+            QMessageBox::warning(this, "Save Copy Failed", QString("%1 could not be saved.").arg(QDir::toNativeSeparators(dest)));
+            return;
+        }
+        qInfo("Saved %s", qPrintable(QDir::toNativeSeparators(dest)));
+        statusBar()->showMessage(QString("Saved %1").arg(fileName), kStatusMessageMs);
+        return;
+    }
+
+    if (m_copyThread) {
+        qWarning("A model copy is already being saved; %s was skipped. Use File > Export instead.", qPrintable(fileName));
+        return;
+    }
+
+    ExportOptions options;
+    options.format = ExportFormat::Obj;
+    options.geometry = followUp.copy == GenerationFollowUp::Copy::ObjMesh ? ExportGeometry::Mesh : ExportGeometry::Points;
+
+    qInfo("Converting the new model to %s...", qPrintable(QDir::toNativeSeparators(dest)));
+    statusBar()->showMessage(QString("Saving %1...").arg(fileName));
+    auto result = std::make_shared<ExportResult>();
+    const std::string source = QDir::toNativeSeparators(plyPath).toLocal8Bit().toStdString();
+    const std::filesystem::path nativeDest = dest.toStdWString();
+    // Load and convert on a worker thread: big scans take seconds and the .obj can be hundreds of MB.
+    m_copyThread = QThread::create([result, source, nativeDest, options] {
+        const std::vector<SplatVertex> splats = LoadSplatPly(source);
+        if (splats.empty()) {
+            result->error = "The downloaded model could not be read.";
+            return;
+        }
+        *result = ExportSplats({ ExportSource{ &splats, glm::mat4(1.0f) } }, nativeDest, options);
+    });
+    connect(m_copyThread, &QThread::finished, this, [this, result, dest, fileName] {
+        m_copyThread->deleteLater();
+        m_copyThread = nullptr;
+        if (!result->ok) {
+            qWarning("Saving %s failed: %s", qPrintable(fileName), result->error.c_str());
+            statusBar()->showMessage(QString("Saving %1 failed").arg(fileName), kStatusMessageMs);
+            QMessageBox::warning(this, "Save Copy Failed",
+                                 QString("%1 could not be saved.\n\n%2").arg(fileName, QString::fromStdString(result->error)));
+            return;
+        }
+        const QLocale locale;
+        qInfo("Saved %s (%s splats, %s)", qPrintable(QDir::toNativeSeparators(dest)),
+              qPrintable(locale.toString(static_cast<qulonglong>(result->splatCount))),
+              qPrintable(locale.formattedDataSize(QFileInfo(dest).size())));
+        statusBar()->showMessage(QString("Saved %1").arg(fileName), kStatusMessageMs);
+    });
+    m_copyThread->start();
 }
 
 void MainWindow::exportModels() {

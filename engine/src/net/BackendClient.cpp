@@ -20,9 +20,12 @@ backend needs no engine-specific routes and applies its usual rules
 #include <QDir>
 #include <QFileInfo>
 #include <QHostAddress>
+#include <QHttpMultiPart>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
+#include <QMimeDatabase>
 #include <QNetworkAccessManager>
 #include <QNetworkCookie>
 #include <QNetworkCookieJar>
@@ -103,6 +106,47 @@ namespace {
     QString CacheRoot() {
         return AssetPaths::UserDataDir() + "/remote-models";
     }
+
+    // Uploads keep data flowing, but once the last byte is in the server may
+    // take a while to answer (it checks videos before replying), so allow
+    // more than kTransferTimeoutMs of silence.
+    constexpr int kUploadTimeoutMs = 180000;
+
+    // The file name sent with an upload. The backend only uses it for the
+    // extension (and renames photos anyway), so keep it plain ASCII.
+    QString UploadFileName(const QFileInfo& info) {
+        QString base;
+        for (const QChar c : info.completeBaseName()) {
+            const bool plain = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+                            || c == '_' || c == '-' || c == '.';
+            base += plain ? c : QChar('_');
+        }
+        if (base.isEmpty()) base = QStringLiteral("file");
+        return base.left(100) + "." + info.suffix().toLower();
+    }
+
+    QHttpPart TextPart(const QString& name, const QString& value) {
+        QHttpPart part;
+        part.setHeader(QNetworkRequest::ContentDispositionHeader, QString("form-data; name=\"%1\"").arg(name));
+        part.setBody(value.toUtf8());
+        return part;
+    }
+
+    JobStatus ParseJobStatus(const QJsonObject& json) {
+        JobStatus status;
+        status.id = json.value("id").toString();
+        status.status = json.value("status").toString();
+        status.phase = json.value("phase").toString();
+        status.detail = json.value("detail").toString();
+        status.error = json.value("error").toString();
+        status.progress = json.value("progress").toDouble();
+        status.hasResult = json.value("hasResult").toBool();
+        return status;
+    }
+
+    QString JobPath(const QString& jobId) {
+        return "/jobs/" + QString::fromLatin1(QUrl::toPercentEncoding(jobId));
+    }
 }
 
 QString RemoteJob::displayName() const {
@@ -120,7 +164,7 @@ BackendClient::BackendClient(QObject* parent)
 BackendClient::~BackendClient() {
     // Abort without reporting back: the panels listening may already be gone.
     // The unfinished QSaveFile (a child) discards its temp file when deleted.
-    for (QNetworkReply* reply : { m_download.data(), m_signInReply.data() }) {
+    for (QNetworkReply* reply : { m_download.data(), m_signInReply.data(), m_upload.data() }) {
         if (reply) {
             reply->disconnect(this);
             reply->abort();
@@ -285,6 +329,7 @@ void BackendClient::setSession(const QByteArray& token, const RemoteUser& user) 
 
 void BackendClient::clearSession(bool forgetSaved) {
     cancelDownload();
+    cancelUpload();
     m_token.clear();
     m_user = RemoteUser();
     if (forgetSaved) {
@@ -346,7 +391,7 @@ void BackendClient::downloadResult(const RemoteJob& job, const QString& destPath
         return;
     }
 
-    const QString path = "/jobs/" + QString::fromLatin1(QUrl::toPercentEncoding(job.id)) + "/result.ply";
+    const QString path = JobPath(job.id) + "/result.ply";
     QNetworkReply* reply = m_net->get(MakeRequest(m_server, path, m_token));
     m_download = reply;
     m_downloadCancelled = false;
@@ -392,6 +437,156 @@ void BackendClient::cancelDownload() {
         m_downloadCancelled = true;
         m_download->abort();
     }
+}
+
+// ===========================================================================
+// Generating a model
+// ===========================================================================
+
+void BackendClient::startGeneration(const GenerationRequest& request) {
+    if (!isSignedIn()) {
+        emit generationFailed("Sign in with your web app account first.");
+        return;
+    }
+    if (m_upload) {
+        emit generationFailed("A model is already uploading. Wait for it or cancel it first.");
+        return;
+    }
+    if (request.files.isEmpty()) {
+        emit generationFailed("No files were chosen.");
+        return;
+    }
+
+    const bool media = request.source == GenerationRequest::Source::Media;
+    auto* multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+
+    // Text fields go before the files so the server has them as the upload streams in
+    // (the same order the web app uses).
+    multiPart->append(TextPart("removeBackground", request.removeBackground ? "true" : "false"));
+    if (request.trainIters > 0) {
+        multiPart->append(TextPart("trainIters", QString::number(request.trainIters)));
+    }
+    if (media && request.fps > 0.0) {
+        multiPart->append(TextPart("fps", QString::number(request.fps)));
+    }
+
+    // Files are streamed from disk, not read into memory: a video batch can be gigabytes.
+    const QMimeDatabase mimeTypes;
+    const QString field = media ? QStringLiteral("media") : QStringLiteral("images");
+    qint64 totalBytes = 0;
+    for (const QString& path : request.files) {
+        auto* file = new QFile(path, multiPart);
+        if (!file->open(QIODevice::ReadOnly)) {
+            const QString error = QString("Couldn't read %1: %2").arg(QDir::toNativeSeparators(path), file->errorString());
+            delete multiPart;
+            emit generationFailed(error);
+            return;
+        }
+        totalBytes += file->size();
+        const QFileInfo info(path);
+        QHttpPart part;
+        // The backend only accepts photos sent as image/jpeg or image/png.
+        part.setHeader(QNetworkRequest::ContentTypeHeader, mimeTypes.mimeTypeForFile(info).name());
+        part.setHeader(QNetworkRequest::ContentDispositionHeader,
+                       QString("form-data; name=\"%1\"; filename=\"%2\"").arg(field, UploadFileName(info)));
+        part.setBodyDevice(file);
+        multiPart->append(part);
+    }
+
+    QNetworkRequest httpRequest = MakeRequest(m_server, media ? "/jobs/from-media" : "/upload", m_token);
+    httpRequest.setTransferTimeout(kUploadTimeoutMs);
+    QNetworkReply* reply = m_net->post(httpRequest, multiPart);
+    multiPart->setParent(reply); // freed (and its files closed) with the reply
+    m_upload = reply;
+    m_uploadCancelled = false;
+    qInfo("Uploading %lld %s (%s) to %s...", static_cast<long long>(request.files.size()),
+          media ? "video file(s)" : "photo(s)", qPrintable(QLocale().formattedDataSize(totalBytes)),
+          qPrintable(m_server.toString()));
+
+    connect(reply, &QNetworkReply::uploadProgress, this, &BackendClient::uploadProgress);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, name = request.name.trimmed()] {
+        reply->deleteLater();
+        m_upload = nullptr;
+        const QByteArray data = reply->readAll();
+        if (m_uploadCancelled) {
+            emit generationFailed("Upload cancelled.");
+            return;
+        }
+        if (handleUnauthorized(reply)) {
+            emit generationFailed("Your session has expired. Sign in again.");
+            return;
+        }
+        const QString jobId = QJsonDocument::fromJson(data).object().value("id").toString();
+        if (HttpStatus(reply) != 202 || jobId.isEmpty()) {
+            emit generationFailed(ReplyError(reply, data));
+            return;
+        }
+
+        // Name it the way the web app's name prompt does. Best effort: an unnamed
+        // job still builds and shows up as "Model <id>".
+        if (!name.isEmpty()) {
+            QNetworkRequest rename = MakeRequest(m_server, JobPath(jobId), m_token);
+            rename.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+            QNetworkReply* renameReply = m_net->sendCustomRequest(
+                rename, "PATCH", QJsonDocument(QJsonObject{ { "name", name } }).toJson(QJsonDocument::Compact));
+            connect(renameReply, &QNetworkReply::finished, this, [renameReply] {
+                renameReply->deleteLater();
+                if (HttpStatus(renameReply) != 200) {
+                    qWarning("Couldn't name the new model: %s",
+                             qPrintable(ReplyError(renameReply, renameReply->readAll())));
+                }
+            });
+        }
+
+        qInfo("Upload finished. The server is building the model (job %s).", qPrintable(jobId));
+        emit generationStarted(jobId);
+    });
+}
+
+void BackendClient::cancelUpload() {
+    if (m_upload) {
+        m_uploadCancelled = true;
+        m_upload->abort();
+    }
+}
+
+void BackendClient::fetchJobStatus(const QString& jobId) {
+    if (!isSignedIn()) {
+        return;
+    }
+    QNetworkReply* reply = m_net->get(MakeRequest(m_server, JobPath(jobId), m_token));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, jobId] {
+        reply->deleteLater();
+        const QByteArray data = reply->readAll();
+        if (handleUnauthorized(reply)) {
+            emit jobStatusFailed(jobId, "Your session has expired. Sign in again.");
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(data);
+        if (HttpStatus(reply) != 200 || !doc.isObject()) {
+            emit jobStatusFailed(jobId, ReplyError(reply, data));
+            return;
+        }
+        JobStatus status = ParseJobStatus(doc.object());
+        if (status.id.isEmpty()) status.id = jobId;
+        emit jobStatusReceived(status);
+    });
+}
+
+void BackendClient::cancelJob(const QString& jobId) {
+    if (!isSignedIn()) {
+        return;
+    }
+    QNetworkReply* reply = m_net->deleteResource(MakeRequest(m_server, JobPath(jobId), m_token));
+    connect(reply, &QNetworkReply::finished, this, [reply, jobId] {
+        reply->deleteLater();
+        const int status = HttpStatus(reply);
+        if (status == 200) {
+            qInfo("Cancelled job %s on the server.", qPrintable(jobId));
+        } else if (status != 409) { // 409: it had already finished, nothing to stop
+            qWarning("Couldn't cancel job %s: %s", qPrintable(jobId), qPrintable(ReplyError(reply, reply->readAll())));
+        }
+    });
 }
 
 // ===========================================================================

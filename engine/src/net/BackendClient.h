@@ -10,7 +10,9 @@ Declares BackendClient, the engine's connection to the web app's backend.
 It signs in with the same accounts as the web app (POST /auth/login), keeps
 the session token the backend hands out, lists the caller's reconstruction
 jobs (GET /jobs) and downloads a finished model (GET /jobs/:id/result.ply)
-into a per-user cache. The backend decides what each account may see:
+into a per-user cache. It can also start a new model the way the web app
+does: upload photos (POST /upload) or videos (POST /jobs/from-media), name
+it (PATCH /jobs/:id), poll it (GET /jobs/:id) and cancel it (DELETE /jobs/:id). The backend decides what each account may see:
 users get only the models they uploaded, admins get every model.
 **************************************************************************/
 #pragma once
@@ -21,6 +23,7 @@ users get only the models they uploaded, admins get every model.
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 class QNetworkAccessManager;
@@ -50,6 +53,37 @@ struct RemoteJob {
 
     // The user's name for the job, else "Model <short id>" (as the web app shows it).
     QString displayName() const;
+};
+
+// What to build a new model from: the same choices the web app's capture and
+// Frame Extractor screens send to POST /upload and POST /jobs/from-media.
+struct GenerationRequest {
+    enum class Source {
+        Photos, // .jpg / .png, at least 8 (POST /upload)
+        Media   // videos or animated GIFs, frames are extracted on the server (POST /jobs/from-media)
+    };
+    Source source = Source::Photos;
+    QStringList files;
+    QString name;                  // empty keeps the server's default name
+    bool removeBackground = false; // mask out the background first (turntable captures)
+    int trainIters = 0;            // training iteration cap, 0 = server default
+    double fps = 0.0;              // Media only: frames taken per second of video, 0 = server default
+};
+
+// One job's live state, from GET /jobs/:id.
+struct JobStatus {
+    QString id;
+    QString status;   // queued / running / done / error / cancelled
+    QString phase;    // upload / extract / masking / colmap-* / training / normalize / done
+    QString detail;   // e.g. the training iteration counter
+    QString error;
+    double progress = 0.0; // 0..1 within the current phase
+    bool hasResult = false;
+
+    bool isFinished() const {
+        return status == QLatin1String("done") || status == QLatin1String("error")
+            || status == QLatin1String("cancelled");
+    }
 };
 
 class BackendClient : public QObject {
@@ -92,6 +126,19 @@ public:
     void cancelDownload();
     bool isDownloading() const { return m_download != nullptr; }
 
+    // Uploads the request's files and starts a reconstruction job on the
+    // server, like the web app's Generate. Answered by generationStarted (the
+    // job id) or generationFailed; uploadProgress reports the upload. One at a time.
+    void startGeneration(const GenerationRequest& request);
+    void cancelUpload();
+    bool isUploading() const { return m_upload != nullptr; }
+
+    // Asks for one job's state; answered by jobStatusReceived or jobStatusFailed.
+    void fetchJobStatus(const QString& jobId);
+    // Stops a queued or running job on the server (frees its GPU). The next
+    // fetchJobStatus reports it as cancelled.
+    void cancelJob(const QString& jobId);
+
     // Where this account's downloaded models are kept. Empty when signed out.
     QString cacheDir() const;
     // Whether path is inside any account's download cache.
@@ -106,6 +153,11 @@ signals:
     void downloadProgress(qint64 received, qint64 total);
     // error is empty on success.
     void downloadFinished(const QString& jobId, const QString& path, const QString& error);
+    void uploadProgress(qint64 sent, qint64 total);
+    void generationStarted(const QString& jobId);
+    void generationFailed(const QString& error);
+    void jobStatusReceived(const JobStatus& status);
+    void jobStatusFailed(const QString& jobId, const QString& error);
 
 private:
     // A request to server + path that carries token as the session cookie.
@@ -124,4 +176,6 @@ private:
     QPointer<QNetworkReply> m_download;
     QSaveFile* m_downloadFile = nullptr;
     bool m_downloadCancelled = false; // by cancelDownload(), not a timeout
+    QPointer<QNetworkReply> m_upload;
+    bool m_uploadCancelled = false;   // by cancelUpload(), not a timeout
 };

@@ -15,7 +15,11 @@ up-to-date copy) and asks for it to be imported.
 #pragma once
 
 #include "net/BackendClient.h"
+#include "pipeline/LocalReconstruction.h"
+#include "ui/GenerateModelDialog.h"
 
+#include <QElapsedTimer>
+#include <QHash>
 #include <QList>
 #include <QWidget>
 
@@ -23,6 +27,7 @@ class QLabel;
 class QLineEdit;
 class QProgressBar;
 class QPushButton;
+class QTimer;
 class QTreeWidget;
 
 class RemoteModelsPanel : public QWidget {
@@ -33,11 +38,37 @@ public:
 
     void refresh();
 
+    // Asks what to build (GenerateModelDialog), uploads it, follows the build
+    // and, once the model is ready, downloads it and applies the follow-up
+    // (import and / or save a copy). Asks to sign in first if needed.
+    void showGenerateDialog();
+    bool isGenerating() const;
+    // A model is being built on this PC (closing the engine stops it).
+    bool isBuildingLocally() const;
+
 signals:
     void importRequested(const QString& path);
     void signInRequested();
+    // A generated model has been downloaded to plyPath and the user asked for a copy of it.
+    void saveCopyRequested(const QString& plyPath, const GenerationFollowUp& followUp);
 
 private:
+    // ---- generating a model ----
+    void startLocalBuild(const GenerationRequest& request, const GenerationFollowUp& followUp);
+    void onLocalFinished(const QString& path, const QString& error);
+    // Phase, detail, elapsed time and progress of a build (server or local) on the generation row.
+    void showBuildProgress(const JobStatus& status);
+    void startGeneration(const GenerationRequest& request, const GenerationFollowUp& followUp);
+    void onGenerationStarted(const QString& jobId);
+    void onJobStatus(const JobStatus& status);
+    void pollGeneration();
+    void cancelGeneration();
+    // Ends the build being followed; a non-empty message stays on the row until dismissed.
+    void endGeneration(const QString& message);
+    void resetGeneration();
+    // A downloaded (or cached) model is ready: import it, or apply its generation follow-up.
+    void deliver(const QString& jobId, const QString& path);
+
     void onSessionChanged();
     void showJobs(const QList<RemoteJob>& jobs);
     void applyFilter();
@@ -59,4 +90,22 @@ private:
     QLabel* m_message = nullptr;
     QProgressBar* m_progress = nullptr;
     QPushButton* m_cancelButton = nullptr;
+
+    // Generation row: what the build is doing, its progress, and Cancel / Dismiss.
+    QPushButton* m_generateButton = nullptr;
+    QWidget* m_genRow = nullptr;
+    QLabel* m_genLabel = nullptr;
+    QProgressBar* m_genProgress = nullptr;
+    QPushButton* m_genCancel = nullptr;
+    QTimer* m_pollTimer = nullptr;
+    LocalReconstruction* m_local = nullptr; // builds on this PC
+    GenerationFollowUp m_localFollowUp;
+
+    bool m_genUploading = false;           // upload in flight, no job id yet
+    QString m_genJobId;                    // job being built and polled
+    QString m_genName;                     // the name the user gave it (may be empty)
+    GenerationFollowUp m_pendingFollowUp;  // for the upload in flight
+    QHash<QString, GenerationFollowUp> m_followUps; // by job id, applied when its model is delivered
+    QString m_autoOpenJobId;               // built, waiting for the job list so it can be downloaded
+    QElapsedTimer m_genClock;              // since the build started on the server
 };
