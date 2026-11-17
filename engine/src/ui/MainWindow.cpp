@@ -376,6 +376,8 @@ void MainWindow::createActions() {
 
     m_devModeAction = new QAction(this);
     m_devModeAction->setStatusTip("Click to toggle developer mode, which shows the developer-only tabs");
+    m_devModeAction->setCheckable(true); //Creates a checkbox
+    m_devModeAction->setChecked(m_devMode); //Sets checkbox state
     updateDevModeAction(); //Sets the initial text from m_devMode
     connect(m_devModeAction, &QAction::triggered, this, [this] { toggleDevMode(); });
 
