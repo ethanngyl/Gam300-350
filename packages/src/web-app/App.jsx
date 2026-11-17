@@ -11,8 +11,9 @@ Top-level app shell. Signed out, it shows the landing page
 in (#/login) or get started (#/signup); the session is kept in
 localStorage. Once signed in it renders the GENESIS dashboard, laid out
 like the Genesis Figma: a top bar (TopNav.jsx) and a left sidebar
-(Sidebar.jsx) around the page on wider screens, or the phone dock
-(Dock.jsx) at 760px wide or less. The pages: Home, Library, Photo Editor,
+(Sidebar.jsx) around the page on wider screens, or the top bar and the
+phone tab bar (Dock.jsx) at 760px wide or less (phones show Capture full
+screen, without either). The pages: Home, Library, Photo Editor,
 Scene Builder, Model Viewer, Video Extractor (FrameExtractor.jsx),
 Feedback, Capture and Account. Capture opens from New > Capture with
 camera, or from Upload photos with the chosen photos already in the
@@ -63,6 +64,7 @@ import './AppTheme.css';
 import './App.css';
 import './AppShell.css';
 import './Pages.css';
+import './MobileShell.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
 // Names of the pages a model can be opened from, for the model page's back link.
@@ -666,18 +668,24 @@ function App() {
     const pageTab = isAccountWindowOpen ? accountReturnTab : activeTab;
 
     return (
-        <div className={isMobile ? 'forma-app genesis-shell' : 'forma-app genesis-shell has-app-sidebar'}>
+        <div className={isMobile ? 'forma-app genesis-shell has-mobile-topbar' : 'forma-app genesis-shell has-app-sidebar'}>
+            {/* Phones: the full-screen camera has no top bar, and the model
+                page has its own header with a back button instead. */}
+            {!(isMobile && (pageTab === 'capture' || pageTab === 'model')) && (
+                <TopNav
+                    user={currentUser}
+                    isCompact={isMobile}
+                    onGoHome={() => goToTab('home')}
+                    onOpenModel={openModel}
+                    onOpenLibrary={openLibrary}
+                    onOpenHelp={() => goToTab('feedback')}
+                    onOpenAccount={openAccount}
+                    onShowWalkthrough={showWalkthroughAgain}
+                    onSignOut={handleSignOutOrSignIn}
+                />
+            )}
             {!isMobile && (
                 <>
-                    <TopNav
-                        user={currentUser}
-                        onGoHome={() => goToTab('home')}
-                        onOpenModel={openModel}
-                        onOpenLibrary={openLibrary}
-                        onOpenHelp={() => goToTab('feedback')}
-                        onOpenAccount={openAccount}
-                        onSignOut={handleSignOutOrSignIn}
-                    />
                     <Sidebar
                         // The model page belongs with the Model Viewer.
                         activeTab={activeTab === 'model' ? 'viewer' : activeTab}
@@ -693,9 +701,8 @@ function App() {
                 <div className="genesis-main" key={pageTab}>
                     {pageTab === 'home' && (
                         <HomeScreen
-                            userName={currentUser.name}
                             onNewGeneration={() => goToTab('capture')}
-                            onAddPhotos={addPhotosToCapture}
+                            onEditPhotos={(files) => reviewPhotosInEditor(files)}
                             onNavigate={goToTab}
                             onOpenLibrary={openLibrary}
                             onOpenModel={openModel}
@@ -795,17 +802,13 @@ function App() {
 
             {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
 
-            {isMobile && (
+            {isMobile && pageTab !== 'capture' && (
                 <Dock
-                    // The model page belongs with the Model Viewer.
-                    activeTab={activeTab === 'model' ? 'viewer' : activeTab}
+                    // The model page belongs with the Media Library, where
+                    // phones open models from.
+                    activeTab={activeTab === 'model' ? 'library' : activeTab}
                     onNavigate={goToTab}
                     onNewModel={() => goToTab('capture')}
-                    onAddPhotos={addPhotosToCapture}
-                    user={currentUser}
-                    onOpenAccount={openAccount}
-                    onShowWalkthrough={showWalkthroughAgain}
-                    onSignOut={handleSignOutOrSignIn}
                 />
             )}
         </div>

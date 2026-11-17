@@ -177,8 +177,15 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
             </aside>
 
             <main className="auth-panel">
-                <form className="auth-card" onSubmit={handleSubmit} noValidate>
+                <form className={isSignUp ? 'auth-card' : 'auth-card is-login'} onSubmit={handleSubmit} noValidate>
                     <div className="auth-card-logo">{logo}</div>
+                    {/* Phones: the hero is hidden, so logging in opens with its line instead. */}
+                    {!isSignUp && (
+                        <div className="auth-card-intro" aria-hidden="true">
+                            <p className="auth-card-intro-title">Build 3D models from photos.</p>
+                            <p>Turn photos and video frames into polished 3D assets.</p>
+                        </div>
+                    )}
                     <p className="auth-eyebrow">{isSignUp ? 'Get started' : 'Welcome back'}</p>
                     <h1>{isSignUp ? 'Create your Genesis account' : 'Log in to Genesis'}</h1>
 

@@ -21,7 +21,7 @@ section. Sections:
   Guests see a sign-in card instead.
 - Billing: the current plan and this month's models. Paid plans aren't
   available yet, so there is no payment method or billing history.
-- Plans: Genesis Free / Plus / Pro compared side by side. A prototype:
+- Plans: Genesis Free / Pro / Max compared side by side. A prototype:
   everyone is on Free and paid plans cannot be chosen yet.
 - Storage: the plan's storage (storage used isn't reported by the server
   yet) and workspace stats counted from GET /jobs (models, photos, failed
@@ -29,8 +29,12 @@ section. Sections:
 - Notifications: which notifications the user wants, saved in this
   browser. None are sent yet; the choices are kept for when they are.
 - Appearance: the theme (dark, light or follow the device, see
-  AppearanceSettings.js) and sound effects on/off and volume, saved in
-  this browser.
+  AppearanceSettings.js), saved in this browser.
+- Audio: sound effects on/off and overall volume, then each kind of
+  sound (buttons, camera shutter, notifications) on/off with its own
+  volume and a Play button to hear it (Audio.js), saved in this browser.
+On phones the three preference sections are one simpler Preferences tab:
+the theme, sounds on/off and volume, and one switch per notification.
 - buildUsageStats(jobs)
 Turns the GET /jobs list into the three usage cards.
 - AccountScreen({ user, isModal, onClose, onOpenModel, onOpenLibrary,
@@ -44,10 +48,18 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { CURRENT_PLAN_ID, PLANS } from './plans.js';
-import { playSound, setSoundMuted, setSoundVolume, useSoundSettings } from '../audio/Audio.js';
+import {
+    SOUND_CATEGORY_IDS,
+    playSound,
+    setSoundCategory,
+    setSoundMuted,
+    setSoundVolume,
+    useSoundSettings,
+} from '../audio/Audio.js';
 import { removeProfilePhoto, saveProfilePhoto, useProfilePhoto } from './ProfilePhoto.js';
 import { setTheme, useAppearanceSettings } from './AppearanceSettings.js';
 import ChangePasswordDialog from './ChangePasswordDialog.jsx';
+import { useMobileView } from './useMobileView.js';
 import './AccountScreen.css';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -74,9 +86,26 @@ const SECTION_GROUPS = [
         sections: [
             { id: 'notifications', label: 'Notifications', icon: 'bell' },
             { id: 'appearance', label: 'Appearance', icon: 'sun' },
+            { id: 'audio', label: 'Audio', icon: 'volume' },
         ],
     },
 ];
+
+// Phones: the three preference sections are one Preferences tab.
+const PREFERENCE_SECTION_IDS = ['notifications', 'appearance', 'audio'];
+const PHONE_SECTION_GROUPS = SECTION_GROUPS.map((group) => (
+    group.label === 'Preferences'
+        ? { ...group, sections: [{ id: 'preferences', label: 'Preferences', icon: 'settings' }] }
+        : group
+));
+
+// Account > Audio: each kind of sound (Audio.js SOUND_CATEGORY_IDS), with
+// the sound its Play button plays.
+const SOUND_CATEGORY_DETAILS = {
+    buttons: { title: 'Button sounds', hint: 'Taps, confirm and back.', sampleSound: 'tap' },
+    camera: { title: 'Camera shutter', hint: 'When you take a photo.', sampleSound: 'camera' },
+    notifications: { title: 'Notification sounds', hint: 'Model ready, build failed and build steps.', sampleSound: 'success' },
+};
 
 // Account > Appearance theme choices, in order (AppearanceSettings.js).
 const THEME_OPTIONS = [
@@ -157,7 +186,12 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [passwordNotice, setPasswordNotice] = useState(null);
     const photoInputRef = useRef(null);
-    const { isMuted, volume } = useSoundSettings();
+    const { isMuted, volume, categories } = useSoundSettings();
+    const isPhone = useMobileView();
+    // The section to show: phones show the three preference sections as one.
+    let shownSection = activeSection;
+    if (isPhone && PREFERENCE_SECTION_IDS.includes(activeSection)) shownSection = 'preferences';
+    if (!isPhone && activeSection === 'preferences') shownSection = 'appearance';
     const { theme } = useAppearanceSettings();
     const profilePhoto = useProfilePhoto(user.email);
     const volumePercent = Math.round(volume * 100);
@@ -720,72 +754,184 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
         );
     }
 
+    // isCompact: phones, three small buttons without the previews.
+    function renderThemeOptions(isCompact = false) {
+        return (
+            <div className={isCompact ? 'acct-theme-options is-compact' : 'acct-theme-options'} role="radiogroup" aria-label="Theme">
+                {THEME_OPTIONS.map((option) => (
+                    <button
+                        key={option.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={theme === option.id}
+                        className={theme === option.id ? 'acct-theme-option is-active' : 'acct-theme-option'}
+                        onClick={() => {
+                            playSound('tap');
+                            setTheme(option.id);
+                        }}
+                    >
+                        <span className={`acct-theme-swatch is-${option.id}`} aria-hidden="true" />
+                        <span className="acct-theme-name">
+                            <Icon name={option.icon} size={14} /> {isCompact && option.id === 'system' ? 'System' : option.label}
+                        </span>
+                    </button>
+                ))}
+            </div>
+        );
+    }
+
+    // UI sounds on/off and the overall volume (Audio and phone Preferences).
+    function renderSoundCard() {
+        return (
+            <div className="forma-card account-sound">
+                <label className="account-sound-row">
+                    <span className="account-sound-icon">
+                        <Icon name={isMuted ? 'volumeOff' : 'volume'} size={18} />
+                    </span>
+                    <span className="account-sound-text">
+                        <span className="account-sound-title">UI sounds</span>
+                        <span className="account-sound-hint">All of Genesis's sounds. Saved for this browser.</span>
+                    </span>
+                    <input
+                        type="checkbox"
+                        className="forma-switch"
+                        checked={!isMuted}
+                        onChange={(event) => {
+                            const isTurningOn = event.target.checked;
+                            setSoundMuted(!isTurningOn);
+                            // Play once when turning on, so the user hears it worked.
+                            if (isTurningOn) playSound('tap');
+                        }}
+                        aria-label="UI sounds"
+                    />
+                </label>
+
+                <label className={isMuted ? 'account-sound-volume is-disabled' : 'account-sound-volume'}>
+                    <span>Volume <b>{volumePercent}%</b></span>
+                    <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={volumePercent}
+                        disabled={isMuted}
+                        onChange={(event) => setSoundVolume(Number(event.target.value) / 100)}
+                        // Preview the new level once the slider is let go.
+                        onPointerUp={() => playSound('tap')}
+                        onKeyUp={() => playSound('tap')}
+                    />
+                </label>
+            </div>
+        );
+    }
+
     function renderAppearanceSection() {
         return (
             <>
-                {renderSectionHeading('Preferences', 'Appearance', 'How Genesis looks and sounds on this browser.')}
+                {renderSectionHeading('Preferences', 'Appearance', 'How Genesis looks on this browser.')}
                 <div className="forma-card acct-card">
                     <p className="acct-label">Theme</p>
-                    <div className="acct-theme-options" role="radiogroup" aria-label="Theme">
-                        {THEME_OPTIONS.map((option) => (
-                            <button
-                                key={option.id}
-                                type="button"
-                                role="radio"
-                                aria-checked={theme === option.id}
-                                className={theme === option.id ? 'acct-theme-option is-active' : 'acct-theme-option'}
-                                onClick={() => {
-                                    playSound('tap');
-                                    setTheme(option.id);
-                                }}
-                            >
-                                <span className={`acct-theme-swatch is-${option.id}`} aria-hidden="true" />
-                                <span className="acct-theme-name">
-                                    <Icon name={option.icon} size={14} /> {option.label}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
+                    {renderThemeOptions()}
+                </div>
+            </>
+        );
+    }
+
+    function renderAudioSection() {
+        return (
+            <>
+                {renderSectionHeading('Preferences', 'Audio', 'Which sounds Genesis plays, and how loud. Saved for this browser.')}
+                {renderSoundCard()}
+
+                <div className={isMuted ? 'forma-card acct-card acct-sound-types is-disabled' : 'forma-card acct-card acct-sound-types'}>
+                    <p className="acct-label">Sounds</p>
+                    {SOUND_CATEGORY_IDS.map((categoryId) => {
+                        const details = SOUND_CATEGORY_DETAILS[categoryId];
+                        const category = categories[categoryId];
+                        const categoryPercent = Math.round(category.volume * 100);
+                        const isOff = isMuted || !category.isEnabled;
+                        return (
+                            <div key={categoryId} className="acct-sound-type">
+                                <div className="acct-sound-type-head">
+                                    <div>
+                                        <strong>{details.title}</strong>
+                                        <span className="acct-muted">{details.hint}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="forma-btn acct-sound-play"
+                                        disabled={isOff}
+                                        onClick={() => playSound(details.sampleSound)}
+                                        aria-label={`Play ${details.title.toLowerCase()}`}
+                                    >
+                                        <Icon name="playSolid" size={12} /> Play
+                                    </button>
+                                    <input
+                                        type="checkbox"
+                                        className="forma-switch"
+                                        checked={category.isEnabled}
+                                        disabled={isMuted}
+                                        onChange={(event) => setSoundCategory(categoryId, { isEnabled: event.target.checked })}
+                                        aria-label={details.title}
+                                    />
+                                </div>
+                                <label className={isOff ? 'account-sound-volume is-disabled' : 'account-sound-volume'}>
+                                    <span>Volume <b>{categoryPercent}%</b></span>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={100}
+                                        step={5}
+                                        value={categoryPercent}
+                                        disabled={isOff}
+                                        onChange={(event) => setSoundCategory(categoryId, { volume: Number(event.target.value) / 100 })}
+                                        onPointerUp={() => playSound(details.sampleSound)}
+                                        onKeyUp={() => playSound(details.sampleSound)}
+                                        aria-label={`${details.title} volume`}
+                                    />
+                                </label>
+                            </div>
+                        );
+                    })}
+                </div>
+            </>
+        );
+    }
+
+    // Phones: theme, sounds and notifications together, with fewer choices.
+    function renderPhonePreferencesSection() {
+        return (
+            <>
+                {renderSectionHeading('Preferences', 'Preferences', 'Saved for this browser.')}
+                <div className="forma-card acct-card">
+                    <p className="acct-label">Theme</p>
+                    {renderThemeOptions(true)}
                 </div>
 
-                <div className="forma-card account-sound">
-                    <label className="account-sound-row">
-                        <span className="account-sound-icon">
-                            <Icon name={isMuted ? 'volumeOff' : 'volume'} size={18} />
-                        </span>
-                        <span className="account-sound-text">
-                            <span className="account-sound-title">UI sounds</span>
-                            <span className="account-sound-hint">Button clicks and alerts. Saved for this browser.</span>
-                        </span>
-                        <input
-                            type="checkbox"
-                            className="forma-switch"
-                            checked={!isMuted}
-                            onChange={(event) => {
-                                const isTurningOn = event.target.checked;
-                                setSoundMuted(!isTurningOn);
-                                // Play once when turning on, so the user hears it worked.
-                                if (isTurningOn) playSound('tap');
-                            }}
-                            aria-label="UI sounds"
-                        />
-                    </label>
+                {renderSoundCard()}
 
-                    <label className={isMuted ? 'account-sound-volume is-disabled' : 'account-sound-volume'}>
-                        <span>Volume <b>{volumePercent}%</b></span>
-                        <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={5}
-                            value={volumePercent}
-                            disabled={isMuted}
-                            onChange={(event) => setSoundVolume(Number(event.target.value) / 100)}
-                            // Preview the new level once the slider is let go.
-                            onPointerUp={() => playSound('tap')}
-                            onKeyUp={() => playSound('tap')}
-                        />
-                    </label>
+                <div className="forma-card acct-card acct-notification-group">
+                    <p className="acct-label">Notify me about</p>
+                    {NOTIFICATION_GROUPS.flatMap((group) => group.items).map((item) => {
+                        const pref = { email: true, inApp: true, ...notificationPrefs[item.id] };
+                        const isOn = pref.email || pref.inApp;
+                        return (
+                            <label key={item.id} className="acct-notification-row is-simple">
+                                <strong>{item.title}</strong>
+                                <input
+                                    type="checkbox"
+                                    className="forma-switch"
+                                    checked={isOn}
+                                    onChange={(event) => {
+                                        // One switch for both email and in-app on phones.
+                                        setNotificationPref(item.id, 'email', event.target.checked);
+                                        setNotificationPref(item.id, 'inApp', event.target.checked);
+                                    }}
+                                    aria-label={item.title}
+                                />
+                            </label>
+                        );
+                    })}
                 </div>
             </>
         );
@@ -802,15 +948,15 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
                     </div>
                 </div>
 
-                {SECTION_GROUPS.map((group) => (
+                {(isPhone ? PHONE_SECTION_GROUPS : SECTION_GROUPS).map((group) => (
                     <div key={group.label} className="acct-menu-group">
                         <span className="acct-menu-label">{group.label}</span>
                         {group.sections.map((section) => (
                             <button
                                 key={section.id}
-                                className={activeSection === section.id ? 'acct-menu-item is-active' : 'acct-menu-item'}
+                                className={shownSection === section.id ? 'acct-menu-item is-active' : 'acct-menu-item'}
                                 onClick={() => openSection(section.id)}
-                                aria-current={activeSection === section.id ? 'page' : undefined}
+                                aria-current={shownSection === section.id ? 'page' : undefined}
                             >
                                 <Icon name={section.icon} size={16} />
                                 <span>{section.label}</span>
@@ -846,13 +992,15 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
                         <Icon name="close" size={16} />
                     </button>
                 )}
-                {activeSection === 'profile' && renderProfileSection()}
-                {activeSection === 'account' && renderAccountSection()}
-                {activeSection === 'billing' && renderBillingSection()}
-                {activeSection === 'plans' && renderPlansSection()}
-                {activeSection === 'storage' && renderStorageSection()}
-                {activeSection === 'notifications' && renderNotificationsSection()}
-                {activeSection === 'appearance' && renderAppearanceSection()}
+                {shownSection === 'profile' && renderProfileSection()}
+                {shownSection === 'account' && renderAccountSection()}
+                {shownSection === 'billing' && renderBillingSection()}
+                {shownSection === 'plans' && renderPlansSection()}
+                {shownSection === 'storage' && renderStorageSection()}
+                {shownSection === 'notifications' && renderNotificationsSection()}
+                {shownSection === 'appearance' && renderAppearanceSection()}
+                {shownSection === 'audio' && renderAudioSection()}
+                {shownSection === 'preferences' && renderPhonePreferencesSection()}
             </div>
         </div>
     );

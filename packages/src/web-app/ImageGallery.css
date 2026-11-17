@@ -170,3 +170,28 @@ Responsive grid of square photo thumbnails.
 }
 
 /* ----- End of Styles -------------------------------------------------------- */
+
+/* Back from one batch to all of them: a plain link with an arrow. */
+.gallery-compact .gallery-compact-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 16px;
+    padding: 4px 0;
+    border: 0;
+    background: none;
+    color: var(--forma-text-muted);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+    .gallery-compact .gallery-compact-back:hover {
+        color: var(--forma-heading);
+    }
+
+    .gallery-compact .gallery-compact-back:focus-visible {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 2px;
+        border-radius: 4px;
+    }

@@ -14,11 +14,10 @@ title, a short line of text, and Skip / Next (Finish on the last step).
 The tooltip goes to the right of sidebar items, under the top bar's and
 above the dock's. Escape skips. If a step's item is not on the screen,
 its tooltip is shown in the middle of the page instead; steps marked
-optional are left out when their item isn't there (e.g. the dock's
-Add photos on wider screens).
-In the mobile view the dock shows five tabs at a time, so each step slides
-the tabs to the five that hold its item, and finishing slides back to the
-five that hold the current page.
+optional are left out when their item isn't there (e.g. Learn on phones).
+In the mobile view the dock shows four tabs at a time, so each step slides
+the tabs to the four that hold its item, and finishing slides back to the
+four that hold the current page.
 App.jsx shows it the first time each account signs in on a browser, and
 again when the user presses "Show walkthrough" (account page or account
 menu). Guests can't save work, so their last step suggests signing in.
@@ -43,7 +42,7 @@ const WALKTHROUGH_STEPS = [
         padding: 14,
     },
     {
-        targets: ['.app-sidebar [aria-label="New"]', '.genesis-dock [aria-label="New model"]'],
+        targets: ['.app-sidebar [aria-label="New"]', '.genesis-dock [aria-label="Capture"]'],
         title: 'New model',
         text: 'Start a model with your camera, or upload photos you already have.',
         mobileText: 'Quickly get started with your camera.',
@@ -78,7 +77,7 @@ const WALKTHROUGH_STEPS = [
         optional: true,
     },
     {
-        targets: ['.app-topbar .app-avatar', '.genesis-dock-avatar'],
+        targets: ['.app-topbar .app-avatar'],
         title: 'Your account',
         text: 'Your profile, plan and sound settings.',
         mobileText: 'Your profile, plan and sound settings. You can replay this walkthrough from here.',
@@ -93,7 +92,7 @@ const TOOLTIP_GAP = 14;
 const TOOLTIP_WIDTH = 276;
 // Closest the tooltip may come to the sides of the screen.
 const SCREEN_MARGIN = 12;
-// The mobile dock's tabs (Dock.jsx), five to a page.
+// The mobile dock's tabs (Dock.jsx), four to a page.
 const MOBILE_DOCK_SCROLLER = '.genesis-mdock-scroller';
 
 // The step's item: the first of its selectors found on the page.
@@ -113,7 +112,7 @@ function placementFor(element) {
     return 'below';
 }
 
-// Mobile dock: slide its tabs to the five that hold tabElement. Instant, so
+// Mobile dock: slide its tabs to the four that hold tabElement. Instant, so
 // the spotlight can be measured straight after.
 function showMobileDockPageWith(tabElement) {
     const scroller = tabElement?.closest(MOBILE_DOCK_SCROLLER);
@@ -134,9 +133,10 @@ function Walkthrough({ isGuest = false, onClose }) {
     const step = steps[stepIndex];
     const isLastStep = stepIndex === steps.length - 1;
     const padding = step.padding ?? DEFAULT_PADDING;
-    const isInDock = target?.placement === 'above';
+    // Phones have the tab bar instead of the sidebar.
+    const isPhoneLayout = target !== null && !document.querySelector('.app-sidebar');
     let stepText = step.text;
-    if (isInDock && step.mobileText) stepText = step.mobileText;
+    if (isPhoneLayout && step.mobileText) stepText = step.mobileText;
     if (isGuest && step.guestText) stepText = step.guestText;
 
     const finish = useCallback(() => {
@@ -165,7 +165,7 @@ function Walkthrough({ isGuest = false, onClose }) {
         }
 
         const targetElement = findTarget(step);
-        // The mobile dock snaps to pages of five, which would undo scrollIntoView.
+        // The mobile dock snaps to pages of four, which would undo scrollIntoView.
         if (!showMobileDockPageWith(targetElement)) targetElement?.scrollIntoView({ block: 'nearest' });
         const frameId = requestAnimationFrame(measureTarget);
         window.addEventListener('resize', measureTarget);
@@ -212,7 +212,7 @@ function Walkthrough({ isGuest = false, onClose }) {
             top: target.top - padding,
             width: target.width + padding * 2,
             height: target.height + padding * 2,
-            borderRadius: isInDock ? 999 : 14,
+            borderRadius: target.placement === 'above' ? 999 : 14,
         };
 
         if (target.placement === 'right') {

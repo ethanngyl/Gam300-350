@@ -73,16 +73,12 @@
     display: none;
 }
 
-.has-app-sidebar .library-search,
-.has-app-sidebar .library-sort {
-    height: 44px;
-    border-radius: 10px;
-    background: var(--forma-panel);
-}
-
 .has-app-sidebar .library-search {
     flex: 1;
+    height: 44px;
     padding: 0 16px;
+    border-radius: 10px;
+    background: var(--forma-panel);
 }
 
 .has-app-sidebar .library-grid {

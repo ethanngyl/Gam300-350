@@ -934,6 +934,81 @@
     white-space: nowrap;
 }
 
+/* Phone Preferences: just the name and one switch. */
+.acct-notification-row.is-simple {
+    justify-content: space-between;
+    cursor: pointer;
+}
+
+/* Audio: each kind of sound, with Play, a switch and its own volume. */
+.acct-sound-types {
+    padding: 16px 18px 6px;
+}
+
+.acct-sound-type {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 0;
+    border-top: 1px solid var(--forma-border);
+}
+
+.acct-sound-type-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+    .acct-sound-type-head > div {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    .acct-sound-type-head strong {
+        color: var(--forma-heading);
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+.acct-sound-play {
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+}
+
+.acct-sound-type .account-sound-volume {
+    max-width: 360px;
+}
+
+.acct-sound-types.is-disabled .acct-sound-type-head strong {
+    color: var(--forma-text-muted);
+}
+
+/* Phone Preferences: the theme as three small buttons. */
+.acct-theme-options.is-compact {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+    .acct-theme-options.is-compact .acct-theme-swatch {
+        display: none;
+    }
+
+    .acct-theme-options.is-compact .acct-theme-option {
+        justify-content: center;
+        padding: 10px 6px;
+    }
+
+    .acct-theme-options.is-compact .acct-theme-name {
+        justify-content: center;
+        font-size: 0.82rem;
+        white-space: nowrap;
+    }
+
 /* Appearance */
 .acct-theme-options {
     display: grid;

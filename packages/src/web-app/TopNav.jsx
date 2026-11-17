@@ -6,8 +6,7 @@
 \par Software Engineering Project 5
 \date 09-10-2026
 \brief
-Top bar of the app on wider screens (above 760px), laid out like the
-Genesis Figma. Left to right:
+Top bar of the app, laid out like the Genesis Figma. Left to right:
 - the GENESIS logo, which opens Home;
 - search: finds the user's models and photo batches by name (from
   GET /jobs, loaded when the box is focused). Arrow keys move through the
@@ -20,6 +19,14 @@ Genesis Figma. Left to right:
 - the user's avatar, whose menu shows their name and email, "Manage
   account", their plan and storage, sound on/off, and Log out (or Sign in
   for guests).
+On phones (isCompact) it is the mobile Figma's top bar: the logo, then a
+search button that opens the search box in a row under the bar,
+notifications and the avatar. The storage meter and help are left out
+(Feedback is in the tab bar), and the avatar menu also has "Show
+walkthrough", since phones have no Learn button.
+- TopNav({ user, isCompact, onGoHome, onOpenModel, onOpenLibrary,
+  onOpenHelp, onOpenAccount, onShowWalkthrough, onSignOut })
+React component.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
@@ -58,7 +65,9 @@ function useCloseOnOutsideClick(isOpen, ref, close) {
     }, [isOpen, ref, close]);
 }
 
-function SearchBox({ onOpenModel, onOpenLibrary }) {
+// autoFocus: focus the box as soon as it appears (the phone search row).
+// onResultOpened: called after a result is opened.
+function SearchBox({ onOpenModel, onOpenLibrary, autoFocus = false, onResultOpened }) {
     const [query, setQuery] = useState('');
     const [jobs, setJobs] = useState(null);
     const [isOpen, setIsOpen] = useState(false);
@@ -97,6 +106,7 @@ function SearchBox({ onOpenModel, onOpenLibrary }) {
         setQuery('');
         if (result.isModel) onOpenModel(result.id);
         else onOpenLibrary('photos');
+        onResultOpened?.();
     }
 
     function handleKeyDown(event) {
@@ -116,6 +126,7 @@ function SearchBox({ onOpenModel, onOpenLibrary }) {
             <Icon name="search" size={16} />
             <input
                 type="search"
+                autoFocus={autoFocus}
                 value={query}
                 placeholder="Search models and photos"
                 aria-label="Search models and photos"
@@ -161,8 +172,21 @@ function SearchBox({ onOpenModel, onOpenLibrary }) {
     );
 }
 
-function TopNav({ user, onGoHome, onOpenModel, onOpenLibrary, onOpenHelp, onOpenAccount, onSignOut }) {
+function TopNav({
+    user,
+    isCompact = false,
+    onGoHome,
+    onOpenModel,
+    onOpenLibrary,
+    onOpenHelp,
+    onOpenAccount,
+    onShowWalkthrough,
+    onSignOut,
+}) {
     const [openPopup, setOpenPopup] = useState(null);
+    // Phones: whether the search row under the bar is open.
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const searchRowRef = useRef(null);
     const notificationsRef = useRef(null);
     const profileRef = useRef(null);
     const profilePhoto = useProfilePhoto(user.email);
@@ -171,6 +195,7 @@ function TopNav({ user, onGoHome, onOpenModel, onOpenLibrary, onOpenHelp, onOpen
     const closePopup = () => setOpenPopup(null);
     useCloseOnOutsideClick(openPopup === 'notifications', notificationsRef, closePopup);
     useCloseOnOutsideClick(openPopup === 'profile', profileRef, closePopup);
+    useCloseOnOutsideClick(isSearchOpen, searchRowRef, () => setIsSearchOpen(false));
 
     function togglePopup(name) {
         playSound('tap');
@@ -180,32 +205,61 @@ function TopNav({ user, onGoHome, onOpenModel, onOpenLibrary, onOpenHelp, onOpen
     const avatar = profilePhoto ? <img src={profilePhoto} alt="" /> : initialsOf(user.name);
 
     return (
-        <header className="app-topbar">
+        <header className={isCompact ? 'app-topbar is-compact' : 'app-topbar'}>
             <button type="button" className="app-topbar-logo" onClick={onGoHome} aria-label="GENESIS home">
                 <img src={genesisLogo} alt="" />
                 <span>GENESIS</span>
             </button>
 
-            <SearchBox onOpenModel={onOpenModel} onOpenLibrary={onOpenLibrary} />
+            {!isCompact && <SearchBox onOpenModel={onOpenModel} onOpenLibrary={onOpenLibrary} />}
 
             <div className="app-topbar-actions">
-                {/* Display only until the backend reports storage used. */}
-                <span className="app-storage-meter" title="Storage use coming soon">
-                    {'\u2014'} / {plan.storage}
-                </span>
+                {isCompact ? (
+                    <div className="app-popup-anchor" ref={searchRowRef}>
+                        <button
+                            type="button"
+                            className="app-icon-button"
+                            aria-label="Search"
+                            aria-expanded={isSearchOpen}
+                            onClick={() => {
+                                playSound('tap');
+                                setIsSearchOpen((isOpen) => !isOpen);
+                            }}
+                        >
+                            <Icon name="search" size={20} />
+                        </button>
+                        {isSearchOpen && (
+                            <div className="app-search-row">
+                                <SearchBox
+                                    autoFocus
+                                    onOpenModel={onOpenModel}
+                                    onOpenLibrary={onOpenLibrary}
+                                    onResultOpened={() => setIsSearchOpen(false)}
+                                />
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        {/* Display only until the backend reports storage used. */}
+                        <span className="app-storage-meter" title="Storage use coming soon">
+                            {'\u2014'} / {plan.storage}
+                        </span>
 
-                <button
-                    type="button"
-                    className="app-icon-button"
-                    aria-label="Help and feedback"
-                    title="Help and feedback"
-                    onClick={() => {
-                        playSound('tap');
-                        onOpenHelp();
-                    }}
-                >
-                    <Icon name="help" size={18} />
-                </button>
+                        <button
+                            type="button"
+                            className="app-icon-button"
+                            aria-label="Help and feedback"
+                            title="Help and feedback"
+                            onClick={() => {
+                                playSound('tap');
+                                onOpenHelp();
+                            }}
+                        >
+                            <Icon name="help" size={18} />
+                        </button>
+                    </>
+                )}
 
                 <div className="app-popup-anchor" ref={notificationsRef}>
                     <button
@@ -285,6 +339,20 @@ function TopNav({ user, onGoHome, onOpenModel, onOpenLibrary, onOpenHelp, onOpen
                                     <Icon name={isMuted ? 'volume' : 'volumeOff'} size={16} />
                                     {isMuted ? 'Unmute sounds' : 'Mute sounds'}
                                 </button>
+                                {isCompact && onShowWalkthrough && (
+                                    <button
+                                        type="button"
+                                        className="app-menu-item is-compact"
+                                        onClick={() => {
+                                            playSound('tap');
+                                            closePopup();
+                                            onShowWalkthrough();
+                                        }}
+                                    >
+                                        <Icon name="book" size={16} />
+                                        Show walkthrough
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     className="app-menu-item is-compact"
