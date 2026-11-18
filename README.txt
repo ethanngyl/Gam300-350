@@ -47,7 +47,9 @@ Web app + backend (npm -- packages/package.json):
 
 Python (tools/requirements.txt, installed by packages/start.bat):
 - opencv-python >=4.8.0 (Frame Extractor)
-- rembg >=2.0.60 and pillow >=10.0.0 (optional "Remove background"; the segmentation model downloads on first use)
+- rembg >=2.0.60 and pillow >=10.0.0 (optional "Remove background"; the segmentation model downloads on first use).
+  pillow also makes the small photo copies the website's cards show (tools/make_thumbs.py);
+  without it the cards load the full photos, which is slower but still works.
 - onnxruntime: start.bat installs onnxruntime-gpu on NVIDIA GPUs and plain onnxruntime elsewhere
 - aqtinstall (installed into a separate venv by engine/run.bat to download Qt)
 
@@ -308,3 +310,12 @@ Panels and layout:
 - Scene, Inspector, Assets, My Models, Console and Audio are dockable panels. Open or close them from the Window menu, drag them to
   rearrange, and use Window > Reset Layout to restore the default. The layout is saved between runs.
 - Console panel: shows engine output and Qt logs, colour-coded.
+Loading Audio Files:
+1) You can select which folder to load the audio files from under "Choose folder", the default folder path is under engine/assets/audio
+2) You can load a specific audio file that is not in the selected folder with the "Play File Not Listed" button
+
+Login In to Account:
+1) Open the My Models tab on the bottom row and click Sign In
+2) Change server address to the desired server if required
+3) Enter your account and password
+

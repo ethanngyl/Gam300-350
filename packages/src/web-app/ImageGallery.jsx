@@ -14,7 +14,8 @@ user's own jobs otherwise (the backend filters GET /jobs by the session
 cookie). It fetches the job list once when it opens (load() is
 unchanged). The "full" variant shows a section per job with a download-on-
 click thumbnail grid. The "compact" variant, used inside the Library tab's
-Photo Library, shows one preview card per job (with search and sort);
+Photo Library, shows one card per job with a single small thumbnail of its
+first photo and the photo count (with search and sort);
 clicking a card opens that job's full grid so photos can still be
 downloaded.
 - ImageGallery({ onBack, variant, searchTerm, sortOrder })
@@ -28,11 +29,11 @@ Renders one job's heading and download-on-click thumbnail grid.
 
 // ----- Headers ------------------------------------------------------- //
 import { useEffect, useState } from 'react';
+import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
 import './ImageGallery.css';
-
-const PREVIEW_COUNT = 4;
 
 // Same badge wording and colours as the 3D Models cards.
 function getBatchBadge(status) {
@@ -124,7 +125,8 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                             title="Click to download"
                         >
                             <img
-                                src={img.url}
+                                src={smallPhotoUrl(img.url)}
+                                decoding="async"
                                 alt={`Job ${job.id.slice(0, 8)} - ${img.name}`}
                                 loading="lazy"
                             />
@@ -173,8 +175,9 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
 
                 <div className="library-photo-grid">
                     {visibleJobs.map((job) => {
-                        const previewImages = job.images.slice(0, PREVIEW_COUNT);
-                        const overflowCount = job.images.length - PREVIEW_COUNT;
+                        // One small thumbnail per batch: full-size photos made the
+                        // Library lag once it held about 50 batches.
+                        const coverImage = job.images[0];
                         const badge = getBatchBadge(job.status);
 
                         return (
@@ -187,17 +190,17 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                                     setOpenJobId(job.id);
                                 }}
                             >
-                                <div className="library-photo-thumbgrid">
-                                    {previewImages.map((img, index) => (
-                                        <div key={img.name} className="library-photo-thumb">
-                                            <img src={img.url} alt="" loading="lazy" />
-                                            {index === PREVIEW_COUNT - 1 && overflowCount > 0 && (
-                                                <span className="library-photo-overflow">+{overflowCount}</span>
-                                            )}
-                                        </div>
-                                    ))}
+                                <div className="library-photo-cover">
+                                    {coverImage ? (
+                                        <img src={smallPhotoUrl(coverImage.url)} alt="" loading="lazy" decoding="async" />
+                                    ) : (
+                                        <Icon name="image" size={26} />
+                                    )}
                                     <span className={`forma-badge library-photo-badge ${badge.className}`}>
                                         {badge.label}
+                                    </span>
+                                    <span className="library-photo-total" aria-hidden="true">
+                                        <Icon name="image" size={12} /> {job.images.length}
                                     </span>
                                 </div>
                                 {/* Same name and meta rows as the 3D Models cards, so both tabs line up. */}

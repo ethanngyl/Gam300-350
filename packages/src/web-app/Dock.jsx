@@ -18,8 +18,9 @@ they set one on the account page (ProfilePhoto.js). Each item is an icon whose l
 hover or keyboard focus; the current page is highlighted. A switch in its
 own panel at the top-right corner ("Show Tab Labels" / "Hide Tab Labels")
 keeps every label showing instead, in one straight row (remembered on this
-browser). It only shows where that row fits, from 1160px wide; narrower
-windows keep the icons-only dock.
+browser, and also set in Account > Appearance, see AppearanceSettings.js).
+It only shows where that row fits, from 1160px wide; narrower windows keep
+the icons-only dock.
 On devices with a mouse, the dock fades and slides mostly out of view 3s
 after the pointer leaves it, and comes back when the pointer reaches the
 bottom of the screen or the dock gets keyboard focus. isPinned (set during
@@ -35,13 +36,14 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import Icon from './Icons.jsx';
 import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
 import { useProfilePhoto } from './ProfilePhoto.js';
+import { setShowTabLabels, useAppearanceSettings } from './AppearanceSettings.js';
 
 const WORKSPACE_ITEMS = [
     { id: 'home', label: 'Home', shortLabel: 'Home', icon: 'home' },
     { id: 'library', label: 'Media Library', shortLabel: 'Library', icon: 'layers' },
     { id: 'editor', label: 'Photo Editor', shortLabel: 'Editor', icon: 'edit' },
     { id: 'scene', label: 'Scene Builder', shortLabel: 'Scene', icon: 'shapes' },
-    { id: 'extractor', label: 'Frame Extractor', shortLabel: 'Frames', icon: 'play' },
+    { id: 'extractor', label: 'Frame Extractor', shortLabel: 'Frames', icon: 'film' },
     { id: 'viewer', label: 'Model Viewer', shortLabel: 'Viewer', icon: 'cube' },
     { id: 'feedback', label: 'Feedback', shortLabel: 'Feedback', icon: 'message' },
 ];
@@ -51,26 +53,6 @@ const MOBILE_WORKSPACE_ORDER = ['home', 'library', 'viewer', 'editor', 'scene', 
 
 // How long the dock waits after the pointer leaves before it fades.
 const IDLE_DELAY_MS = 3000;
-
-// Remembers "Show tab labels" on this browser.
-const SHOW_LABELS_KEY = 'genesis-dock-show-labels';
-
-// Storage can be blocked (private windows, site data off), so every access is wrapped.
-function loadShowLabels() {
-    try {
-        return window.localStorage.getItem(SHOW_LABELS_KEY) === 'true';
-    } catch {
-        return false;
-    }
-}
-
-function saveShowLabels(showLabels) {
-    try {
-        window.localStorage.setItem(SHOW_LABELS_KEY, String(showLabels));
-    } catch {
-        // Storage unavailable: the choice lasts until the page is reloaded.
-    }
-}
 
 // Only the desktop view fades the dock: it needs a mouse to bring the dock
 // back, and the mobile view keeps it in view at all times.
@@ -112,7 +94,8 @@ function Dock({
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isIdle, setIsIdle] = useState(false);
     // Every item shows its full label, not just the icon (desktop view only).
-    const [showLabels, setShowLabels] = useState(loadShowLabels);
+    // Shared with Account > Appearance (AppearanceSettings.js), so both switches stay in step.
+    const { showTabLabels: showLabels } = useAppearanceSettings();
     // Touch screens: the tab labels switch was tapped open (a mouse opens it by hovering).
     const [isLabelsToggleOpen, setIsLabelsToggleOpen] = useState(false);
     // Mobile view: whether the last tabs are showing, so the arrow points back.
@@ -238,8 +221,7 @@ function Dock({
 
     function toggleShowLabels() {
         playSound('tap');
-        saveShowLabels(!showLabels);
-        setShowLabels(!showLabels);
+        setShowTabLabels(!showLabels);
     }
 
     // Mobile view: notes whether the tabs have reached the last page.
