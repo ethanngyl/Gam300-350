@@ -1,0 +1,41 @@
+{
+  "name": "@codefine/splat-renderer",
+  "version": "0.1.0",
+  "description": "The Codefine engine's Gaussian splat renderer (engine/src/splat, engine/src/gfx) compiled to WebAssembly, with a small JavaScript API for drawing a .ply into a WebGL2 canvas.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "dist/",
+    "example/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "gaussian-splatting",
+    "splat",
+    "ply",
+    "webgl2",
+    "webassembly",
+    "renderer"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ethanngyl/Gam300-350.git",
+    "directory": "engine/web/package"
+  },
+  "author": "Team CoDefine (DigiPen GAM300-350)",
+  "license": "UNLICENSED",
+  "private": true
+}

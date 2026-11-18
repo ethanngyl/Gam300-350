@@ -57,10 +57,12 @@ import {
 import { usePhotoThumbnails } from './PhotoThumbnails.js';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
+import { catalog } from './catalog.js';
 import './PhotoEditor.css';
 
-// Fewest kept photos allowed before building a model (matches capture).
-const MIN_PHOTOS = 8;
+// Fewest kept photos allowed before building a model: the backend's
+// catalog.minPhotos (GET /api/v1/catalog), the same minimum the pipeline checks.
+const MIN_PHOTOS = catalog.minPhotos;
 // Same breakpoint as the phone layout in AppTheme.css.
 const PHONE_MEDIA_QUERY = '(max-width: 760px)';
 // Longest side of the large preview, in pixels.

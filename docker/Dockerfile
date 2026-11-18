@@ -22,10 +22,14 @@ RUN emcmake cmake -S engine/web -B /build -DCMAKE_BUILD_TYPE=Release -DCODEFINE_
 # ---- Stage 1: build the React app and install server deps ----------
 FROM node:22-bookworm-slim AS web
 WORKDIR /app/packages
+# The web app installs the renderer package from ../engine/web/package
+# (file: dependency), so it must be in place before npm ci; the compiled
+# engine from stage 0 goes into its dist/, where vite.config.js picks it up.
+COPY engine/web/package /app/engine/web/package
+COPY --from=engine-web /out/ /app/engine/web/package/dist/
 COPY packages/package.json packages/package-lock.json ./
 RUN npm ci
 COPY packages/ ./
-COPY --from=engine-web /out/ ./src/web-app/public/engine/
 RUN npm run build && npm prune --omit=dev
 
 # ---- Stage 2: runtime (COLMAP's official CUDA image) ---------------
@@ -61,12 +65,15 @@ RUN python3 -m venv /opt/venv \
 COPY tools/extract_frames.py tools/make_masks.py tools/normalize_ply.py /app/tools/
 COPY --from=web /app/packages /app/packages
 
+# UV_THREADPOOL_SIZE: 16 worker threads instead of 4, so a burst of sign-ups
+# (password hashing) doesn't queue (README "Many users at once").
 ENV PORT=5005 \
     JOBS_DIR=/data/jobs \
     COLMAP_BIN=/usr/local/bin/colmap \
     BRUSH_BIN=/usr/local/bin/brush_app \
     PYTHON_BIN=/opt/venv/bin/python \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
+    UV_THREADPOOL_SIZE=16
 
 VOLUME /data/jobs
 EXPOSE 5005

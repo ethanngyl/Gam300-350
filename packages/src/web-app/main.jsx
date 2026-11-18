@@ -2,6 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 //import './index.css'
 import App from './App.jsx'
+// Reports this page's load time to the backend (p95 load times for admins).
+import './pageLoadTiming.js'
 // Applies the saved light / dark theme and follows the device on 'system'.
 import './AppearanceSettings.js'
 

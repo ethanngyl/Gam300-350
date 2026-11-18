@@ -518,10 +518,13 @@ SplatRenderer::SplatRenderer() {
     m_totalSplatCount = 0;
 }
 
+//wait() only throws future_error when the future has no state, which valid() rules out
+// NOLINTNEXTLINE(bugprone-exception-escape)
 SplatRenderer::~SplatRenderer() {
 #ifndef CODEFINE_GLES
-    //The worker thread reads our members, wait for it before anything is torn down
-    if (m_sortFuture.valid()) m_sortFuture.get();
+    //The worker thread reads our members, wait for it before anything is torn down.
+    //wait() rather than get(): get() rethrows a sort that threw, and a destructor must not throw
+    if (m_sortFuture.valid()) m_sortFuture.wait();
 #endif
     m_models.clear(); //Removed unique ptrs
 #ifdef CODEFINE_GLES

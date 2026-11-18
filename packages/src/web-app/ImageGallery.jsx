@@ -31,6 +31,7 @@ Renders one job's heading and download-on-click thumbnail grid.
 import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
 import './ImageGallery.css';
 
@@ -84,7 +85,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         /************************************************************************/
         async function load() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!cancelled) setJobs(data);
@@ -124,7 +125,8 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                             title="Click to download"
                         >
                             <img
-                                src={img.url}
+                                src={smallPhotoUrl(img.url)}
+                                decoding="async"
                                 alt={`Job ${job.id.slice(0, 8)} - ${img.name}`}
                                 loading="lazy"
                             />
@@ -190,7 +192,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                             >
                                 <div className="library-photo-cover">
                                     {coverImage ? (
-                                        <img src={coverImage.url} alt="" loading="lazy" decoding="async" />
+                                        <img src={smallPhotoUrl(coverImage.url)} alt="" loading="lazy" decoding="async" />
                                     ) : (
                                         <Icon name="image" size={26} />
                                     )}

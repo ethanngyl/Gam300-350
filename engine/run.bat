@@ -29,13 +29,25 @@ set "QT_VENV=%QT_ROOT%\.aqt-venv"
 if not exist "%QT_ROOT%\%QT_VERSION%\msvc2022_64\lib\cmake\Qt6\Qt6Config.cmake" (
     echo Qt %QT_VERSION% not found. Downloading it into %QT_ROOT%...
     echo This is a one-time download of a few hundred MB.
-    python --version >nul 2>&1
-    if errorlevel 1 (
+    REM The first python.exe on PATH is often Windows' Microsoft Store stub in
+    REM ...\WindowsApps, which only prints "Python was not found" and exits
+    REM 9009. Skip it the same way packages\start.bat does. (REM, not ::,
+    REM because :: inside a parenthesized block breaks cmd.)
+    set "PY="
+    for /f "delims=" %%P in ('where python 2^>nul') do (
+        if not defined PY (
+            echo %%P| findstr /i /l "WindowsApps" >nul || set "PY=%%P"
+        )
+    )
+    if defined PY "!PY!" -c "" >nul 2>nul || set "PY="
+    if not defined PY (
         echo Python is required to download Qt: https://www.python.org/downloads/
+        echo If it is already installed, make sure "Add python.exe to PATH" was ticked.
         goto :error
     )
+    echo Using Python: !PY!
     if not exist "%QT_VENV%\Scripts\python.exe" (
-        python -m venv "%QT_VENV%"
+        "!PY!" -m venv "%QT_VENV%"
         if errorlevel 1 goto :error
     )
     "%QT_VENV%\Scripts\python.exe" -m pip install -q --disable-pip-version-check aqtinstall

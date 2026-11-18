@@ -10,14 +10,15 @@ The model detail choices shown by TrainingQualitySlider. Each one is the
 cap on how many training iterations Brush runs: fewer is faster but
 blurrier, more is slower but sharper. The chosen number is sent to the
 backend as trainIters (POST /upload and POST /jobs/from-media), which
-clamps it to its own min / max.
+clamps it to its own min / max. The presets and the default are reference
+data in the backend's catalog/catalog.json, read through
+GET /api/v1/catalog (catalog.js).
 **************************************************************************/
 
-export const TRAINING_PRESETS = [
-    { id: 'fast', label: 'Fast', iterations: 5000 },
-    { id: 'normal', label: 'Normal', iterations: 7000 },
-    { id: 'detailed', label: 'Detailed', iterations: 10000 },
-];
+import { catalog } from './catalog.js';
 
-// Matches the backend's default (config.trainIters).
-export const DEFAULT_TRAINING_ITERATIONS = 7000;
+export const TRAINING_PRESETS = catalog.trainingPresets;
+
+// The default preset's iterations (catalog.defaultTrainingPreset).
+export const DEFAULT_TRAINING_ITERATIONS =
+    TRAINING_PRESETS.find((preset) => preset.id === catalog.defaultTrainingPreset).iterations;

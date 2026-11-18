@@ -6,7 +6,9 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
   // Built bundles and installed deps are generated/vendored, not ours to lint.
-  globalIgnores(['**/dist/**', '**/node_modules/**']),
+  // public/engine/ is the WebAssembly renderer's Emscripten output
+  // (engine/build-web.bat; gitignored), also generated.
+  globalIgnores(['**/dist/**', '**/node_modules/**', 'src/web-app/public/engine/**']),
 
   // Browser code: the React web app, the shared audio helper and the
   // metrics dashboard's frontend.

@@ -11,6 +11,7 @@
  * All rights reserved.
  ******************************************************************************/
 #include "pipeline/HeadlessBuild.h"
+#include "ui/ButtonSounds.h"
 #include "ui/EditorTheme.h"
 #include "ui/MainWindow.h"
 
@@ -39,6 +40,8 @@ int main(int argc, char** argv) {
     }
 
     EditorTheme::Apply(app);
+    // Click sound on every push/tool button in the editor and its dialogs.
+    ButtonSounds buttonSounds;
 
     MainWindow window;
     window.show();
