@@ -13,6 +13,8 @@ caller's own jobs, or all of them for an admin.
 **************************************************************************/
 #include "ui/RemoteModelsPanel.h"
 
+#include "pipeline/GenerationSettings.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -61,21 +63,13 @@ namespace {
         return job.status;
     }
 
-    // A job name made safe to use as a file name on any OS.
-    QString SafeFileName(const QString& name) {
-        QString safe;
-        for (const QChar c : name) {
-            safe += (c < QChar(32) || QStringLiteral("<>:\"/\\|?*").contains(c)) ? QChar('_') : c;
-        }
-        safe = safe.trimmed();
-        while (safe.endsWith('.')) {
-            safe.chop(1); // Windows drops trailing dots
-        }
-        return safe.left(80);
-    }
+    using generation::SafeFileName;
 
     // How often a build in progress is polled (the web app's Processing screen polls about as often).
     constexpr int kPollIntervalMs = 2000;
+    // After a server build finishes, how many polls (at kPollIntervalMs) wait for the job list to
+    // offer the model for download before the row gives up and points at the list: about a minute.
+    constexpr int kMaxAutoOpenTries = 30;
 
     // The web app's step names (PHASE_LABELS in Processing.jsx).
     QString PhaseLabel(const QString& phase) {
@@ -214,6 +208,7 @@ RemoteModelsPanel::RemoteModelsPanel(BackendClient* client, QWidget* parent)
     connect(m_client, &BackendClient::jobStatusReceived, this, &RemoteModelsPanel::onJobStatus);
     connect(m_client, &BackendClient::jobStatusFailed, this, [this](const QString& jobId, const QString& error) {
         if (jobId != m_genJobId) return;
+        m_pollPending = false;
         // Keep polling: the build carries on on the server even while it can't be reached.
         m_genLabel->setText(QString("%1: can't reach the server, retrying... (%2)")
                                 .arg(m_genName.isEmpty() ? QStringLiteral("New model") : m_genName, error));
@@ -240,6 +235,9 @@ RemoteModelsPanel::RemoteModelsPanel(BackendClient* client, QWidget* parent)
     connect(m_client, &BackendClient::sessionChanged, this, &RemoteModelsPanel::onSessionChanged);
     connect(m_client, &BackendClient::jobsReceived, this, &RemoteModelsPanel::showJobs);
     connect(m_client, &BackendClient::requestFailed, this, [this](const QString& error) {
+        // A failed job list may be the poll waiting for a finished build's download; the poll
+        // timer asks again (pollGeneration).
+        m_pollPending = false;
         m_message->setText(error);
         m_message->show();
     });
@@ -290,6 +288,11 @@ void RemoteModelsPanel::onSessionChanged() {
     m_list->clear();
     m_progress->hide();
     m_cancelButton->hide();
+    if (!m_client->isSignedIn()) {
+        // Follow-ups belong to server builds started in that session. Kept, a later plain Import of
+        // one of those jobs (maybe by another account) would save a copy nobody asked for.
+        m_followUps.clear();
+    }
     if (!m_client->isSignedIn() && !m_local->isRunning()) {
         // The upload was aborted with the session; a build already on the server carries on there.
         // A build on this PC needs no account, so signing out leaves it running.
@@ -321,6 +324,7 @@ void RemoteModelsPanel::showJobs(const QList<RemoteJob>& jobs) {
     const QString previous = m_list->currentItem() ? m_list->currentItem()->data(kNameColumn, kIdRole).toString()
                                                    : QString();
     m_jobs = jobs;
+    if (m_genJobId.isEmpty()) m_pollPending = false; // the poll waiting on a finished build asked for this list
     m_list->setSortingEnabled(false);
     m_list->clear();
 
@@ -368,6 +372,7 @@ void RemoteModelsPanel::showJobs(const QList<RemoteJob>& jobs) {
         for (const RemoteJob& job : m_jobs) {
             if (job.id == m_autoOpenJobId && job.hasResult) {
                 m_autoOpenJobId.clear();
+                m_pollTimer->stop(); // the download has started; nothing left to wait for
                 open(job);
                 break;
             }
@@ -554,17 +559,43 @@ void RemoteModelsPanel::onGenerationStarted(const QString& jobId) {
     m_genLabel->setText(QString("%1: queued on the server...").arg(m_genName.isEmpty() ? QStringLiteral("New model") : m_genName));
     m_genProgress->setRange(0, 0);
     m_client->fetchJobs(); // show it in the list straight away
+    m_pollPending = false;
     pollGeneration();
     m_pollTimer->start();
     updateButtons();
 }
 
 void RemoteModelsPanel::pollGeneration() {
-    if (!m_genJobId.isEmpty()) m_client->fetchJobStatus(m_genJobId);
+    // One request at a time: a slow server isn't sent a new one every tick while the last waits.
+    // Every request times out (BackendClient's transfer timeout), so m_pollPending always clears.
+    if (m_pollPending) return;
+
+    if (!m_genJobId.isEmpty()) {
+        m_pollPending = true;
+        m_client->fetchJobStatus(m_genJobId);
+        return;
+    }
+    if (m_autoOpenJobId.isEmpty()) {
+        m_pollTimer->stop();
+        return;
+    }
+    // Built on the server, waiting for the job list to offer it for download (showJobs opens it).
+    // A download already running finishes first, then asks for the list itself.
+    if (m_client->isDownloading()) return;
+    if (++m_autoOpenTries > kMaxAutoOpenTries) {
+        const QString name = m_genName.isEmpty() ? QStringLiteral("The new model") : m_genName;
+        qWarning("%s was built, but the job list didn't offer it for download.", qPrintable(name));
+        endGeneration(QString("%1 was built but couldn't be downloaded yet. Press Refresh, then import it "
+                              "from the list.").arg(name));
+        return;
+    }
+    m_pollPending = true;
+    m_client->fetchJobs();
 }
 
 void RemoteModelsPanel::onJobStatus(const JobStatus& status) {
     if (status.id != m_genJobId) return;
+    m_pollPending = false;
     const QString name = m_genName.isEmpty() ? QStringLiteral("New model") : m_genName;
     const QString elapsed = Elapsed(m_genClock.elapsed());
 
@@ -574,9 +605,7 @@ void RemoteModelsPanel::onJobStatus(const JobStatus& status) {
     }
 
     const QString jobId = m_genJobId;
-    m_pollTimer->stop();
     m_genJobId.clear();
-    m_client->fetchJobs(); // the list shows the final status
 
     if (status.status == "done" && status.hasResult) {
         qInfo("%s was built in %s. Downloading it...", qPrintable(name), qPrintable(elapsed));
@@ -584,9 +613,17 @@ void RemoteModelsPanel::onJobStatus(const JobStatus& status) {
         m_genProgress->setRange(0, 0);
         m_genCancel->hide(); // the download has its own Cancel
         m_autoOpenJobId = jobId; // opened by showJobs once the list arrives
+        // The poll timer keeps running: if this list request fails, or doesn't offer the model yet,
+        // pollGeneration asks again (and gives up with a message after kMaxAutoOpenTries).
+        m_autoOpenTries = 0;
+        m_pollPending = true;
+        m_client->fetchJobs();
         updateButtons();
         return;
     }
+
+    m_pollTimer->stop();
+    m_client->fetchJobs(); // the list shows the final status
 
     m_followUps.remove(jobId);
     if (status.status == "cancelled") {
@@ -632,6 +669,7 @@ void RemoteModelsPanel::cancelGeneration() {
 
 void RemoteModelsPanel::endGeneration(const QString& message) {
     m_pollTimer->stop();
+    m_pollPending = false;
     m_genUploading = false;
     m_genJobId.clear();
     m_autoOpenJobId.clear();
@@ -645,6 +683,7 @@ void RemoteModelsPanel::endGeneration(const QString& message) {
 
 void RemoteModelsPanel::resetGeneration() {
     m_pollTimer->stop();
+    m_pollPending = false;
     m_genUploading = false;
     m_genJobId.clear();
     m_autoOpenJobId.clear();
@@ -664,7 +703,10 @@ void RemoteModelsPanel::deliver(const QString& jobId, const QString& path) {
     }
     const GenerationFollowUp followUp = it.value();
     m_followUps.erase(it);
-    resetGeneration();
+    // Clear the row only if it belongs to this job (built, waiting for this download, or showing
+    // its end). Another build may own it by now: a build on this PC, or a newer server build
+    // uploading or being polled. Resetting would hide that build's progress and its Cancel.
+    if (!m_local->isRunning() && !m_genUploading && m_genJobId.isEmpty()) resetGeneration();
 
     qInfo("New model ready: %s", qPrintable(QDir::toNativeSeparators(path)));
     if (followUp.copy != GenerationFollowUp::Copy::None) emit saveCopyRequested(path, followUp);

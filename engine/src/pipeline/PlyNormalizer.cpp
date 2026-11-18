@@ -86,6 +86,12 @@ QString NormalizeSplatPly(const QString& input, const QString& output, double ta
 
     // ---- Vertex data ----
     const auto columns = static_cast<std::size_t>(props.size());
+    // The header's count is checked against what the file actually holds before anything is
+    // allocated: a bad count would otherwise ask for a huge buffer (or overflow rows * columns).
+    const qint64 rowBytes = static_cast<qint64>(columns * sizeof(float));
+    if (count > (in.size() - in.pos()) / rowBytes) {
+        return "The PLY is truncated: fewer vertex bytes than the header declares";
+    }
     const auto rows = static_cast<std::size_t>(count);
     std::vector<float> data(rows * columns);
     const qint64 bytes = static_cast<qint64>(data.size() * sizeof(float));

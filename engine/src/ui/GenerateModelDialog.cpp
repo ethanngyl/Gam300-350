@@ -14,6 +14,7 @@ backend enforces (at least 8 photos, .jpg/.png only, up to 300 photos or
 **************************************************************************/
 #include "ui/GenerateModelDialog.h"
 
+#include "pipeline/GenerationSettings.h"
 #include "pipeline/LocalReconstruction.h"
 
 #include <QCheckBox>
@@ -38,15 +39,15 @@ backend enforces (at least 8 photos, .jpg/.png only, up to 300 photos or
 #include <QVBoxLayout>
 
 namespace {
-    // Must match the backend: catalog.json minPhotos, config.maxFiles / maxMediaFiles,
-    // the photo mimetype filter and MEDIA_EXT_RE in middleware/uploads.js.
-    constexpr int kMinPhotos = 8;
-    constexpr int kMaxPhotos = 300;
-    constexpr int kMaxMediaFiles = 10;
+    // Shared with the local and command-line builds (GenerationSettings.h).
+    using generation::kDefaultFps;
+    using generation::kMaxTrainIters;
+    using generation::kMediaSuffixes;
+    using generation::kMinTrainIters;
+    using generation::kPhotoSuffixes;
+
     // Must match MAX_JOB_NAME_LENGTH in services/jobs.js.
     constexpr int kMaxNameLength = 80;
-    const QStringList kPhotoSuffixes = { "jpg", "jpeg", "png" };
-    const QStringList kMediaSuffixes = { "mp4", "m4v", "mov", "webm", "mkv", "avi", "mpg", "mpeg", "gif" };
 
     // The web app's detail presets (catalog.json trainingPresets): Brush training iterations.
     struct DetailPreset {
@@ -62,11 +63,6 @@ namespace {
     constexpr int kDefaultPreset = 1;
     // Item data of the "Custom..." detail choice; the spin box then gives the count.
     constexpr int kCustomDetail = 0;
-    // The range the backend accepts (config.js minTrainIters / maxTrainIters); LocalReconstruction clamps to the same.
-    constexpr int kMinTrainIters = 1000;
-    constexpr int kMaxTrainIters = 30000;
-    // The Frame Extractor's default frames per second.
-    constexpr double kDefaultFps = 2.0;
 
     // QSettings keys.
     const QString kTargetKey = QStringLiteral("generate/target");
@@ -81,7 +77,7 @@ namespace {
     const QString kLastFolderKey = QStringLiteral("generate/lastFolder");
 
     QString DefaultCopyFolder() {
-        return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/Genesis Models";
+        return generation::DefaultOutputFolder();
     }
 
     QString NameFilter(bool media) {
@@ -378,15 +374,14 @@ void GenerateModelDialog::updateControls() {
     }
 
     // Anything in `problem` stops the build; `hint` is shown but allowed.
-    QString problem;
+    // Too few or too many files first: the same check as the command-line build.
+    QString problem = generation::FileCountProblem(media, count);
     QString hint;
-    if (media && count == 0) problem = "Add at least one video or GIF.";
-    else if (media && count > kMaxMediaFiles) problem = QString("At most %1 videos per model.").arg(kMaxMediaFiles);
-    else if (!media && count < kMinPhotos) problem = QString("Add at least %1 photos (%2 so far).").arg(kMinPhotos).arg(count);
-    else if (!media && count > kMaxPhotos) problem = QString("At most %1 photos per model.").arg(kMaxPhotos);
-    else if (copying && m_copyFolder->text().trimmed().isEmpty()) problem = "Choose where to save the model.";
-    else if (!toolProblem.isEmpty()) problem = "This PC is missing tools (see above).";
-    else if (!copying && !m_import->isChecked()) hint = "The model will only appear in My Models.";
+    if (problem.isEmpty()) {
+        if (copying && m_copyFolder->text().trimmed().isEmpty()) problem = "Choose where to save the model.";
+        else if (!toolProblem.isEmpty()) problem = "This PC is missing tools (see above).";
+        else if (!copying && !m_import->isChecked()) hint = "The model will only appear in My Models.";
+    }
 
     if (!problem.isEmpty() || !hint.isEmpty()) {
         m_fileCount->setText(problem.isEmpty() ? hint : problem);
