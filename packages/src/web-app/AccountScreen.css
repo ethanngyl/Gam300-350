@@ -934,6 +934,60 @@
     white-space: nowrap;
 }
 
+/* Log out and Delete account, as rows of one card. */
+.acct-leave {
+    display: flex;
+    flex-direction: column;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.acct-leave-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 0;
+}
+
+.acct-leave .acct-leave-row + .acct-leave-row {
+    border-top: 1px solid var(--forma-border);
+}
+
+.acct-leave-row > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.acct-leave-row .forma-btn {
+    flex: none;
+}
+
+.acct-leave .acct-leave-row h2.acct-danger-title {
+    color: var(--forma-red-text);
+}
+
+.acct-leave .forma-btn.acct-danger-button {
+    border-color: transparent;
+    background: #d7263d;
+    color: #fff;
+}
+
+    .acct-leave .forma-btn.acct-danger-button:hover {
+        background: #b81e33;
+        color: #fff;
+    }
+
+/* Phones: the buttons go under the text. */
+@media (max-width: 760px) {
+    .acct-leave-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
 /* Phone Preferences: just the name and one switch. */
 .acct-notification-row.is-simple {
     justify-content: space-between;

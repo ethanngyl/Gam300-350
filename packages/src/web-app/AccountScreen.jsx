@@ -17,7 +17,10 @@ section. Sections:
 - My account: profile photo (saved in this browser, see ProfilePhoto.js),
   name, email, password ("Change password" opens ChangePasswordDialog;
   Google-only accounts, per GET /api/v1/auth/me/account, have none),
-  sign-in methods, role, member since, "Show walkthrough", and log out.
+  sign-in methods, role, member since, "Show walkthrough", log out, and
+  Delete account (the user types DELETE to confirm, then DELETE
+  /api/v1/auth/me removes the account and signs them out; until the server
+  has that route, the dialog says deleting isn't available yet).
   Guests see a sign-in card instead.
 - Billing: the current plan and this month's models. Paid plans aren't
   available yet, so there is no payment method or billing history.
@@ -59,6 +62,7 @@ import {
 import { removeProfilePhoto, saveProfilePhoto, useProfilePhoto } from './ProfilePhoto.js';
 import { setTheme, useAppearanceSettings } from './AppearanceSettings.js';
 import ChangePasswordDialog from './ChangePasswordDialog.jsx';
+import ActionDialog from './ActionDialog.jsx';
 import { useMobileView } from './useMobileView.js';
 import './AccountScreen.css';
 
@@ -90,6 +94,11 @@ const SECTION_GROUPS = [
         ],
     },
 ];
+
+// Delete account: DELETE on this removes the signed-in account (backend).
+const DELETE_ACCOUNT_URL = '/api/v1/auth/me';
+// What the user types to confirm deleting their account.
+const DELETE_CONFIRM_WORD = 'DELETE';
 
 // Phones: the three preference sections are one Preferences tab.
 const PREFERENCE_SECTION_IDS = ['notifications', 'appearance', 'audio'];
@@ -184,6 +193,7 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
     // false: Google sign-in only, so there is no password to change.
     const hasPassword = signInMethods ? signInMethods.password !== false : null;
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
     const [passwordNotice, setPasswordNotice] = useState(null);
     const photoInputRef = useRef(null);
     const { isMuted, volume, categories } = useSoundSettings();
@@ -296,6 +306,30 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
                     : <Icon name="user" size={iconSize} />}
             </span>
         );
+    }
+
+    // Delete account: the typed word must match, then the server removes the
+    // account and its files and the user is signed out to the landing page.
+    // Errors show in the dialog (ActionDialog shows a rejected promise's message).
+    async function deleteAccount(typedWord) {
+        if (typedWord.trim().toUpperCase() !== DELETE_CONFIRM_WORD) {
+            throw new Error(`Type ${DELETE_CONFIRM_WORD} to confirm.`);
+        }
+        let response;
+        try {
+            response = await fetch(DELETE_ACCOUNT_URL, { method: 'DELETE', credentials: 'same-origin' });
+        } catch {
+            throw new Error("Couldn't reach the server. Check your connection and try again.");
+        }
+        if (response.status === 404 || response.status === 405) {
+            throw new Error("Deleting accounts isn't available on this server yet.");
+        }
+        if (!response.ok) {
+            const body = await response.json().catch(() => null);
+            throw new Error(body?.error ?? `Couldn't delete your account (error ${response.status}).`);
+        }
+        setIsDeletingAccount(false);
+        onSignOut();
     }
 
     function renderSignOutButton() {
@@ -466,13 +500,44 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
                     </button>
                 </div>
 
-                <div className="forma-card acct-card acct-logout">
-                    <div>
-                        <h2 className="acct-card-title">Log out</h2>
-                        <p className="acct-muted">Sign out of Genesis on this device.</p>
+                <div className="forma-card acct-card acct-leave">
+                    <div className="acct-leave-row">
+                        <div>
+                            <h2 className="acct-card-title">Log out</h2>
+                            <p className="acct-muted">Sign out of Genesis on this device.</p>
+                        </div>
+                        {renderSignOutButton()}
                     </div>
-                    {renderSignOutButton()}
+                    <div className="acct-leave-row">
+                        <div>
+                            <h2 className="acct-card-title acct-danger-title">Delete account</h2>
+                            <p className="acct-muted">
+                                Permanently removes your account, models and source photos. This can't be undone.
+                            </p>
+                        </div>
+                        <button
+                            className="forma-btn acct-danger-button"
+                            onClick={() => {
+                                playSound('tap');
+                                setIsDeletingAccount(true);
+                            }}
+                        >
+                            <Icon name="trash" size={14} /> Delete account
+                        </button>
+                    </div>
                 </div>
+                {isDeletingAccount && (
+                    <ActionDialog
+                        title="Delete your account?"
+                        message={`This permanently removes ${user.email}, every model and every source photo. Type ${DELETE_CONFIRM_WORD} to confirm.`}
+                        initialValue=""
+                        placeholder={DELETE_CONFIRM_WORD}
+                        confirmLabel="Delete account"
+                        danger
+                        onConfirm={deleteAccount}
+                        onCancel={() => setIsDeletingAccount(false)}
+                    />
+                )}
             </>
         );
     }
