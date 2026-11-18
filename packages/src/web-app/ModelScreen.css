@@ -379,3 +379,93 @@
         height: max(420px, calc(100dvh - 260px));
     }
 }
+
+/* ---------- Export .obj dialog (ExportObjDialog.jsx, portalled to <body>) ---------- */
+
+.export-obj-dialog {
+    width: min(460px, 100%);
+}
+
+.export-obj-fields {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px 14px;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    border: none;
+    min-width: 0;
+}
+
+    .export-obj-fields label {
+        display: contents;
+    }
+
+        .export-obj-fields label > span {
+            font-size: 0.84rem;
+            color: var(--forma-text-muted);
+            text-align: right;
+        }
+
+    .export-obj-fields :is(select, input) {
+        min-width: 0;
+        font-family: inherit;
+        font-size: 0.86rem;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--forma-border-strong);
+        background: var(--forma-panel-alt);
+        color: var(--forma-text);
+    }
+
+        .export-obj-fields :is(select, input):focus {
+            outline: none;
+            border-color: var(--forma-blue);
+        }
+
+        .export-obj-fields :is(select, input):disabled {
+            opacity: 0.5;
+        }
+
+.export-obj-note {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--forma-text-muted);
+}
+
+.export-obj-done {
+    color: var(--forma-text);
+}
+
+.export-obj-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.export-obj-bar {
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--forma-panel-alt);
+}
+
+    .export-obj-bar > span {
+        display: block;
+        height: 100%;
+        background: var(--forma-blue);
+        transition: width 0.2s ease;
+    }
+
+/* Phones: labels above their fields. */
+@media (max-width: 480px) {
+    .export-obj-fields {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+    }
+
+        .export-obj-fields label > span {
+            text-align: left;
+            margin-top: 6px;
+        }
+}

@@ -10,8 +10,8 @@ Model Viewer tab: picks a Gaussian splat to open in the full-page
 SplatViewer. Lists every finished model from GET /jobs as a searchable
 grid (each card shows a cut-out or photo of the object, see
 ModelCover.jsx), and has
-an "Open .ply file" button that loads a .ply from the
-user's computer instead. Opening is left to the parent: onOpenModel(jobId)
+an "Open model file" button that loads a Gaussian splat .ply or a
+Wavefront .obj from the user's computer instead. Opening is left to the parent: onOpenModel(jobId)
 for a server model, onOpenFile(file) for a local one.
 **************************************************************************/
 
@@ -95,12 +95,12 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                         fileInputRef.current?.click();
                     }}
                 >
-                    <Icon name="folder" size={14} /> Open .ply file
+                    <Icon name="folder" size={14} /> Open .ply / .obj file
                 </button>
                 <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".ply"
+                    accept=".ply,.obj"
                     hidden
                     onChange={handleFileChange}
                 />
@@ -114,7 +114,7 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                 <p className="library-note">
                     {normalizedSearch
                         ? 'No models match your search.'
-                        : 'No finished models yet. Open a .ply file from your computer to view it.'}
+                        : 'No finished models yet. Open a .ply or .obj file from your computer to view it.'}
                 </p>
             )}
 
