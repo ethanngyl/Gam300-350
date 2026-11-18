@@ -243,6 +243,88 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Google sign-in is not available here. }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Email a 6-digit password reset code
+      description: |
+        If the email has an account, emails it a 6-digit code that works once,
+        for 15 minutes (`RESET_CODE_TTL_MIN`); a new request replaces the old
+        code. The reply is the same whether or not the account exists. Limits:
+        one request per email per minute and 3 per hour, 10 per IP address per
+        hour. The VM (or a machine in local mode) sends the email; a team
+        machine passes the request on to the VM.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+            example: { email: alice@example.com }
+      responses:
+        '202':
+          description: Sent if the account exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: "If an account exists for that email, we've sent it a 6-digit code. It works for 15 minutes." }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          description: Email isn't set up on the machine that holds the accounts, or the VM can't be reached
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: "Password reset by email isn't set up here. Ask a team admin to reset your password." }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Set a new password with the emailed code
+      description: |
+        An unknown email, a wrong code and an expired code all give the same
+        400. After 5 wrong codes the code stops working. On success every
+        session of the account is signed out (sign in again with the new
+        password), the wrong-password lock is lifted, and the owner is
+        emailed that the password changed. 20 tries per IP address per 15
+        minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetInput' }
+            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: Password changed. Sign in with your new password. }
+        '400':
+          description: Wrong or expired code, or a new password that is too short
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: That code is wrong or has expired. Check the email, or ask for a new code. }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /auth/google/finish:
     get:
       tags: [Auth]
@@ -971,6 +1053,91 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Unknown or expired code. }
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /password-reset/request:
+    post:
+      tags: [VM]
+      operationId: vmRequestPasswordReset
+      summary: Email a reset code (for a team machine's "Forgot password?")
+      description: The same as POST /auth/forgot-password, run on the VM. A 429 also says when to try again.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+            example: { email: alice@example.com }
+      responses:
+        '202':
+          description: Sent if the account exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: "If an account exists for that email, we've sent it a 6-digit code. It works for 15 minutes." }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '429':
+          description: Too many requests for this email
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, retryAfterSec]
+                properties:
+                  error: { type: string }
+                  retryAfterSec: { type: integer }
+              example: { error: Too many attempts. Try again in 1 minute., retryAfterSec: 42 }
+        '503':
+          description: Not the VM, or email isn't set up on it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: This server is not the account authority. }
+  /password-reset/confirm:
+    post:
+      tags: [VM]
+      operationId: vmConfirmPasswordReset
+      summary: Set a new password with a reset code (for a team machine)
+      description: |
+        The same as POST /auth/reset-password, run on the VM. The reply names
+        the account, so the team machine signs it out of its own sessions too.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetInput' }
+            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, message]
+                properties:
+                  id: { type: integer }
+                  message: { type: string }
+              example: { id: 7, message: Password changed. Sign in with your new password. }
+        '400':
+          description: Wrong or expired code, or a new password that is too short
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: That code is wrong or has expired. Check the email, or ask for a new code. }
+        '401':
+          $ref: '#/components/responses/KeyRefused'
         '503':
           $ref: '#/components/responses/NotAuthority'
   /library/jobs:
@@ -1953,6 +2120,13 @@ components:
         email: { type: string }
         name: { type: string }
         role: { enum: [user, admin] }
+    PasswordResetInput:
+      type: object
+      required: [email, code, newPassword]
+      properties:
+        email: { type: string }
+        code: { type: string, description: The 6 digits from the email }
+        newPassword: { type: string, minLength: 6 }
     Account:
       type: object
       required: [name, email, role, createdAt, memberSince, emailVerified, passwordChangedAt, signInMethods, photoVersion]

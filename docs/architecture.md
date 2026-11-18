@@ -143,8 +143,11 @@ needs the shared key.
 | GET | `/auth/google` | anyone | 302 to Google (VM), or to the VM's `/auth/google` |
 | GET | `/auth/google/callback` | Google's redirect | 302 to `/` (signed in) or `/?login=...`; for a sign-in started on a team machine, back to it with a one-time code |
 | GET | `/auth/google/finish` | the VM's redirect (team machines) | 302 to `/` (signed in here) or `/?login=...` |
+| POST | `/auth/forgot-password` | anyone | 202 `{ message }` (the same whether or not the account exists); emails a 6-digit code; 400 / 429 / 503 |
+| POST | `/auth/reset-password` | anyone | 200 `{ message }`; body `{ email, code, newPassword }`; signs the account out everywhere; 400 / 429 |
 | POST | `/register`, `/verify-account` | team machines (shared key) | create an account / check a password |
 | POST | `/redeem-google-code` | team machines (shared key) | 200 `{ id, email, name, role }` for a one-time Google code; 404 if unknown, used or expired |
+| POST | `/password-reset/request`, `/password-reset/confirm` | team machines (shared key) | "Forgot password?" for a team machine's user; the VM sends the email |
 
 ### Jobs (models and their photos)
 
