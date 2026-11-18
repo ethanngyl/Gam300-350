@@ -231,6 +231,38 @@
     height: 44px;
 }
 
+/* Forgot password */
+.auth-page .auth-note {
+    margin: -12px 0 20px;
+    color: var(--forma-text-muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.auth-notice {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--forma-green-rgb), 0.45);
+    border-radius: 8px;
+    background: rgba(var(--forma-green-rgb), 0.1);
+    color: var(--forma-green);
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
+.auth-reset-links {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+    .auth-reset-links .auth-link:disabled {
+        color: var(--forma-text-dim);
+        text-decoration: none;
+        cursor: default;
+    }
+
 .auth-switch {
     display: flex;
     justify-content: center;
