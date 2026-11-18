@@ -453,7 +453,9 @@ void BackendClient::startGeneration(const GenerationRequest& request) {
         return;
     }
     if (m_upload) {
-        emit generationFailed("A model is already uploading. Wait for it or cancel it first.");
+        emit generationFailed(m_uploadCancelled
+            ? QStringLiteral("The cancelled upload is still being stopped on the server. Try again in a moment.")
+            : QStringLiteral("A model is already uploading. Wait for it or cancel it first."));
         return;
     }
     if (request.files.isEmpty()) {
@@ -503,16 +505,27 @@ void BackendClient::startGeneration(const GenerationRequest& request) {
     multiPart->setParent(reply); // freed (and its files closed) with the reply
     m_upload = reply;
     m_uploadCancelled = false;
+    m_uploadAllSent = false;
     qInfo("Uploading %lld %s (%s) to %s...", static_cast<long long>(request.files.size()),
           media ? "video file(s)" : "photo(s)", qPrintable(QLocale().formattedDataSize(totalBytes)),
           qPrintable(m_server.toString()));
 
-    connect(reply, &QNetworkReply::uploadProgress, this, &BackendClient::uploadProgress);
+    connect(reply, &QNetworkReply::uploadProgress, this, [this](qint64 sent, qint64 total) {
+        if (total > 0 && sent >= total) m_uploadAllSent = true;
+        emit uploadProgress(sent, total);
+    });
     connect(reply, &QNetworkReply::finished, this, [this, reply, name = request.name.trimmed()] {
         reply->deleteLater();
         m_upload = nullptr;
         const QByteArray data = reply->readAll();
+        const QString jobId = QJsonDocument::fromJson(data).object().value("id").toString();
         if (m_uploadCancelled) {
+            // Cancelled after every byte was sent (cancelUpload let the reply finish): the server
+            // may have made the job anyway, so stop it there too.
+            if (HttpStatus(reply) == 202 && !jobId.isEmpty()) {
+                qInfo("The cancelled upload reached the server (job %s); cancelling it there.", qPrintable(jobId));
+                cancelJob(jobId);
+            }
             emit generationFailed("Upload cancelled.");
             return;
         }
@@ -520,7 +533,6 @@ void BackendClient::startGeneration(const GenerationRequest& request) {
             emit generationFailed("Your session has expired. Sign in again.");
             return;
         }
-        const QString jobId = QJsonDocument::fromJson(data).object().value("id").toString();
         if (HttpStatus(reply) != 202 || jobId.isEmpty()) {
             emit generationFailed(ReplyError(reply, data));
             return;
@@ -550,6 +562,12 @@ void BackendClient::startGeneration(const GenerationRequest& request) {
 void BackendClient::cancelUpload() {
     if (m_upload) {
         m_uploadCancelled = true;
+        if (m_uploadAllSent) {
+            // Every byte is on the server, which is checking the files and may already have made
+            // the job. Aborting now would lose its id, so wait for the reply and cancel the job then.
+            qInfo("Upload cancelled after it finished sending; the server's job will be cancelled when it answers.");
+            return;
+        }
         m_upload->abort();
     }
 }

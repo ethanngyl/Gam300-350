@@ -14,6 +14,7 @@ messages. Keep the tool arguments in step with pipeline.js / config.js.
 **************************************************************************/
 #include "pipeline/LocalReconstruction.h"
 
+#include "pipeline/GenerationSettings.h"
 #include "pipeline/PlyNormalizer.h"
 #include "ui/AssetPaths.h"
 
@@ -30,6 +31,7 @@ messages. Keep the tool arguments in step with pipeline.js / config.js.
 #include <QTimer>
 
 #include <algorithm>
+#include <exception>
 
 namespace {
 #ifdef Q_OS_WIN
@@ -38,13 +40,17 @@ namespace {
     const QString kExe;
 #endif
 
-    // Must match the backend (catalog.json minPhotos, config.js defaults).
-    constexpr int kMinPhotos = 8;
-    constexpr int kDefaultTrainIters = 7000;   // the web app's Normal preset
-    constexpr int kMinTrainIters = 1000;
-    constexpr int kMaxTrainIters = 30000;
+    // Shared with the dialog and the command-line build (GenerationSettings.h).
+    using generation::kDefaultFps;
+    using generation::kDefaultTrainIters;
+    using generation::kMaxTrainIters;
+    using generation::kMinPhotos;
+    using generation::kMinTrainIters;
+    using generation::kPhotoSuffixes;
+    using generation::SafeFileName;
+
+    // Must match the backend (config.js defaults).
     constexpr int kMaxResolution = 1024;
-    constexpr double kDefaultFps = 2.0;
     constexpr int kMaxFrames = 200;
     constexpr int kFrameTimeoutMs = 30 * 60 * 1000;
     const QString kMaskModel = QStringLiteral("isnet-general-use");
@@ -54,8 +60,6 @@ namespace {
     // pipeline.js NO_MODEL_MESSAGE: any way the mapper fails to build a model means the same to the user.
     const QString kNoModelMessage =
         QStringLiteral("COLMAP could not reconstruct a model from these photos. Try more photos with more overlap and texture.");
-
-    const QStringList kPhotoSuffixes = { "jpg", "jpeg", "png" };
 
     // No console window per tool (the engine is a GUI app; each console tool would flash one).
     void HideConsole(QProcess& process) {
@@ -120,17 +124,6 @@ namespace {
 #else
         return QStandardPaths::findExecutable("python3");
 #endif
-    }
-
-    // A model name made safe to use as a file name on any OS.
-    QString SafeFileName(const QString& name) {
-        QString safe;
-        for (const QChar c : name) {
-            safe += (c < QChar(32) || QStringLiteral("<>:\"/\\|?*").contains(c)) ? QChar('_') : c;
-        }
-        safe = safe.trimmed();
-        while (safe.endsWith('.')) safe.chop(1);
-        return safe.left(80);
     }
 
     void PruneLogs(const QString& dir) {
@@ -199,9 +192,11 @@ QString LocalReconstruction::MissingTools(const GenerationRequest& request, cons
     if (tools.brush.isEmpty()) missing << "Brush";
     const bool needsPython = request.source == GenerationRequest::Source::Media || request.removeBackground;
     if (needsPython && tools.python.isEmpty()) missing << "Python (for videos and background removal)";
-    if (needsPython && !tools.toolsDir.isEmpty()) {
+    if (needsPython) {
+        // Without a tools/ folder (COLMAP and Brush found on PATH or through COLMAP_BIN) the
+        // scripts can't be found either: report them, rather than running "python /extract_frames.py".
         const QString script = request.source == GenerationRequest::Source::Media ? "extract_frames.py" : "make_masks.py";
-        if (!QFileInfo(tools.toolsDir + "/" + script).isFile()) missing << "tools/" + script;
+        if (tools.toolsDir.isEmpty() || !QFileInfo(tools.toolsDir + "/" + script).isFile()) missing << "tools/" + script;
     }
     if (missing.isEmpty()) return QString();
     return QString("Missing on this PC: %1. Run tools/get-tools.ps1 to download COLMAP and Brush%2.")
@@ -545,7 +540,13 @@ void LocalReconstruction::finishModel() {
         QString source = rawPly;
         const QString normalized = exportDir + "/result.ply";
         QString summary;
-        const QString error = NormalizeSplatPly(rawPly, normalized, 1.5, &summary);
+        QString error;
+        try {
+            error = NormalizeSplatPly(rawPly, normalized, 1.5, &summary);
+        } catch (const std::exception& e) {
+            // An exception escaping this worker thread would end the whole editor.
+            error = QString("out of memory or bad data (%1)").arg(QString::fromLocal8Bit(e.what()));
+        }
         if (error.isEmpty()) {
             source = normalized;
             result->log << summary;
@@ -569,9 +570,15 @@ void LocalReconstruction::finishModel() {
         result->path = dest;
     }, [this, result] {
         for (const QString& line : result->log) log(line);
-        if (m_cancelled) fail("Cancelled.");
-        else if (!result->error.isEmpty()) fail(result->error);
-        else complete(result->path);
+        if (m_cancelled) {
+            // Cancelled while the model was being saved: the prompt promised nothing is kept.
+            if (!result->path.isEmpty()) QFile::remove(result->path);
+            fail("Cancelled.");
+        } else if (!result->error.isEmpty()) {
+            fail(result->error);
+        } else {
+            complete(result->path);
+        }
     });
 }
 

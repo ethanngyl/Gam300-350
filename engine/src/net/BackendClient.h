@@ -180,4 +180,5 @@ private:
     bool m_downloadCancelled = false; // by cancelDownload(), not a timeout
     QPointer<QNetworkReply> m_upload;
     bool m_uploadCancelled = false;   // by cancelUpload(), not a timeout
+    bool m_uploadAllSent = false;     // every byte sent; waiting for the server's reply (job id)
 };

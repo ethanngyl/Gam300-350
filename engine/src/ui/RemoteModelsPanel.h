@@ -107,5 +107,7 @@ private:
     GenerationFollowUp m_pendingFollowUp;  // for the upload in flight
     QHash<QString, GenerationFollowUp> m_followUps; // by job id, applied when its model is delivered
     QString m_autoOpenJobId;               // built, waiting for the job list so it can be downloaded
+    int m_autoOpenTries = 0;               // job list requests made while waiting for m_autoOpenJobId
+    bool m_pollPending = false;            // a poll (status or job list) hasn't answered yet
     QElapsedTimer m_genClock;              // since the build started on the server
 };

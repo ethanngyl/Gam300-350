@@ -11,7 +11,12 @@ LocalReconstruction without opening the editor (for scripting and testing):
   Codefine --build-model <photo folder | photos... | videos...>
            [--out <folder>] [--name <name>] [--iters <n>] [--fps <n>]
            [--remove-background]
-Progress goes to stdout; the exit code is 0 when the .ply was saved.
+Progress goes to the terminal that started it (the engine attaches to its
+console); the exit code is 0 when the .ply was saved, 2 for bad arguments.
+The engine is a Windows GUI app, so cmd.exe doesn't wait for it: run it as
+  start /b /wait "" Codefine.exe --build-model ...
+to wait for the build and get the exit code in %ERRORLEVEL% (run.bat does
+the same). In PowerShell: Start-Process -Wait -NoNewWindow -PassThru.
 **************************************************************************/
 #pragma once
 
