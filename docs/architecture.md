@@ -107,7 +107,10 @@ flowchart LR
   - Google sign-in runs here.
 - **Team machines (`AUTH_MODE=client`):**
   - build models on their GPU;
-  - pass sign-ups and logins to the VM (`VM_AUTH_URL`) and send each finished job there.
+  - pass sign-ups and logins to the VM (`VM_AUTH_URL`) and send each finished job there;
+  - Google sign-in goes through the VM, which sends the browser back with a
+    one-time code (`/auth/google/finish`), so the user ends up signed in on
+    the team machine's own website.
 - **`AUTH_MODE=local` (default):**
   - one machine on its own, with its own accounts.
 
@@ -138,8 +141,10 @@ needs the shared key.
 | GET / PUT / DELETE | `/auth/me/avatar` | user | GET: the image (JPEG / PNG); PUT / DELETE: account details |
 | GET | `/auth/me/storage` | user | 200 `{ usedBytes, models, jobs }` |
 | GET | `/auth/google` | anyone | 302 to Google (VM), or to the VM's `/auth/google` |
-| GET | `/auth/google/callback` | Google's redirect | 302 to `/` (signed in) or `/?login=...` |
+| GET | `/auth/google/callback` | Google's redirect | 302 to `/` (signed in) or `/?login=...`; for a sign-in started on a team machine, back to it with a one-time code |
+| GET | `/auth/google/finish` | the VM's redirect (team machines) | 302 to `/` (signed in here) or `/?login=...` |
 | POST | `/register`, `/verify-account` | team machines (shared key) | create an account / check a password |
+| POST | `/redeem-google-code` | team machines (shared key) | 200 `{ id, email, name, role }` for a one-time Google code; 404 if unknown, used or expired |
 
 ### Jobs (models and their photos)
 

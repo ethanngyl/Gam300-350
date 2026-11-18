@@ -182,7 +182,27 @@ paths:
       description: |
         On the VM, redirects to Google's account chooser with a one-use state
         cookie. On other machines, redirects to the VM's /auth/google.
+
+        A team machine (with a working VM connection) adds `return_to` (its
+        own `/api/v1/auth/google/finish`) and `return_state` (a random state
+        it also keeps in a cookie), so the sign-in ends on its own website:
+        the VM then sends the browser back there with a one-time code instead
+        of signing in on the VM's website. The VM only accepts a `return_to`
+        on a loopback address (localhost, 127.0.0.1, [::1]) or an origin in
+        its `GOOGLE_RETURN_ORIGINS`, with exactly that path; any other is
+        ignored.
       security: []
+      parameters:
+        - name: return_to
+          in: query
+          description: VM only. Where to send the browser back to, with the one-time code.
+          schema: { type: string }
+          example: http://localhost:5005/api/v1/auth/google/finish
+        - name: return_state
+          in: query
+          description: VM only. The team machine's state, sent back with the code.
+          schema: { type: string, pattern: '^[\w-]{16,128}$' }
+          example: Zm9vYmFyYmF6cXV4MTIz
       responses:
         '302':
           description: Redirect to Google (or the VM)
@@ -208,13 +228,48 @@ paths:
         - { name: error, in: query, schema: { type: string }, example: access_denied }
       responses:
         '302':
-          description: Signed in (to /) or failed (to /?login=google_failed or google_denied)
+          description: |
+            Signed in (to /) or failed (to /?login=google_failed or
+            google_denied). If the sign-in started on a team machine, back to
+            its `return_to` instead, with `state` and either a one-time
+            `code` (no session on the VM) or an `error`.
           headers:
             Location:
               schema: { type: string }
               example: /
         '503':
           description: Google sign-in isn't set up here
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Google sign-in is not available here. }
+  /auth/google/finish:
+    get:
+      tags: [Auth]
+      operationId: finishGoogleSignInHere
+      summary: Back from the VM after Google sign-in (team machines)
+      description: |
+        The VM sends the browser here after a Google sign-in that started on
+        this team machine's website. `state` must match the cookie this
+        machine set in GET /auth/google (one use only). The one-time `code`
+        is redeemed with the VM (POST /redeem-google-code), the account is
+        copied here and a session starts.
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string }, example: 3vQ0bq7m1Xk2cG9yZXRoYW5mb3J0eXRocmVlY2hhcnM }
+        - { name: state, in: query, schema: { type: string }, example: Zm9vYmFyYmF6cXV4MTIz }
+        - { name: error, in: query, schema: { type: string, enum: [google_denied, google_failed] }, example: google_denied }
+      responses:
+        '302':
+          description: Signed in (to /) or failed (to /?login=google_failed or google_denied)
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+            Location:
+              schema: { type: string }
+              example: /
+        '503':
+          description: This machine isn't a team machine (AUTH_MODE isn't client)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -877,6 +932,45 @@ paths:
           $ref: '#/components/responses/KeyRefused'
         '429':
           $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /redeem-google-code:
+    post:
+      tags: [VM]
+      operationId: vmRedeemGoogleCode
+      summary: Trade a Google sign-in's one-time code for the account (for a team machine)
+      description: |
+        The code comes from GET /auth/google/callback when the sign-in started
+        on a team machine's website. Each code works once, for 60 seconds
+        (`GOOGLE_HANDOFF_TTL_SEC`).
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+            example: { code: 3vQ0bq7m1Xk2cG9yZXRoYW5mb3J0eXRocmVlY2hhcnM }
+      responses:
+        '200':
+          description: The account the code was made for
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VmUser' }
+              example: { id: 7, email: alice@example.com, name: Alice, role: user }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '404':
+          description: Unknown code, already used or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Unknown or expired code. }
         '503':
           $ref: '#/components/responses/NotAuthority'
   /library/jobs:
