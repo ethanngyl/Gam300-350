@@ -31,6 +31,45 @@ to the API is recorded here, newest first.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
 
+## v1 additions: 2026-11-16 (nothing breaks)
+
+Small photo copies, so the Library doesn't load a full 12 MP photo per card:
+- **`GET /jobs/:id/images/:name?size=small`** (and `/library/...` on the
+  VM): a WebP copy, 480 px on its longest side, turned upright. Without
+  `size`, the original as before; any other `size` gives 400.
+  - Made by `tools/make_thumbs.py` (Pillow), one run for a whole job: when
+    the job ends, or on the first request for older jobs. Kept in
+    `jobs/<id>_out/thumbs/`, so deleting the job removes them.
+  - If no copy can be made (no Pillow, a broken photo), the original is
+    sent, so a card never breaks. Retried after 10 minutes.
+  - A team machine passes `size` on to the VM for jobs only in the shared
+    library. An older VM ignores it and sends the original.
+- The website uses the small copy in the Library, Home, Model Viewer and
+  photo picker cards; downloads and photos added to a batch use the
+  original.
+
+## v1 additions: 2026-11-14 (nothing breaks)
+
+Google sign-in started on a team machine's website now ends there, instead
+of on the VM's website:
+- **`GET /auth/google`:** on the VM, takes two optional query parameters,
+  `return_to` (the team machine's `/api/v1/auth/google/finish`) and
+  `return_state`. A team machine sends both.
+  - The VM accepts `return_to` only on a loopback address or an origin in
+    `GOOGLE_RETURN_ORIGINS`, with exactly that path. Any other is ignored,
+    and the sign-in ends on the VM as before.
+  - After Google, the VM sends the browser to `return_to` with a one-time
+    `code` (or an `error`) and the `state`. It starts no VM session.
+- **`GET /auth/google/finish`** (team machines): checks the state against
+  its cookie, redeems the code with the VM, copies the account and starts a
+  session.
+- **`POST /redeem-google-code`** (VM, shared key): trades a one-time code
+  for `{ id, email, name, role }`. Each code works once, for 60 seconds.
+
+The Google console needs no change: Google still only redirects to the VM's
+`GOOGLE_REDIRECT_URI`. A team machine on a newer build than the VM still
+works, because the old VM ignores `return_to`, so update the VM first.
+
 ## v1 additions: 2026-11-15 (nothing breaks)
 
 "Forgot password?" with an emailed 6-digit code:

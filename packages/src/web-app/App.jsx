@@ -534,7 +534,7 @@ function App() {
         showModelPage({ jobId: modelJobId }, activeTab);
     }
 
-    // Opens a .ply from the user's computer (Model Viewer's "Open .ply file").
+    // Opens a .ply or .obj from the user's computer (Model Viewer's "Open .ply / .obj file").
     function openLocalModel(file) {
         showModelPage({ localFile: { url: URL.createObjectURL(file), name: file.name, sizeBytes: file.size } }, 'viewer');
     }

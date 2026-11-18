@@ -107,7 +107,10 @@ flowchart LR
   - Google sign-in runs here.
 - **Team machines (`AUTH_MODE=client`):**
   - build models on their GPU;
-  - pass sign-ups and logins to the VM (`VM_AUTH_URL`) and send each finished job there.
+  - pass sign-ups and logins to the VM (`VM_AUTH_URL`) and send each finished job there;
+  - Google sign-in goes through the VM, which sends the browser back with a
+    one-time code (`/auth/google/finish`), so the user ends up signed in on
+    the team machine's own website.
 - **`AUTH_MODE=local` (default):**
   - one machine on its own, with its own accounts.
 
@@ -138,10 +141,12 @@ needs the shared key.
 | GET / PUT / DELETE | `/auth/me/avatar` | user | GET: the image (JPEG / PNG); PUT / DELETE: account details |
 | GET | `/auth/me/storage` | user | 200 `{ usedBytes, models, jobs }` |
 | GET | `/auth/google` | anyone | 302 to Google (VM), or to the VM's `/auth/google` |
-| GET | `/auth/google/callback` | Google's redirect | 302 to `/` (signed in) or `/?login=...` |
+| GET | `/auth/google/callback` | Google's redirect | 302 to `/` (signed in) or `/?login=...`; for a sign-in started on a team machine, back to it with a one-time code |
+| GET | `/auth/google/finish` | the VM's redirect (team machines) | 302 to `/` (signed in here) or `/?login=...` |
 | POST | `/auth/forgot-password` | anyone | 202 `{ message }` (the same whether or not the account exists); emails a 6-digit code; 400 / 429 / 503 |
 | POST | `/auth/reset-password` | anyone | 200 `{ message }`; body `{ email, code, newPassword }`; signs the account out everywhere; 400 / 429 |
 | POST | `/register`, `/verify-account` | team machines (shared key) | create an account / check a password |
+| POST | `/redeem-google-code` | team machines (shared key) | 200 `{ id, email, name, role }` for a one-time Google code; 404 if unknown, used or expired |
 | POST | `/password-reset/request`, `/password-reset/confirm` | team machines (shared key) | "Forgot password?" for a team machine's user; the VM sends the email |
 
 ### Jobs (models and their photos)
@@ -155,7 +160,7 @@ needs the shared key.
 | PATCH | `/jobs/:id` | owner | 200 `{ id, name, sampleFile }` (rename) |
 | DELETE | `/jobs/:id` | owner | 200 cancelled; 409 if already finished |
 | DELETE | `/jobs/:id/files` | owner | 200 `{ id, deleted: true }` |
-| GET | `/jobs/:id/images/:name` | owner | the photo (binary) |
+| GET | `/jobs/:id/images/:name` | owner | the photo (binary); `?size=small`: a small WebP copy (480 px, `tools/make_thumbs.py`, kept in `<id>_out/thumbs/`), or the original if none can be made |
 | GET / HEAD | `/jobs/:id/result.ply` | owner | the model (binary, byte ranges supported) |
 | GET | `/jobs/:id/cover.webp` | owner | the card cover (binary); 404 if none |
 | PUT | `/library/jobs/:id` | team machines (shared key) | 201 `{ id, bytes }`. Stores a finished job on the VM |

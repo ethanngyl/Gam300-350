@@ -47,7 +47,9 @@ Web app + backend (npm -- packages/package.json):
 
 Python (tools/requirements.txt, installed by packages/start.bat):
 - opencv-python >=4.8.0 (Frame Extractor)
-- rembg >=2.0.60 and pillow >=10.0.0 (optional "Remove background"; the segmentation model downloads on first use)
+- rembg >=2.0.60 and pillow >=10.0.0 (optional "Remove background"; the segmentation model downloads on first use).
+  pillow also makes the small photo copies the website's cards show (tools/make_thumbs.py);
+  without it the cards load the full photos, which is slower but still works.
 - onnxruntime: start.bat installs onnxruntime-gpu on NVIDIA GPUs and plain onnxruntime elsewhere
 - aqtinstall (installed into a separate venv by engine/run.bat to download Qt)
 

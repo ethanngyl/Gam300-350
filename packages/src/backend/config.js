@@ -386,6 +386,27 @@ if (jobSources.length === 0 || jobSources.some((s) => !JOB_SOURCE_NAMES.includes
     process.exit(1)
 }
 
+// GOOGLE_RETURN_ORIGINS: each entry reduced to its origin (scheme, host and
+// port). A typo stops startup, so a team machine isn't silently refused.
+function parseOrigins(value) {
+    const origins = []
+    for (const entry of (value || '').split(',').map((s) => s.trim()).filter(Boolean)) {
+        let url
+        try {
+            url = new URL(entry)
+        }
+        catch {
+            url = null
+        }
+        if (!url || !['http:', 'https:'].includes(url.protocol)) {
+            console.error(`[backend] GOOGLE_RETURN_ORIGINS: "${entry}" is not an http(s) address like http://bryans-pc:5005`)
+            process.exit(1)
+        }
+        origins.push(url.origin)
+    }
+    return origins
+}
+
 export const config = {
     // The repository's root folder (sample data paths are relative to it).
     repoRoot,
@@ -474,6 +495,9 @@ export const config = {
     // Cuts the object out of a photo with those masks, for the Library card
     // (GET /jobs/:id/cover.webp, see make_cover.py).
     coverScript: process.env.COVER_SCRIPT || path.join(toolsDir, 'make_cover.py'),
+    // Small WebP copies of a job's photos for the website's cards and grids
+    // (GET /jobs/:id/images/:name?size=small, see make_thumbs.py).
+    thumbScript: process.env.THUMB_SCRIPT || path.join(toolsDir, 'make_thumbs.py'),
 
     // --- Shared library on the VM ----------------------------------------------
     // Client machines send each finished job (photos + result.ply) to the VM,
@@ -549,6 +573,15 @@ export const config = {
     // Google's OAuth 2.0 endpoints (fixed by Google, see services/google.js).
     googleAuthUrl: process.env.GOOGLE_AUTH_URL || 'https://accounts.google.com/o/oauth2/v2/auth',
     googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
+    // Google sign-in started on a team machine's website returns there
+    // (services/google.js). The VM sends the browser back only to a loopback
+    // address (localhost, 127.0.0.1, [::1]) or to one of these origins,
+    // comma-separated (e.g. http://bryans-pc:5005 for a team machine opened
+    // by its LAN name). Anything else signs in on the VM's website instead.
+    googleReturnOrigins: parseOrigins(process.env.GOOGLE_RETURN_ORIGINS),
+    // How long the one-time code handed back to the team machine works, in
+    // seconds. The team machine redeems it straight away.
+    googleHandoffTtlSec: Number(process.env.GOOGLE_HANDOFF_TTL_SEC) || 60,
 
     // --- Email (password reset codes; the VM, or a machine in local mode) ------
     // An SMTP server to send from, e.g. Gmail: smtp.gmail.com, port 465, the
