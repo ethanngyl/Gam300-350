@@ -10,6 +10,7 @@
  * Copyright 2026 DigiPen Institute of Technology Singapore.
  * All rights reserved.
  ******************************************************************************/
+#include "pipeline/HeadlessBuild.h"
 #include "ui/EditorTheme.h"
 #include "ui/MainWindow.h"
 
@@ -31,6 +32,12 @@ int main(int argc, char** argv) {
     // Identity used by QSettings (window layout, recent files, preferences).
     QApplication::setOrganizationName("CoDefine");
     QApplication::setApplicationName("Codefine Engine");
+
+    // Codefine --build-model <photos...>: build a model on this PC without opening the editor.
+    if (IsHeadlessBuild(app.arguments())) {
+        return RunHeadlessBuild(app.arguments());
+    }
+
     EditorTheme::Apply(app);
 
     MainWindow window;

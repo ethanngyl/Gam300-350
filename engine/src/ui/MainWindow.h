@@ -11,7 +11,8 @@ centre and arranges the editor around it: menu bar, main toolbar, status
 bar, and the dockable Scene (outliner), Inspector, Assets, My Models,
 Console and Audio panels, plus the Account menu for signing in with a web
 app account. It owns the scene-editing commands (import, select, rename,
-delete, render mode, export), loads .ply files and writes exports on
+delete, render mode, export), builds new models from photos or videos on
+this PC (Generate Model, no server), loads .ply files and writes exports on
 worker threads, accepts .ply
 drag-and-drop, and persists layout and preferences with QSettings.
 **************************************************************************/
@@ -36,8 +37,12 @@ class QThread;
 class QToolBar;
 
 #include "splat/SplatTrimmer.h"
+#include "ui/GenerateModelDialog.h" // GenerationFollowUp
 
+struct JobStatus;
 struct SplatVertex;
+class LocalReconstruction;
+class QPushButton;
 class SplatModel;
 
 class AssetBrowserPanel;
@@ -105,6 +110,16 @@ private:
     // model (or the whole scene) on a worker thread.
     void exportModels();
 
+    // ---- generating a model (on this PC, no server) ----
+    // Asks what to build (GenerateModelDialog) and starts LocalReconstruction.
+    void showGenerateDialog();
+    void onBuildStatus(const JobStatus& status);
+    void onBuildFinished(const QString& plyPath, const QString& error);
+    void cancelBuild();
+    void setBuildBusy(bool busy);
+    // Converts a newly built model (plyPath) to .obj next to it, on a worker thread.
+    void saveGeneratedObj(const QString& plyPath, const GenerationFollowUp& followUp);
+
     // Rebuilds the outliner/inspector from the renderer and updates which
     // scene actions are enabled.
     void refreshScenePanels();
@@ -143,6 +158,7 @@ private:
     //Actions.
     QAction* m_importAction = nullptr;
     QAction* m_exportAction = nullptr;
+    QAction* m_generateAction = nullptr;
     QAction* m_exitAction = nullptr;
     QAction* m_renameAction = nullptr;
     QAction* m_deleteAction = nullptr;
@@ -179,11 +195,21 @@ private:
     QLabel* m_modeLabel = nullptr;
     QLabel* m_fpsLabel = nullptr;
     QElapsedTimer m_statsTimer;
+    QLabel* m_buildLabel = nullptr;       // model build: phase, detail, elapsed time
+    QProgressBar* m_buildBar = nullptr;
+    QPushButton* m_buildCancel = nullptr;
+
+    // Model build on this PC.
+    LocalReconstruction* m_localBuild = nullptr;
+    GenerationFollowUp m_buildFollowUp;
+    QString m_buildName;
+    QElapsedTimer m_buildClock;
 
     // Import queue / worker.
     QStringList m_pendingImports;
     QPointer<QThread> m_loadThread;
     QPointer<QThread> m_exportThread;
+    QPointer<QThread> m_copyThread; // saving a generated model's .obj copy
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
