@@ -19,6 +19,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "net/BackendClient.h"
 #include "splat/CropBox.h"
 #include "splat/SplatExporter.h"
+#include "splat/SplatGenerator.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
 #include "splat/SplatTrimmer.h"
@@ -32,6 +33,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/OutlinerPanel.h"
 #include "ui/RemoteModelsPanel.h"
 #include "ui/TrimDialog.h"
+#include "ui/StressTestPanel.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -41,6 +43,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QDockWidget>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
@@ -122,6 +125,7 @@ MainWindow::MainWindow() {
 
     m_defaultLayout = saveState(kLayoutVersion);
     restoreSettings();
+    updateDevModeAction(); //restoreState can bring back a saved dock visibility, so re-apply dev mode
 
     //A finished gizmo drag is one undo step
     m_viewport->onTransformEdited = [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
@@ -368,9 +372,21 @@ void MainWindow::createActions() {
     m_trimSettingsAction->setStatusTip("Edit the default splat trim values used for new imports");
     connect(m_trimSettingsAction, &QAction::triggered, this, [this] { showTrimDialog(); });
 
+    m_stressTestSphereAction = new QAction("Generate Stress Test &Sphere (1M)", this);
+    m_stressTestSphereAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
+    connect(m_stressTestSphereAction, &QAction::triggered, this, [this] { generateStressTestSphere(); });
+
+    m_devModeAction = new QAction(this);
+    m_devModeAction->setStatusTip("Click to toggle developer mode, which shows the developer-only tabs");
+    m_devModeAction->setCheckable(true); //Creates a checkbox
+    m_devModeAction->setChecked(m_devMode); //Sets checkbox state
+    updateDevModeAction(); //Sets the initial text from m_devMode
+    connect(m_devModeAction, &QAction::triggered, this, [this] { toggleDevMode(); });
+
     m_resetLayoutAction = new QAction("&Reset Layout", this);
     connect(m_resetLayoutAction, &QAction::triggered, this, [this] {
         restoreState(m_defaultLayout, kLayoutVersion);
+        updateDevModeAction(); //The default layout was saved with the dev dock visible, so re-apply dev mode
     });
 }
 
@@ -401,6 +417,9 @@ void MainWindow::createMenus() {
     editMenu->addAction(m_cropMoveContentsAction);
     editMenu->addSeparator();
     editMenu->addAction(m_trimSettingsAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_devModeAction);
+    editMenu->addAction(m_stressTestSphereAction);
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
     QMenu* renderModeMenu = viewMenu->addMenu("Render &Mode");
@@ -483,9 +502,13 @@ void MainWindow::createDocks() {
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
+    m_stressTestPanel = new StressTestPanel(this); //Empty for now, the stress test controls go here
+    QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestPanel, Qt::BottomDockWidgetArea);
+
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);
     tabifyDockWidget(consoleDock, audioDock);
+    tabifyDockWidget(audioDock, stressTestDock);
     assetsDock->raise();
 
     resizeDocks({ sceneDock, inspectorDock }, { 260, 300 }, Qt::Horizontal);
@@ -761,6 +784,35 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     }
     qInfo("Imported %s (%s).", qPrintable(fileName), qPrintable(summary));
     statusBar()->showMessage(QString("Imported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
+}
+
+void MainWindow::generateStressTestSphere() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer) {
+        return; // GL not ready
+    }
+    if (renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
+        QMessageBox::warning(this, "Scene Full",
+                             QString("The scene already holds the maximum of %1 models.\nDelete a model to make room.")
+                                 .arg(SplatRenderer::kMaxModels));
+        return;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+    const std::vector<SplatVertex> splats = splat_generate::GenerateSphereSplats();
+    const qint64 generateMs = timer.restart();
+    renderer->SetSplats(splats, "StressTestSphere");
+    const qint64 uploadMs = timer.elapsed();
+
+    selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+    refreshScenePanels();
+
+    const QString message = QString("Generated stress test sphere (%1 splats): generate %2 ms, load %3 ms")
+                                .arg(QLocale().toString(static_cast<qulonglong>(splats.size())))
+                                .arg(generateMs).arg(uploadMs);
+    qInfo("%s.", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
 }
 
 void MainWindow::showTrimDialog() {
@@ -1112,6 +1164,28 @@ void MainWindow::exportModels() {
         statusBar()->showMessage(QString("Exported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
     });
     m_exportThread->start();
+}
+
+void MainWindow::toggleDevMode()
+{
+    m_devMode = !m_devMode;
+    updateDevModeAction();
+}
+
+void MainWindow::updateDevModeAction()
+{
+    if (m_devModeAction)
+        m_devModeAction->setText(m_devMode ? "Developer Mode: &On" : "Developer Mode: &Off");
+
+    //This can run before the dock is created, so check it exists first
+    if (m_stressTestPanel) {
+        //The panel's parent is the QDockWidget that addPanelDock wrapped it in
+        if (auto* dock = qobject_cast<QDockWidget*>(m_stressTestPanel->parentWidget())) {
+            dock->setVisible(m_devMode);
+            //Also hide its entry in the Window menu so it can't be reopened outside dev mode
+            dock->toggleViewAction()->setVisible(m_devMode);
+        }
+    }
 }
 
 void MainWindow::refreshScenePanels() {
