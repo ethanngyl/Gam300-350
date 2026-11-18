@@ -1906,6 +1906,26 @@ html {
     font-size: 0.8rem;
 }
 
+/* "Code sent" / "Password changed" (Forgot password?). */
+.login-success {
+    color: var(--forma-teal-text);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+/* "Resend code" and "Back to sign in" under the reset steps. */
+.login-reset-links {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+    .login-reset-links .login-switch:disabled {
+        opacity: 0.45;
+        cursor: default;
+        text-decoration: none;
+    }
+
 .login-submit {
     width: 100%;
     justify-content: center;

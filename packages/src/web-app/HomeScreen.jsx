@@ -24,6 +24,7 @@ import { useEffect, useState } from 'react';
 import AddPhotosDialog from './AddPhotosDialog.jsx';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
 import './HomeScreen.css';
 
@@ -106,7 +107,7 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
             id: job.id,
             name: jobDisplayName(job, 'Photos'),
             ...fileStatus(job),
-            coverUrl: job.images[0].url,
+            coverUrl: smallPhotoUrl(job.images[0].url),
             createdAt: job.createdAt,
         }));
 
@@ -117,7 +118,7 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
             id: job.id,
             name: jobDisplayName(job, 'Model'),
             kind: '3D model',
-            coverUrl: job.images?.[0]?.url ?? null,
+            coverUrl: smallPhotoUrl(job.images?.[0]?.url),
             createdAt: job.createdAt,
         }));
 

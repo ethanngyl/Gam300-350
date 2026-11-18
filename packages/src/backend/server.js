@@ -15,8 +15,9 @@ serves the built React frontend and the HTTP API the website (and the
 engine) use to turn photos or videos into a Gaussian Splat .ply with COLMAP
 and Brush. The backend is split into layers (see docs/architecture.md):
 - routes/ (API layer)
-jobs.js, sampleJobs.js, libraryStore.js, auth.js, account.js, feedback.js,
-scenes.js, catalog.js, docs.js and metrics.js: one Express Router each. They read the request,
+jobs.js, sampleJobs.js, libraryStore.js, auth.js, passwordReset.js,
+account.js, feedback.js, scenes.js, catalog.js, docs.js and metrics.js: one
+Express Router each. They read the request,
 call the layers below and reply with JSON or file data only. All of them
 are served at /api/v1/... and at the old unversioned paths.
 - adapters/ (between the API and the data)
@@ -27,7 +28,8 @@ session.js (who is calling, access rules), limits.js (429s), uploads.js
 (multer and file checks), sendDbModel.js, errors.js (JSON 404s and the
 JSON error handler) and timing.js (times every API request).
 - services/ (business logic, no req / res)
-jobs.js, accounts.js, authority.js, feedback.js, google.js, scenes.js and
+jobs.js, accounts.js, authority.js, feedback.js, google.js, scenes.js,
+passwordReset.js and mail.js ("Forgot password?" codes by email) and
 performance.js (response and page-load times, p50 / p95 / p99); with
 pipeline.js (COLMAP / Brush), library.js (sending jobs to the VM),
 cleanup.js, metrics.js, scan.js and status.js.
@@ -73,6 +75,8 @@ import docsRoutes from './routes/docs.js'
 import sampleJobRoutes from './routes/sampleJobs.js'
 import sceneRoutes from './routes/scenes.js'
 import metricsRoutes from './routes/metrics.js'
+import passwordResetRoutes from './routes/passwordReset.js'
+import { mailReady } from './services/mail.js'
 import { timeRequests } from './middleware/timing.js'
 import { flushTimings, startPerformance } from './services/performance.js'
 import { API_V1_PREFIX, markLegacy } from './adapters/apiVersions.js'
@@ -185,6 +189,7 @@ api.use(sampleJobRoutes)
 api.use(jobRoutes)
 api.use(libraryStoreRoutes)
 api.use(authRoutes)
+api.use(passwordResetRoutes)
 api.use(accountRoutes)
 api.use(feedbackRoutes)
 api.use(sceneRoutes)
@@ -277,6 +282,11 @@ const server = app.listen(config.port, () =>
     console.log(`[backend] storage: ${jobRule}; ${feedbackRule}`)
     if (config.googleClientId && !googleSignInReady())
       console.warn('[backend] *** GOOGLE_REDIRECT_URI is not set: Google sign-in is off. ***')
+    // "Forgot password?" emails a code; team machines ask this machine.
+    if (mailReady())
+      console.log(`[backend] password reset email: on (${config.mailOutboxDir ? `outbox folder ${config.mailOutboxDir}` : `${config.smtpHost}:${config.smtpPort}`})`)
+    else
+      console.warn('[backend] *** SMTP_HOST / SMTP_USER / SMTP_PASS are not set: "Forgot password?" is off. ***')
     startCleanup()
   }
   else if (config.authMode === 'client')
@@ -294,6 +304,7 @@ const server = app.listen(config.port, () =>
   else
   {
     console.log('[backend] accounts: local (this machine\'s own database)')
+    console.log(`[backend] password reset email: ${mailReady() ? 'on' : 'off (SMTP_HOST not set)'}`)
   }
   // Probe hardware now (cached) so recording a job's metrics doesn't wait on it.
   getHardwareInfo().then((hw) =>

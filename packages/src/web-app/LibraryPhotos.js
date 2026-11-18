@@ -9,8 +9,27 @@
 Reads the photo library for the library picker. fetchLibraryBatches()
 lists past jobs that have photos (GET /jobs). downloadLibraryPhoto()
 fetches one stored photo and turns it into a File, so it can join a batch
-exactly like a photo picked from the device.
+exactly like a photo picked from the device. smallPhotoUrl() gives the
+address of a photo's small copy, for cards and grids.
 **************************************************************************/
+
+/************************************************************************/
+/*!
+  \brief
+    The small copy of a stored photo (a WebP about 480 px across, GET
+    .../images/<name>?size=small), for showing it in a card or grid. Full
+    photos are 12 MP, and loading one per card made the Library stutter.
+    Downloads and photos added to a batch still use the original URL.
+  \param url
+    A photo URL from GET /jobs (images[].url), or null
+  \return
+    The small copy's URL, or null
+*/
+/************************************************************************/
+export function smallPhotoUrl(url) {
+    if (!url) return null;
+    return `${url}${url.includes('?') ? '&' : '?'}size=small`;
+}
 
 const IMAGE_TYPES_BY_EXTENSION = {
     jpg: 'image/jpeg',

@@ -20,20 +20,29 @@ password.
 - GET /auth/google, GET /auth/google/callback
 Google sign-in (services/google.js). The consent and callback run on the
 VM; other machines send the browser to the VM's /auth/google.
+- GET /auth/google/finish, POST /redeem-google-code
+Google sign-in started on a team machine's website ends there: the VM
+sends the browser back to the team machine's /auth/google/finish with a
+one-time code instead of signing in on the VM's website, and the team
+machine's backend redeems the code with the VM (shared key) for the
+account, then starts its own session.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
 import crypto from 'node:crypto'
 import express from 'express'
 import { config } from '../config.js'
-import { createUser, deleteSession, findOrCreateGoogleUser, findUserByEmail, upsertLocalUser } from '../db.js'
+import { createUser, deleteSession, findOrCreateGoogleUser, findUserByEmail, findUserById, upsertLocalUser } from '../db.js'
 import { createLimiter } from '../ratelimit.js'
 import { SESSION_COOKIE, readCookie, requireAuthorityKey, requireUser, startSession } from '../middleware/session.js'
 import { limitByIp, tooManyAttempts } from '../middleware/limits.js'
 import { checkCredentials, publicUser, validateSignup } from '../services/accounts.js'
 import { callAuthority, clientAuthProblem, logAuthorityFailure } from '../services/authority.js'
-import { googleConsentUrl, googleSignInReady, readGoogleSignIn, safeEqual } from '../services/google.js'
-import { userFor } from '../adapters/apiVersions.js'
+import {
+    GOOGLE_FINISH_PATH, createHandoffCode, googleConsentUrl, googleSignInReady, isAllowedReturnUrl,
+    readGoogleSignIn, redeemHandoffCode, safeEqual,
+} from '../services/google.js'
+import { API_V1_PREFIX, userFor } from '../adapters/apiVersions.js'
 
 const router = express.Router()
 
@@ -49,6 +58,16 @@ const signupIpLimiter = createLimiter({ windowMs: 60 * 60 * 1000, max: 10 })
 // path '/auth/google' also covers '/auth/google/callback'.
 const GOOGLE_STATE_COOKIE = 'genesis_google_state'
 const GOOGLE_STATE_PATH = '/auth/google'
+// On the VM: where to send the browser back to (a team machine's website)
+// once Google answers, beside the state cookie. Absent = sign in on the VM.
+const GOOGLE_RETURN_COOKIE = 'genesis_google_return'
+// On a team machine: its own state for the trip to the VM and back, so a
+// finish link made by someone else (with their own code) is refused.
+const GOOGLE_LOCAL_COOKIE = 'genesis_google_local'
+const GOOGLE_LOCAL_PATH = `${API_V1_PREFIX}/auth/google`
+const GOOGLE_COOKIE_MAX_AGE_MS = 10 * 60 * 1000
+// The failure reasons the website understands (/?login=...).
+const GOOGLE_ERRORS = ['google_denied', 'google_failed']
 
 // ----- Start of Routes ------------------------------------------------------ //
 
@@ -263,6 +282,11 @@ router.post('/verify-account', requireAuthorityKey, async (req, res, next) => {
     the website's button can use this same relative link everywhere.
     A random state goes both to Google and into a 10-minute HttpOnly
     cookie in this browser; the callback requires the two to match.
+    A team machine with a working VM connection also asks the VM to send
+    the browser back to its own website afterwards (?return_to, with its
+    own state in ?return_state and in a cookie here). The VM keeps an
+    allowed return_to in a second cookie for the callback; any other
+    return_to is ignored, and the sign-in ends on the VM's website.
   \return
     302 to Google (or to the VM), or 503 if Google sign-in isn't set up
 */
@@ -270,7 +294,18 @@ router.post('/verify-account', requireAuthorityKey, async (req, res, next) => {
 router.get('/auth/google', (req, res) => {
     if (config.authMode !== 'authority') {
         if (!config.vmAuthUrl) return res.status(503).json({ error: 'Google sign-in is not available here.' })
-        return res.redirect(`${config.vmAuthUrl}/auth/google`)
+        const vmStart = new URL(`${config.vmAuthUrl}/auth/google`)
+        // Without a working VM connection the code couldn't be redeemed, so
+        // the sign-in ends on the VM's website as before.
+        if (config.authMode === 'client' && !clientAuthProblem()) {
+            const localState = crypto.randomBytes(16).toString('base64url')
+            res.cookie(GOOGLE_LOCAL_COOKIE, localState, googleCookie(req, GOOGLE_LOCAL_PATH))
+            // This website's own address, as the browser reached it (e.g.
+            // http://localhost:5005, or :5173 through Vite in development).
+            vmStart.searchParams.set('return_to', `${req.protocol}://${req.get('host')}${GOOGLE_FINISH_PATH}`)
+            vmStart.searchParams.set('return_state', localState)
+        }
+        return res.redirect(vmStart.href)
     }
     if (!googleSignInReady())
         return res.status(503).json({ error: 'Google sign-in is not available here.' })
@@ -278,13 +313,13 @@ router.get('/auth/google', (req, res) => {
     const state = crypto.randomBytes(16).toString('base64url')
     // sameSite 'lax' is still sent on Google's redirect back, because that
     // is a normal top-level navigation.
-    res.cookie(GOOGLE_STATE_COOKIE, state, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: req.secure,
-        path: GOOGLE_STATE_PATH,
-        maxAge: 10 * 60 * 1000,
-    })
+    res.cookie(GOOGLE_STATE_COOKIE, state, googleCookie(req, GOOGLE_STATE_PATH))
+    const { return_to: returnTo, return_state: returnState } = req.query
+    if (isAllowedReturnUrl(returnTo) && isGoogleState(returnState))
+        res.cookie(GOOGLE_RETURN_COOKIE, JSON.stringify({ to: returnTo, state: returnState }), googleCookie(req, GOOGLE_STATE_PATH))
+    else
+        // An earlier, unfinished sign-in from a team machine mustn't decide where this one ends.
+        res.clearCookie(GOOGLE_RETURN_COOKIE, { path: GOOGLE_STATE_PATH })
     res.redirect(googleConsentUrl(state))
 })
 
@@ -294,11 +329,15 @@ router.get('/auth/google', (req, res) => {
     Google redirects back here with ?code & ?state. Verify state against
     this browser's state cookie (one use only: the cookie is cleared
     straight away), exchange the code for the verified email/name/sub
-    (readGoogleSignIn), find-or-create the account, start a session, go to
-    the app.
+    (readGoogleSignIn), find-or-create the account, then either:
+    - start a session and go to the app (sign-in started on the VM), or
+    - send the browser back to the team machine it started on with a
+      one-time code and that machine's state, without a VM session.
+    Failures also go back where the sign-in started.
   \return
     302 to "/" on success (logged in), 302 to "/?login=..." on failure,
-    503 if Google sign-in isn't set up here
+    302 to the team machine's /auth/google/finish (?code or ?error, and
+    ?state), 503 if Google sign-in isn't set up here
 */
 /************************************************************************/
 router.get('/auth/google/callback', async (req, res) => {
@@ -306,29 +345,137 @@ router.get('/auth/google/callback', async (req, res) => {
     const { code, state, error } = req.query
 
     const expectedState = readCookie(req, GOOGLE_STATE_COOKIE)
+    const back = readReturnCookie(req)
     res.clearCookie(GOOGLE_STATE_COOKIE, { path: GOOGLE_STATE_PATH })
+    res.clearCookie(GOOGLE_RETURN_COOKIE, { path: GOOGLE_STATE_PATH })
+    const fail = (reason) => res.redirect(back ? returnUrl(back, { error: reason }) : `/?login=${reason}`)
 
-    if (error) return res.redirect('/?login=google_denied')
-    if (!code || !safeEqual(state, expectedState))
-        return res.redirect('/?login=google_failed')
+    if (error) return fail('google_denied')
+    if (!code || !safeEqual(state, expectedState)) return fail('google_failed')
 
     try {
         const profile = await readGoogleSignIn(code)
-        if (!profile) return res.redirect('/?login=google_failed')
+        if (!profile) return fail('google_failed')
 
-        // Find or create the account, link by email, start our own session.
+        // Find or create the account, link by email.
         const user = findOrCreateGoogleUser(profile)
         if (!user) {
             console.warn(`[backend] google sign-in refused: ${profile.email} is already linked to a different Google account`)
-            return res.redirect('/?login=google_failed')
+            return fail('google_failed')
         }
+        // Started on a team machine: its backend redeems the code for the
+        // account and starts its own session there.
+        if (back) return res.redirect(returnUrl(back, { code: createHandoffCode(user.id) }))
         startSession(res, user.id, true)
         res.redirect('/')
     }
     catch (err) {
         console.error('[backend] google callback failed:', err)
-        res.redirect('/?login=google_failed')
+        fail('google_failed')
     }
 })
+
+/************************************************************************/
+/*!
+  \brief
+    Team machine: the browser back from the VM after Google sign-in. The
+    state must match this browser's cookie (one use only), so a finish link
+    someone else made can't sign this browser in to their account. The
+    one-time code is redeemed with the VM (shared key); the account is
+    copied here, as after a password login, and a session starts.
+  \return
+    302 to "/" (signed in) or "/?login=google_failed|google_denied", or 503
+    if this machine isn't a team machine
+*/
+/************************************************************************/
+router.get('/auth/google/finish', async (req, res) => {
+    if (config.authMode !== 'client')
+        return res.status(503).json({ error: 'Google sign-in is not available here.' })
+    const { code, state, error } = req.query
+
+    const expectedState = readCookie(req, GOOGLE_LOCAL_COOKIE)
+    res.clearCookie(GOOGLE_LOCAL_COOKIE, { path: GOOGLE_LOCAL_PATH })
+    const fail = (reason) => res.redirect(`/?login=${reason}`)
+
+    if (!safeEqual(state, expectedState)) return fail('google_failed')
+    if (error) return fail(GOOGLE_ERRORS.includes(error) ? error : 'google_failed')
+    if (typeof code !== 'string' || !code) return fail('google_failed')
+    const problem = clientAuthProblem()
+    if (problem) {
+        console.error(`[backend] google sign-in refused -- ${problem}`)
+        return fail('google_failed')
+    }
+
+    try {
+        const { status, data } = await callAuthority('/redeem-google-code', { code })
+        if (status !== 200 || !Number.isInteger(data.id) || typeof data.email !== 'string') {
+            if (status === 404)
+                console.warn('[backend] google sign-in: the VM refused the one-time code (expired or already used)')
+            else
+                logAuthorityFailure('/redeem-google-code', status, data)
+            return fail('google_failed')
+        }
+        upsertLocalUser(data)                 // mirror VM id -> local users
+        startSession(res, data.id, true)
+        res.redirect('/')
+    }
+    catch (err) {
+        console.error('[backend] google sign-in: could not reach the VM:', err)
+        fail('google_failed')
+    }
+})
+
+/************************************************************************/
+/*!
+  \brief
+    Authority-only: a team machine's backend trades the one-time code from
+    a Google sign-in (GET /auth/google/callback) for the account. Each code
+    works once, for config.googleHandoffTtlSec seconds. The role comes from
+    the VM's database, as with /verify-account.
+  \return
+    400 without a code, 404 for an unknown, used or expired code, else
+    200 { id, email, name, role }
+*/
+/************************************************************************/
+router.post('/redeem-google-code', requireAuthorityKey, (req, res) => {
+    const { code } = req.body || {}
+    if (typeof code !== 'string' || !code) return res.status(400).json({ error: 'code required.' })
+    const userId = redeemHandoffCode(code)
+    const user = userId === null ? null : findUserById(userId)
+    if (!user) return res.status(404).json({ error: 'Unknown or expired code.' })
+    res.json({ id: user.id, email: user.email, name: user.name, role: user.role })
+})
+
+// ----- Helpers ------------------------------------------------------------ //
+
+// The short-lived HttpOnly cookie options for a step of Google sign-in.
+function googleCookie(req, cookiePath) {
+    return { httpOnly: true, sameSite: 'lax', secure: req.secure, path: cookiePath, maxAge: GOOGLE_COOKIE_MAX_AGE_MS }
+}
+
+// A state this code made (16 random bytes, base64url), or close enough to
+// be safe to carry: letters, digits, - and _ only.
+function isGoogleState(value) {
+    return typeof value === 'string' && /^[\w-]{16,128}$/.test(value)
+}
+
+// The VM's return cookie: { to, state }, checked again, or null.
+function readReturnCookie(req) {
+    try {
+        const back = JSON.parse(readCookie(req, GOOGLE_RETURN_COOKIE) ?? 'null')
+        return back && isAllowedReturnUrl(back.to) && isGoogleState(back.state) ? back : null
+    }
+    catch {
+        return null
+    }
+}
+
+// The team machine's finish address with its state and the given fields.
+function returnUrl(back, fields) {
+    const url = new URL(back.to)
+    url.searchParams.set('state', back.state)
+    for (const [key, value] of Object.entries(fields)) url.searchParams.set(key, value)
+    return url.href
+}
 
 export default router

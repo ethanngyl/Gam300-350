@@ -18,10 +18,12 @@ Layout (Genesis Figma): a hero panel on the left (hidden on narrow
 screens) and the form on the right. The GENESIS logo goes back to the
 landing page. "Continue with Google" sends the browser to /auth/google once
 the backend supports it (GOOGLE_SIGN_IN_READY); until then it says so.
-"Forgot password?" works the same way with PASSWORD_RESET_READY.
+"Forgot password?" switches the card to two more steps: the email
+(/auth/forgot-password emails a 6-digit code), then the code and a new
+password (/auth/reset-password), after which the card goes back to Sign in.
 **************************************************************************/
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import genesisLogo from './GenesisLogo.svg';
 import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
@@ -35,10 +37,24 @@ const GOOGLE_SIGN_IN_READY = true;
 // the VM (VM_AUTH_URL in the backend's .env).
 const GOOGLE_SIGN_IN_URL = '/api/v1/auth/google';
 
-// TODO(backend): set to true once a password reset flow exists, and point
-// PASSWORD_RESET_URL at its page.
-const PASSWORD_RESET_READY = false;
-const PASSWORD_RESET_URL = '/api/v1/auth/forgot-password';
+// "Forgot password?": ask for an emailed code, then use it with a new password.
+const FORGOT_PASSWORD_URL = '/api/v1/auth/forgot-password';
+const RESET_PASSWORD_URL = '/api/v1/auth/reset-password';
+// The server allows one code request per email per minute.
+const RESEND_AFTER_MS = 60 * 1000;
+const MIN_PASSWORD_LENGTH = 6;
+
+// Posts JSON to the backend; returns { ok, data } (data is {} if the reply
+// wasn't JSON, e.g. from a proxy).
+async function postJson(url, body) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, data };
+}
 
 
 // Google's "G" logo, as required on a Google sign-in button.
@@ -60,14 +76,42 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
     const [password, setPassword] = useState('');
     const [rememberMe, setRememberMe] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
+    // A success message (code sent, password changed).
+    const [notice, setNotice] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // "Forgot password?" steps: mode 'forgot' (email) then 'reset' (code + new password).
+    const [resetCode, setResetCode] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [canResend, setCanResend] = useState(false);
 
     const isSignUp = mode === 'signup';
+    const isForgot = mode === 'forgot';
+    const isReset = mode === 'reset';
+    const isPasswordReset = isForgot || isReset;
+
+    // "Resend code" becomes available a minute after a code was sent.
+    useEffect(() => {
+        if (!isReset || canResend) return undefined;
+        const timer = setTimeout(() => setCanResend(true), RESEND_AFTER_MS);
+        return () => clearTimeout(timer);
+    }, [isReset, canResend]);
 
     function switchMode() {
         playSound('tap');
         setMode(isSignUp ? 'signin' : 'signup');
         setErrorMessage(null);
+        setNotice(null);
+    }
+
+    function backToSignIn() {
+        playSound('back');
+        setMode('signin');
+        setErrorMessage(null);
+        setNotice(null);
+        setResetCode('');
+        setNewPassword('');
+        setConfirmPassword('');
     }
 
     // Leaves the page for Google's sign-in. The backend sends the browser back
@@ -81,13 +125,78 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
         window.location.href = GOOGLE_SIGN_IN_URL;
     }
 
+    // Step 1 of "Forgot password?": ask for the email (kept if already typed).
     function handleForgotPassword() {
         playSound('tap');
-        if (!PASSWORD_RESET_READY) {
-            setErrorMessage('Password reset is coming soon. Ask a team admin to reset it for now.');
+        setMode('forgot');
+        setErrorMessage(null);
+        setNotice(null);
+    }
+
+    // Emails a code (the reply is the same whether or not the account
+    // exists), then moves on to step 2. Also used by "Resend code".
+    async function requestResetCode() {
+        const trimmedEmail = email.trim();
+        if (!/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+            setErrorMessage('Enter a valid email address.');
             return;
         }
-        window.location.href = PASSWORD_RESET_URL;
+        setErrorMessage(null);
+        setIsSubmitting(true);
+        try {
+            const { ok, data } = await postJson(FORGOT_PASSWORD_URL, { email: trimmedEmail });
+            if (!ok) {
+                setErrorMessage(data.error || 'Something went wrong. Please try again.');
+                return;
+            }
+            setNotice(data.message || 'If an account exists for that email, we\'ve sent it a code.');
+            setMode('reset');
+            setCanResend(false);
+        } catch {
+            setErrorMessage('Could not reach the server. Is the backend running?');
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    // Step 2: the code from the email and the new password.
+    async function submitNewPassword() {
+        if (!/^\d{6}$/.test(resetCode.trim())) {
+            setErrorMessage('Enter the 6-digit code from the email.');
+            return;
+        }
+        if (newPassword.length < MIN_PASSWORD_LENGTH) {
+            setErrorMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            setErrorMessage('The two new passwords don\'t match.');
+            return;
+        }
+        setErrorMessage(null);
+        setIsSubmitting(true);
+        try {
+            const { ok, data } = await postJson(RESET_PASSWORD_URL, {
+                email: email.trim(),
+                code: resetCode.trim(),
+                newPassword,
+            });
+            if (!ok) {
+                setErrorMessage(data.error || 'Something went wrong. Please try again.');
+                return;
+            }
+            // Back to Sign in, with the email still filled in.
+            setMode('signin');
+            setNotice(data.message || 'Password changed. Sign in with your new password.');
+            setPassword('');
+            setResetCode('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch {
+            setErrorMessage('Could not reach the server. Is the backend running?');
+        } finally {
+            setIsSubmitting(false);
+        }
     }
 
     // Temporary bypass: skips the backend and signs in as a local-only guest.
@@ -104,6 +213,12 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
 
     async function handleSubmit(event) {
         event.preventDefault();
+        if (isForgot || isReset) {
+            playSound('confirm');
+            if (isForgot) await requestResetCode();
+            else await submitNewPassword();
+            return;
+        }
         const trimmedEmail = email.trim();
 
         if (!/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
@@ -121,6 +236,7 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
 
         playSound('confirm');
         setErrorMessage(null);
+        setNotice(null);
         setIsSubmitting(true);
 
         try {
@@ -177,17 +293,29 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
             </aside>
 
             <main className="auth-panel">
-                <form className={isSignUp ? 'auth-card' : 'auth-card is-login'} onSubmit={handleSubmit} noValidate>
+                <form className={mode === 'signin' ? 'auth-card is-login' : 'auth-card'} onSubmit={handleSubmit} noValidate>
                     <div className="auth-card-logo">{logo}</div>
                     {/* Phones: the hero is hidden, so logging in opens with its line instead. */}
-                    {!isSignUp && (
+                    {mode === 'signin' && (
                         <div className="auth-card-intro" aria-hidden="true">
                             <p className="auth-card-intro-title">Build 3D models from photos.</p>
                             <p>Turn photos and video frames into polished 3D assets.</p>
                         </div>
                     )}
-                    <p className="auth-eyebrow">{isSignUp ? 'Get started' : 'Welcome back'}</p>
-                    <h1>{isSignUp ? 'Create your Genesis account' : 'Log in to Genesis'}</h1>
+                    <p className="auth-eyebrow">
+                        {isSignUp ? 'Get started' : isPasswordReset ? 'Forgot password' : 'Welcome back'}
+                    </p>
+                    <h1>
+                        {isSignUp ? 'Create your Genesis account'
+                            : isForgot ? 'Reset your password'
+                                : isReset ? 'Enter your code'
+                                    : 'Log in to Genesis'}
+                    </h1>
+                    {isForgot && (
+                        <p className="auth-note">
+                            Enter your account&apos;s email and we&apos;ll send you a 6-digit code to set a new password.
+                        </p>
+                    )}
 
                     {isSignUp && (
                         <label className="auth-field">
@@ -219,57 +347,135 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                         </span>
                     </label>
 
-                    <label className="auth-field">
-                        <span className="auth-field-label">Password</span>
-                        <span className="auth-input">
-                            <Icon name="lock" size={16} />
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                                placeholder={isSignUp ? 'At least 6 characters' : 'Enter your password'}
-                            />
-                        </span>
-                    </label>
-                    {!isSignUp && (
-                        <button type="button" className="auth-link auth-forgot" onClick={handleForgotPassword}>
-                            Forgot password?
-                        </button>
+                    {isReset && (
+                        <>
+                            <label className="auth-field">
+                                <span className="auth-field-label">6-digit code</span>
+                                <span className="auth-input">
+                                    <Icon name="mail" size={16} />
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                        value={resetCode}
+                                        onChange={(event) => setResetCode(event.target.value.replace(/\D/g, ''))}
+                                        autoComplete="one-time-code"
+                                        placeholder="123456"
+                                    />
+                                </span>
+                            </label>
+                            <label className="auth-field">
+                                <span className="auth-field-label">New password</span>
+                                <span className="auth-input">
+                                    <Icon name="lock" size={16} />
+                                    <input
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(event) => setNewPassword(event.target.value)}
+                                        autoComplete="new-password"
+                                        placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                                    />
+                                </span>
+                            </label>
+                            <label className="auth-field">
+                                <span className="auth-field-label">Confirm new password</span>
+                                <span className="auth-input">
+                                    <Icon name="lock" size={16} />
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(event) => setConfirmPassword(event.target.value)}
+                                        autoComplete="new-password"
+                                        placeholder="Type it again"
+                                    />
+                                </span>
+                            </label>
+                        </>
                     )}
 
-                    <label className="auth-remember">
-                        <input
-                            type="checkbox"
-                            checked={rememberMe}
-                            onChange={(event) => setRememberMe(event.target.checked)}
-                        />
-                        Keep me logged in
-                    </label>
+                    {!isPasswordReset && (
+                        <>
+                            <label className="auth-field">
+                                <span className="auth-field-label">Password</span>
+                                <span className="auth-input">
+                                    <Icon name="lock" size={16} />
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={(event) => setPassword(event.target.value)}
+                                        autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                                        placeholder={isSignUp ? 'At least 6 characters' : 'Enter your password'}
+                                    />
+                                </span>
+                            </label>
+                            {!isSignUp && (
+                                <button type="button" className="auth-link auth-forgot" onClick={handleForgotPassword}>
+                                    Forgot password?
+                                </button>
+                            )}
 
+                            <label className="auth-remember">
+                                <input
+                                    type="checkbox"
+                                    checked={rememberMe}
+                                    onChange={(event) => setRememberMe(event.target.checked)}
+                                />
+                                Keep me logged in
+                            </label>
+                        </>
+                    )}
+
+                    {notice && <p className="auth-notice" role="status">{notice}</p>}
                     {errorMessage && <p className="auth-error" role="alert">{errorMessage}</p>}
 
                     <button type="submit" className="forma-btn forma-btn-primary auth-submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Please wait\u2026' : isSignUp ? 'Create account' : 'Log in'}
+                        {isSubmitting ? 'Please wait\u2026'
+                            : isSignUp ? 'Create account'
+                                : isForgot ? 'Send code'
+                                    : isReset ? 'Change password'
+                                        : 'Log in'}
                     </button>
 
-                    <div className="auth-divider"><span>or continue with</span></div>
+                    {isPasswordReset && (
+                        <div className="auth-reset-links">
+                            {isReset && (
+                                <button
+                                    type="button"
+                                    className="auth-link"
+                                    onClick={() => { playSound('tap'); requestResetCode(); }}
+                                    disabled={!canResend || isSubmitting}
+                                    title={canResend ? 'Email a new code' : 'You can ask for a new code a minute after the last one'}
+                                >
+                                    Resend code
+                                </button>
+                            )}
+                            <button type="button" className="auth-link" onClick={backToSignIn}>
+                                Back to log in
+                            </button>
+                        </div>
+                    )}
 
-                    <div className="auth-alternatives">
-                        <button type="button" className="forma-btn auth-alternative" onClick={continueWithGoogle} disabled={isSubmitting}>
-                            <GoogleLogo /> Google
-                        </button>
-                        <button type="button" className="forma-btn auth-alternative" onClick={continueAsGuest} disabled={isSubmitting}>
-                            <Icon name="user" size={16} /> Guest
-                        </button>
-                    </div>
+                    {!isPasswordReset && (
+                        <>
+                            <div className="auth-divider"><span>or continue with</span></div>
 
-                    <p className="auth-switch">
-                        {isSignUp ? 'Already have an account?' : 'New to Genesis?'}
-                        <button type="button" className="auth-link" onClick={switchMode}>
-                            {isSignUp ? 'Log in' : 'Create an account'}
-                        </button>
-                    </p>
+                            <div className="auth-alternatives">
+                                <button type="button" className="forma-btn auth-alternative" onClick={continueWithGoogle} disabled={isSubmitting}>
+                                    <GoogleLogo /> Google
+                                </button>
+                                <button type="button" className="forma-btn auth-alternative" onClick={continueAsGuest} disabled={isSubmitting}>
+                                    <Icon name="user" size={16} /> Guest
+                                </button>
+                            </div>
+
+                            <p className="auth-switch">
+                                {isSignUp ? 'Already have an account?' : 'New to Genesis?'}
+                                <button type="button" className="auth-link" onClick={switchMode}>
+                                    {isSignUp ? 'Log in' : 'Create an account'}
+                                </button>
+                            </p>
+                        </>
+                    )}
                 </form>
             </main>
         </div>
