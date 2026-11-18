@@ -19,8 +19,8 @@ section. Sections:
   Google-only accounts, per GET /api/v1/auth/me/account, have none),
   sign-in methods, role, member since, "Show walkthrough", log out, and
   Delete account (the user types DELETE to confirm, then DELETE
-  /api/v1/auth/me removes the account and signs them out; until the server
-  has that route, the dialog says deleting isn't available yet).
+  /api/v1/auth/me removes the account and signs them out). Delete account
+  is hidden until the backend has that route (DELETE_ACCOUNT_READY).
   Guests see a sign-in card instead.
 - Billing: the current plan and this month's models. Paid plans aren't
   available yet, so there is no payment method or billing history.
@@ -96,6 +96,9 @@ const SECTION_GROUPS = [
 ];
 
 // Delete account: DELETE on this removes the signed-in account (backend).
+// TODO(backend): set DELETE_ACCOUNT_READY to true once DELETE /api/v1/auth/me
+// exists; until then the Delete account row is hidden.
+const DELETE_ACCOUNT_READY = false;
 const DELETE_ACCOUNT_URL = '/api/v1/auth/me';
 // What the user types to confirm deleting their account.
 const DELETE_CONFIRM_WORD = 'DELETE';
@@ -508,23 +511,25 @@ function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibr
                         </div>
                         {renderSignOutButton()}
                     </div>
-                    <div className="acct-leave-row">
-                        <div>
-                            <h2 className="acct-card-title acct-danger-title">Delete account</h2>
-                            <p className="acct-muted">
-                                Permanently removes your account, models and source photos. This can't be undone.
-                            </p>
+                    {DELETE_ACCOUNT_READY && (
+                        <div className="acct-leave-row">
+                            <div>
+                                <h2 className="acct-card-title acct-danger-title">Delete account</h2>
+                                <p className="acct-muted">
+                                    Permanently removes your account, models and source photos. This can't be undone.
+                                </p>
+                            </div>
+                            <button
+                                className="forma-btn acct-danger-button"
+                                onClick={() => {
+                                    playSound('tap');
+                                    setIsDeletingAccount(true);
+                                }}
+                            >
+                                <Icon name="trash" size={14} /> Delete account
+                            </button>
                         </div>
-                        <button
-                            className="forma-btn acct-danger-button"
-                            onClick={() => {
-                                playSound('tap');
-                                setIsDeletingAccount(true);
-                            }}
-                        >
-                            <Icon name="trash" size={14} /> Delete account
-                        </button>
-                    </div>
+                    )}
                 </div>
                 {isDeletingAccount && (
                     <ActionDialog
