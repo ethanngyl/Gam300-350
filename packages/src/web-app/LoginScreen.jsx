@@ -6,15 +6,17 @@
 \par Software Engineering Project 5
 \date 08-10-2026
 \brief
-Sign in / create account screen shown before the dashboard. Validates the
+Log in / create account screen, opened from the landing page's "Log in"
+(#/login) or "Get started" (#/signup) buttons. Validates the
 form shape (email format, 6+ character password, name when creating an
 account), then posts it to the backend: /auth/signup creates the account
 in the SQLite database (password stored only as a hash), /auth/login checks
 the password. On success the user object the server returns is handed to
 the parent, which keeps it as this browser's session. "Continue as guest"
 skips the backend and hands the parent a local guest user instead.
-Layout: a hero panel on the left (hidden on narrow screens) and the form
-on the right. "Continue with Google" sends the browser to /auth/google once
+Layout (Genesis Figma): a hero panel on the left (hidden on narrow
+screens) and the form on the right. The GENESIS logo goes back to the
+landing page. "Continue with Google" sends the browser to /auth/google once
 the backend supports it (GOOGLE_SIGN_IN_READY); until then it says so.
 "Forgot password?" switches the card to two more steps: the email
 (/auth/forgot-password emails a 6-digit code), then the code and a new
@@ -23,7 +25,9 @@ password (/auth/reset-password), after which the card goes back to Sign in.
 
 import { useEffect, useState } from 'react';
 import genesisLogo from './GenesisLogo.svg';
+import Icon from './Icons.jsx';
 import { playSound } from '../audio/Audio.js';
+import './LoginScreen.css';
 
 // TODO(backend): set to true once GET /auth/google starts the Google sign-in
 // and redirects back to the site with the session cookie set.
@@ -52,8 +56,6 @@ async function postJson(url, body) {
     return { ok: res.ok, data };
 }
 
-// Short summary of the workflow shown on the hero panel.
-const HERO_STEPS = ['Capture source photos', 'Generate detailed models', 'Build complete scenes'];
 
 // Google's "G" logo, as required on a Google sign-in button.
 function GoogleLogo({ size = 17 }) {
@@ -67,8 +69,8 @@ function GoogleLogo({ size = 17 }) {
     );
 }
 
-function LoginScreen({ onLogin }) {
-    const [mode, setMode] = useState('signin');
+function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
+    const [mode, setMode] = useState(initialMode);
     const [displayName, setDisplayName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -262,149 +264,184 @@ function LoginScreen({ onLogin }) {
         }
     }
 
+    const logo = (
+        <button
+            type="button"
+            className="auth-logo"
+            onClick={() => {
+                playSound('back');
+                onBackToLanding();
+            }}
+            aria-label="Back to the GENESIS home page"
+        >
+            <span className="auth-logo-mark"><img src={genesisLogo} alt="" /></span>
+            GENESIS
+        </button>
+    );
+
     return (
-        <div className="genesis-login genesis-login-split">
-            <aside className="login-hero">
-                <div className="forma-logo login-hero-logo">
-                    <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
-                    GENESIS
-                </div>
-                <div className="login-hero-copy">
-                    <p className="eyebrow eyebrow-accent">Creative 3D workspace</p>
-                    <h2>Shape ideas into worlds.</h2>
+        <div className="auth-page">
+            <aside className="auth-hero">
+                {logo}
+                <div className="auth-hero-copy">
+                    <h2>Build 3D models from photos.</h2>
                     <p>
-                        Turn source photos and video frames into polished 3D assets, then
-                        refine and arrange them in one connected workspace.
+                        Turn source photos and video frames into polished 3D assets. Refine
+                        and arrange them in one connected workspace.
                     </p>
-                    <ul className="login-hero-steps">
-                        {HERO_STEPS.map((step) => <li key={step}>{step}</li>)}
-                    </ul>
                 </div>
-                <p className="login-hero-footer">Image to model - Model to scene</p>
             </aside>
 
-            <div className="login-panel">
-                <form className="login-card" onSubmit={handleSubmit}>
-                    <div className="forma-logo login-logo">
-                        <span className="forma-logo-icon"><img src={genesisLogo} alt="" /></span>
-                        GENESIS
-                    </div>
-                    <p className="eyebrow">{isSignUp ? 'Create account' : isPasswordReset ? 'Forgot password' : 'Sign in'}</p>
+            <main className="auth-panel">
+                <form className={mode === 'signin' ? 'auth-card is-login' : 'auth-card'} onSubmit={handleSubmit} noValidate>
+                    <div className="auth-card-logo">{logo}</div>
+                    {/* Phones: the hero is hidden, so logging in opens with its line instead. */}
+                    {mode === 'signin' && (
+                        <div className="auth-card-intro" aria-hidden="true">
+                            <p className="auth-card-intro-title">Build 3D models from photos.</p>
+                            <p>Turn photos and video frames into polished 3D assets.</p>
+                        </div>
+                    )}
+                    <p className="auth-eyebrow">
+                        {isSignUp ? 'Get started' : isPasswordReset ? 'Forgot password' : 'Welcome back'}
+                    </p>
                     <h1>
-                        {isSignUp ? 'Create your account'
+                        {isSignUp ? 'Create your Genesis account'
                             : isForgot ? 'Reset your password'
                                 : isReset ? 'Enter your code'
-                                    : 'Welcome to Genesis'}
+                                    : 'Log in to Genesis'}
                     </h1>
                     {isForgot && (
-                        <p className="login-note">
+                        <p className="auth-note">
                             Enter your account&apos;s email and we&apos;ll send you a 6-digit code to set a new password.
                         </p>
                     )}
 
                     {isSignUp && (
-                        <label className="login-field">
-                            Name
-                            <input
-                                type="text"
-                                value={displayName}
-                                onChange={(event) => setDisplayName(event.target.value)}
-                                autoComplete="name"
-                            />
-                        </label>
-                    )}
-                    <label className="login-field">
-                        Email
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(event) => setEmail(event.target.value)}
-                            autoComplete="email"
-                        />
-                    </label>
-                    {isReset && (
-                        <>
-                            <label className="login-field">
-                                6-digit code
+                        <label className="auth-field">
+                            <span className="auth-field-label">Name</span>
+                            <span className="auth-input">
+                                <Icon name="user" size={16} />
                                 <input
                                     type="text"
-                                    inputMode="numeric"
-                                    maxLength={6}
-                                    value={resetCode}
-                                    onChange={(event) => setResetCode(event.target.value.replace(/\D/g, ''))}
-                                    autoComplete="one-time-code"
+                                    value={displayName}
+                                    onChange={(event) => setDisplayName(event.target.value)}
+                                    autoComplete="name"
+                                    placeholder="Your name"
                                 />
+                            </span>
+                        </label>
+                    )}
+
+                    <label className="auth-field">
+                        <span className="auth-field-label">Email address</span>
+                        <span className="auth-input">
+                            <Icon name="mail" size={16} />
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(event) => setEmail(event.target.value)}
+                                autoComplete="email"
+                                placeholder="name@example.com"
+                            />
+                        </span>
+                    </label>
+
+                    {isReset && (
+                        <>
+                            <label className="auth-field">
+                                <span className="auth-field-label">6-digit code</span>
+                                <span className="auth-input">
+                                    <Icon name="mail" size={16} />
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                        value={resetCode}
+                                        onChange={(event) => setResetCode(event.target.value.replace(/\D/g, ''))}
+                                        autoComplete="one-time-code"
+                                        placeholder="123456"
+                                    />
+                                </span>
                             </label>
-                            <label className="login-field">
-                                New password
-                                <input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={(event) => setNewPassword(event.target.value)}
-                                    autoComplete="new-password"
-                                />
+                            <label className="auth-field">
+                                <span className="auth-field-label">New password</span>
+                                <span className="auth-input">
+                                    <Icon name="lock" size={16} />
+                                    <input
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(event) => setNewPassword(event.target.value)}
+                                        autoComplete="new-password"
+                                        placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                                    />
+                                </span>
                             </label>
-                            <label className="login-field">
-                                Confirm new password
-                                <input
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={(event) => setConfirmPassword(event.target.value)}
-                                    autoComplete="new-password"
-                                />
+                            <label className="auth-field">
+                                <span className="auth-field-label">Confirm new password</span>
+                                <span className="auth-input">
+                                    <Icon name="lock" size={16} />
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(event) => setConfirmPassword(event.target.value)}
+                                        autoComplete="new-password"
+                                        placeholder="Type it again"
+                                    />
+                                </span>
                             </label>
                         </>
                     )}
+
                     {!isPasswordReset && (
                         <>
-                            <div className="login-password">
-                                <label className="login-field">
-                                    Password
+                            <label className="auth-field">
+                                <span className="auth-field-label">Password</span>
+                                <span className="auth-input">
+                                    <Icon name="lock" size={16} />
                                     <input
                                         type="password"
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                                        placeholder={isSignUp ? 'At least 6 characters' : 'Enter your password'}
                                     />
-                                </label>
-                                {!isSignUp && (
-                                    <button type="button" className="login-forgot" onClick={handleForgotPassword}>
-                                        Forgot password?
-                                    </button>
-                                )}
-                            </div>
-                            <label className="login-remember">
+                                </span>
+                            </label>
+                            {!isSignUp && (
+                                <button type="button" className="auth-link auth-forgot" onClick={handleForgotPassword}>
+                                    Forgot password?
+                                </button>
+                            )}
+
+                            <label className="auth-remember">
                                 <input
                                     type="checkbox"
                                     checked={rememberMe}
                                     onChange={(event) => setRememberMe(event.target.checked)}
                                 />
-                                Remember me
+                                Keep me logged in
                             </label>
                         </>
                     )}
 
-                    {notice && <p className="login-success" role="status">{notice}</p>}
-                    {errorMessage && <p className="login-error" role="alert">{errorMessage}</p>}
+                    {notice && <p className="auth-notice" role="status">{notice}</p>}
+                    {errorMessage && <p className="auth-error" role="alert">{errorMessage}</p>}
 
-                    <button
-                        type="submit"
-                        className="forma-btn forma-btn-primary login-submit"
-                        disabled={isSubmitting}
-                    >
-                        {isSubmitting ? 'Please wait…'
+                    <button type="submit" className="forma-btn forma-btn-primary auth-submit" disabled={isSubmitting}>
+                        {isSubmitting ? 'Please wait\u2026'
                             : isSignUp ? 'Create account'
                                 : isForgot ? 'Send code'
                                     : isReset ? 'Change password'
-                                        : 'Sign in'}
+                                        : 'Log in'}
                     </button>
 
                     {isPasswordReset && (
-                        <div className="login-reset-links">
+                        <div className="auth-reset-links">
                             {isReset && (
                                 <button
                                     type="button"
-                                    className="login-switch"
+                                    className="auth-link"
                                     onClick={() => { playSound('tap'); requestResetCode(); }}
                                     disabled={!canResend || isSubmitting}
                                     title={canResend ? 'Email a new code' : 'You can ask for a new code a minute after the last one'}
@@ -412,41 +449,35 @@ function LoginScreen({ onLogin }) {
                                     Resend code
                                 </button>
                             )}
-                            <button type="button" className="login-switch" onClick={backToSignIn}>
-                                Back to sign in
+                            <button type="button" className="auth-link" onClick={backToSignIn}>
+                                Back to log in
                             </button>
                         </div>
                     )}
 
                     {!isPasswordReset && (
                         <>
-                            <div className="login-divider"><span>or continue with</span></div>
+                            <div className="auth-divider"><span>or continue with</span></div>
 
-                            <button
-                                type="button"
-                                className="forma-btn login-submit login-google"
-                                onClick={continueWithGoogle}
-                                disabled={isSubmitting}
-                            >
-                                <GoogleLogo /> Continue with Google
-                            </button>
+                            <div className="auth-alternatives">
+                                <button type="button" className="forma-btn auth-alternative" onClick={continueWithGoogle} disabled={isSubmitting}>
+                                    <GoogleLogo /> Google
+                                </button>
+                                <button type="button" className="forma-btn auth-alternative" onClick={continueAsGuest} disabled={isSubmitting}>
+                                    <Icon name="user" size={16} /> Guest
+                                </button>
+                            </div>
 
-                            <button
-                                type="button"
-                                className="forma-btn login-submit"
-                                onClick={continueAsGuest}
-                                disabled={isSubmitting}
-                            >
-                                Continue as guest
-                            </button>
-
-                            <button type="button" className="login-switch" onClick={switchMode}>
-                                {isSignUp ? 'Already have an account? Sign in' : 'New here? Create an account'}
-                            </button>
+                            <p className="auth-switch">
+                                {isSignUp ? 'Already have an account?' : 'New to Genesis?'}
+                                <button type="button" className="auth-link" onClick={switchMode}>
+                                    {isSignUp ? 'Log in' : 'Create an account'}
+                                </button>
+                            </p>
                         </>
                     )}
                 </form>
-            </div>
+            </main>
         </div>
     );
 }

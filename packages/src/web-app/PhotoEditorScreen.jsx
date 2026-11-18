@@ -19,7 +19,9 @@ and uploaded batches) masks out the background when the model is
 built, and the "Model detail" slider (Fast / Normal / Detailed) sets how
 many training iterations the build runs. Edits are only
 settings until upload, so the originals are never changed. Phones get a
-simpler, batch-only set of tools. "Review photos first" in Camera Capture
+simpler, batch-only set of tools, laid out like the mobile Figma: the
+heading's buttons are hidden, Add photos sits beside Leave out flagged,
+and Generate stays pinned above the tab bar. "Review photos first" in Camera Capture
 opens the editor with that batch already loaded (initialPhotos); its
 "Back to camera" button returns the photos to the capture page. Opened
 on its own, the same button reads "Go to camera" and takes any photos
@@ -809,8 +811,12 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                             <button className="forma-btn" onClick={leaveOutFlagged} disabled={flaggedCount === 0}>
                                 <Icon name="wand" size={14} /> Leave out flagged
                             </button>
-                            <button className="forma-btn" onClick={keepAll}>
+                            <button className="forma-btn photo-editor-keep-all" onClick={keepAll}>
                                 <Icon name="refresh" size={14} /> Keep all
+                            </button>
+                            {/* Phones: the heading's buttons are hidden, so Add photos is here. */}
+                            <button className="forma-btn photo-editor-phone-add" onClick={openFilePicker}>
+                                <Icon name="plus" size={14} /> Add photos
                             </button>
                         </div>
                     </div>

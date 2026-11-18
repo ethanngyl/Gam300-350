@@ -17,7 +17,7 @@ click thumbnail grid. The "compact" variant, used inside the Library tab's
 Photo Library, shows one card per job with a single small thumbnail of its
 first photo and the photo count (with search and sort);
 clicking a card opens that job's full grid so photos can still be
-downloaded.
+downloaded, with a Back button above it to return to the cards.
 - ImageGallery({ onBack, variant, searchTerm, sortOrder })
 The gallery component.
 - load()
@@ -143,8 +143,8 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         if (openJob) {
             return (
                 <div className="gallery gallery-compact">
-                    <button className="forma-btn gallery-compact-back" onClick={() => { playSound('back'); setOpenJobId(null); }}>
-                        All batches
+                    <button className="gallery-compact-back" onClick={() => { playSound('back'); setOpenJobId(null); }}>
+                        <Icon name="arrowLeft" size={15} /> Back
                     </button>
                     {renderJobSection(openJob)}
                 </div>

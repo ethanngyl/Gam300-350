@@ -8,20 +8,24 @@
 \brief
 First-run walkthrough of the dashboard (Genesis design). The page is
 dimmed and a glowing spotlight is drawn around one item at a time (Home's
-Recent section, then each dock item from left to right), with a tooltip
-beside it: step count, title, a short line of text, and Skip / Next
-(Finish on the last step). Escape skips. If a step's item is not on the
-screen, its tooltip is shown in the middle of the page instead.
-In the mobile view the dock shows five tabs at a time, so each step slides
-the tabs to the five that hold its item, and finishing slides back to the
-five that hold the current page.
+Recent section, then each sidebar item from top to bottom, or each dock
+item from left to right on phones), with a tooltip beside it: step count,
+title, a short line of text, and Skip / Next (Finish on the last step).
+The tooltip goes to the right of sidebar items, under the top bar's and
+above the dock's. Escape skips. If a step's item is not on the screen,
+its tooltip is shown in the middle of the page instead; steps marked
+optional are left out when their item isn't there (e.g. Learn on phones).
+In the mobile view the dock shows four tabs at a time, so each step slides
+the tabs to the four that hold its item, and finishing slides back to the
+four that hold the current page.
 App.jsx shows it the first time each account signs in on a browser, and
 again when the user presses "Show walkthrough" (account page or account
 menu). Guests can't save work, so their last step suggests signing in.
 - WALKTHROUGH_STEPS
-The steps: a CSS selector for the item to highlight, title, text (and
-guestText if guests see different text), and whether the tooltip goes
-above or below the item.
+The steps: CSS selectors for the item to highlight (the first one on the
+page is used: the sidebar's, else the dock's), title, text (and
+mobileText / guestText where phones or guests see different text), and
+optional for steps to leave out when their item isn't there.
 - Walkthrough({ isGuest, onClose })
 React component. Calls onClose() when the user skips or finishes.
 **************************************************************************/
@@ -32,72 +36,52 @@ import './Walkthrough.css';
 
 const WALKTHROUGH_STEPS = [
     {
-        target: '.home-recent-v2-header',
+        targets: ['.home-recent-v2-header'],
         title: 'Recent',
         text: 'Your recent work will appear here.',
-        placement: 'below',
         padding: 14,
     },
     {
-        target: '.genesis-dock [aria-label="New model"]',
+        targets: ['.app-sidebar [aria-label="New"]', '.genesis-dock [aria-label="Capture"]'],
         title: 'New model',
-        text: 'Quickly get started with your camera.',
-        placement: 'above',
+        text: 'Start a model with your camera, or upload photos you already have.',
+        mobileText: 'Quickly get started with your camera.',
     },
     {
-        target: '.genesis-dock [aria-label="Add photos"]',
+        targets: ['.genesis-dock [aria-label="Add photos"]'],
         title: 'Add photos',
         text: 'Already have your photos? Upload them here.',
-        placement: 'above',
+        optional: true,
     },
+    ...[
+        ['Home', 'Your personal workspace.'],
+        ['Media Library', 'Your models and uploaded photos are stored here.'],
+        ['Photo Editor', 'Edit your photos to get the best model quality.'],
+        ['Scene Builder', 'Arrange your models into a scene that matches your vision.'],
+        ['Video Extractor', 'Turn videos or animated GIFs of an object into a 3D model.'],
+        ['Model Viewer', 'Open and inspect your finished models, or a .ply file from your computer.'],
+    ].map(([label, text]) => ({
+        targets: [`.app-sidebar [aria-label="${label}"]`, `.genesis-dock [aria-label="${label}"]`],
+        title: label,
+        text,
+    })),
     {
-        target: '.genesis-dock [aria-label="Home"]',
-        title: 'Home',
-        text: 'Your personal workspace.',
-        placement: 'above',
-    },
-    {
-        target: '.genesis-dock [aria-label="Media Library"]',
-        title: 'Media Library',
-        text: 'Your models and uploaded photos are stored here.',
-        placement: 'above',
-    },
-    {
-        target: '.genesis-dock [aria-label="Photo Editor"]',
-        title: 'Photo Editor',
-        text: 'Edit your photos to get the best model quality.',
-        placement: 'above',
-    },
-    {
-        target: '.genesis-dock [aria-label="Scene Builder"]',
-        title: 'Scene Builder',
-        text: 'Arrange your models into a scene that matches your vision.',
-        placement: 'above',
-    },
-    {
-        target: '.genesis-dock [aria-label="Frame Extractor"]',
-        title: 'Frame Extractor',
-        text: 'Turn videos or animated GIFs of an object into a 3D model.',
-        placement: 'above',
-    },
-    {
-        target: '.genesis-dock [aria-label="Model Viewer"]',
-        title: 'Model Viewer',
-        text: 'Open and inspect your finished models, or a .ply file from your computer.',
-        placement: 'above',
-    },
-    {
-        target: '.genesis-dock [aria-label="Feedback"]',
+        targets: ['.app-sidebar [aria-label="Feedback"]', '.genesis-dock [aria-label="Feedback"]'],
         title: 'Feedback',
         text: 'Found a bug or have an idea? Tell us here.',
-        placement: 'above',
     },
     {
-        target: '.genesis-dock-avatar',
+        targets: ['.app-sidebar [aria-label="Learn"]'],
+        title: 'Learn',
+        text: 'Replay this walkthrough any time from here.',
+        optional: true,
+    },
+    {
+        targets: ['.app-topbar .app-avatar'],
         title: 'Your account',
-        text: 'Your profile, plan and sound settings. You can replay this walkthrough from here.',
+        text: 'Your profile, plan and sound settings.',
+        mobileText: 'Your profile, plan and sound settings. You can replay this walkthrough from here.',
         guestText: 'Sign in here to save your work, choose a plan and send feedback.',
-        placement: 'above',
     },
 ];
 
@@ -108,10 +92,27 @@ const TOOLTIP_GAP = 14;
 const TOOLTIP_WIDTH = 276;
 // Closest the tooltip may come to the sides of the screen.
 const SCREEN_MARGIN = 12;
-// The mobile dock's tabs (Dock.jsx), five to a page.
+// The mobile dock's tabs (Dock.jsx), four to a page.
 const MOBILE_DOCK_SCROLLER = '.genesis-mdock-scroller';
 
-// Mobile dock: slide its tabs to the five that hold tabElement. Instant, so
+// The step's item: the first of its selectors found on the page.
+function findTarget(step) {
+    for (const selector of step.targets) {
+        const element = document.querySelector(selector);
+        if (element) return element;
+    }
+    return null;
+}
+
+// Where the tooltip goes for an item: right of the sidebar, under the top
+// bar, above the dock, and under anything else.
+function placementFor(element) {
+    if (element?.closest('.app-sidebar')) return 'right';
+    if (element?.closest('.genesis-dock')) return 'above';
+    return 'below';
+}
+
+// Mobile dock: slide its tabs to the four that hold tabElement. Instant, so
 // the spotlight can be measured straight after.
 function showMobileDockPageWith(tabElement) {
     const scroller = tabElement?.closest(MOBILE_DOCK_SCROLLER);
@@ -122,14 +123,21 @@ function showMobileDockPageWith(tabElement) {
 }
 
 function Walkthrough({ isGuest = false, onClose }) {
+    // The steps for this layout: optional ones whose item isn't on the page are left out.
+    const [steps] = useState(() => WALKTHROUGH_STEPS.filter((step) => !step.optional || findTarget(step)));
     const [stepIndex, setStepIndex] = useState(0);
-    // The highlighted item's position on screen, or null if it isn't there.
-    const [targetRect, setTargetRect] = useState(null);
+    // The highlighted item's position on screen and where its tooltip goes,
+    // or null if it isn't there.
+    const [target, setTarget] = useState(null);
 
-    const step = WALKTHROUGH_STEPS[stepIndex];
-    const isLastStep = stepIndex === WALKTHROUGH_STEPS.length - 1;
+    const step = steps[stepIndex];
+    const isLastStep = stepIndex === steps.length - 1;
     const padding = step.padding ?? DEFAULT_PADDING;
-    const stepText = isGuest && step.guestText ? step.guestText : step.text;
+    // Phones have the tab bar instead of the sidebar.
+    const isPhoneLayout = target !== null && !document.querySelector('.app-sidebar');
+    let stepText = step.text;
+    if (isPhoneLayout && step.mobileText) stepText = step.mobileText;
+    if (isGuest && step.guestText) stepText = step.guestText;
 
     const finish = useCallback(() => {
         // Mobile dock: back to the tabs that hold the current page.
@@ -141,17 +149,23 @@ function Walkthrough({ isGuest = false, onClose }) {
     // spotlight on it when the window is resized or the page scrolls.
     useEffect(() => {
         function measureTarget() {
-            const targetElement = document.querySelector(step.target);
+            const targetElement = findTarget(step);
             if (!targetElement) {
-                setTargetRect(null);
+                setTarget(null);
                 return;
             }
             const rect = targetElement.getBoundingClientRect();
-            setTargetRect({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+            setTarget({
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height,
+                placement: placementFor(targetElement),
+            });
         }
 
-        const targetElement = document.querySelector(step.target);
-        // The mobile dock snaps to pages of five, which would undo scrollIntoView.
+        const targetElement = findTarget(step);
+        // The mobile dock snaps to pages of four, which would undo scrollIntoView.
         if (!showMobileDockPageWith(targetElement)) targetElement?.scrollIntoView({ block: 'nearest' });
         const frameId = requestAnimationFrame(measureTarget);
         window.addEventListener('resize', measureTarget);
@@ -163,7 +177,7 @@ function Walkthrough({ isGuest = false, onClose }) {
             window.removeEventListener('resize', measureTarget);
             window.removeEventListener('scroll', measureTarget, true);
         };
-    }, [step.target]);
+    }, [step]);
 
     // Escape skips the walkthrough.
     useEffect(() => {
@@ -192,21 +206,27 @@ function Walkthrough({ isGuest = false, onClose }) {
     let tooltipStyle;
     const tooltipWidth = Math.min(TOOLTIP_WIDTH, window.innerWidth - SCREEN_MARGIN * 2);
 
-    if (targetRect) {
+    if (target) {
         spotlightStyle = {
-            left: targetRect.left - padding,
-            top: targetRect.top - padding,
-            width: targetRect.width + padding * 2,
-            height: targetRect.height + padding * 2,
-            borderRadius: step.target.includes('dock') ? 999 : 14,
+            left: target.left - padding,
+            top: target.top - padding,
+            width: target.width + padding * 2,
+            height: target.height + padding * 2,
+            borderRadius: target.placement === 'above' ? 999 : 14,
         };
 
-        // Centred on the item, but kept inside the screen.
-        const centredLeft = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
-        const left = Math.max(SCREEN_MARGIN, Math.min(window.innerWidth - tooltipWidth - SCREEN_MARGIN, centredLeft));
-        tooltipStyle = step.placement === 'above'
-            ? { left, width: tooltipWidth, bottom: window.innerHeight - (targetRect.top - padding - TOOLTIP_GAP) }
-            : { left, width: tooltipWidth, top: targetRect.top + targetRect.height + padding + TOOLTIP_GAP };
+        if (target.placement === 'right') {
+            // Beside the item, its top level with the item's (kept on screen).
+            const top = Math.max(SCREEN_MARGIN, Math.min(window.innerHeight - 180, target.top - padding));
+            tooltipStyle = { left: target.left + target.width + padding + TOOLTIP_GAP, width: tooltipWidth, top };
+        } else {
+            // Centred on the item, but kept inside the screen.
+            const centredLeft = target.left + target.width / 2 - tooltipWidth / 2;
+            const left = Math.max(SCREEN_MARGIN, Math.min(window.innerWidth - tooltipWidth - SCREEN_MARGIN, centredLeft));
+            tooltipStyle = target.placement === 'above'
+                ? { left, width: tooltipWidth, bottom: window.innerHeight - (target.top - padding - TOOLTIP_GAP) }
+                : { left, width: tooltipWidth, top: target.top + target.height + padding + TOOLTIP_GAP };
+        }
     } else {
         // Item not on screen: tooltip in the middle of the page.
         tooltipStyle = { left: '50%', top: '50%', width: tooltipWidth, transform: 'translate(-50%, -50%)' };
@@ -219,7 +239,7 @@ function Walkthrough({ isGuest = false, onClose }) {
             {spotlightStyle && <div className="walkthrough-spotlight" style={spotlightStyle} />}
 
             <div className="walkthrough-tooltip" style={tooltipStyle} aria-live="polite">
-                <span className="walkthrough-progress">{stepIndex + 1} / {WALKTHROUGH_STEPS.length}</span>
+                <span className="walkthrough-progress">{stepIndex + 1} / {steps.length}</span>
                 <strong className="walkthrough-title">{step.title}</strong>
                 <p className="walkthrough-text">{stepText}</p>
                 <div className="walkthrough-actions">

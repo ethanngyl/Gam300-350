@@ -6,16 +6,21 @@
 \par Software Engineering Project 5
 \date 17-10-2026
 \brief
-Top-level app shell. Shows the login screen until a user is signed in
-(session kept in localStorage). Once signed in it renders the GENESIS
-dashboard (a floating dock at the bottom, laid out like the Genesis second
-layout) with these pages above it: Home, Library, Photo Editor, Scene
-Builder, Model Viewer, Frame Extractor, Feedback, Capture and Account. Capture
-opens from the dock's New model button, or from Add photos with the
-chosen photos already in the batch; its "Review photos first" hands the
-batch to the Photo Editor. The first time each account signs in on this
-browser, the walkthrough (Walkthrough.jsx) tours the dock; "Show
-walkthrough" on the account page or in the account menu replays it.
+Top-level app shell. Signed out, it shows the landing page
+(LandingScreen.jsx), and the login screen only when the user asks to log
+in (#/login) or get started (#/signup); the session is kept in
+localStorage. Once signed in it renders the GENESIS dashboard, laid out
+like the Genesis Figma: a top bar (TopNav.jsx) and a left sidebar
+(Sidebar.jsx) around the page on wider screens, or the top bar and the
+phone tab bar (Dock.jsx) at 760px wide or less (phones show Capture full
+screen, without either). The pages: Home, Library, Photo Editor,
+Scene Builder, Model Viewer, Video Extractor (FrameExtractor.jsx),
+Feedback, Capture and Account. Capture opens from New > Capture with
+camera, or from Upload photos with the chosen photos already in the
+batch; its "Review photos first" hands the batch to the Photo Editor. The
+first time each account signs in on this browser, the walkthrough
+(Walkthrough.jsx) tours the sidebar (or the dock on phones); Learn in the
+sidebar and "Show walkthrough" on the account page replay it.
 Opening a model (from Home, the Media Library or the Model Viewer, a .ply
 from the user's computer, or a build that just finished, from photos or
 the Frame Extractor) shows the model page (ModelScreen.jsx) inside the
@@ -36,6 +41,9 @@ import Processing from './Processing.jsx';
 import FrameExtractor from './FrameExtractor.jsx';
 import ImageGallery from './ImageGallery.jsx';
 import Dock from './Dock.jsx';
+import Sidebar from './Sidebar.jsx';
+import TopNav from './TopNav.jsx';
+import LandingScreen from './LandingScreen.jsx';
 import HomeScreen from './HomeScreen.jsx';
 import LibraryScreen from './LibraryScreen.jsx';
 import PhotoEditorScreen from './PhotoEditorScreen.jsx';
@@ -50,9 +58,13 @@ import { useUndoableState } from './useUndoableState.js';
 import { NEW_SCENE_INFO, createSceneObject } from './SceneStorage.js';
 import { hashToView, viewToHash } from './AppRoutes.js';
 import { uploadMedia } from './mediaJobs.js';
+import { useMobileView } from './useMobileView.js';
 import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
+import './AppShell.css';
+import './Pages.css';
+import './MobileShell.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
 // Names of the pages a model can be opened from, for the model page's back link.
@@ -61,8 +73,16 @@ const TAB_LABELS = {
     library: 'Media Library',
     viewer: 'Model Viewer',
     scene: 'Scene Builder',
-    extractor: 'Frame Extractor',
+    extractor: 'Video Extractor',
 };
+
+// Signed out: the landing page, or the login screen in sign-in or
+// create-account mode, from the address bar (#/login, #/signup).
+function authPageFromHash(hash) {
+    if (hash === '#/login') return 'login';
+    if (hash === '#/signup') return 'signup';
+    return 'landing';
+}
 
 // AppRoutes.js names the model page by its old full-page screens: 'result'
 // (a server model, #/model/<jobId>) or 'local-model' (a .ply from this
@@ -134,6 +154,26 @@ function saveUser(user) {
 
 function App() {
     const [currentUser, setCurrentUser] = useState(loadSavedUser);
+    const isMobile = useMobileView();
+    // Signed out: 'landing' | 'login' | 'signup' (see authPageFromHash).
+    const [authPage, setAuthPage] = useState(() => authPageFromHash(window.location.hash));
+    useEffect(() => {
+        if (currentUser) return undefined;
+        function readAuthPage() {
+            setAuthPage(authPageFromHash(window.location.hash));
+        }
+        window.addEventListener('hashchange', readAuthPage);
+        return () => window.removeEventListener('hashchange', readAuthPage);
+    }, [currentUser]);
+
+    // Signed out: opens the landing page, login or create account, with its
+    // own history entry so Back returns to the previous one.
+    const showAuthPage = useCallback((page) => {
+        const hash = page === 'landing' ? '#/' : `#/${page}`;
+        if (window.location.hash !== hash) window.history.pushState(null, '', hash);
+        setAuthPage(page);
+        window.scrollTo(0, 0);
+    }, []);
     // True until GET /auth/me answers, so no screen fetches with a dead session.
     const [isCheckingSession, setIsCheckingSession] = useState(true);
 
@@ -189,6 +229,9 @@ function App() {
         initialView.modelJobId ? { jobId: initialView.modelJobId } : null);
     // The tab the model page was opened from, for its back link.
     const [modelReturnTab, setModelReturnTab] = useState('viewer');
+    // Wider screens: the page shown behind the account window, and where
+    // closing it returns to.
+    const [accountReturnTab, setAccountReturnTab] = useState('home');
     // Releases a local .ply's blob URL once another model replaces it.
     const localModelUrl = viewedModel?.localFile?.url;
     useEffect(() => () => {
@@ -289,6 +332,8 @@ function App() {
     }, [viewedModel]);
 
     useEffect(() => {
+        // Signed out, the address bar belongs to the landing and login pages.
+        if (!currentUser) return;
         const hash = viewToHash(toRouteView({ activeTab, librarySubTab, screen, jobId, viewedModel }));
         const replace = replaceNextRef.current;
         replaceNextRef.current = false;
@@ -296,7 +341,7 @@ function App() {
         if (hash === window.location.hash) return;
         if (replace) window.history.replaceState(null, '', hash);
         else window.history.pushState(null, '', hash);
-    }, [activeTab, librarySubTab, screen, jobId, viewedModel]);
+    }, [currentUser, activeTab, librarySubTab, screen, jobId, viewedModel]);
 
     useEffect(() => {
         function handlePopState() {
@@ -338,7 +383,9 @@ function App() {
         setActiveTab('home');
     }
 
-    function handleSignOut() {
+    // Signs out and shows nextPage: the landing page, or the login screen
+    // when a guest chose to sign in.
+    function handleSignOut(nextPage = 'landing') {
         // Ends the session on the server and clears the cookie. Not awaited:
         // a backend that is down must not stop the user signing out here.
         fetch('/api/v1/auth/logout', { method: 'POST' }).catch(() => { });
@@ -348,6 +395,15 @@ function App() {
         scene.reset([]);
         setSceneInfo(NEW_SCENE_INFO);
         setActiveTab('home');
+        // The next sign-in replaces the login page's address with Home's.
+        replaceNextRef.current = true;
+        window.history.replaceState(null, '', nextPage === 'landing' ? '#/' : `#/${nextPage}`);
+        setAuthPage(nextPage);
+    }
+
+    // Guests (who aren't really signed in) go to the login screen instead.
+    function handleSignOutOrSignIn() {
+        handleSignOut(currentUser?.isGuest ? 'login' : 'landing');
     }
 
     // Every navigation goes through here: it clears a stale upload error so
@@ -389,6 +445,13 @@ function App() {
     function openLibrary(subTab) {
         setLibrarySubTab(subTab);
         goToTab('library');
+    }
+
+    // Opens account settings: a window over the current page on wider
+    // screens (closing returns to that page), a page of its own on phones.
+    function openAccount() {
+        if (activeTab !== 'account') setAccountReturnTab(activeTab);
+        goToTab('account');
     }
 
     // Uploads the real batch to the backend and starts reconstruction.
@@ -531,7 +594,9 @@ function App() {
 
     // Opens a finished model from Home, the Media Library or the Model Viewer.
     function openModel(modelJobId) {
-        showModelPage({ jobId: modelJobId }, activeTab);
+        // From the account window, the back link returns to the page behind it.
+        const returnTab = activeTab === 'account' && !isMobile ? accountReturnTab : activeTab;
+        showModelPage({ jobId: modelJobId }, returnTab);
     }
 
     // Opens a .ply or .obj from the user's computer (Model Viewer's "Open .ply / .obj file").
@@ -567,7 +632,18 @@ function App() {
     }
 
     if (!currentUser) {
-        return <LoginScreen onLogin={handleLogin} />;
+        if (authPage === 'landing') {
+            return <LandingScreen onLogIn={() => showAuthPage('login')} onGetStarted={() => showAuthPage('signup')} />;
+        }
+        return (
+            <LoginScreen
+                // key: switching between login and sign-up from the landing page starts afresh.
+                key={authPage}
+                initialMode={authPage === 'signup' ? 'signup' : 'signin'}
+                onLogin={handleLogin}
+                onBackToLanding={() => showAuthPage('landing')}
+            />
+        );
     }
 
     if (screen === 'processing' && (jobId || mediaBuild)) {
@@ -586,27 +662,60 @@ function App() {
         return <ImageGallery onBack={backToDashboard} />;
     }
 
+    // Wider screens show account settings as a window over the page it was
+    // opened from; phones show it as a page.
+    const isAccountWindowOpen = !isMobile && activeTab === 'account';
+    const pageTab = isAccountWindowOpen ? accountReturnTab : activeTab;
+
     return (
-        <div className="forma-app genesis-shell">
+        <div className={isMobile ? 'forma-app genesis-shell has-mobile-topbar' : 'forma-app genesis-shell has-app-sidebar'}>
+            {/* Phones: the full-screen camera has no top bar, and the model
+                page has its own header with a back button instead. */}
+            {!(isMobile && (pageTab === 'capture' || pageTab === 'model')) && (
+                <TopNav
+                    user={currentUser}
+                    isCompact={isMobile}
+                    onGoHome={() => goToTab('home')}
+                    onOpenModel={openModel}
+                    onOpenLibrary={openLibrary}
+                    onOpenHelp={() => goToTab('feedback')}
+                    onOpenAccount={openAccount}
+                    onShowWalkthrough={showWalkthroughAgain}
+                    onSignOut={handleSignOutOrSignIn}
+                />
+            )}
+            {!isMobile && (
+                <>
+                    <Sidebar
+                        // The model page belongs with the Model Viewer.
+                        activeTab={activeTab === 'model' ? 'viewer' : activeTab}
+                        onNavigate={goToTab}
+                        onNewModel={() => goToTab('capture')}
+                        onAddPhotos={addPhotosToCapture}
+                        onLearn={showWalkthroughAgain}
+                    />
+                </>
+            )}
             <div className="genesis-body">
                 {/* key resets the scroll position, so each page opens at the top. */}
-                <div className="genesis-main" key={activeTab}>
-                    {activeTab === 'home' && (
+                <div className="genesis-main" key={pageTab}>
+                    {pageTab === 'home' && (
                         <HomeScreen
-                            userName={currentUser.name}
                             onNewGeneration={() => goToTab('capture')}
+                            onEditPhotos={(files) => reviewPhotosInEditor(files)}
+                            onNavigate={goToTab}
                             onOpenLibrary={openLibrary}
                             onOpenModel={openModel}
                         />
                     )}
-                    {activeTab === 'library' && (
+                    {pageTab === 'library' && (
                         <LibraryScreen
                             subTab={librarySubTab}
                             onSubTabChange={setLibrarySubTab}
                             onOpenModel={openModel}
                         />
                     )}
-                    {activeTab === 'editor' && (
+                    {pageTab === 'editor' && (
                         <PhotoEditorScreen
                             onGenerateModel={handleBatchReady}
                             uploadError={uploadError}
@@ -614,7 +723,7 @@ function App() {
                             onBackToCapture={returnPhotosToCapture}
                         />
                     )}
-                    {activeTab === 'scene' && (
+                    {pageTab === 'scene' && (
                         <SceneBuilderScreen
                             objects={scene.value}
                             onObjectsChange={scene.set}
@@ -627,10 +736,10 @@ function App() {
                             onSceneInfoChange={setSceneInfo}
                         />
                     )}
-                    {activeTab === 'viewer' && (
+                    {pageTab === 'viewer' && (
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}
-                    {activeTab === 'extractor' && (
+                    {pageTab === 'extractor' && (
                         // FrameExtractor plays the click sound itself, so none here.
                         <FrameExtractor
                             onStartBuild={startMediaBuild}
@@ -638,7 +747,7 @@ function App() {
                             notice={frameExtractorNotice}
                         />
                     )}
-                    {activeTab === 'capture' && (
+                    {pageTab === 'capture' && (
                         // CameraCapture plays the click sound itself, so none here.
                         <CameraCapture
                             onBatchReady={handleBatchReady}
@@ -650,18 +759,20 @@ function App() {
                             onRegisterAddFiles={registerCaptureAddFiles}
                         />
                     )}
-                    {activeTab === 'account' && (
+                    {pageTab === 'account' && (
                         <AccountScreen
                             user={currentUser}
-                            onSignOut={handleSignOut}
+                            onOpenModel={openModel}
+                            onOpenLibrary={openLibrary}
+                            onSignOut={handleSignOutOrSignIn}
                             onShowWalkthrough={showWalkthroughAgain}
                         />
                     )}
-                    {activeTab === 'feedback' && (
+                    {pageTab === 'feedback' && (
                         // Guests are sent back to the login screen to sign in.
-                        <FeedbackScreen user={currentUser} onSignIn={handleSignOut} />
+                        <FeedbackScreen user={currentUser} onSignIn={() => handleSignOut('login')} />
                     )}
-                    {activeTab === 'model' && viewedModel && (
+                    {pageTab === 'model' && viewedModel && (
                         <ModelScreen
                             jobId={viewedModel.jobId}
                             localFile={viewedModel.localFile}
@@ -677,20 +788,29 @@ function App() {
                 </div>
             </div>
 
+            {isAccountWindowOpen && (
+                <AccountScreen
+                    user={currentUser}
+                    isModal
+                    onClose={() => goToTab(accountReturnTab)}
+                    onOpenModel={openModel}
+                    onOpenLibrary={openLibrary}
+                    onSignOut={handleSignOutOrSignIn}
+                    onShowWalkthrough={showWalkthroughAgain}
+                />
+            )}
+
             {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
 
-            <Dock
-                isPinned={isWalkthroughOpen}
-                // The model page belongs with the Model Viewer.
-                activeTab={activeTab === 'model' ? 'viewer' : activeTab}
-                onNavigate={goToTab}
-                onNewModel={() => goToTab('capture')}
-                onAddPhotos={addPhotosToCapture}
-                user={currentUser}
-                onOpenAccount={() => goToTab('account')}
-                onShowWalkthrough={showWalkthroughAgain}
-                onSignOut={handleSignOut}
-            />
+            {isMobile && pageTab !== 'capture' && (
+                <Dock
+                    // The model page belongs with the Media Library, where
+                    // phones open models from.
+                    activeTab={activeTab === 'model' ? 'library' : activeTab}
+                    onNavigate={goToTab}
+                    onNewModel={() => goToTab('capture')}
+                />
+            )}
         </div>
     );
 }

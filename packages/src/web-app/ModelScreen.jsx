@@ -20,6 +20,10 @@ Delete). Rename and delete use the Library's dialog and calls (mediaApi).
 A .ply opened from the user's computer uses the same page with only the
 viewer, its file details and Export .obj. A .obj opened from the user's
 computer is shown with ObjViewer, with its vertex and triangle counts.
+On phones it follows the mobile Figma: a header with a back button, the
+model's name and a menu (Rename, Delete), then the viewer, the name and
+badge, a row of Photos / Size / Format, Download, Export .obj and Add to
+scene, and the source photos.
 Right after a build, showNamePrompt asks for the model's name first.
 - ModelScreen({ jobId, localFile, backLabel, showNamePrompt, onNamePromptClose,
   onBack, onOpenPhotos, onAddToScene, onDeleted })
@@ -37,6 +41,7 @@ import SplatViewer from './SplatViewer.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
 import { smallPhotoUrl } from './LibraryPhotos.js';
 import { readPlyInfo } from './plyHeader.js';
+import { useMobileView } from './useMobileView.js';
 import { playSound } from '../audio/Audio.js';
 import './ModelScreen.css';
 
@@ -81,7 +86,28 @@ function ModelScreen({
     const [dialog, setDialog] = useState(null);
     // Bumped to load the model again (after naming it).
     const [reloadCount, setReloadCount] = useState(0);
+    // Phones: whether the header's menu (Rename, Delete) is open.
+    const [isPhoneMenuOpen, setIsPhoneMenuOpen] = useState(false);
     const viewerCardRef = useRef(null);
+    const phoneMenuRef = useRef(null);
+    const isPhone = useMobileView();
+
+    // The phone header's menu closes on a click outside it or on Escape.
+    useEffect(() => {
+        if (!isPhoneMenuOpen) return undefined;
+        function closeOnOutsideClick(event) {
+            if (!phoneMenuRef.current?.contains(event.target)) setIsPhoneMenuOpen(false);
+        }
+        function closeOnEscape(event) {
+            if (event.key === 'Escape') setIsPhoneMenuOpen(false);
+        }
+        document.addEventListener('pointerdown', closeOnOutsideClick);
+        document.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', closeOnOutsideClick);
+            document.removeEventListener('keydown', closeOnEscape);
+        };
+    }, [isPhoneMenuOpen]);
 
     // Server models are always .ply; a local file is whatever the user picked.
     const isObj = !jobId && /\.obj$/i.test(localFile?.name ?? '');
@@ -196,6 +222,65 @@ function ModelScreen({
 
     return (
         <div className="model-screen">
+            {isPhone && (
+                <div className="model-phone-header">
+                    <button
+                        className="model-round-btn"
+                        aria-label={`Back to ${backLabel}`}
+                        onClick={() => {
+                            playSound('back');
+                            onBack();
+                        }}
+                    >
+                        <Icon name="arrowLeft" size={18} />
+                    </button>
+                    <span className="model-phone-title">{modelName}</span>
+                    {jobId && model ? (
+                        <div className="model-phone-menu-anchor" ref={phoneMenuRef}>
+                            <button
+                                className="model-round-btn"
+                                aria-label="More options"
+                                aria-expanded={isPhoneMenuOpen}
+                                onClick={() => {
+                                    playSound('tap');
+                                    setIsPhoneMenuOpen((isOpen) => !isOpen);
+                                }}
+                            >
+                                <Icon name="more" size={18} />
+                            </button>
+                            {isPhoneMenuOpen && (
+                                <div className="app-menu model-phone-menu" role="menu">
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="app-menu-item is-compact"
+                                        onClick={() => {
+                                            setIsPhoneMenuOpen(false);
+                                            openRenameDialog();
+                                        }}
+                                    >
+                                        <Icon name="edit" size={16} /> Rename
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="app-menu-item is-compact model-delete"
+                                        onClick={() => {
+                                            setIsPhoneMenuOpen(false);
+                                            openDeleteDialog();
+                                        }}
+                                    >
+                                        <Icon name="trash" size={16} /> Delete model
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <span className="model-round-btn is-placeholder" aria-hidden="true" />
+                    )}
+                </div>
+            )}
+
             <button
                 className="model-back"
                 onClick={() => {
@@ -219,6 +304,16 @@ function ModelScreen({
                     </div>
                     <p className="model-meta">{metaParts.filter(Boolean).join(' \u00B7 ')}</p>
                 </div>
+
+                {isPhone && (
+                    <dl className="model-phone-stats">
+                        {jobId && (
+                            <div><dt>Photos</dt><dd>{photoCount ?? '-'}</dd></div>
+                        )}
+                        <div><dt>Size</dt><dd>{fileSizeText ?? '-'}</dd></div>
+                        <div><dt>Format</dt><dd>PLY</dd></div>
+                    </dl>
+                )}
 
                 {jobId && (
                     <div className="model-actions">
@@ -276,11 +371,15 @@ function ModelScreen({
                     <button className="model-icon-btn model-fullscreen" onClick={toggleFullScreen} aria-label="Full screen" title="Full screen">
                         <Icon name="fullscreen" size={16} />
                     </button>
-                    <span className="model-viewer-hint">Drag to orbit {'\u00B7'} right-drag to pan {'\u00B7'} scroll to zoom</span>
+                    <span className="model-viewer-hint">
+                        {isPhone
+                            ? <>Drag to orbit {'\u00B7'} pinch to zoom</>
+                            : <>Drag to orbit {'\u00B7'} right-drag to pan {'\u00B7'} scroll to zoom</>}
+                    </span>
                 </div>
 
                 <aside className="model-side">
-                    <div className="forma-card model-card">
+                    <div className="forma-card model-card model-card-details">
                         <h2 className="model-card-title">Details</h2>
                         <dl className="model-details">
                             {jobId && photoCount != null && (
@@ -332,7 +431,7 @@ function ModelScreen({
                     )}
 
                     {jobId && model && (
-                        <div className="forma-card model-card">
+                        <div className="forma-card model-card model-card-manage">
                             <h2 className="model-card-title">Manage</h2>
                             <div className="model-manage">
                                 <button className="forma-btn" onClick={openRenameDialog}>
