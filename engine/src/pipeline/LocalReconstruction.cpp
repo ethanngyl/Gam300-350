@@ -22,6 +22,7 @@ messages. Keep the tool arguments in step with pipeline.js / config.js.
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QLocale>
 #include <QProcess>
@@ -73,17 +74,25 @@ namespace {
     }
 
     // Runs a quick command (a --help probe) and returns everything it printed; empty if it couldn't run.
-    // Blocking: only called from the preparation worker thread.
-    QString RunForOutput(const QString& program, const QStringList& args, int timeoutMs = 15000) {
-        if (program.isEmpty()) return QString();
+    // Blocking: only called from the preparation worker thread. Gives up within ~100 ms once
+    // cancelled is set, so Cancel and quitting don't wait out the timeout.
+    QString RunForOutput(const QString& program, const QStringList& args, const std::atomic_bool& cancelled,
+                         int timeoutMs = 15000) {
+        if (program.isEmpty() || cancelled) return QString();
         QProcess process;
         HideConsole(process);
         process.setProcessChannelMode(QProcess::MergedChannels);
         process.start(program, args);
         if (!process.waitForStarted(timeoutMs)) return QString();
-        if (!process.waitForFinished(timeoutMs)) {
-            process.kill();
-            process.waitForFinished(2000);
+        QElapsedTimer clock;
+        clock.start();
+        while (!process.waitForFinished(100)) {
+            if (process.state() == QProcess::NotRunning) break;
+            if (cancelled || clock.elapsed() > timeoutMs) {
+                process.kill();
+                process.waitForFinished(2000);
+                break;
+            }
         }
         return QString::fromLocal8Bit(process.readAll());
     }
@@ -230,9 +239,12 @@ LocalReconstruction::~LocalReconstruction() {
     }
     if (m_worker) {
         m_worker->disconnect(this);
-        m_worker->wait(); // never destroy a running QThread; the copy loop checks m_cancelled
+        m_worker->wait(); // never destroy a running QThread; the workers check m_cancelled
         delete m_worker;
     }
+    // Quit while "Finalizing model": the save worker may have finished the move before it saw
+    // m_cancelled, and its done() will never run now. The quit prompt promised nothing is kept.
+    if (!m_unclaimedResult.isEmpty()) QFile::remove(m_unclaimedResult);
     if (m_running) removeWorkFiles();
 }
 
@@ -286,25 +298,28 @@ void LocalReconstruction::start(const GenerationRequest& request, const QString&
         const QString colmap = m_tools.colmap;
 
         // config.js colmapUseGpu: a CUDA build AND an NVIDIA driver, else COLMAP runs on the CPU.
-        const bool cuda = RunForOutput(colmap, { "-h" }).contains("with CUDA", Qt::CaseInsensitive);
+        // Each probe returns early once m_cancelled is set; onPrepared() then reports the cancel.
+        const bool cuda = RunForOutput(colmap, { "-h" }, m_cancelled).contains("with CUDA", Qt::CaseInsensitive);
         const bool nvidia = QRegularExpression("^GPU \\d+:", QRegularExpression::MultilineOption)
-                                .match(RunForOutput(m_tools.nvidiaSmi, { "-L" })).hasMatch();
+                                .match(RunForOutput(m_tools.nvidiaSmi, { "-L" }, m_cancelled)).hasMatch();
+        if (m_cancelled) return;
         p.colmapGpu = cuda && nvidia;
         if (const QString env = qEnvironmentVariable("COLMAP_USE_GPU"); !env.isEmpty()) p.colmapGpu = env == "1";
 
         // COLMAP 4.x renamed SiftExtraction / SiftMatching to FeatureExtraction / FeatureMatching.
-        const QString extractorHelp = RunForOutput(colmap, { "feature_extractor", "--help" });
+        const QString extractorHelp = RunForOutput(colmap, { "feature_extractor", "--help" }, m_cancelled);
         if (extractorHelp.contains("--SiftExtraction.use_gpu") && !extractorHelp.contains("--FeatureExtraction.use_gpu")) {
             p.extractionNs = "SiftExtraction";
             p.matchingNs = "SiftMatching";
         }
-        const QString matcherHelp = RunForOutput(colmap, { "exhaustive_matcher", "--help" });
+        const QString matcherHelp = RunForOutput(colmap, { "exhaustive_matcher", "--help" }, m_cancelled);
         p.minInliersFlag = matcherHelp.contains("--TwoViewGeometry.min_num_inliers")
                                ? QStringLiteral("--TwoViewGeometry.min_num_inliers")
                                : "--" + p.matchingNs + ".min_num_inliers";
 
         // Brush v0.3.0 says --total-steps, newer builds --total-train-iters.
-        const QString brushHelp = RunForOutput(m_tools.brush, { "--help" });
+        const QString brushHelp = RunForOutput(m_tools.brush, { "--help" }, m_cancelled);
+        if (m_cancelled) return;
         if (brushHelp.isEmpty()) {
             p.error = "Brush could not be started (" + QDir::toNativeSeparators(m_tools.brush) + ").";
             return;
@@ -534,7 +549,9 @@ void LocalReconstruction::finishModel() {
     const QString exportDir = m_exportDir;
     const QString outputFolder = m_outputFolder;
 
-    runWorker([result, rawPly, name, exportDir, outputFolder] {
+    m_unclaimedResult.clear();
+    // Captures this for m_cancelled / m_unclaimedResult: the destructor waits for the worker.
+    runWorker([this, result, rawPly, name, exportDir, outputFolder] {
         // Recentre and rescale into the viewer's frame. Best effort, like the backend: if it fails
         // the raw export is used.
         QString source = rawPly;
@@ -554,6 +571,7 @@ void LocalReconstruction::finishModel() {
             result->log << "Normalization failed (" + error + "); keeping the raw export.";
         }
 
+        if (m_cancelled) return; // cancelled or quitting: don't save anything
         if (!QDir().mkpath(outputFolder)) {
             result->error = "Couldn't create " + QDir::toNativeSeparators(outputFolder);
             return;
@@ -568,14 +586,19 @@ void LocalReconstruction::finishModel() {
             return;
         }
         result->path = dest;
+        m_unclaimedResult = dest;
     }, [this, result] {
+        m_unclaimedResult.clear();
         for (const QString& line : result->log) log(line);
         if (m_cancelled) {
             // Cancelled while the model was being saved: the prompt promised nothing is kept.
             if (!result->path.isEmpty()) QFile::remove(result->path);
             fail("Cancelled.");
         } else if (!result->error.isEmpty()) {
-            fail(result->error);
+            // Training succeeded; only the move into the output folder failed. Keep the export
+            // folder so a long build isn't thrown away, and say where it is.
+            fail(result->error + "\n\nThe trained model was kept in "
+                     + QDir::toNativeSeparators(m_exportDir), true);
         } else {
             complete(result->path);
         }
@@ -729,7 +752,7 @@ void LocalReconstruction::log(const QString& line) {
     }
 }
 
-void LocalReconstruction::fail(const QString& error) {
+void LocalReconstruction::fail(const QString& error, bool keepExport) {
     if (!m_running) return;
     m_running = false;
     m_timeout->stop();
@@ -739,7 +762,7 @@ void LocalReconstruction::fail(const QString& error) {
     m_status.status = cancelled ? "cancelled" : "error";
     m_status.error = cancelled ? QString() : error;
     emit statusChanged(m_status);
-    removeWorkFiles();
+    removeWorkFiles(keepExport && !cancelled);
     emit finished(QString(), cancelled ? QStringLiteral("Cancelled.") : error);
 }
 
@@ -758,10 +781,12 @@ void LocalReconstruction::complete(const QString& resultPath) {
     emit finished(resultPath, QString());
 }
 
-void LocalReconstruction::removeWorkFiles() {
+void LocalReconstruction::removeWorkFiles(bool keepExport) {
     // The photo copies, COLMAP database and Brush exports are only needed during the build.
     // On Windows a tool killed a moment ago can still hold a file, so try once more a little later.
-    const QStringList dirs = { m_workspace, m_exportDir };
+    // keepExport: the final save failed, so the export folder holds the only copy of the model.
+    QStringList dirs = { m_workspace };
+    if (!keepExport) dirs << m_exportDir;
     bool leftovers = false;
     for (const QString& dir : dirs) {
         if (!dir.isEmpty() && QFileInfo(dir).exists() && !QDir(dir).removeRecursively()) leftovers = true;

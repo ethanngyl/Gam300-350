@@ -162,6 +162,8 @@ void FrameMetrics::Shutdown() {
     if (!m_initialized) return;
 
     // The open frame never got its full interval, so it is dropped; everything before it is processed.
+    // glFinish lets the last frames' GPU results land first, since the flush below doesn't wait for them.
+    if (m_gpuTimingAvailable && !m_gpuQueryActive) glFinish();
     PollGpuQueries();
     ProcessReadyFrames(true);
     if (m_sessionOpen) CloseSession();
@@ -320,10 +322,23 @@ void FrameMetrics::ProcessReadyFrames(bool flushAll) {
     if (m_finalizedEnd > kHistorySize && m_nextToProcess < m_finalizedEnd - kHistorySize) {
         m_nextToProcess = m_finalizedEnd - kHistorySize;
     }
+    static_assert(kQueryCount >= kProcessDelay, "the GPU wait must cover at least the normal delay");
     while (m_nextToProcess + delay < m_finalizedEnd) {
+        // A GPU-heavy frame's timer result can take longer than kProcessDelay frames. Wait for it, up to
+        // the whole query ring: by then its slot has been reused or skipped, so it won't come in time.
+        if (!flushAll && m_finalizedEnd - m_nextToProcess <= kQueryCount && GpuResultPending(m_nextToProcess)) {
+            break; // frames are processed in order, so the later ones wait too
+        }
         ProcessFrame(m_history[m_nextToProcess % kHistorySize]);
         ++m_nextToProcess;
     }
+}
+
+bool FrameMetrics::GpuResultPending(std::uint64_t frameId) const {
+    for (std::size_t q = 0; q < kQueryCount; ++q) {
+        if (m_queryInFlight[q] && m_queryFrame[q] == frameId) return true;
+    }
+    return false;
 }
 
 void FrameMetrics::ProcessFrame(const FrameRecord& frame) {

@@ -164,7 +164,9 @@ private:
     // Reads back any GPU timer results that are ready.
     void PollGpuQueries();
     // Processes frames kProcessDelay behind the newest, once their GPU time has had time to arrive.
+    // Waits longer (up to kQueryCount frames) for a frame whose GPU result is still in flight.
     void ProcessReadyFrames(bool flushAll);
+    bool GpuResultPending(std::uint64_t frameId) const;
     void ProcessFrame(const FrameRecord& frame);
     void UpdateLive();
     void OpenSession(const FrameRecord& frame);

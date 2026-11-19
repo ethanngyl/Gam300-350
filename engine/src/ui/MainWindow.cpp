@@ -143,6 +143,9 @@ MainWindow::MainWindow() {
     m_localBuild = new LocalReconstruction(this);
     connect(m_localBuild, &LocalReconstruction::statusChanged, this, &MainWindow::onBuildStatus);
     connect(m_localBuild, &LocalReconstruction::finished, this, &MainWindow::onBuildFinished);
+    m_buildTick = new QTimer(this);
+    m_buildTick->setInterval(1000);
+    connect(m_buildTick, &QTimer::timeout, this, &MainWindow::refreshBuildLabel);
 
     m_viewport = new Viewport(this);
     setCentralWidget(m_viewport);
@@ -1249,7 +1252,8 @@ void MainWindow::showGenerateDialog() {
     m_buildName = request.name.isEmpty() ? QStringLiteral("New model") : request.name;
     m_buildClock.start();
     setBuildBusy(true);
-    m_buildLabel->setText(QString("%1: preparing...").arg(m_buildName));
+    m_buildText = QString("%1: preparing...").arg(m_buildName);
+    refreshBuildLabel();
     m_buildBar->setRange(0, 0);
     qInfo("Building %s on this PC from %lld file(s)...", qPrintable(m_buildName),
           static_cast<long long>(request.files.size()));
@@ -1265,7 +1269,8 @@ void MainWindow::onBuildStatus(const JobStatus& status) {
     if (!status.detail.isEmpty()) {
         text += QString(" (%1)").arg(status.detail);
     }
-    m_buildLabel->setText(text + QString("  |  %1").arg(ElapsedText(m_buildClock.elapsed())));
+    m_buildText = text;
+    refreshBuildLabel();
     m_buildBar->setRange(0, 1000);
     m_buildBar->setValue(qBound(0, qRound(status.progress * 1000.0), 1000));
 }
@@ -1318,9 +1323,18 @@ void MainWindow::setBuildBusy(bool busy) {
     m_buildLabel->setVisible(busy);
     m_buildBar->setVisible(busy);
     m_buildCancel->setVisible(busy);
-    if (!busy) {
+    if (busy) {
+        m_buildTick->start();
+    } else {
+        m_buildTick->stop();
+        m_buildText.clear();
         m_buildLabel->clear();
     }
+}
+
+void MainWindow::refreshBuildLabel() {
+    if (m_buildText.isEmpty()) return;
+    m_buildLabel->setText(m_buildText + QString("  |  %1").arg(ElapsedText(m_buildClock.elapsed())));
 }
 
 void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollowUp& followUp) {
@@ -1374,6 +1388,8 @@ void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollow
         statusBar()->showMessage(QString("Saved %1").arg(fileName), kStatusMessageMs);
     });
     m_copyThread->start();
+}
+
 void MainWindow::toggleDevMode()
 {
     m_devMode = !m_devMode;

@@ -21,6 +21,7 @@ each phase change to stdout.
 #include <QEventLoop>
 #include <QFileInfo>
 
+#include <atomic>
 #include <cstdio>
 
 #ifdef Q_OS_WIN
@@ -65,6 +66,34 @@ namespace {
         }
 #endif
     }
+
+#ifdef Q_OS_WIN
+    // The running build, read by the console control handler. Only the main thread sets it, and
+    // only the main thread dereferences it (the handler queues the cancel onto the main thread).
+    std::atomic<LocalReconstruction*> g_build{ nullptr };
+    std::atomic_bool g_cancelRequested{ false };
+    HANDLE g_buildDone = nullptr; // set once the build has finished and cleaned up
+
+    // Runs on a thread Windows creates for the event. COLMAP and Brush run without a console
+    // (CREATE_NO_WINDOW), so they never see Ctrl+C: without this they kept running hidden on the GPU.
+    BOOL WINAPI OnConsoleControl(DWORD type) {
+        if (!g_build.load()) return FALSE; // nothing running: default handling (exit)
+        if (g_cancelRequested.exchange(true)) {
+            return FALSE; // second Ctrl+C: give up on a clean cancel and exit
+        }
+        QMetaObject::invokeMethod(qApp, [] {
+            if (LocalReconstruction* build = g_build.load()) {
+                Print("Cancelling... (press Ctrl+C again to exit without cleaning up)");
+                build->cancel();
+            }
+        }, Qt::QueuedConnection);
+        if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT) return TRUE;
+        // Window closed, logoff or shutdown: Windows ends the process as soon as this returns,
+        // and allows ~5 s, so wait for the cancel to stop the tools and remove the work folders.
+        if (g_buildDone) WaitForSingleObject(g_buildDone, 4500);
+        return TRUE;
+    }
+#endif
 }
 
 bool IsHeadlessBuild(const QStringList& args) {
@@ -158,7 +187,17 @@ int RunHeadlessBuild(const QStringList& args) {
     });
 
     Print(QString("Building from %1 file(s) into %2").arg(request.files.size()).arg(QDir::toNativeSeparators(outFolder)));
+#ifdef Q_OS_WIN
+    g_buildDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_build = &build;
+    SetConsoleCtrlHandler(OnConsoleControl, TRUE);
+#endif
     build.start(request, outFolder);
     if (build.isRunning()) loop.exec();
+#ifdef Q_OS_WIN
+    g_build = nullptr;
+    if (g_buildDone) SetEvent(g_buildDone);
+    SetConsoleCtrlHandler(OnConsoleControl, FALSE);
+#endif
     return exitCode;
 }

@@ -34,6 +34,7 @@ class QLabel;
 class QMenu;
 class QProgressBar;
 class QThread;
+class QTimer;
 class QToolBar;
 
 #include "splat/SplatTrimmer.h"
@@ -123,6 +124,7 @@ private:
     void onBuildFinished(const QString& plyPath, const QString& error);
     void cancelBuild();
     void setBuildBusy(bool busy);
+    void refreshBuildLabel(); // m_buildText plus the elapsed time
     // Converts a newly built model (plyPath) to .obj next to it, on a worker thread.
     void saveGeneratedObj(const QString& plyPath, const GenerationFollowUp& followUp);
 
@@ -213,6 +215,8 @@ private:
     GenerationFollowUp m_buildFollowUp;
     QString m_buildName;
     QElapsedTimer m_buildClock;
+    QString m_buildText;           // phase + detail, without the elapsed time
+    QTimer* m_buildTick = nullptr; // redraws the elapsed time every second (COLMAP is quiet for minutes)
 
     // Import queue / worker.
     QStringList m_pendingImports;

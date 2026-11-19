@@ -73,11 +73,18 @@ inline QString SafeFileName(const QString& name) {
     for (const QChar c : name) {
         safe += (c < QChar(32) || QStringLiteral("<>:\"/\\|?*").contains(c)) ? QChar('_') : c;
     }
-    safe = safe.trimmed();
+    safe = safe.trimmed().left(80).trimmed();
     while (safe.endsWith('.')) {
         safe.chop(1); // Windows drops trailing dots
     }
-    return safe.left(80);
+    // Windows reserves these device names, with or without an extension ("Con", "nul.txt", "COM1").
+    static const QStringList reserved = {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+    if (reserved.contains(safe.section('.', 0, 0).trimmed(), Qt::CaseInsensitive)) safe += '_';
+    return safe;
 }
 
 } // namespace generation

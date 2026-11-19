@@ -119,10 +119,11 @@ private:
     void setPhase(const QString& phase, double progress, const QString& detail = QString());
     void setProgress(double progress, const QString& detail);
     void log(const QString& line);
-    void fail(const QString& error);
+    // keepExport leaves m_exportDir on disk (used when only the final save failed).
+    void fail(const QString& error, bool keepExport = false);
     void complete(const QString& resultPath);
     void killTool();
-    void removeWorkFiles();
+    void removeWorkFiles(bool keepExport = false);
 
     Tools m_tools;
     GenerationRequest m_request;
@@ -134,7 +135,10 @@ private:
     Prepared m_prepared;
 
     bool m_running = false;
-    std::atomic_bool m_cancelled{ false }; // also read by the preparation worker's copy loop
+    std::atomic_bool m_cancelled{ false }; // also read by the worker threads (probes, copy loop, save)
+    // Set by the save worker once the model is in the output folder; cleared when its done() runs.
+    // If the build is destroyed (app quit) before then, the destructor deletes it: quitting keeps nothing.
+    QString m_unclaimedResult;
     bool m_timedOut = false;
     JobStatus m_status;
     QFile m_log;
