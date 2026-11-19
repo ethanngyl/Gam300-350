@@ -15,6 +15,7 @@ or its first photo (see ModelCover.jsx).
 Clicking a Ready card (or Enter on it) opens it on the model page
 (onOpenModel); right-clicking a card renames or deletes it. The active sub-tab is controlled by the parent
 so other pages (such as Home's "View all") can open either one directly.
+Both sub-views share the search box and the sort menu (SortMenu.jsx).
 **************************************************************************/
 
 import { useCallback, useEffect, useState } from 'react';
@@ -24,12 +25,21 @@ import ContextMenu from './ContextMenu.jsx';
 import { menuPosition } from './menuPosition.js';
 import ActionDialog from './ActionDialog.jsx';
 import ModelCover from './ModelCover.jsx';
+import SortMenu from './SortMenu.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
 
 // Statuses where a job has stopped for good. 'done' is the only one that
 // produces a model; the others are hidden from the grid.
 const FINISHED_STATUSES = ['done', 'error', 'cancelled'];
+
+// The sort orders, in the order the sort menu lists them.
+const SORT_OPTIONS = [
+    { id: 'newest', label: 'Newest' },
+    { id: 'oldest', label: 'Oldest' },
+    { id: 'lastEdited', label: 'Last edited' },
+    { id: 'name', label: 'Name' },
+];
 
 // When a model was last changed, for the "Last edited" sort. Falls back to
 // when it was made if the server has no update time.
@@ -58,7 +68,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
 
         async function loadJobs() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!isCancelled) {
@@ -147,6 +157,8 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
 
     return (
         <div className="library-screen">
+            {/* Wider screens only (Pages.css); phones keep the tabs as the heading. */}
+            <h1 className="page-title">Media Library</h1>
             <div className="library-toolbar">
                 <div className="library-subtabs">
                     <button
@@ -165,7 +177,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                             onSubTabChange('photos');
                         }}
                     >
-                        Photo Library
+                        Photos
                     </button>
                 </div>
 
@@ -178,16 +190,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                     />
                 </label>
 
-                <label className="library-sort">
-                    <Icon name="filter" size={13} />
-                    <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
-                        <option value="newest">Newest</option>
-                        <option value="oldest">Oldest</option>
-                        <option value="lastEdited">Last edited</option>
-                        <option value="name">Name</option>
-                    </select>
-                    <Icon name="chevron" size={13} />
-                </label>
+                <SortMenu options={SORT_OPTIONS} value={sortOrder} onChange={setSortOrder} />
             </div>
 
             {subTab === 'models' ? (
@@ -200,7 +203,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                         <p className="library-note">
                             {normalizedSearch
                                 ? 'No models match your search.'
-                                : 'No generated models yet. Use New model in the dock below to create one.'}
+                                : 'No generated models yet. Use New model to create one.'}
                         </p>
                     )}
 

@@ -1,0 +1,499 @@
+/* ============================================================
+   App shell (TopNav.jsx, Sidebar.jsx): top bar across the
+   top, sidebar down the left, page in the rest. Above 760px only;
+   phones keep the dock (Dock.jsx). Imported after AppTheme.css, so
+   these rules win over the older shell layouts there.
+   Colours come from the theme tokens (the palette isn't final).
+   ============================================================ */
+
+.genesis-shell.has-app-sidebar {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    grid-template-rows: 60px minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
+}
+
+    .genesis-shell.has-app-sidebar .genesis-body {
+        grid-column: 2;
+        grid-row: 2;
+        display: block;
+        min-height: 0;
+    }
+
+    .genesis-shell.has-app-sidebar .genesis-main {
+        height: 100%;
+        /* No dock to leave room for. */
+        padding-bottom: 0;
+    }
+
+/* ---------- Top bar ---------- */
+
+.app-topbar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--forma-border);
+    background: var(--forma-sidebar);
+    position: relative;
+    z-index: 40;
+}
+
+.app-topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    width: 220px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--forma-heading);
+    font: 600 0.92rem var(--forma-font);
+    letter-spacing: 0.18em;
+    cursor: pointer;
+}
+
+    .app-topbar-logo img {
+        width: 22px;
+        height: 22px;
+    }
+
+.app-search {
+    position: relative;
+    flex: 0 1 420px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    margin: 0 auto;
+    padding: 0 16px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 999px;
+    background: var(--forma-panel);
+    color: var(--forma-text-dim);
+}
+
+    .app-search:focus-within {
+        border-color: rgba(var(--forma-accent-rgb), 0.7);
+    }
+
+    .app-search input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: var(--forma-text);
+        font: inherit;
+        font-size: 0.86rem;
+    }
+
+        .app-search input::placeholder {
+            color: var(--forma-text-dim);
+        }
+
+        .app-search input::-webkit-search-cancel-button {
+            display: none;
+        }
+
+.app-search-results {
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+}
+
+.app-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    width: 220px;
+    justify-content: flex-end;
+}
+
+.app-storage-meter {
+    padding: 6px 12px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 999px;
+    color: var(--forma-text-soft);
+    font: 0.72rem var(--forma-font-mono);
+    white-space: nowrap;
+}
+
+.app-icon-button {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .app-icon-button:hover,
+    .app-icon-button[aria-expanded="true"] {
+        background: var(--forma-panel-alt);
+        color: var(--forma-text);
+    }
+
+.app-popup-anchor {
+    position: relative;
+}
+
+.app-avatar {
+    width: 34px;
+    height: 34px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid rgba(var(--forma-accent-light-rgb), 0.45);
+    border-radius: 50%;
+    background: rgba(var(--forma-accent-light-rgb), 0.22);
+    color: var(--forma-heading);
+    font: 600 0.74rem var(--forma-font);
+    cursor: pointer;
+}
+
+    .app-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .app-avatar.is-large {
+        width: 44px;
+        height: 44px;
+        font-size: 0.9rem;
+        cursor: default;
+    }
+
+/* ---------- Popups: menus and panels ---------- */
+
+.app-menu {
+    position: absolute;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 12px;
+    background: var(--forma-panel);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.app-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--forma-text);
+    font: inherit;
+    font-size: 0.86rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .app-menu-item svg {
+        flex: none;
+        color: var(--forma-text-muted);
+    }
+
+    .app-menu-item > span {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    .app-menu-item strong {
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .app-menu-item small {
+        color: var(--forma-text-dim);
+        font-size: 0.74rem;
+    }
+
+    .app-menu-item:hover,
+    .app-menu-item.is-highlighted {
+        background: var(--forma-panel-alt);
+    }
+
+    .app-menu-item.is-compact {
+        padding: 9px 10px;
+    }
+
+.app-menu-heading {
+    margin: 0 0 6px;
+    color: var(--forma-text-dim);
+    font: 500 0.66rem var(--forma-font-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.app-menu-note {
+    margin: 0;
+    padding: 6px 4px;
+    color: var(--forma-text-muted);
+    font-size: 0.84rem;
+}
+
+.app-notifications {
+    top: calc(100% + 10px);
+    right: 0;
+    width: 300px;
+    padding: 16px;
+}
+
+.app-profile-menu {
+    top: calc(100% + 10px);
+    right: 0;
+    width: 300px;
+    padding: 0;
+    gap: 0;
+}
+
+.app-profile-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 16px 14px;
+}
+
+    .app-profile-summary > span:last-child {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    .app-profile-summary strong {
+        color: var(--forma-heading);
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+
+    .app-profile-summary small {
+        color: var(--forma-text-muted);
+        font-size: 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+.app-profile-manage {
+    justify-content: center;
+    gap: 8px;
+    margin: 0 16px 16px;
+}
+
+.app-profile-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--forma-border);
+}
+
+    .app-profile-section:last-child {
+        padding: 8px;
+    }
+
+.app-profile-plan {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    color: var(--forma-heading);
+    font-size: 0.9rem;
+}
+
+    .app-profile-plan strong {
+        font-weight: 500;
+    }
+
+.app-plan-badge {
+    padding: 2px 6px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 4px;
+    color: var(--forma-text-muted);
+    font: 500 0.62rem var(--forma-font-mono);
+    text-transform: uppercase;
+}
+
+.app-profile-storage {
+    display: flex;
+    justify-content: space-between;
+    color: var(--forma-text-soft);
+    font-size: 0.82rem;
+}
+
+    .app-profile-storage span:last-child {
+        font-family: var(--forma-font-mono);
+        font-size: 0.74rem;
+    }
+
+.app-storage-bar {
+    height: 6px;
+    margin: 8px 0 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+}
+
+    .app-storage-bar span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--forma-blue);
+    }
+
+.app-profile-storage-note {
+    color: var(--forma-text-dim);
+    font-size: 0.74rem;
+}
+
+/* ---------- Sidebar ---------- */
+
+.app-sidebar {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-height: 0;
+    padding: 16px 8px;
+    /* No scrolling here: it would clip the New menu that opens beside it. */
+    border-right: 1px solid var(--forma-border);
+    background: var(--forma-sidebar);
+    position: relative;
+    z-index: 30;
+}
+
+.app-sidebar-new {
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.app-sidebar-new-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--forma-text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.app-sidebar-new-icon {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--forma-blue);
+    color: var(--forma-on-accent);
+    transition: transform 0.15s ease;
+}
+
+.app-sidebar-new-button:hover .app-sidebar-new-icon,
+.app-sidebar-new-button[aria-expanded="true"] .app-sidebar-new-icon {
+    transform: scale(1.05);
+}
+
+.app-sidebar-new-menu {
+    top: 0;
+    left: calc(100% + 18px);
+    width: 260px;
+}
+
+.app-sidebar-pages {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+
+.app-sidebar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    padding: 9px 2px 8px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+    .app-sidebar-item:hover {
+        background: var(--forma-panel);
+        color: var(--forma-text);
+    }
+
+    .app-sidebar-item.is-active {
+        background: var(--forma-panel-alt);
+        color: var(--forma-heading);
+    }
+
+    .app-sidebar-item:focus-visible,
+    .app-sidebar-new-button:focus-visible .app-sidebar-new-icon {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 2px;
+    }
+
+.app-sidebar-label {
+    max-width: 100%;
+    font-size: 0.66rem;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.app-sidebar-learn {
+    margin-top: auto;
+}
+
+/* Laptops: a narrower search, and no gap-fillers beside it. */
+@media (max-width: 1100px) {
+    .app-topbar-logo,
+    .app-topbar-actions {
+        width: auto;
+    }
+
+    .app-storage-meter {
+        display: none;
+    }
+}
+
+/* The GENESIS logo is white; in the light theme it is shown dark instead
+   (top bar, landing page and login). */
+:root[data-theme="light"] .app-topbar-logo img,
+:root[data-theme="light"] .landing-logo img,
+:root[data-theme="light"] .auth-logo-mark img {
+    filter: invert(1);
+}

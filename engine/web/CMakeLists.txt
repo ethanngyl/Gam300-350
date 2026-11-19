@@ -1,8 +1,9 @@
 # ======================= Codefine Web (WebAssembly) =========================
 # Builds the engine's splat renderer for the browser with Emscripten. It compiles
 # the same src/splat and src/gfx files as the desktop editor (CODEFINE_GLES switches
-# them to WebGL2) plus web/WebMain.cpp, and writes codefine-engine.js/.wasm into the
-# web app's public folder, where packages/src/web-app/EngineSplatViewer.jsx loads it.
+# them to WebGL2) plus web/WebMain.cpp, and writes codefine-engine.js/.wasm into
+# web/package/dist: the @codefine/splat-renderer npm package (web/package), which the
+# web app installs and uses in packages/src/web-app/EngineSplatViewer.jsx.
 #
 # Build with engine/build-web.bat (Windows) or engine/build-web.sh, which set up the
 # Emscripten SDK and run:
@@ -21,8 +22,14 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(ENGINE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
-set(CODEFINE_WEB_OUTPUT_DIR "${ENGINE_DIR}/../packages/src/web-app/public/engine"
+set(CODEFINE_WEB_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/package/dist"
     CACHE PATH "Where codefine-engine.js/.wasm are written")
+# Build folders configured before the package existed cached the old default
+# (the web app's public/engine); move them to the package.
+if(CODEFINE_WEB_OUTPUT_DIR MATCHES "packages/src/web-app/public/engine/?$")
+    set(CODEFINE_WEB_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/package/dist"
+        CACHE PATH "Where codefine-engine.js/.wasm are written" FORCE)
+endif()
 
 # Only the header-only/portable dependencies the renderer needs (no Qt, GLEW, FMOD, ...)
 list(APPEND CMAKE_MODULE_PATH "${ENGINE_DIR}/cmake")

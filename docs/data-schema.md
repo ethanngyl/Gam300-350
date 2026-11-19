@@ -32,7 +32,7 @@ dates as ISO text, as they always have. See [api-changelog.md](api-changelog.md)
 
 SQLite file `packages/src/backend/data/app.db`, built and changed only by the
 numbered migrations in `packages/src/backend/migrations/`. Its version is
-`PRAGMA user_version`; the current version is 4.
+`PRAGMA user_version`; the current version is 6.
 
 ```mermaid
 erDiagram
@@ -41,6 +41,7 @@ erDiagram
     users ||--o{ jobs : "owns"
     users ||--o{ feedback : "sent"
     users ||--o{ scenes : "owns"
+    users ||--o| password_resets : "forgot password"
     jobs ||--o{ job_images : "photos (VM, FILE_STORE=db)"
     jobs ||--o| job_models : "model (VM, FILE_STORE=db)"
     job_models ||--|{ job_model_chunks : "4 MiB pieces"
@@ -114,7 +115,35 @@ erDiagram
         INTEGER created_at "ms"
         INTEGER updated_at "ms"
     }
+    perf_minutes {
+        TEXT kind PK "api or page"
+        TEXT name PK "route, or page-load measure"
+        INTEGER minute PK "ms, start of the minute"
+        INTEGER count
+        INTEGER errors "5xx replies"
+        REAL sum_ms
+        REAL max_ms
+        TEXT buckets "JSON counts per time range"
+    }
+    password_resets {
+        INTEGER user_id PK "and FK"
+        TEXT code_hash "salt:scrypt of the 6-digit code"
+        INTEGER expires_at "ms"
+        INTEGER attempts "wrong codes so far"
+        INTEGER created_at "ms"
+    }
 ```
+
+`password_resets` holds at most one "Forgot password?" code per account,
+only as a hash: it works once, for `RESET_CODE_TTL_MIN` minutes (15), and is
+deleted after 5 wrong tries or when a new code is requested
+(`services/passwordReset.js`).
+
+`perf_minutes` (no links to other tables) holds the API response times and
+website load times behind `GET /api/v1/metrics/performance`. Each row is
+one minute's histogram, so minutes can be added together and p50 / p95 /
+p99 read from the total (`services/performance.js`). It is kept
+`PERF_KEEP_DAYS` days.
 
 A job's photos, model, status and metrics live in its folders,
 `jobs/<id>/` and `jobs/<id>_out/`. On the VM with `FILE_STORE=db`, the photos
@@ -142,7 +171,7 @@ converter from the old one.
 
 | What | Where | Version field | Schema | Older versions |
 |---|---|---|---|---|
-| Database | `data/app.db` | `PRAGMA user_version` (4) | the migrations | Every older database is brought up to date at startup, after a backup (`migrate.js`). Also by hand: `npm run migrate -- --db <file>`. |
+| Database | `data/app.db` | `PRAGMA user_version` (6) | the migrations | Every older database is brought up to date at startup, after a backup (`migrate.js`). Also by hand: `npm run migrate -- --db <file>`. |
 | Job status | `jobs/<id>/status.json` | `version` (1) | `job-status.schema.json` | `status.js` runs each record through `STATUS_UPGRADES`. Every record written so far is version 1. A newer record is skipped with a warning. |
 | Scene | `scenes.document` | `format: "genesis.scene"`, `version` (1) | `scene.v1.schema.json` | Version 0 (the browser-only format, no `format` / `version`) is converted on save (`services/scenes.js`). A newer version is refused with 422. Loading returns exactly what was saved. |
 | Run metrics | `jobs/<id>_out/metrics.json`, `jobs/metrics.jsonl` | `version` (1) | in `metrics.js` | Version 1 still writes `createdAt` / `finishedAt` as ISO text, the one exception to the date rule. The metrics dashboard reads them as text. Moving to ms means a version 2, with the dashboard reading both. |

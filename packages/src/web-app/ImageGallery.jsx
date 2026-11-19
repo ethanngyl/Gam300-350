@@ -17,7 +17,7 @@ click thumbnail grid. The "compact" variant, used inside the Library tab's
 Photo Library, shows one card per job with a single small thumbnail of its
 first photo and the photo count (with search and sort);
 clicking a card opens that job's full grid so photos can still be
-downloaded.
+downloaded, with a Back button above it to return to the cards.
 - ImageGallery({ onBack, variant, searchTerm, sortOrder })
 The gallery component.
 - load()
@@ -31,6 +31,7 @@ Renders one job's heading and download-on-click thumbnail grid.
 import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
 import './ImageGallery.css';
 
@@ -84,7 +85,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         /************************************************************************/
         async function load() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!cancelled) setJobs(data);
@@ -124,7 +125,8 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                             title="Click to download"
                         >
                             <img
-                                src={img.url}
+                                src={smallPhotoUrl(img.url)}
+                                decoding="async"
                                 alt={`Job ${job.id.slice(0, 8)} - ${img.name}`}
                                 loading="lazy"
                             />
@@ -141,8 +143,8 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         if (openJob) {
             return (
                 <div className="gallery gallery-compact">
-                    <button className="forma-btn gallery-compact-back" onClick={() => { playSound('back'); setOpenJobId(null); }}>
-                        All batches
+                    <button className="gallery-compact-back" onClick={() => { playSound('back'); setOpenJobId(null); }}>
+                        <Icon name="arrowLeft" size={15} /> Back
                     </button>
                     {renderJobSection(openJob)}
                 </div>
@@ -190,7 +192,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                             >
                                 <div className="library-photo-cover">
                                     {coverImage ? (
-                                        <img src={coverImage.url} alt="" loading="lazy" decoding="async" />
+                                        <img src={smallPhotoUrl(coverImage.url)} alt="" loading="lazy" decoding="async" />
                                     ) : (
                                         <Icon name="image" size={26} />
                                     )}

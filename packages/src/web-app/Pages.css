@@ -1,0 +1,130 @@
+/* ============================================================
+   Page layouts in the sidebar layout (wider screens), following the
+   Genesis Figma: the same page margins and big page titles on every
+   page, the Media Library and Model Viewer with larger cards, the
+   Video Extractor with a large drop area, and the Photo Editor's
+   options as a bar along the bottom. Everything is scoped to
+   .has-app-sidebar, so phones keep their existing layout.
+   Imported after AppTheme.css and AppShell.css. Colours come from
+   the theme tokens.
+   ============================================================ */
+
+/* Page titles added for wider screens only (phones use the tabs). */
+.page-title {
+    display: none;
+}
+
+.has-app-sidebar .page-title {
+    display: block;
+    margin: 0 0 20px;
+    color: var(--forma-heading);
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* ---------- Same margins and title size on every page ---------- */
+
+.has-app-sidebar .library-screen,
+.has-app-sidebar .fx,
+.has-app-sidebar .feedback-screen {
+    padding: 28px 32px 40px;
+}
+
+.has-app-sidebar .photo-editor {
+    padding: 28px 32px 0;
+}
+
+.has-app-sidebar .scene-builder {
+    padding: 20px 24px 0;
+}
+
+.has-app-sidebar .fx .fx-title,
+.has-app-sidebar .photo-editor .photo-editor-title,
+.has-app-sidebar .feedback-screen .feedback-title {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* ---------- Media Library and Model Viewer ---------- */
+
+.has-app-sidebar .library-toolbar {
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 0;
+    border-bottom: 0;
+}
+
+.has-app-sidebar .library-subtabs {
+    border-color: var(--forma-border-strong);
+    border-radius: 10px;
+    background: var(--forma-panel);
+}
+
+.has-app-sidebar .library-subtab {
+    min-width: 0;
+    padding: 9px 16px;
+    font-size: 0.86rem;
+}
+
+/* The Model Viewer's lone tab is its title on wider screens. */
+.has-app-sidebar .model-viewer-toolbar .library-subtabs {
+    display: none;
+}
+
+.has-app-sidebar .library-search {
+    flex: 1;
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 10px;
+    background: var(--forma-panel);
+}
+
+.has-app-sidebar .library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+/* The page has its own margins now, so the grids and notes don't add more. */
+.has-app-sidebar .library-grid,
+.has-app-sidebar .library-photo-grid,
+.has-app-sidebar .library-note,
+.has-app-sidebar .gallery-compact .gallery-note,
+.has-app-sidebar .gallery-compact section.gallery-job {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.has-app-sidebar .library-photo-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.has-app-sidebar .library-item {
+    border-radius: 12px;
+}
+
+.has-app-sidebar .library-thumb {
+    height: 190px;
+}
+
+.has-app-sidebar .library-item-name {
+    font-size: 1rem;
+}
+
+/* ---------- Video Extractor: a large drop area ---------- */
+
+.has-app-sidebar .fx-dropzone {
+    min-height: 300px;
+    justify-content: center;
+    border-radius: 14px;
+}
+
+/* ---------- Photo Editor: options as a bar along the bottom ---------- */
+
+.has-app-sidebar .photo-editor-footer {
+    margin: auto -32px 0;
+    padding: 14px 32px;
+    /* No dock below it to cover. */
+    box-shadow: none;
+}

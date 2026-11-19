@@ -11,19 +11,14 @@ How the app looks, saved in this browser's localStorage:
   colours are applied as data-theme="dark" | "light" on <html>; the light
   colours are in AppTheme.css. index.html applies the saved theme before
   the page first paints, so a light-theme user never sees a dark flash.
-- showTabLabels: names next to the dock icons. Changed from the dock's
-  top-right switch or Account > Appearance.
-setTheme / setShowTabLabels change them, and useAppearanceSettings()
-gives components the current values and re-renders them on any change, so
-the dock and the Account page stay in step.
+setTheme changes it, and useAppearanceSettings() gives components the
+current value ({ theme }) and re-renders them when it changes.
 **************************************************************************/
 
 import { useSyncExternalStore } from 'react';
 
-// SHOW_LABELS_KEY is the dock's old key, so saved choices carry over.
 // index.html reads THEME_STORAGE_KEY too; keep the two in step.
 const THEME_STORAGE_KEY = 'genesis-theme';
-const SHOW_LABELS_KEY = 'genesis-dock-show-labels';
 export const THEME_CHOICES = ['dark', 'light', 'system'];
 
 const deviceLightQuery = window.matchMedia?.('(prefers-color-scheme: light)');
@@ -49,7 +44,6 @@ function loadAppearanceSettings() {
     const savedTheme = readStorage(THEME_STORAGE_KEY);
     return {
         theme: THEME_CHOICES.includes(savedTheme) ? savedTheme : 'dark',
-        showTabLabels: readStorage(SHOW_LABELS_KEY) === 'true',
     };
 }
 
@@ -79,11 +73,6 @@ export function setTheme(theme) {
     updateAppearanceSettings({ theme });
 }
 
-export function setShowTabLabels(showTabLabels) {
-    writeStorage(SHOW_LABELS_KEY, String(showTabLabels));
-    updateAppearanceSettings({ showTabLabels });
-}
-
 function subscribeToAppearanceSettings(listener) {
     settingsListeners.add(listener);
     return () => settingsListeners.delete(listener);
@@ -93,7 +82,7 @@ function getAppearanceSettings() {
     return appearanceSettings;
 }
 
-// React hook: { theme, showTabLabels }, re-rendering whenever either changes.
+// React hook: { theme }, re-rendering whenever it changes.
 export function useAppearanceSettings() {
     return useSyncExternalStore(subscribeToAppearanceSettings, getAppearanceSettings);
 }

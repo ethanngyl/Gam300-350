@@ -9,7 +9,8 @@
 Scene Builder: arrange finished models (Gaussian splats from GET /jobs)
 into a scene, then save it.
 
-Both web and phone: add a model from the library, select it, move /
+Both web and phone: add a model from the library (a dialog with search:
+pick a card, then "Add selected model"), select it, move /
 rotate / scale it with the viewport gizmo, drop it to the floor, clean up
 stray splats with one slider, duplicate, delete, undo / redo, save and
 reopen. Web only (advanced): outliner with hide and load status,
@@ -32,6 +33,7 @@ SceneEngine.js), and saving goes through SceneStorage.js.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
+import ModelCover from './ModelCover.jsx';
 import SceneViewport from './SceneViewport.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { playSound } from '../audio/Audio.js';
@@ -99,7 +101,7 @@ function tidyNumber(value) {
 }
 
 function getPlyUrl(jobId) {
-    return `/jobs/${jobId}/result.ply`;
+    return `/api/v1/jobs/${jobId}/result.ply`;
 }
 
 // Fields where Ctrl+Z should undo the typing rather than the scene.
@@ -154,38 +156,107 @@ function TrimSlider({ label, value, onChange, onEditStart, onEditEnd }) {
     );
 }
 
+// "Add model from library": search, pick a card, then "Add selected model"
+// (or double-click a card). Escape or the X closes it.
 function ModelPickerDialog({ models, modelsStatus, onPick, onClose }) {
+    const [search, setSearch] = useState('');
+    const [selectedModelId, setSelectedModelId] = useState(null);
+    const trimmedSearch = search.trim().toLowerCase();
+    const visibleModels = trimmedSearch
+        ? models.filter((model) => model.name.toLowerCase().includes(trimmedSearch))
+        : models;
+    const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
+
+    useEffect(() => {
+        function closeOnEscape(event) {
+            if (event.key === 'Escape') onClose();
+        }
+        document.addEventListener('keydown', closeOnEscape);
+        return () => document.removeEventListener('keydown', closeOnEscape);
+    }, [onClose]);
+
     return (
         <div className="scene-builder-dialog-backdrop" onClick={onClose}>
             <div
-                className="forma-card scene-builder-dialog"
+                className="forma-card scene-builder-dialog scene-builder-picker"
                 role="dialog"
-                aria-label="Add a model"
+                aria-label="Add model from library"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="scene-builder-dialog-head">
-                    <h2>Add a model</h2>
-                    <button className="forma-btn" onClick={onClose}>Close</button>
+                    <h2>Add model from library</h2>
+                    <button className="scene-builder-dialog-close" onClick={onClose} aria-label="Close">
+                        <Icon name="close" size={16} />
+                    </button>
                 </div>
 
-                {modelsStatus === 'loading' && <p className="scene-builder-note">Loading your models...</p>}
-                {modelsStatus === 'error' && (
-                    <p className="scene-builder-note">Could not load your models. Is the server running?</p>
-                )}
-                {modelsStatus === 'ready' && models.length === 0 && (
-                    <p className="scene-builder-note">No finished models yet. Build one from your photos first.</p>
-                )}
-
-                <div className="scene-builder-model-grid">
-                    {models.map((model) => (
-                        <button key={model.id} className="scene-builder-model-card" onClick={() => onPick(model)}>
-                            <span className="scene-builder-model-thumb">
-                                {model.thumbnailUrl ? <img src={model.thumbnailUrl} alt="" /> : <Icon name="cube" size={22} />}
+                <div className="scene-builder-picker-body">
+                    <div className="scene-builder-picker-search-row">
+                        <label className="scene-builder-picker-search">
+                            <Icon name="search" size={16} />
+                            <input
+                                type="search"
+                                value={search}
+                                placeholder="Search models..."
+                                aria-label="Search models"
+                                onChange={(event) => setSearch(event.target.value)}
+                            />
+                        </label>
+                        {modelsStatus === 'ready' && (
+                            <span className="scene-builder-picker-count">
+                                {models.length} model{models.length === 1 ? '' : 's'}
                             </span>
-                            <span className="scene-builder-model-name">{model.name}</span>
-                            <span className="scene-builder-model-meta">{model.photoCount} photos</span>
-                        </button>
-                    ))}
+                        )}
+                    </div>
+
+                    {modelsStatus === 'loading' && <p className="scene-builder-note">Loading your models...</p>}
+                    {modelsStatus === 'error' && (
+                        <p className="scene-builder-note">Could not load your models. Is the server running?</p>
+                    )}
+                    {modelsStatus === 'ready' && models.length === 0 && (
+                        <p className="scene-builder-note">No finished models yet. Build one from your photos first.</p>
+                    )}
+                    {modelsStatus === 'ready' && models.length > 0 && visibleModels.length === 0 && (
+                        <p className="scene-builder-note">No models match &quot;{search.trim()}&quot;.</p>
+                    )}
+
+                    <div className="scene-builder-model-grid">
+                        {visibleModels.map((model) => {
+                            const isSelected = model.id === selectedModelId;
+                            return (
+                                <button
+                                    key={model.id}
+                                    className={isSelected ? 'scene-builder-model-card is-selected' : 'scene-builder-model-card'}
+                                    aria-pressed={isSelected}
+                                    onClick={() => {
+                                        playSound('tap');
+                                        setSelectedModelId(model.id);
+                                    }}
+                                    onDoubleClick={() => onPick(model)}
+                                >
+                                    <span className="scene-builder-model-thumb">
+                                        <ModelCover coverUrl={model.coverUrl} photoUrl={model.thumbnailUrl} icon="cube" />
+                                        {isSelected && (
+                                            <span className="scene-builder-model-tick"><Icon name="check" size={12} /></span>
+                                        )}
+                                    </span>
+                                    <span className="scene-builder-model-name">{model.name}</span>
+                                    <span className="scene-builder-model-meta">{model.photoCount} photos</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="scene-builder-picker-footer">
+                    <button className="forma-btn" onClick={onClose}>Cancel</button>
+                    <button
+                        className="forma-btn forma-btn-primary"
+                        disabled={!selectedModel}
+                        onClick={() => onPick(selectedModel)}
+                    >
+                        <Icon name="plus" size={14} /> Add selected model
+                    </button>
                 </div>
             </div>
         </div>
@@ -324,7 +395,7 @@ function SceneBuilderScreen({
 
         async function loadModels() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const jobs = await res.json();
                 if (isCancelled) return;
@@ -336,6 +407,7 @@ function SceneBuilderScreen({
                             name: jobDisplayName(job, 'Model'),
                             photoCount: job.imageCount ?? job.images?.length ?? 0,
                             thumbnailUrl: job.images?.[0]?.url ?? null,
+                            coverUrl: job.cover ?? null,
                         })),
                 );
                 setModelsStatus('ready');

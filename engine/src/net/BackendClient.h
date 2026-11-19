@@ -7,9 +7,10 @@
 \date 23-10-2026
 \brief
 Declares BackendClient, the engine's connection to the web app's backend.
-It signs in with the same accounts as the web app (POST /auth/login), keeps
-the session token the backend hands out, lists the caller's reconstruction
-jobs (GET /jobs) and downloads a finished model (GET /jobs/:id/result.ply)
+It signs in with the same accounts as the web app (POST /api/v1/auth/login),
+keeps the session token the backend hands out, lists the caller's
+reconstruction jobs (GET /api/v1/jobs) and downloads a finished model
+(GET /api/v1/jobs/:id/result.ply)
 into a per-user cache. The backend decides what each account may see:
 users get only the models they uploaded, admins get every model.
 **************************************************************************/
@@ -108,7 +109,7 @@ signals:
     void downloadFinished(const QString& jobId, const QString& path, const QString& error);
 
 private:
-    // A request to server + path that carries token as the session cookie.
+    // A request to server + /api/v1 + path that carries token as the session cookie.
     static QNetworkRequest MakeRequest(const QUrl& server, const QString& path, const QByteArray& token);
     // Drops the session if the server says it is no longer valid. True if it did.
     bool handleUnauthorized(QNetworkReply* reply);

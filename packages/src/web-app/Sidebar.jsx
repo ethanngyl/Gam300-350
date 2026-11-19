@@ -6,217 +6,150 @@
 \par Software Engineering Project 5
 \date 27-10-2026
 \brief
-Left sidebar shown on every dashboard page, laid out like the Genesis
-wireframe. From top to bottom: a collapse button; "New model", which opens
-the camera capture page; "Add photos", which opens the file picker and
-hands the chosen photos to the capture page; the workspace pages (Home,
-Media Library, Photo Editor, Scene Builder, Frame Extractor, Model
-Viewer); and the signed-in user at the bottom, whose menu links to the
-account page, mutes / unmutes sound effects, and signs out (or in, for
-guests). The item for the current
-page is highlighted. Collapsed (wider screens), only icons show. On phones
-it becomes a slide-in drawer: isOpen shows it, and every item calls
-onClose so the drawer shuts after a choice is made.
+Left sidebar of the app on wider screens (above 760px; phones keep the
+dock, Dock.jsx), laid out like the Genesis Figma: a "New" button at the
+top, the workspace pages as an icon with a short label under it, and
+"Learn" at the bottom, which replays the walkthrough.
+"New" opens a small menu: "Capture with camera" opens the capture page,
+and "Upload photos" opens the file picker and hands the chosen photos to
+the capture page (the same two actions the dock had).
+- SIDEBAR_PAGES
+The workspace pages, top to bottom.
+- Sidebar({ activeTab, onNavigate, onNewModel, onAddPhotos, onLearn })
+React component. activeTab is highlighted.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
+import { playSound } from '../audio/Audio.js';
 
-const WORKSPACE_ITEMS = [
+const SIDEBAR_PAGES = [
     { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'library', label: 'Media Library', icon: 'layers' },
-    { id: 'editor', label: 'Photo Editor', icon: 'edit' },
-    { id: 'scene', label: 'Scene Builder', icon: 'shapes' },
-    { id: 'extractor', label: 'Frame Extractor', icon: 'play' },
-    { id: 'viewer', label: 'Model Viewer', icon: 'cube' },
+    { id: 'library', label: 'Media Library', icon: 'image' },
+    { id: 'editor', label: 'Photo Editor', icon: 'sliders' },
+    { id: 'scene', label: 'Scene Builder', icon: 'cube' },
+    { id: 'extractor', label: 'Video Extractor', icon: 'film' },
+    { id: 'viewer', label: 'Model Viewer', icon: 'layers' },
+    { id: 'feedback', label: 'Feedback', icon: 'message' },
 ];
 
-function Sidebar({
-    activeTab,
-    onNavigate,
-    onNewModel,
-    onAddPhotos,
-    user,
-    onOpenAccount,
-    onSignOut,
-    isCollapsed,
-    onToggleCollapsed,
-    isOpen,
-    onClose,
-}) {
+function Sidebar({ activeTab, onNavigate, onNewModel, onAddPhotos, onLearn }) {
+    const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
+    const newMenuRef = useRef(null);
     const fileInputRef = useRef(null);
-    const profileRef = useRef(null);
-    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-    const { isMuted } = useSoundSettings();
-    const isCapturePage = activeTab === 'capture';
 
-    // Close the profile menu when the user clicks anywhere outside it.
+    // The New menu closes on a click outside it or on Escape.
     useEffect(() => {
-        if (!isProfileMenuOpen) return;
-
-        function closeWhenClickingOutside(event) {
-            if (profileRef.current && !profileRef.current.contains(event.target)) {
-                setIsProfileMenuOpen(false);
-            }
+        if (!isNewMenuOpen) return undefined;
+        function closeOnOutsideClick(event) {
+            if (!newMenuRef.current?.contains(event.target)) setIsNewMenuOpen(false);
         }
-
-        document.addEventListener('mousedown', closeWhenClickingOutside);
-        return () => document.removeEventListener('mousedown', closeWhenClickingOutside);
-    }, [isProfileMenuOpen]);
+        function closeOnEscape(event) {
+            if (event.key === 'Escape') setIsNewMenuOpen(false);
+        }
+        document.addEventListener('pointerdown', closeOnOutsideClick);
+        document.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', closeOnOutsideClick);
+            document.removeEventListener('keydown', closeOnEscape);
+        };
+    }, [isNewMenuOpen]);
 
     function handleFilesChosen(event) {
         const chosenFiles = Array.from(event.target.files ?? []);
         // Clear so choosing the same files again still fires onChange.
         event.target.value = '';
-        if (chosenFiles.length === 0) return;
-        onClose();
-        onAddPhotos(chosenFiles);
+        if (chosenFiles.length > 0) onAddPhotos(chosenFiles);
     }
 
-    const sidebarClassName = [
-        'genesis-sidebar',
-        isOpen ? 'is-open' : '',
-        isCollapsed ? 'is-collapsed' : '',
-    ].join(' ').trim();
-
     return (
-        <aside className={sidebarClassName}>
-            <button
-                className="genesis-collapse-btn"
-                onClick={() => {
-                    playSound('tap');
-                    setIsProfileMenuOpen(false);
-                    onToggleCollapsed();
-                }}
-                aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-                <Icon name="chevron" size={15} />
-            </button>
-
-            <button
-                className={
-                    isCapturePage
-                        ? 'forma-btn forma-btn-primary genesis-new-model is-active'
-                        : 'forma-btn forma-btn-primary genesis-new-model'
-                }
-                onClick={() => {
-                    playSound('tap');
-                    onClose();
-                    onNewModel();
-                }}
-                title="New model"
-            >
-                <Icon name="cubePlus" size={16} /> <span>New model</span>
-            </button>
-
-            <button
-                className="forma-btn genesis-add-photos"
-                onClick={() => {
-                    playSound('tap');
-                    fileInputRef.current?.click();
-                }}
-                title="Add photos"
-            >
-                <Icon name="upload" size={16} /> <span>Add photos</span>
-            </button>
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleFilesChosen}
-                style={{ display: 'none' }}
-            />
-
-            <div className="genesis-side-label">Workspace</div>
-            {WORKSPACE_ITEMS.map((item) => (
+        <nav className="app-sidebar" aria-label="Workspace">
+            <div className="app-sidebar-new" ref={newMenuRef}>
                 <button
-                    key={item.id}
-                    className={activeTab === item.id ? 'genesis-side-item is-active' : 'genesis-side-item'}
+                    type="button"
+                    className="app-sidebar-new-button"
+                    aria-label="New"
+                    aria-haspopup="menu"
+                    aria-expanded={isNewMenuOpen}
                     onClick={() => {
                         playSound('tap');
-                        onClose();
-                        onNavigate(item.id);
+                        setIsNewMenuOpen((isOpen) => !isOpen);
                     }}
-                    title={item.label}
                 >
-                    <Icon name={item.icon} size={16} /> <span>{item.label}</span>
+                    <span className="app-sidebar-new-icon"><Icon name="plus" size={20} /></span>
+                    <span className="app-sidebar-label">New</span>
                 </button>
-            ))}
-
-            <div className="genesis-profile" ref={profileRef}>
-                {isProfileMenuOpen && (
-                    <div className="genesis-profile-menu" role="dialog" aria-label="Account overview">
-                        <div className="genesis-profile-summary">
-                            <span className="forma-avatar genesis-profile-avatar-large">
-                                <Icon name="user" size={22} />
-                            </span>
-                            <div className="genesis-profile-identity">
-                                <strong>{user.name}</strong>
-                                <span>{user.email}</span>
-                                {!user.isGuest && (
-                                    <button
-                                        className="genesis-profile-link"
-                                        onClick={() => {
-                                            playSound('tap');
-                                            setIsProfileMenuOpen(false);
-                                            onClose();
-                                            onOpenAccount();
-                                        }}
-                                    >
-                                        Manage account
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                        <div className="genesis-profile-divider" />
+                {isNewMenuOpen && (
+                    <div className="app-menu app-sidebar-new-menu" role="menu">
                         <button
-                            className="forma-account-menu-item"
+                            type="button"
+                            role="menuitem"
+                            className="app-menu-item"
                             onClick={() => {
-                                setSoundMuted(!isMuted);
-                                // Muting stays silent; unmuting plays once to confirm.
-                                if (isMuted) playSound('tap');
+                                playSound('confirm');
+                                setIsNewMenuOpen(false);
+                                onNewModel();
                             }}
                         >
-                            <Icon name={isMuted ? 'volume' : 'volumeOff'} size={14} />
-                            {isMuted ? ' Unmute sounds' : ' Mute sounds'}
+                            <Icon name="camera" size={16} />
+                            <span>
+                                <strong>Capture with camera</strong>
+                                <small>Take photos from every angle</small>
+                            </span>
                         </button>
                         <button
-                            className="forma-account-menu-item"
+                            type="button"
+                            role="menuitem"
+                            className="app-menu-item"
                             onClick={() => {
-                                playSound('back');
-                                setIsProfileMenuOpen(false);
-                                onSignOut();
+                                playSound('tap');
+                                setIsNewMenuOpen(false);
+                                fileInputRef.current?.click();
                             }}
                         >
-                            {user.isGuest
-                                ? <><Icon name="user" size={14} /> Sign in</>
-                                : <><Icon name="logout" size={14} /> Sign out</>}
+                            <Icon name="upload" size={16} />
+                            <span>
+                                <strong>Upload photos</strong>
+                                <small>40{'\u2013'}80 overlapping shots</small>
+                            </span>
                         </button>
                     </div>
                 )}
-
-                <button
-                    className={activeTab === 'account' ? 'genesis-profile-btn is-active' : 'genesis-profile-btn'}
-                    onClick={() => {
-                        playSound('tap');
-                        setIsProfileMenuOpen((wasOpen) => !wasOpen);
-                    }}
-                    aria-expanded={isProfileMenuOpen}
-                    aria-label="Open account menu"
-                    title={user.name}
-                >
-                    <span className="forma-avatar genesis-profile-avatar"><Icon name="user" size={15} /></span>
-                    <span className="genesis-profile-text">
-                        <span className="genesis-profile-name">{user.name}</span>
-                        <span className="genesis-profile-email">{user.email}</span>
-                    </span>
-                    <Icon name="chevron" size={13} />
-                </button>
+                <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={handleFilesChosen} />
             </div>
-        </aside>
+
+            <div className="app-sidebar-pages">
+                {SIDEBAR_PAGES.map((page) => (
+                    <button
+                        key={page.id}
+                        type="button"
+                        className={activeTab === page.id ? 'app-sidebar-item is-active' : 'app-sidebar-item'}
+                        aria-label={page.label}
+                        aria-current={activeTab === page.id ? 'page' : undefined}
+                        onClick={() => {
+                            playSound('tap');
+                            onNavigate(page.id);
+                        }}
+                    >
+                        <Icon name={page.icon} size={20} />
+                        <span className="app-sidebar-label">{page.label}</span>
+                    </button>
+                ))}
+            </div>
+
+            <button
+                type="button"
+                className="app-sidebar-item app-sidebar-learn"
+                aria-label="Learn"
+                onClick={() => {
+                    playSound('tap');
+                    onLearn();
+                }}
+            >
+                <Icon name="book" size={20} />
+                <span className="app-sidebar-label">Learn</span>
+            </button>
+        </nav>
     );
 }
 

@@ -1,0 +1,814 @@
+/* ============================================================
+   Phone layouts (760px wide or less), following the Genesis mobile
+   Figma: the top bar (TopNav.jsx, isCompact), the tab bar (Dock.jsx),
+   and the Home, Library, Photo Editor, model page, Capture and login
+   screens. Imported last in App.jsx, so these rules win over the older
+   phone rules in AppTheme.css and the page stylesheets. Colours come
+   from the theme tokens.
+   Also here: the desktop Library card look (striped backdrop, grey
+   Ready tag), which phones share.
+   ============================================================ */
+
+/* ---------- Library cards (all widths) ---------- */
+
+.library-thumb {
+    background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 12px), var(--forma-panel-alt);
+}
+
+    .library-thumb .forma-badge-ready {
+        border-color: var(--forma-border-strong);
+        background: rgba(var(--forma-bg-rgb), 0.6);
+        color: var(--forma-text-soft);
+    }
+
+/* ---------- Library sort menu (SortMenu.jsx, all widths) ---------- */
+
+.sort-menu {
+    position: relative;
+    flex: none;
+}
+
+.sort-menu-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 44px;
+    min-width: 160px;
+    padding: 0 14px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 10px;
+    background: var(--forma-panel);
+    color: var(--forma-text-muted);
+    font: inherit;
+    font-size: 0.86rem;
+    cursor: pointer;
+}
+
+    .sort-menu-button:hover,
+    .sort-menu-button[aria-expanded="true"] {
+        border-color: rgba(var(--forma-accent-rgb), 0.6);
+        color: var(--forma-text);
+    }
+
+    .sort-menu-button:focus-visible {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 2px;
+    }
+
+.sort-menu-label {
+    color: var(--forma-heading);
+}
+
+.sort-menu-chevron {
+    display: inline-flex;
+    margin-left: auto;
+    transition: transform 0.15s ease;
+}
+
+.sort-menu-button[aria-expanded="true"] .sort-menu-chevron {
+    transform: rotate(180deg);
+}
+
+.sort-menu-list {
+    top: calc(100% + 6px);
+    right: 0;
+    width: 200px;
+}
+
+    .sort-menu-list .app-menu-heading {
+        padding: 4px 10px 0;
+    }
+
+    .sort-menu-list .app-menu-item {
+        justify-content: space-between;
+    }
+
+        .sort-menu-list .app-menu-item svg {
+            color: var(--forma-teal-text);
+        }
+
+        .sort-menu-list .app-menu-item.is-chosen {
+            color: var(--forma-heading);
+        }
+
+        .sort-menu-list .app-menu-item:focus-visible {
+            outline: none;
+            background: var(--forma-panel-alt);
+        }
+
+/* Phone-only pieces stay hidden on wider screens. */
+.photo-editor-phone-add,
+.auth-card-intro {
+    display: none;
+}
+
+@media (max-width: 760px) {
+
+    /* ---------- Top bar ---------- */
+
+    .app-topbar.is-compact {
+        flex: none;
+        height: 64px;
+        gap: 8px;
+        padding: 0 10px 0 16px;
+        border-bottom: 0;
+        background: var(--forma-bg);
+    }
+
+        .app-topbar.is-compact .app-topbar-logo {
+            width: auto;
+            font-size: 0.9rem;
+        }
+
+        .app-topbar.is-compact .app-topbar-actions {
+            width: auto;
+            margin-left: auto;
+            gap: 2px;
+        }
+
+        .app-topbar.is-compact .app-icon-button {
+            width: 40px;
+            height: 40px;
+        }
+
+        .app-topbar.is-compact .app-avatar {
+            margin-left: 4px;
+        }
+
+        .app-topbar.is-compact .app-notifications,
+        .app-topbar.is-compact .app-profile-menu {
+            width: min(300px, calc(100vw - 20px));
+        }
+
+    /* Search opens in a row under the bar. */
+    .app-search-row {
+        position: fixed;
+        top: 64px;
+        left: 0;
+        right: 0;
+        z-index: 60;
+        padding: 4px 16px 12px;
+        border-bottom: 1px solid var(--forma-border);
+        background: var(--forma-bg);
+    }
+
+        .app-search-row .app-search {
+            flex: none;
+            width: 100%;
+            margin: 0;
+        }
+
+    /* ---------- Tab bar ---------- */
+
+    .genesis-dock.genesis-dock-mobile {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        gap: 0;
+        padding: 6px 4px max(6px, env(safe-area-inset-bottom));
+        border: 0;
+        border-top: 1px solid var(--forma-border);
+        border-radius: 0;
+        background: var(--forma-bg);
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    .genesis-dock-mobile .genesis-mdock-item {
+        flex: 0 0 25%;
+        height: 58px;
+        gap: 5px;
+        border: 0;
+        color: var(--forma-text-dim);
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+
+        /* Pages of four snap into place. */
+        .genesis-dock-mobile .genesis-mdock-item:nth-child(5n + 1) {
+            scroll-snap-align: none;
+        }
+
+        .genesis-dock-mobile .genesis-mdock-item:nth-child(4n + 1) {
+            scroll-snap-align: start;
+        }
+
+        .genesis-dock-mobile .genesis-mdock-item.is-active {
+            background: transparent;
+            color: var(--forma-heading);
+        }
+
+        .genesis-dock-mobile .genesis-mdock-item:focus-visible .genesis-mdock-icon {
+            outline: 2px solid var(--forma-teal-text);
+            outline-offset: 2px;
+            border-radius: 10px;
+        }
+
+        /* Capture: a raised pill. */
+        .genesis-dock-mobile .genesis-mdock-item.is-raised {
+            color: var(--forma-heading);
+        }
+
+            .genesis-dock-mobile .genesis-mdock-item.is-raised .genesis-mdock-icon {
+                width: 48px;
+                height: 34px;
+                border-radius: 12px;
+                background: var(--forma-blue);
+                color: var(--forma-on-accent);
+            }
+
+    .genesis-dock-mobile .genesis-mdock-arrow {
+        width: 30px;
+        height: 46px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--forma-text-muted);
+    }
+
+    .genesis-main {
+        padding-bottom: 92px;
+    }
+
+    /* Page titles (Library, Model Viewer ...) show on phones too. */
+    .genesis-shell .page-title {
+        display: block;
+        margin: 4px 0 18px;
+        color: var(--forma-heading);
+        font-size: 1.75rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    /* ---------- Home: Recent only ---------- */
+
+    .home-screen .home-recent-v2-header {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px 12px;
+        margin: 4px 0 18px;
+    }
+
+    .home-screen .home-recent-title-row {
+        display: contents;
+    }
+
+        .home-screen .home-recent-title-row .home-section-title {
+            order: 1;
+            font-size: 1.15rem;
+        }
+
+    .home-screen .home-view-all-link {
+        order: 2;
+        align-self: center;
+    }
+
+    .home-screen .home-recent-tabs {
+        order: 3;
+    }
+
+    .home-screen .home-file-preview {
+        aspect-ratio: 6 / 5;
+    }
+
+    /* ---------- Library ---------- */
+
+    .library-screen {
+        padding: 0 16px 24px;
+    }
+
+        .library-screen .library-toolbar {
+            padding: 0;
+            margin-bottom: 16px;
+            border-bottom: 0;
+        }
+
+        .library-screen .library-subtab {
+            padding: 9px 12px;
+            font-size: 0.86rem;
+        }
+
+        .library-screen .library-search {
+            height: 44px;
+            border-radius: 10px;
+        }
+
+        /* Search and the sort button share a row. */
+        .library-screen .library-search {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .library-screen .sort-menu-button {
+            min-width: 0;
+            width: 44px;
+            justify-content: center;
+            padding: 0;
+        }
+
+            .library-screen .sort-menu-button .sort-menu-label,
+            .library-screen .sort-menu-button .sort-menu-chevron {
+                display: none;
+            }
+
+        .library-screen .library-grid,
+        .library-screen .library-photo-grid,
+        .library-screen .library-note,
+        .library-screen .gallery-compact .gallery-note,
+        .library-screen .gallery-compact section.gallery-job {
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        .library-screen .library-grid {
+            gap: 12px;
+        }
+
+        .library-screen .library-item {
+            border-radius: 12px;
+        }
+
+        .library-screen .library-thumb {
+            height: 140px;
+        }
+
+        .library-screen .library-item-name {
+            padding: 12px 12px 4px;
+        }
+
+        .library-screen .library-item-meta {
+            flex-direction: row;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+            gap: 0 6px;
+            padding: 0 12px 12px;
+        }
+
+            .library-screen .library-item-meta span + span::before {
+                content: '\00b7';
+                margin-right: 6px;
+            }
+
+    /* ---------- Photo Editor ---------- */
+
+    .photo-editor .photo-editor-heading .eyebrow,
+    .photo-editor .photo-editor-subtitle,
+    .photo-editor .photo-editor-heading-actions,
+    .photo-editor .photo-editor-keep-all {
+        display: none;
+    }
+
+    .photo-editor .photo-editor-title {
+        font-size: 1.75rem;
+    }
+
+    .photo-editor .photo-editor-summary-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+    }
+
+    .photo-editor .photo-editor-phone-add {
+        display: inline-flex;
+    }
+
+    .photo-editor .photo-editor-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    /* The bottom bar: options in one row, then Generate. */
+    .photo-editor .photo-editor-footer {
+        gap: 8px;
+        padding: 10px 16px 12px;
+        background: var(--forma-bg);
+        box-shadow: 0 92px 0 var(--forma-bg);
+    }
+
+    .photo-editor .photo-editor-footer-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        font-size: 0.8rem;
+    }
+
+    .photo-editor .photo-editor-footer-text {
+        font-size: 0.76rem;
+    }
+
+        /* Only problems show here; the photo count is in the summary. */
+        .photo-editor .photo-editor-footer-text:not(:has(.photo-editor-error)) {
+            display: none;
+        }
+
+    /* Model detail on one line: the name, then Fast / Normal / Detailed. */
+    .photo-editor .photo-editor-footer .training-quality {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .photo-editor .photo-editor-footer .training-quality-range {
+        display: none;
+    }
+
+    .photo-editor .photo-editor-footer .training-quality-stops {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 999px;
+    }
+
+    .photo-editor .photo-editor-footer .training-quality-stop {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.74rem;
+    }
+
+        .photo-editor .photo-editor-footer .training-quality-stop.is-active {
+            background: var(--forma-panel-raised);
+            color: var(--forma-heading);
+        }
+
+    .photo-editor .photo-editor-footer .forma-btn-primary {
+        height: 48px;
+        border-radius: 12px;
+        font-size: 0.95rem;
+    }
+
+    /* ---------- Model page ---------- */
+
+    .model-screen {
+        padding-top: max(16px, env(safe-area-inset-top));
+    }
+
+        .model-screen > .model-back,
+        .model-screen .model-title-row .model-icon-btn,
+        .model-screen .model-card-details,
+        .model-screen .model-card-manage {
+            display: none;
+        }
+
+        /* Viewer first, then the name, stats and buttons, then photos. */
+        .model-screen .model-body {
+            display: contents;
+        }
+
+    .model-phone-header {
+        order: 0;
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr) 40px;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .model-round-btn {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 50%;
+        background: var(--forma-panel);
+        color: var(--forma-heading);
+        cursor: pointer;
+    }
+
+        .model-round-btn.is-placeholder {
+            visibility: hidden;
+        }
+
+    .model-phone-title {
+        overflow: hidden;
+        color: var(--forma-heading);
+        font-weight: 600;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .model-phone-menu-anchor {
+        position: relative;
+    }
+
+    .model-phone-menu {
+        top: calc(100% + 8px);
+        right: 0;
+        width: 200px;
+    }
+
+    .model-screen .model-viewer {
+        order: 1;
+        border-radius: 16px;
+    }
+
+    .model-screen .model-head {
+        order: 2;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+    }
+
+    .model-screen .model-side {
+        order: 3;
+    }
+
+    .model-phone-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+        margin: 0;
+        padding: 12px 0;
+        border: 1px solid var(--forma-border);
+        border-radius: 12px;
+        text-align: center;
+    }
+
+        .model-phone-stats div {
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 2px;
+        }
+
+        .model-phone-stats dd {
+            margin: 0;
+            color: var(--forma-heading);
+            font: 600 1rem var(--forma-font-mono);
+        }
+
+        .model-phone-stats dt {
+            color: var(--forma-text-muted);
+            font-size: 0.72rem;
+        }
+
+    .model-screen .model-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+        .model-screen .model-actions .forma-btn {
+            height: 48px;
+            justify-content: center;
+            border-radius: 12px;
+        }
+
+    /* ---------- Capture: full-screen camera ---------- */
+
+    .capture-phone {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        overflow: hidden;
+        background: #000;
+        color: #fff;
+        font-family: var(--forma-font);
+    }
+
+    .capture-phone-viewport {
+        position: absolute;
+        inset: 0;
+    }
+
+        .capture-phone-viewport .capture-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+    .capture-phone-message {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 24px;
+        color: rgba(255, 255, 255, 0.75);
+        text-align: center;
+    }
+
+    /* The framing corners, in the upper middle of the screen. */
+    .capture-phone-frame {
+        position: absolute;
+        top: 18%;
+        left: 12%;
+        right: 12%;
+        height: 36%;
+        pointer-events: none;
+    }
+
+        .capture-phone-frame .capture-corner {
+            border-color: rgba(255, 255, 255, 0.9);
+        }
+
+    .capture-phone-top {
+        position: absolute;
+        top: max(16px, env(safe-area-inset-top));
+        left: 16px;
+        right: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .capture-phone-round {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 50%;
+        background: rgba(20, 20, 24, 0.6);
+        color: #fff;
+        cursor: pointer;
+    }
+
+    .capture-phone-count {
+        padding: 6px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        background: rgba(20, 20, 24, 0.6);
+        font: 600 0.78rem var(--forma-font-mono);
+    }
+
+    .capture-phone-bottom {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+        padding: 0 20px max(28px, env(safe-area-inset-bottom));
+    }
+
+    .capture-phone-hint {
+        margin: 0 0 4px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.5);
+        font-size: 0.8rem;
+    }
+
+        .capture-phone-hint.is-error {
+            background: rgba(180, 30, 40, 0.75);
+        }
+
+    .capture-phone-modes {
+        display: flex;
+        padding: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        background: rgba(20, 20, 24, 0.6);
+    }
+
+        .capture-phone-modes button {
+            padding: 6px 16px;
+            border: 0;
+            border-radius: 999px;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.85);
+            font: inherit;
+            font-size: 0.82rem;
+            cursor: pointer;
+        }
+
+            .capture-phone-modes button.is-active {
+                background: var(--forma-blue);
+                color: var(--forma-on-accent);
+            }
+
+    .capture-phone-controls {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+    }
+
+    .capture-phone-last {
+        justify-self: start;
+        width: 52px;
+        height: 52px;
+        overflow: hidden;
+        padding: 0;
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.12);
+        cursor: pointer;
+    }
+
+        .capture-phone-last img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .capture-phone-last:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+    /* The shutter: a white ring around a white disc. */
+    .capture-phone-shutter {
+        width: 76px;
+        height: 76px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 4px solid #fff;
+        border-radius: 50%;
+        background: transparent;
+        cursor: pointer;
+    }
+
+        .capture-phone-shutter span {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform 0.12s ease, border-radius 0.2s ease;
+        }
+
+        .capture-phone-shutter:active span {
+            transform: scale(0.92);
+        }
+
+        /* Auto-capture running: the disc turns into a red stop square. */
+        .capture-phone-shutter.is-capturing span {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            background: #e5484d;
+        }
+
+        .capture-phone-shutter:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+    .capture-phone-done {
+        justify-self: end;
+        min-width: 64px;
+        height: 44px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--forma-blue);
+        color: var(--forma-on-accent);
+        font: inherit;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .capture-phone-done:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+    /* ---------- Login ---------- */
+
+    .auth-card.is-login .auth-card-intro {
+        display: block;
+        margin-bottom: 28px;
+    }
+
+    .auth-card-intro p {
+        margin: 0;
+        color: var(--forma-text-muted);
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .auth-card-intro .auth-card-intro-title {
+        margin-bottom: 8px;
+        color: var(--forma-heading);
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+    }
+
+    /* Logging in: the line above replaces "Welcome back / Log in to Genesis"
+       (still there for screen readers). */
+    .auth-card.is-login .auth-eyebrow,
+    .auth-card.is-login h1 {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }
+}

@@ -6,23 +6,38 @@
 \par Software Engineering Project 5
 \date 26-10-2026
 \brief
-Dashboard landing screen, laid out like the Genesis wireframe and focused
-on the user's own work: a welcome line and subtitle (plus a "New model"
-button on phones, as a bigger target than the dock's), then "Recent" with two
-tabs and a "View all" button. "Your files" shows the latest photo batches
-(tagged with their build's status: source photos, processing, failed or
-cancelled) and opens the Photo Library; "Generated models" shows the latest
-finished models and opens one in the full-page viewer. Both come from GET /jobs. With nothing made yet,
+Dashboard landing screen, laid out like the Genesis Figma: a "Get
+Started" banner with three ways to start (Add photos opens the Add source
+photos dialog, AddPhotosDialog.jsx, which hands the photos to the Photo
+Editor; Frames from video opens the Video Extractor; Build a scene opens
+the Scene Builder), then "Recent" with two tabs and a "View all" link.
+Phones show only Recent, as in the mobile Figma (Capture is in the tab
+bar). "Your files" shows the
+latest photo batches (tagged with their build's status: source photos,
+processing, failed or cancelled) and opens the Photo Library; "Generated
+models" shows the latest finished models and opens one in the full-page
+viewer. Both come from GET /jobs. With nothing made yet,
 it shows a single "Create your first 3D model" card instead.
 **************************************************************************/
 
 import { useEffect, useState } from 'react';
+import AddPhotosDialog from './AddPhotosDialog.jsx';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
+import './HomeScreen.css';
 
 // How many cards each Recent tab shows.
 const RECENT_ITEM_COUNT = 10;
+
+// The banner's ways to start. 'photos' opens the Add source photos
+// dialog; the others open that page.
+const START_ACTIONS = [
+    { id: 'photos', title: 'Add photos', hint: '40\u201380 overlapping shots', icon: 'upload' },
+    { id: 'extractor', title: 'Frames from video', hint: 'Pick frames from a walkaround video', icon: 'play' },
+    { id: 'scene', title: 'Build a scene', hint: 'Arrange models in a space', icon: 'cube' },
+];
 
 const RECENT_TABS = [
     { id: 'files', label: 'Your files' },
@@ -53,7 +68,8 @@ function formatTimeAgo(timestamp) {
     return new Date(timestamp).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
 }
 
-function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
+function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, onOpenModel }) {
+    const [isAddPhotosOpen, setIsAddPhotosOpen] = useState(false);
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
@@ -64,7 +80,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
 
         async function loadJobs() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!isCancelled) {
@@ -91,7 +107,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
             id: job.id,
             name: jobDisplayName(job, 'Photos'),
             ...fileStatus(job),
-            coverUrl: job.images[0].url,
+            coverUrl: smallPhotoUrl(job.images[0].url),
             createdAt: job.createdAt,
         }));
 
@@ -102,7 +118,7 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
             id: job.id,
             name: jobDisplayName(job, 'Model'),
             kind: '3D model',
-            coverUrl: job.images?.[0]?.url ?? null,
+            coverUrl: smallPhotoUrl(job.images?.[0]?.url),
             createdAt: job.createdAt,
         }));
 
@@ -121,22 +137,35 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
         onNewGeneration();
     }
 
+    function startAction(actionId) {
+        playSound('tap');
+        if (actionId === 'photos') setIsAddPhotosOpen(true);
+        else onNavigate(actionId);
+    }
+
     return (
         <div className="home-screen">
-            <p className="eyebrow eyebrow-accent">Default workspace</p>
-            <div className="home-heading-row">
-                <div>
-                    <h1>Welcome back, {userName}</h1>
-                    <p className="home-subtitle">Turn photos and video frames into polished 3D assets.</p>
+            <section className="home-hero" aria-labelledby="home-hero-title">
+                <span className="home-hero-art" aria-hidden="true" />
+                <h1 id="home-hero-title" className="home-hero-title">Get Started</h1>
+                <div className="home-hero-actions">
+                    {START_ACTIONS.map((action) => (
+                        <button
+                            key={action.id}
+                            type="button"
+                            className="home-hero-action"
+                            onClick={() => startAction(action.id)}
+                        >
+                            <span className="home-hero-action-icon"><Icon name={action.icon} size={18} /></span>
+                            <span className="home-hero-action-title">{action.title}</span>
+                            <span className="home-hero-action-hint">{action.hint}</span>
+                        </button>
+                    ))}
                 </div>
-                {/* Phones only: a bigger New model button than the dock's icon. */}
-                <button className="forma-btn forma-btn-primary home-new-model" onClick={startNewModel}>
-                    <Icon name="cubePlus" size={15} /> New model
-                </button>
-            </div>
+            </section>
 
             <div className="home-recent-v2-header">
-                <div>
+                <div className="home-recent-title-row">
                     <h2 className="home-section-title">Recent</h2>
                     <div className="home-recent-tabs" role="tablist">
                         {RECENT_TABS.map((tab) => (
@@ -156,13 +185,13 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                     </div>
                 </div>
                 <button
-                    className="forma-btn home-view-all"
+                    className="home-view-all-link"
                     onClick={() => {
                         playSound('tap');
                         onOpenLibrary(isShowingFiles ? 'photos' : 'models');
                     }}
                 >
-                    View all {isShowingFiles ? 'files' : 'models'}
+                    View all {isShowingFiles ? 'files' : 'models'} <Icon name="chevronRight" size={14} />
                 </button>
             </div>
 
@@ -207,12 +236,24 @@ function HomeScreen({ userName, onNewGeneration, onOpenLibrary, onOpenModel }) {
                             </span>
                             <span className="home-file-copy">
                                 <span className="home-file-name">{item.name}</span>
-                                <span className={item.statusClassName ? `home-file-kind ${item.statusClassName}` : 'home-file-kind'}>{item.kind}</span>
-                                <span className="home-file-time">{formatTimeAgo(item.createdAt)}</span>
+                                <span className="home-file-meta">
+                                    <span className={item.statusClassName ? `home-file-kind ${item.statusClassName}` : 'home-file-kind'}>{item.kind}</span>
+                                    <span className="home-file-time">{formatTimeAgo(item.createdAt)}</span>
+                                </span>
                             </span>
                         </button>
                     ))}
                 </div>
+            )}
+
+            {isAddPhotosOpen && (
+                <AddPhotosDialog
+                    onClose={() => setIsAddPhotosOpen(false)}
+                    onContinue={(files) => {
+                        setIsAddPhotosOpen(false);
+                        onEditPhotos(files);
+                    }}
+                />
             )}
         </div>
     );

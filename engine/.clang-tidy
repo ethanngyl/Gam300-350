@@ -1,0 +1,16 @@
+# clang-tidy settings for the engine's C++ (run by engine/lint-cpp.sh and CI).
+# Kept to bug-finding checks: the static analyzer (clang-analyzer-*) and the
+# bugprone-* checks, minus three that mostly flag deliberate code here
+# (float/int conversions in the renderer, and adjacent same-type parameters).
+# Third-party headers are passed as -isystem, so their warnings are hidden.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result
+# Any finding fails the run, so CI blocks the merge.
+WarningsAsErrors: '*'
+# Also check the engine's own headers, not only the .cpp files.
+HeaderFilterRegex: '.*'

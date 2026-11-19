@@ -52,6 +52,7 @@ class ConsolePanel;
 class InspectorPanel;
 class OutlinerPanel;
 class RemoteModelsPanel;
+class StressTestPanel;
 class Viewport;
 
 class MainWindow : public QMainWindow {
@@ -92,6 +93,7 @@ private:
     // `trimData` is the values the import was trimmed with (stored on the model).
     void finishImport(const QString& path, std::vector<SplatVertex>& splats, std::vector<SplatVertex>& original,
                       const TrimData& trimData);
+    void generateStressTestSphere();               // adds a generated 1M-splat sphere to the scene
     void showTrimDialog();
     void applyDefaultTrim(const TrimData& trim);   // saves the global defaults used for new imports
     void applyModelTrim(const TrimData& trim);     // re-trims the selected model and stores the values on it
@@ -109,6 +111,10 @@ private:
     // Asks for export options and a file name, then writes the selected
     // model (or the whole scene) on a worker thread.
     void exportModels();
+    //Toggles developer mode
+    void toggleDevMode();
+    //Refreshes the dev mode menu text to match m_devMode
+    void updateDevModeAction();
 
     // ---- generating a model (on this PC, no server) ----
     // Asks what to build (GenerateModelDialog) and starts LocalReconstruction.
@@ -152,6 +158,7 @@ private:
     ConsolePanel* m_console = nullptr;
     AudioPanel* m_audio = nullptr;
     RemoteModelsPanel* m_remoteModels = nullptr;
+    StressTestPanel* m_stressTestPanel = nullptr; //Dev mode only, its dock is shown/hidden by updateDevModeAction
     QList<QDockWidget*> m_docks;
     QToolBar* m_toolBar = nullptr;
 
@@ -177,6 +184,7 @@ private:
     QAction* m_statsOverlayAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
     QAction* m_trimSettingsAction = nullptr;
+    QAction* m_stressTestSphereAction = nullptr;
     TrimData m_trimSettings;
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;
@@ -184,6 +192,7 @@ private:
     QAction* m_accountInfoAction = nullptr;
     QAction* m_signInAction = nullptr;
     QAction* m_signOutAction = nullptr;
+    QAction* m_devModeAction = nullptr;
 
     // Connection to the web app's backend (accounts, uploaded models).
     BackendClient* m_backend = nullptr;
@@ -213,4 +222,7 @@ private:
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
+
+    //Dev mode
+    bool m_devMode = false;
 };

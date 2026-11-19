@@ -235,6 +235,15 @@ describe('the server answers as documented', () =>
     await check('GET', `/scenes/${created.body.id}`, '/scenes/{id}', { cookie })
   })
 
+  test('performance metrics', async () =>
+  {
+    await check('POST', '/metrics/page-load', '/metrics/page-load', { json: { ttfb: 42.5, fcp: 310.2, domContentLoaded: 288.9, load: 642.1 } })
+    await check('POST', '/metrics/page-load', '/metrics/page-load', { json: { load: -5 } })
+    const report = await check('GET', '/metrics/performance?window=1h', '/metrics/performance', { cookie })
+    assert.ok(report.body.api.length > 0 && report.body.pageLoad.length === 4)
+    await check('GET', '/metrics/performance?window=1y', '/metrics/performance', { cookie })
+  })
+
   test('feedback, then signing out', async () =>
   {
     await check('POST', '/feedback', '/feedback', { cookie, json: { category: 'idea', message: 'Please add a dark mode toggle.' } })

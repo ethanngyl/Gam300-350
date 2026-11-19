@@ -44,6 +44,8 @@ tags:
     description: Feedback from the website, and the admins' inbox
   - name: Catalog
     description: Reference data and API documentation
+  - name: Metrics
+    description: API response times and website load times (p50 / p95 / p99), per machine
   - name: VM
     description: Machine-to-machine routes on the VM (shared key required)
 
@@ -180,7 +182,27 @@ paths:
       description: |
         On the VM, redirects to Google's account chooser with a one-use state
         cookie. On other machines, redirects to the VM's /auth/google.
+
+        A team machine (with a working VM connection) adds `return_to` (its
+        own `/api/v1/auth/google/finish`) and `return_state` (a random state
+        it also keeps in a cookie), so the sign-in ends on its own website:
+        the VM then sends the browser back there with a one-time code instead
+        of signing in on the VM's website. The VM only accepts a `return_to`
+        on a loopback address (localhost, 127.0.0.1, [::1]) or an origin in
+        its `GOOGLE_RETURN_ORIGINS`, with exactly that path; any other is
+        ignored.
       security: []
+      parameters:
+        - name: return_to
+          in: query
+          description: VM only. Where to send the browser back to, with the one-time code.
+          schema: { type: string }
+          example: http://localhost:5005/api/v1/auth/google/finish
+        - name: return_state
+          in: query
+          description: VM only. The team machine's state, sent back with the code.
+          schema: { type: string, pattern: '^[\w-]{16,128}$' }
+          example: Zm9vYmFyYmF6cXV4MTIz
       responses:
         '302':
           description: Redirect to Google (or the VM)
@@ -206,13 +228,130 @@ paths:
         - { name: error, in: query, schema: { type: string }, example: access_denied }
       responses:
         '302':
-          description: Signed in (to /) or failed (to /?login=google_failed or google_denied)
+          description: |
+            Signed in (to /) or failed (to /?login=google_failed or
+            google_denied). If the sign-in started on a team machine, back to
+            its `return_to` instead, with `state` and either a one-time
+            `code` (no session on the VM) or an `error`.
           headers:
             Location:
               schema: { type: string }
               example: /
         '503':
           description: Google sign-in isn't set up here
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Google sign-in is not available here. }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Email a 6-digit password reset code
+      description: |
+        If the email has an account, emails it a 6-digit code that works once,
+        for 15 minutes (`RESET_CODE_TTL_MIN`); a new request replaces the old
+        code. The reply is the same whether or not the account exists. Limits:
+        one request per email per minute and 3 per hour, 10 per IP address per
+        hour. The VM (or a machine in local mode) sends the email; a team
+        machine passes the request on to the VM.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+            example: { email: alice@example.com }
+      responses:
+        '202':
+          description: Sent if the account exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: "If an account exists for that email, we've sent it a 6-digit code. It works for 15 minutes." }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          description: Email isn't set up on the machine that holds the accounts, or the VM can't be reached
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: "Password reset by email isn't set up here. Ask a team admin to reset your password." }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Set a new password with the emailed code
+      description: |
+        An unknown email, a wrong code and an expired code all give the same
+        400. After 5 wrong codes the code stops working. On success every
+        session of the account is signed out (sign in again with the new
+        password), the wrong-password lock is lifted, and the owner is
+        emailed that the password changed. 20 tries per IP address per 15
+        minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetInput' }
+            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: Password changed. Sign in with your new password. }
+        '400':
+          description: Wrong or expired code, or a new password that is too short
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: That code is wrong or has expired. Check the email, or ask for a new code. }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/google/finish:
+    get:
+      tags: [Auth]
+      operationId: finishGoogleSignInHere
+      summary: Back from the VM after Google sign-in (team machines)
+      description: |
+        The VM sends the browser here after a Google sign-in that started on
+        this team machine's website. `state` must match the cookie this
+        machine set in GET /auth/google (one use only). The one-time `code`
+        is redeemed with the VM (POST /redeem-google-code), the account is
+        copied here and a session starts.
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string }, example: 3vQ0bq7m1Xk2cG9yZXRoYW5mb3J0eXRocmVlY2hhcnM }
+        - { name: state, in: query, schema: { type: string }, example: Zm9vYmFyYmF6cXV4MTIz }
+        - { name: error, in: query, schema: { type: string, enum: [google_denied, google_failed] }, example: google_denied }
+      responses:
+        '302':
+          description: Signed in (to /) or failed (to /?login=google_failed or google_denied)
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+            Location:
+              schema: { type: string }
+              example: /
+        '503':
+          description: This machine isn't a team machine (AUTH_MODE isn't client)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -493,10 +632,18 @@ paths:
       tags: [Jobs]
       operationId: getJobImage
       summary: One of a job's photos
+      description: >-
+        The original photo, or with `size=small` a small WebP copy (480 px on
+        the longest side) for cards and grids. The copy is made the first
+        time it is asked for; if it can't be made, the original is sent.
       security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PhotoSize'
       responses:
         '200':
           $ref: '#/components/responses/Photo'
+        '400':
+          $ref: '#/components/responses/BadPhotoSize'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -703,6 +850,90 @@ paths:
               schema: { type: string }
               example: "openapi: 3.1.0\ninfo:\n  title: Genesis backend API\n  ..."
 
+  # --------------------------------------------------------------- Metrics
+  /metrics/page-load:
+    post:
+      tags: [Metrics]
+      operationId: reportPageLoad
+      summary: Report how long the website took to load
+      description: |
+        Sent once per page load by the website (navigator.sendBeacon), from the
+        browser's Navigation Timing. Public, because the page loads before
+        anyone signs in. Each measure is in ms from 0 to 120000; others are
+        ignored. At most 30 reports per IP address per minute.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttfb: { type: number, minimum: 0, maximum: 120000, description: Time to the first byte of the page }
+                fcp: { type: number, minimum: 0, maximum: 120000, description: First contentful paint }
+                domContentLoaded: { type: number, minimum: 0, maximum: 120000, description: HTML parsed and scripts run }
+                load: { type: number, minimum: 0, maximum: 120000, description: Everything loaded (the load event finished) }
+            example: { ttfb: 42.5, fcp: 310.2, domContentLoaded: 288.9, load: 642.1 }
+      responses:
+        '204':
+          description: Recorded
+        '400':
+          description: No valid measure was sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Send at least one of ttfb, fcp, domContentLoaded, load, in ms (0-120000).' }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+  /metrics/performance:
+    get:
+      tags: [Metrics]
+      operationId: getPerformance
+      summary: API response times and website load times (admins)
+      description: |
+        p50 / p95 / p99, mean, slowest and counts, per API route (slowest p95
+        first) and per page-load measure, for this machine. Times are in ms.
+        Percentiles come from per-minute histograms, so they are accurate to
+        within their time range (about +-25%); counts, means and maximums
+        are exact. Measurements are kept PERF_KEEP_DAYS days (default 7).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: window
+          in: query
+          required: false
+          description: How far back to look (default 24h)
+          schema: { enum: ['1h', '24h', '7d'] }
+          example: 24h
+      responses:
+        '200':
+          description: The report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PerformanceReport' }
+              example:
+                window: 24h
+                from: 1792800000000
+                to: 1792886400000
+                api:
+                  - { route: 'GET /jobs/:id/result.ply', count: 41, errors: 0, mean: 3120.4, p50: 2410.7, p95: 8650.2, p99: 11800.0, max: 12391.6 }
+                  - { route: 'POST /upload', count: 6, errors: 0, mean: 1840.2, p50: 1630.0, p95: 2900.4, p99: 2980.1, max: 3001.7 }
+                  - { route: 'GET /jobs/:id', count: 1287, errors: 0, mean: 4.1, p50: 3.2, p95: 9.8, p99: 18.5, max: 41.0 }
+                pageLoad:
+                  - { metric: ttfb, count: 120, mean: 61.3, p50: 48.0, p95: 140.2, p99: 260.4, max: 402.0 }
+                  - { metric: fcp, count: 118, mean: 402.7, p50: 351.0, p95: 820.5, p99: 1310.0, max: 1622.4 }
+                  - { metric: domContentLoaded, count: 120, mean: 380.4, p50: 330.6, p95: 790.1, p99: 1180.0, max: 1490.3 }
+                  - { metric: load, count: 120, mean: 911.0, p50: 760.2, p95: 1980.4, p99: 2700.8, max: 3302.1 }
+        '400':
+          description: An unknown window
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'window must be one of 1h, 24h, 7d.' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   # -------------------------------------------------------------------- VM
   /register:
     post:
@@ -783,6 +1014,130 @@ paths:
           $ref: '#/components/responses/KeyRefused'
         '429':
           $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /redeem-google-code:
+    post:
+      tags: [VM]
+      operationId: vmRedeemGoogleCode
+      summary: Trade a Google sign-in's one-time code for the account (for a team machine)
+      description: |
+        The code comes from GET /auth/google/callback when the sign-in started
+        on a team machine's website. Each code works once, for 60 seconds
+        (`GOOGLE_HANDOFF_TTL_SEC`).
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+            example: { code: 3vQ0bq7m1Xk2cG9yZXRoYW5mb3J0eXRocmVlY2hhcnM }
+      responses:
+        '200':
+          description: The account the code was made for
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VmUser' }
+              example: { id: 7, email: alice@example.com, name: Alice, role: user }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '404':
+          description: Unknown code, already used or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Unknown or expired code. }
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /password-reset/request:
+    post:
+      tags: [VM]
+      operationId: vmRequestPasswordReset
+      summary: Email a reset code (for a team machine's "Forgot password?")
+      description: The same as POST /auth/forgot-password, run on the VM. A 429 also says when to try again.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+            example: { email: alice@example.com }
+      responses:
+        '202':
+          description: Sent if the account exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: "If an account exists for that email, we've sent it a 6-digit code. It works for 15 minutes." }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '429':
+          description: Too many requests for this email
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, retryAfterSec]
+                properties:
+                  error: { type: string }
+                  retryAfterSec: { type: integer }
+              example: { error: Too many attempts. Try again in 1 minute., retryAfterSec: 42 }
+        '503':
+          description: Not the VM, or email isn't set up on it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: This server is not the account authority. }
+  /password-reset/confirm:
+    post:
+      tags: [VM]
+      operationId: vmConfirmPasswordReset
+      summary: Set a new password with a reset code (for a team machine)
+      description: |
+        The same as POST /auth/reset-password, run on the VM. The reply names
+        the account, so the team machine signs it out of its own sessions too.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetInput' }
+            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, message]
+                properties:
+                  id: { type: integer }
+                  message: { type: string }
+              example: { id: 7, message: Password changed. Sign in with your new password. }
+        '400':
+          description: Wrong or expired code, or a new password that is too short
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: That code is wrong or has expired. Check the email, or ask for a new code. }
+        '401':
+          $ref: '#/components/responses/KeyRefused'
         '503':
           $ref: '#/components/responses/NotAuthority'
   /library/jobs:
@@ -942,9 +1297,12 @@ paths:
       security: [{ authorityKey: [] }]
       parameters:
         - $ref: '#/components/parameters/ActAsUser'
+        - $ref: '#/components/parameters/PhotoSize'
       responses:
         '200':
           $ref: '#/components/responses/Photo'
+        '400':
+          $ref: '#/components/responses/BadPhotoSize'
         '401':
           $ref: '#/components/responses/KeyOrUserRefused'
         '404':
@@ -1264,6 +1622,13 @@ components:
       required: true
       schema: { type: string, pattern: '^[\w.-]+\.(jpe?g|png)$' }
       example: 0000.jpg
+    PhotoSize:
+      name: size
+      in: query
+      required: false
+      description: '`small`: a small WebP copy (480 px on the longest side) instead of the original.'
+      schema: { type: string, enum: [small] }
+      example: small
     SceneId:
       name: id
       in: path
@@ -1605,6 +1970,15 @@ components:
         image/png:
           schema: { type: string, format: binary }
           example: (PNG bytes)
+        image/webp:
+          schema: { type: string, format: binary }
+          example: (WebP bytes, with size=small)
+    BadPhotoSize:
+      description: '`size` isn''t `small`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: size must be "small" }
     ImageNotFound:
       description: No such photo, or the job isn't the caller's
       content:
@@ -1746,6 +2120,13 @@ components:
         email: { type: string }
         name: { type: string }
         role: { enum: [user, admin] }
+    PasswordResetInput:
+      type: object
+      required: [email, code, newPassword]
+      properties:
+        email: { type: string }
+        code: { type: string, description: The 6 digits from the email }
+        newPassword: { type: string, minLength: 6 }
     Account:
       type: object
       required: [name, email, role, createdAt, memberSince, emailVerified, passwordChangedAt, signInMethods, photoVersion]
@@ -1825,3 +2206,38 @@ components:
             minTrainIters: { type: integer }
             maxTrainIters: { type: integer }
             maxAvatarKB: { type: number }
+    PerformanceReport:
+      type: object
+      required: [window, from, to, api, pageLoad]
+      properties:
+        window: { enum: ['1h', '24h', '7d'] }
+        from: { type: integer, description: UTC epoch ms }
+        to: { type: integer, description: UTC epoch ms }
+        api:
+          type: array
+          description: One entry per route ("METHOD /pattern", the same for /api/v1 and the legacy paths; "(no route)" for unknown paths), slowest p95 first
+          items:
+            type: object
+            required: [route, count, errors, mean, p50, p95, p99, max]
+            properties:
+              route: { type: string }
+              count: { type: integer, minimum: 1 }
+              errors: { type: integer, minimum: 0, description: Replies with a 5xx status }
+              mean: { type: number }
+              p50: { type: number }
+              p95: { type: number }
+              p99: { type: number }
+              max: { type: number }
+        pageLoad:
+          type: array
+          items:
+            type: object
+            required: [metric, count, mean, p50, p95, p99, max]
+            properties:
+              metric: { enum: [ttfb, fcp, domContentLoaded, load] }
+              count: { type: integer, minimum: 1 }
+              mean: { type: number }
+              p50: { type: number }
+              p95: { type: number }
+              p99: { type: number }
+              max: { type: number }

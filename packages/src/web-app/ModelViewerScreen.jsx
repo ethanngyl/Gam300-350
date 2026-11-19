@@ -1,7 +1,8 @@
 /*!************************************************************************
 \file ModelViewerScreen.jsx
 \author Xiong Yang
-\par DP email: xiong.yang@digipen.edu
+\par DP email1: xiong.yang@digipen.edu
+\par DP email2: bryanjunjie.lim@digipen.edu
 \par Course: csd3401f26
 \par Software Engineering Project 5
 \date 15-10-2026
@@ -10,8 +11,8 @@ Model Viewer tab: picks a Gaussian splat to open in the full-page
 SplatViewer. Lists every finished model from GET /jobs as a searchable
 grid (each card shows a cut-out or photo of the object, see
 ModelCover.jsx), and has
-an "Open .ply file" button that loads a .ply from the
-user's computer instead. Opening is left to the parent: onOpenModel(jobId)
+an "Open model file" button that loads a Gaussian splat .ply or a
+Wavefront .obj from the user's computer instead. Opening is left to the parent: onOpenModel(jobId)
 for a server model, onOpenFile(file) for a local one.
 **************************************************************************/
 
@@ -33,7 +34,7 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
 
         async function loadJobs() {
             try {
-                const res = await fetch('/jobs');
+                const res = await fetch('/api/v1/jobs');
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
                 if (!isCancelled) {
@@ -74,6 +75,8 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
 
     return (
         <div className="library-screen">
+            {/* Wider screens only (Pages.css); phones keep the tab as the heading. */}
+            <h1 className="page-title">Model Viewer</h1>
             <div className="library-toolbar model-viewer-toolbar">
                 <div className="library-subtabs">
                     <span className="library-subtab is-active">Model Viewer</span>
@@ -95,12 +98,12 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                         fileInputRef.current?.click();
                     }}
                 >
-                    <Icon name="folder" size={14} /> Open .ply file
+                    <Icon name="folder" size={14} /> Open .ply / .obj file
                 </button>
                 <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".ply"
+                    accept=".ply,.obj"
                     hidden
                     onChange={handleFileChange}
                 />
@@ -114,7 +117,7 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                 <p className="library-note">
                     {normalizedSearch
                         ? 'No models match your search.'
-                        : 'No finished models yet. Open a .ply file from your computer to view it.'}
+                        : 'No finished models yet. Open a .ply or .obj file from your computer to view it.'}
                 </p>
             )}
 

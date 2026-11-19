@@ -14,11 +14,11 @@ to the API is recorded here, newest first.
 - **Legacy paths:** the original unversioned paths (`/auth/me`, `/jobs`,
   `/library/...`, ...) are **deprecated** and frozen. They keep answering
   exactly as before, with two extra headers: `Deprecation` (RFC 9745) and
-  `Link: </api/v1/...>; rel="successor-version"`. They stay for the clients
-  not moved yet:
-  - the website (to-do list below);
-  - the engine (`engine/src/net/BackendClient.cpp`);
-  - team machines on a build from before 2026-11-03.
+  `Link: </api/v1/...>; rel="successor-version"`. The website and the
+  engine moved to `/api/v1` on 2026-11-07; the legacy paths stay for the
+  clients not moved yet:
+  - team machines on a build from before 2026-11-03;
+  - website and engine builds from before 2026-11-07.
 
   They will only be removed once nothing uses them, and that removal will be
   listed here.
@@ -30,6 +30,89 @@ to the API is recorded here, newest first.
   it twice). `adapters/apiVersions.js` holds the only differences.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
+
+## v1 additions: 2026-11-16 (nothing breaks)
+
+Small photo copies, so the Library doesn't load a full 12 MP photo per card:
+- **`GET /jobs/:id/images/:name?size=small`** (and `/library/...` on the
+  VM): a WebP copy, 480 px on its longest side, turned upright. Without
+  `size`, the original as before; any other `size` gives 400.
+  - Made by `tools/make_thumbs.py` (Pillow), one run for a whole job: when
+    the job ends, or on the first request for older jobs. Kept in
+    `jobs/<id>_out/thumbs/`, so deleting the job removes them.
+  - If no copy can be made (no Pillow, a broken photo), the original is
+    sent, so a card never breaks. Retried after 10 minutes.
+  - A team machine passes `size` on to the VM for jobs only in the shared
+    library. An older VM ignores it and sends the original.
+- The website uses the small copy in the Library, Home, Model Viewer and
+  photo picker cards; downloads and photos added to a batch use the
+  original.
+
+## v1 additions: 2026-11-14 (nothing breaks)
+
+Google sign-in started on a team machine's website now ends there, instead
+of on the VM's website:
+- **`GET /auth/google`:** on the VM, takes two optional query parameters,
+  `return_to` (the team machine's `/api/v1/auth/google/finish`) and
+  `return_state`. A team machine sends both.
+  - The VM accepts `return_to` only on a loopback address or an origin in
+    `GOOGLE_RETURN_ORIGINS`, with exactly that path. Any other is ignored,
+    and the sign-in ends on the VM as before.
+  - After Google, the VM sends the browser to `return_to` with a one-time
+    `code` (or an `error`) and the `state`. It starts no VM session.
+- **`GET /auth/google/finish`** (team machines): checks the state against
+  its cookie, redeems the code with the VM, copies the account and starts a
+  session.
+- **`POST /redeem-google-code`** (VM, shared key): trades a one-time code
+  for `{ id, email, name, role }`. Each code works once, for 60 seconds.
+
+The Google console needs no change: Google still only redirects to the VM's
+`GOOGLE_REDIRECT_URI`. A team machine on a newer build than the VM still
+works, because the old VM ignores `return_to`, so update the VM first.
+
+## v1 additions: 2026-11-15 (nothing breaks)
+
+"Forgot password?" with an emailed 6-digit code:
+- **`POST /auth/forgot-password`:** body `{ email }`. Emails a code if the
+  email has an account, and answers `202 { message }` either way.
+  - The code works once, for 15 minutes (`RESET_CODE_TTL_MIN`), and a new
+    request replaces it.
+  - Limits: one request per email per minute and 3 per hour, 10 per IP
+    address per hour.
+  - Answers 503 if email isn't set up (`SMTP_*`).
+- **`POST /auth/reset-password`:** body `{ email, code, newPassword }`.
+  Answers `200 { message }`.
+  - A wrong, expired or unknown code gives the same 400, and 5 wrong codes
+    end the code.
+  - On success: every session of the account is signed out, and the owner is
+    emailed that the password changed.
+- **`POST /password-reset/request`, `POST /password-reset/confirm`:** VM
+  only, shared key. A team machine passes both requests on to them, so only
+  the VM needs the email settings.
+- Database migration 6 (`006_password_resets.sql`) adds the
+  `password_resets` table.
+
+## v1 additions: 2026-11-07 (nothing breaks)
+
+- `POST /metrics/page-load`: the website reports how long it took to load
+  (`ttfb`, `fcp`, `domContentLoaded`, `load`, in ms). Public; at most 30 per
+  IP address per minute. The website sends it once per page load.
+- `GET /metrics/performance?window=1h|24h|7d` (admins): p50 / p95 / p99,
+  mean, slowest and counts for every API route (slowest p95 first) and for
+  the page-load measures. Each machine reports its own numbers, kept 7 days
+  (`PERF_KEEP_DAYS`).
+- Database migration 5 (`005_performance.sql`) adds the `perf_minutes` table.
+
+## Clients moved to v1: 2026-11-07 (no API change)
+
+- The website calls every endpoint under `/api/v1/...`, including the URLs
+  it builds itself (`/api/v1/jobs/<id>/result.ply`) and the start of Google
+  sign-in (`/api/v1/auth/google`). The Feedback inbox reads `createdAt` as
+  milliseconds.
+- The engine (`engine/src/net/BackendClient.cpp`) prefixes every request
+  with `/api/v1`. It never read user dates, and job dates were already
+  milliseconds, so nothing else changed.
+- Google's callback still comes back to `GOOGLE_REDIRECT_URI` (see below).
 
 ## v1 additions: 2026-11-03 (later the same day; nothing breaks)
 
@@ -89,31 +172,29 @@ pages. Nothing used them.
 | 2 | `002_drop_uploads.sql` | Drops the `uploads` table, which was never used. |
 | 3 | `003_timestamps_ms.js` | Every date column becomes INTEGER milliseconds (`users`, `jobs`, `feedback`, `synced_jobs`). `feedback.category` is checked against the catalog instead of a fixed list. |
 | 4 | `004_scenes.sql` | Adds the `scenes` table. |
+| 5 | `005_performance.sql` | Adds the `perf_minutes` table (2026-11-07). |
 
 The first start after updating backs `app.db` up (`data/app.db.bak-<time>`),
 then migrates it.
 
 ### Moving the website to v1 (frontend to-do, for Bryan)
 
-The website keeps working unchanged on the legacy paths. To move it to v1:
+Steps 1 and 3 are done (2026-11-07), step 4 (2026-11-08); 2 and 5 are still open.
 
-1. Prefix every API call with `/api/v1` (one helper, for example
-   `apiUrl(path)`), including the URLs built by hand: `App.jsx` (lines 409
-   and 427) and `SceneBuilderScreen.jsx` (line 115) build
-   `/jobs/<id>/result.ply`. (`vite.config.js` already forwards `/api` in
-   development, and the account page's password change already uses
-   `/api/v1/auth/me/account` and `/api/v1/auth/me/password`.)
+1. **Done.** Every API call is prefixed with `/api/v1`, including the URLs
+   built by hand (`/api/v1/jobs/<id>/result.ply`).
 2. Fix the "Last edited" sort in `LibraryScreen.jsx:37` and
    `ImageGallery.jsx:159`. They call `Date.parse(job.updatedAt)`, but job
    dates are numbers, so the result is `NaN` and the sort does nothing (this
    is already broken today). Use `new Date(x).getTime()`.
-3. With v1, `createdAt` of users, the account and feedback items is a number.
-   The website only shows them through `new Date(...)` and `memberSince`,
-   which already accept both.
-4. Read `GET /api/v1/catalog` instead of the copies in
-   `FeedbackCategories.js`, `TrainingPresets.js` and `FrameExtractor.jsx`
-   (`MAX_MEDIA_FILES`, `MAX_MEDIA_SIZE_MB`), plus `MIN_PHOTOS = 8` in
-   `PhotoEditorScreen.jsx`.
+3. **Done.** With v1, `createdAt` of users, the account and feedback items
+   is a number. The Feedback inbox now turns it into ISO text for its
+   `<time dateTime>`; everything else already went through `new Date(...)`.
+4. **Done.** `web-app/catalog.js` reads `GET /api/v1/catalog` once (top-level
+   await, so importing modules can use it as constants). `FeedbackCategories.js`,
+   `TrainingPresets.js`, `mediaJobs.js` (`MAX_MEDIA_FILES`, `MAX_MEDIA_SIZE_MB`),
+   the feedback length limits in `FeedbackScreen.jsx` and `MIN_PHOTOS` in
+   `PhotoEditorScreen.jsx` now come from it instead of copies.
 5. Set `SCENES_API_READY = true` in `SceneStorage.js`, so scenes are saved to
    the account. Scenes already in the browser can be moved with
    `PUT /api/v1/scenes/<their id>`; the server converts them.
