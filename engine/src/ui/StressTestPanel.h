@@ -21,6 +21,7 @@ public:
 	//Singal to run various stress tests
 signals:
 	void loadTestRequested();
+	void selectTestRequested();
 
 private:
 	QTableWidget* m_results = nullptr;

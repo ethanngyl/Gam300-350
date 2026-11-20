@@ -62,6 +62,8 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QToolBar>
 #include <QUrl>
 
+#include <functional>
+
 #include <memory>
 
 namespace {
@@ -505,32 +507,46 @@ void MainWindow::createDocks() {
 
     m_stressTestPanel = new StressTestPanel(this);
     QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestPanel, Qt::BottomDockWidgetArea);
-    //Link load test to tresstestpanel
-    connect(m_stressTestPanel, &StressTestPanel::loadTestRequested, this, [this] {
-        //The test runs on the GUI thread, so the UI freezes and any clicks made meanwhile are queued
-        //each one would start another run afterwards
-        // Disable the panel for the whole run so they are ignored
+    //Lamda function to runner 1 stress test, type is inputted a input variable
+    //Shows its results in the panel
+    //The test runs on the GUI thread, so the UI freezes
+    //Disable the panel for the whole run so they are ignored
+    auto runStressTest = [this](const QString& name, std::function<std::vector<StressResult>(StressTestRunner&)> test) 
+    {
         m_stressTestPanel->setEnabled(false);
 
         StressTestRunner runner(m_viewport);
-        const std::vector<StressResult> results = runner.TestLoad(splat_generate::kStressTestSplatCount);
+        const std::vector<StressResult> results = test(runner);
         if (results.empty())
         {
-            statusBar()->showMessage("Load test skipped: the renderer is not ready or the scene is full.", kStatusMessageMs);
+            statusBar()->showMessage(QString("%1 skipped: the renderer is not ready, or the scene is full or has no selected model.").arg(name), kStatusMessageMs);
         }
-        else 
+        else
         {
             m_stressTestPanel->AddResults(results);
-
-            //Same as an import, the new sphere becomes the selected model
-            SplatRenderer* renderer = m_viewport->renderer();
-            selectModel(static_cast<int>(renderer->ModelCount()) - 1);
-            refreshScenePanels();
         }
 
         //Deliver the queued clicks now, while the panel is still disabled, so they are dropped
         QCoreApplication::processEvents();
         m_stressTestPanel->setEnabled(true);
+        return !results.empty();
+    };
+
+    //Link the tests to the stress test panel
+    connect(m_stressTestPanel, &StressTestPanel::loadTestRequested, this, [this, runStressTest] {
+        const bool ran = runStressTest("Load test", [](StressTestRunner& runner) {
+            return runner.TestLoad(splat_generate::kStressTestSplatCount);
+        });
+        if (ran)
+        {
+            //Same as an import, the new sphere becomes the selected model
+            SplatRenderer* renderer = m_viewport->renderer();
+            selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+            refreshScenePanels();
+        }
+    });
+    connect(m_stressTestPanel, &StressTestPanel::selectTestRequested, this, [runStressTest] {
+        runStressTest("Select test", [](StressTestRunner& runner) { return runner.TestSelect(); });
     });
 
     tabifyDockWidget(assetsDock, modelsDock);
