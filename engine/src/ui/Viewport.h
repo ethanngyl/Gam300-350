@@ -72,6 +72,10 @@ public:
     // Moves the orbit camera's pan target back to where it started.
     void recenterCamera() { m_camera.ResetPosition(); }
 
+    //Draws one frame now and waits for the GPU to finish it, instead of waiting for the next vsync.
+    //Let the stress tests time work that the renderer defers to its next Draw (e.g. uploads).
+    void RenderFrameBlocking();
+
 protected:
     void initializeGL() override;
     void paintGL() override;

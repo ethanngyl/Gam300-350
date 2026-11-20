@@ -34,6 +34,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/RemoteModelsPanel.h"
 #include "ui/TrimDialog.h"
 #include "ui/StressTestPanel.h"
+#include "Manager/StressTestRunner.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -502,8 +503,23 @@ void MainWindow::createDocks() {
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
-    m_stressTestPanel = new StressTestPanel(this); //Empty for now, the stress test controls go here
+    m_stressTestPanel = new StressTestPanel(this);
     QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestPanel, Qt::BottomDockWidgetArea);
+    //Link load test to tresstestpanel
+    connect(m_stressTestPanel, &StressTestPanel::loadTestRequested, this, [this] {
+        StressTestRunner runner(m_viewport);
+        const std::vector<StressResult> results = runner.TestLoad(splat_generate::kStressTestSplatCount);
+        if (results.empty()) {
+            statusBar()->showMessage("Load test skipped: the renderer is not ready or the scene is full.", kStatusMessageMs);
+            return;
+        }
+        m_stressTestPanel->AddResults(results);
+
+        //Same as an import, the new sphere becomes the selected model
+        SplatRenderer* renderer = m_viewport->renderer();
+        selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+        refreshScenePanels();
+    });
 
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);
