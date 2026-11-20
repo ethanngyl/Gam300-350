@@ -17,6 +17,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/MainWindow.h"
 
 #include "net/BackendClient.h"
+#include "pipeline/LocalReconstruction.h"
 #include "splat/CropBox.h"
 #include "splat/SplatExporter.h"
 #include "splat/SplatGenerator.h"
@@ -46,6 +47,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QElapsedTimer>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QHash>
 #include <QLabel>
 #include <QLocale>
 #include <QMenu>
@@ -53,6 +55,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QMessageBox>
 #include <QMimeData>
 #include <QProgressBar>
+#include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
 #include <QStyle>
@@ -100,6 +103,28 @@ namespace {
     QString RenderModeName(SplatRenderer::RenderMode mode) {
         return mode == SplatRenderer::RenderMode::GaussianSplat ? "Gaussian Splat" : "Point Cloud";
     }
+
+    // The web app's step names (PHASE_LABELS in Processing.jsx) for a model build's phases.
+    QString BuildPhaseLabel(const QString& phase) {
+        static const QHash<QString, QString> labels = {
+            { "upload", "Preparing" },
+            { "extract", "Extracting frames" },
+            { "masking", "Removing background" },
+            { "colmap-features", "Analyzing photos" },
+            { "colmap-matching", "Matching photos" },
+            { "colmap-mapping", "Recovering camera positions" },
+            { "training", "Training 3D model" },
+            { "normalize", "Finalizing model" },
+            { "done", "Done" },
+        };
+        return labels.value(phase, phase.isEmpty() ? QStringLiteral("Starting") : phase);
+    }
+
+    // "0:42" or "12:05".
+    QString ElapsedText(qint64 ms) {
+        const qint64 seconds = ms / 1000;
+        return QString("%1:%2").arg(seconds / 60).arg(seconds % 60, 2, 10, QChar('0'));
+    }
 }
 
 MainWindow::MainWindow() {
@@ -113,6 +138,14 @@ MainWindow::MainWindow() {
     m_console = new ConsolePanel(this);
 
     m_backend = new BackendClient(this);
+
+    // Builds new models on this PC (COLMAP + Brush); needs no server or sign-in.
+    m_localBuild = new LocalReconstruction(this);
+    connect(m_localBuild, &LocalReconstruction::statusChanged, this, &MainWindow::onBuildStatus);
+    connect(m_localBuild, &LocalReconstruction::finished, this, &MainWindow::onBuildFinished);
+    m_buildTick = new QTimer(this);
+    m_buildTick->setInterval(1000);
+    connect(m_buildTick, &QTimer::timeout, this, &MainWindow::refreshBuildLabel);
 
     m_viewport = new Viewport(this);
     setCentralWidget(m_viewport);
@@ -179,7 +212,7 @@ MainWindow::MainWindow() {
 
 MainWindow::~MainWindow() {
     // Never destroy a running QThread: wait for an in-flight import or export to finish.
-    for (QThread* thread : { m_loadThread.data(), m_exportThread.data() }) {
+    for (QThread* thread : { m_loadThread.data(), m_exportThread.data(), m_copyThread.data() }) {
         if (thread) {
             thread->wait();
             delete thread;
@@ -211,6 +244,12 @@ void MainWindow::createActions() {
     m_exportAction->setStatusTip("Convert the selected model or the whole scene to .glb, .obj, .ply, .stl or .splat");
     m_exportAction->setEnabled(false); // until a model is loaded
     connect(m_exportAction, &QAction::triggered, this, [this] { exportModels(); });
+
+    m_generateAction = new QAction(s->standardIcon(QStyle::SP_ArrowUp), "&Generate Model...", this);
+    m_generateAction->setShortcut(QKeySequence("Ctrl+G"));
+    m_generateAction->setStatusTip("Build a new model from photos or a video on this PC (no server needed), "
+                                   "save it as .ply (and optionally .obj) and import it");
+    connect(m_generateAction, &QAction::triggered, this, [this] { showGenerateDialog(); });
 
     m_exitAction = new QAction("E&xit", this);
     m_exitAction->setShortcut(QKeySequence("Ctrl+Q"));
@@ -395,6 +434,7 @@ void MainWindow::createMenus() {
     fileMenu->addAction(m_importAction);
     fileMenu->addAction(m_trimOnImportAction);
     m_recentMenu = fileMenu->addMenu("Open &Recent");
+    fileMenu->addAction(m_generateAction);
     fileMenu->addSeparator();
     fileMenu->addAction(m_exportAction);
     fileMenu->addSeparator();
@@ -452,6 +492,7 @@ void MainWindow::createToolBar() {
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
     m_toolBar->addAction(m_importAction);
+    m_toolBar->addAction(m_generateAction);
     m_toolBar->addAction(m_exportAction);
     m_toolBar->addSeparator();
 
@@ -578,6 +619,19 @@ void MainWindow::createStatusBar() {
     m_fpsLabel = new QLabel(this);
     m_fpsLabel->setMinimumWidth(70);
 
+    m_buildLabel = new QLabel(this);
+    m_buildBar = new QProgressBar(this);
+    m_buildBar->setRange(0, 1000);
+    m_buildBar->setMaximumWidth(140);
+    m_buildBar->setMaximumHeight(14);
+    m_buildBar->setTextVisible(false);
+    m_buildCancel = new QPushButton("Cancel Build", this);
+    m_buildCancel->setToolTip("Stop building the model; nothing is kept");
+    connect(m_buildCancel, &QPushButton::clicked, this, [this] { cancelBuild(); });
+
+    statusBar()->addPermanentWidget(m_buildLabel);
+    statusBar()->addPermanentWidget(m_buildBar);
+    statusBar()->addPermanentWidget(m_buildCancel);
     statusBar()->addPermanentWidget(m_loadingLabel);
     statusBar()->addPermanentWidget(m_loadingBar);
     statusBar()->addPermanentWidget(m_sceneLabel);
@@ -585,6 +639,7 @@ void MainWindow::createStatusBar() {
     statusBar()->addPermanentWidget(m_fpsLabel);
 
     setImportBusy(QString());
+    setBuildBusy(false);
     m_modeLabel->setText(RenderModeName(SplatRenderer::RenderMode::PointCloud));
 }
 
@@ -634,6 +689,17 @@ void MainWindow::saveSettings() const {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    // A build on this PC dies with the engine.
+    if (m_localBuild && m_localBuild->isRunning()) {
+        const auto answer = QMessageBox::question(
+            this, "Model Still Building",
+            "A model is still being built on this PC. Quit anyway? The build is stopped and nothing is kept.",
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            event->ignore();
+            return;
+        }
+    }
     saveSettings();
     m_pendingImports.clear(); // don't start anything new while shutting down
     QMainWindow::closeEvent(event);
@@ -1164,6 +1230,191 @@ void MainWindow::exportModels() {
         statusBar()->showMessage(QString("Exported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
     });
     m_exportThread->start();
+}
+
+// ===========================================================================
+// Generating a model (on this PC, no server)
+// ===========================================================================
+
+void MainWindow::showGenerateDialog() {
+    if (m_localBuild->isRunning()) {
+        QMessageBox::information(this, "Generate Model",
+                                 "A model is already being built. Wait for it to finish or cancel it first.");
+        return;
+    }
+    GenerateModelDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const GenerationRequest request = dialog.request();
+    m_buildFollowUp = dialog.followUp();
+    m_buildName = request.name.isEmpty() ? QStringLiteral("New model") : request.name;
+    m_buildClock.start();
+    setBuildBusy(true);
+    m_buildText = QString("%1: preparing...").arg(m_buildName);
+    refreshBuildLabel();
+    m_buildBar->setRange(0, 0);
+    qInfo("Building %s on this PC from %lld file(s)...", qPrintable(m_buildName),
+          static_cast<long long>(request.files.size()));
+    // May answer with finished() straight away (e.g. a tool went missing since the dialog checked).
+    m_localBuild->start(request, m_buildFollowUp.copyFolder);
+}
+
+void MainWindow::onBuildStatus(const JobStatus& status) {
+    if (status.isFinished()) {
+        return; // onBuildFinished reports the outcome
+    }
+    QString text = QString("%1: %2").arg(m_buildName, BuildPhaseLabel(status.phase));
+    if (!status.detail.isEmpty()) {
+        text += QString(" (%1)").arg(status.detail);
+    }
+    m_buildText = text;
+    refreshBuildLabel();
+    m_buildBar->setRange(0, 1000);
+    m_buildBar->setValue(qBound(0, qRound(status.progress * 1000.0), 1000));
+}
+
+void MainWindow::onBuildFinished(const QString& plyPath, const QString& error) {
+    const QString name = m_buildName;
+    const QString elapsed = ElapsedText(m_buildClock.elapsed());
+    setBuildBusy(false);
+
+    if (error == QLatin1String("Cancelled.")) {
+        qInfo("Building %s on this PC was cancelled.", qPrintable(name));
+        statusBar()->showMessage(QString("Building %1 was cancelled").arg(name), kStatusMessageMs);
+        return;
+    }
+    if (!error.isEmpty()) {
+        const QString log = QDir::toNativeSeparators(m_localBuild->logPath());
+        qWarning("Building %s on this PC failed: %s (log: %s)", qPrintable(name), qPrintable(error), qPrintable(log));
+        statusBar()->showMessage(QString("Building %1 failed - see the Console for details.").arg(name),
+                                 kStatusMessageMs);
+        QMessageBox::warning(this, "Generate Model Failed",
+                             QString("%1 couldn't be built.\n\n%2\n\nFull tool output:\n%3").arg(name, error, log));
+        return;
+    }
+
+    qInfo("%s was built on this PC in %s: %s", qPrintable(name), qPrintable(elapsed),
+          qPrintable(QDir::toNativeSeparators(plyPath)));
+    statusBar()->showMessage(QString("Built %1 in %2").arg(QFileInfo(plyPath).fileName(), elapsed), kStatusMessageMs);
+    // The .ply is already saved in the chosen folder; only an .obj copy is left to make. That reads
+    // the .ply anyway, so it also does the import from the same read.
+    if (m_buildFollowUp.copy != GenerationFollowUp::Copy::None) {
+        saveGeneratedObj(plyPath, m_buildFollowUp);
+    } else if (m_buildFollowUp.importIntoScene) {
+        importSplat(plyPath);
+    }
+}
+
+void MainWindow::cancelBuild() {
+    if (!m_localBuild->isRunning()) {
+        return;
+    }
+    const auto answer = QMessageBox::question(this, "Cancel Build",
+                                              "Stop building this model on this PC? Nothing is kept.",
+                                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer == QMessageBox::Yes) {
+        m_localBuild->cancel(); // finished("Cancelled.") resets the status bar
+    }
+}
+
+void MainWindow::setBuildBusy(bool busy) {
+    m_buildLabel->setVisible(busy);
+    m_buildBar->setVisible(busy);
+    m_buildCancel->setVisible(busy);
+    if (busy) {
+        m_buildTick->start();
+    } else {
+        m_buildTick->stop();
+        m_buildText.clear();
+        m_buildLabel->clear();
+    }
+}
+
+void MainWindow::refreshBuildLabel() {
+    if (m_buildText.isEmpty()) return;
+    m_buildLabel->setText(m_buildText + QString("  |  %1").arg(ElapsedText(m_buildClock.elapsed())));
+}
+
+void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollowUp& followUp) {
+    if (m_copyThread) {
+        qWarning("A model copy is already being saved; the .obj of %s was skipped. Use File > Export instead.",
+                 qPrintable(QFileInfo(plyPath).fileName()));
+        if (followUp.importIntoScene) {
+            importSplat(plyPath);
+        }
+        return;
+    }
+
+    // "<model>.obj" next to the .ply, or "<model> (2).obj" etc. so an earlier copy is never overwritten.
+    const QFileInfo ply(plyPath);
+    const QDir folder = ply.absoluteDir();
+    const QString baseName = ply.completeBaseName();
+    QString dest = folder.filePath(baseName + ".obj");
+    for (int n = 2; QFileInfo::exists(dest); ++n) {
+        dest = folder.filePath(QString("%1 (%2).obj").arg(baseName).arg(n));
+    }
+    const QString fileName = QFileInfo(dest).fileName();
+
+    ExportOptions options;
+    options.format = ExportFormat::Obj;
+    options.geometry = followUp.copy == GenerationFollowUp::Copy::ObjMesh ? ExportGeometry::Mesh : ExportGeometry::Points;
+
+    qInfo("Converting the new model to %s...", qPrintable(QDir::toNativeSeparators(dest)));
+    auto result = std::make_shared<ExportResult>();
+    const std::string source = QDir::toNativeSeparators(plyPath).toLocal8Bit().toStdString();
+    const std::filesystem::path nativeDest = dest.toStdWString();
+    // Import the splats read for the copy rather than reading the .ply a second time.
+    const bool importAfter = followUp.importIntoScene;
+    auto splats = std::make_shared<std::vector<SplatVertex>>();
+    auto original = std::make_shared<std::vector<SplatVertex>>(); // filled only when trimmed
+    const bool trim = m_trimOnImportAction->isChecked();
+    const TrimData trimSettings = m_trimSettings;
+    // Load and convert on a worker thread: big scans take seconds and the .obj can be hundreds of MB.
+    m_copyThread = QThread::create([result, splats, original, source, nativeDest, options, importAfter, trim,
+                                    trimSettings] {
+        *splats = LoadSplatPly(source);
+        if (splats->empty()) {
+            result->error = "The new model could not be read.";
+            return;
+        }
+        *result = ExportSplats({ ExportSource{ splats.get(), glm::mat4(1.0f) } }, nativeDest, options);
+        // Trimmed after the export, so the .obj holds every splat, as File > Export of the .ply would.
+        if (importAfter && trim) {
+            std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
+            if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
+                *original = std::move(*splats);
+                *splats = std::move(trimmed);
+            }
+        }
+    });
+    connect(m_copyThread, &QThread::finished, this,
+            [this, result, splats, original, plyPath, dest, fileName, importAfter, trimSettings] {
+        m_copyThread->deleteLater();
+        m_copyThread = nullptr;
+        if (importAfter && !splats->empty()) {
+            SplatRenderer* renderer = m_viewport->renderer();
+            if (renderer && renderer->ModelCount() < static_cast<size_t>(SplatRenderer::kMaxModels)) {
+                finishImport(plyPath, *splats, *original, trimSettings);
+            } else {
+                importSplat(plyPath); // GL not ready or scene full: the import queue handles (and reports) both
+            }
+        }
+        if (!result->ok) {
+            qWarning("Saving %s failed: %s", qPrintable(fileName), result->error.c_str());
+            statusBar()->showMessage(QString("Saving %1 failed").arg(fileName), kStatusMessageMs);
+            QMessageBox::warning(this, "Save Copy Failed",
+                                 QString("%1 could not be saved.\n\n%2").arg(fileName, QString::fromStdString(result->error)));
+            return;
+        }
+        const QLocale locale;
+        qInfo("Saved %s (%s splats, %s)", qPrintable(QDir::toNativeSeparators(dest)),
+              qPrintable(locale.toString(static_cast<qulonglong>(result->splatCount))),
+              qPrintable(locale.formattedDataSize(QFileInfo(dest).size())));
+        statusBar()->showMessage(QString("Saved %1").arg(fileName), kStatusMessageMs);
+    });
+    m_copyThread->start();
 }
 
 void MainWindow::toggleDevMode()

@@ -21,6 +21,7 @@ through renderer().
 #include "gfx/Camera.h"
 #include "gfx/CropBoxRenderer.h"
 #include "Manager/InputManager.h"
+#include "metrics/FrameMetrics.h"
 #include "splat/CropBox.h"
 
 #include <glm/glm.hpp>
@@ -32,6 +33,7 @@ through renderer().
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <vector>
 
 class SplatModel;
 class SplatRenderer;
@@ -103,6 +105,8 @@ private:
     void Nudge(InputManager::INPUT_TYPE type, const glm::vec3& direction);
     //Reports the finished burst to onTransformEdited
     void FinishNudge();
+    //Tells the frame metrics what the user is doing this frame (drag, nudge, camera, idle)
+    void ReportMetricsActivity();
 
     Camera m_camera;
     InputManager m_input;
@@ -111,6 +115,9 @@ private:
 
     QElapsedTimer m_frameTimer;
     bool m_showImGuiStats = true;
+    //Frame timing and frame drop logging (Console + CSV in the user data folder)
+    FrameMetrics m_metrics;
+    std::vector<float> m_frameTimePlot; //Scratch buffer for the overlay's frame time graph
 
     // Mouse drags are forwarded to the engine only if they started outside ImGui.
     bool m_leftHeld = false;
