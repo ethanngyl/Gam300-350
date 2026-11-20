@@ -507,18 +507,30 @@ void MainWindow::createDocks() {
     QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestPanel, Qt::BottomDockWidgetArea);
     //Link load test to tresstestpanel
     connect(m_stressTestPanel, &StressTestPanel::loadTestRequested, this, [this] {
+        //The test runs on the GUI thread, so the UI freezes and any clicks made meanwhile are queued
+        //each one would start another run afterwards
+        // Disable the panel for the whole run so they are ignored
+        m_stressTestPanel->setEnabled(false);
+
         StressTestRunner runner(m_viewport);
         const std::vector<StressResult> results = runner.TestLoad(splat_generate::kStressTestSplatCount);
-        if (results.empty()) {
+        if (results.empty())
+        {
             statusBar()->showMessage("Load test skipped: the renderer is not ready or the scene is full.", kStatusMessageMs);
-            return;
         }
-        m_stressTestPanel->AddResults(results);
+        else 
+        {
+            m_stressTestPanel->AddResults(results);
 
-        //Same as an import, the new sphere becomes the selected model
-        SplatRenderer* renderer = m_viewport->renderer();
-        selectModel(static_cast<int>(renderer->ModelCount()) - 1);
-        refreshScenePanels();
+            //Same as an import, the new sphere becomes the selected model
+            SplatRenderer* renderer = m_viewport->renderer();
+            selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+            refreshScenePanels();
+        }
+
+        //Deliver the queued clicks now, while the panel is still disabled, so they are dropped
+        QCoreApplication::processEvents();
+        m_stressTestPanel->setEnabled(true);
     });
 
     tabifyDockWidget(assetsDock, modelsDock);
