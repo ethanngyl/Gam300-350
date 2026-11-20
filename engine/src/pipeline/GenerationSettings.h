@@ -15,16 +15,19 @@ maxTrainIters, and the photo / media file filters in middleware/uploads.js.
 - kMinTrainIters, kMaxTrainIters, kDefaultTrainIters
 - kDefaultFps
 - kPhotoSuffixes, kMediaSuffixes, IsPhotoFile(path), IsMediaFile(path)
+- NamePatterns(suffixes), PhotosInFolder(folder)
+"*.jpg"-style filters, and every photo in a folder in capture (name) order.
 - FileCountProblem(media, count)
 Why a set of photos or videos can't be built (too few, too many), or empty.
 - DefaultOutputFolder()
 Documents/Genesis Models, where new models are saved by default.
 - SafeFileName(name)
-A model or job name made safe to use as a file name on any OS.
-**************************************************************************/
+A model or job name made safe to use as a file name on any OS.**************************************************************************/
 #pragma once
 
 #include <QChar>
+#include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <QString>
@@ -54,6 +57,22 @@ inline bool IsMediaFile(const QString& path) {
     return kMediaSuffixes.contains(QFileInfo(path).suffix().toLower());
 }
 
+// { "jpg", "png" } -> { "*.jpg", "*.png" }, for folder scans and file dialog filters.
+inline QStringList NamePatterns(const QStringList& suffixes) {
+    QStringList patterns;
+    for (const QString& suffix : suffixes) patterns << "*." + suffix;
+    return patterns;
+}
+
+// Every photo directly in folder, sorted by name: capture order, which COLMAP matching benefits from.
+inline QStringList PhotosInFolder(const QString& folder) {
+    QStringList photos;
+    QDirIterator it(folder, NamePatterns(kPhotoSuffixes), QDir::Files);
+    while (it.hasNext()) photos << it.next();
+    photos.sort(Qt::CaseInsensitive);
+    return photos;
+}
+
 // Why this many photos or videos can't be built, or empty if they can. The same check for the
 // dialog and the command-line build.
 inline QString FileCountProblem(bool media, int count) {
@@ -78,12 +97,13 @@ inline QString SafeFileName(const QString& name) {
         safe.chop(1); // Windows drops trailing dots
     }
     // Windows reserves these device names, with or without an extension ("Con", "nul.txt", "COM1").
+    // It only looks before the first dot, so "nul.txt_" would still be NUL: put the "_" in front.
     static const QStringList reserved = {
         "CON", "PRN", "AUX", "NUL",
         "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     };
-    if (reserved.contains(safe.section('.', 0, 0).trimmed(), Qt::CaseInsensitive)) safe += '_';
+    if (reserved.contains(safe.section('.', 0, 0).trimmed(), Qt::CaseInsensitive)) safe.prepend('_');
     return safe;
 }
 

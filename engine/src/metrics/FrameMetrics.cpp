@@ -15,6 +15,7 @@ per run, the newest kKeepRuns runs are kept) under the user data folder.
 #include <GL/glew.h>
 
 #include "metrics/FrameMetrics.h"
+#include "ui/AssetPaths.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -62,16 +63,6 @@ namespace {
 
     float MsBetween(std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) {
         return std::chrono::duration<float, std::milli>(b - a).count();
-    }
-
-    // Deletes all but the newest kKeepRuns runs. Names sort by time (metrics_YYYYMMDD_HHMMSS_*).
-    void PruneOldRuns(QDir dir) {
-        for (const char* suffix : { "_sessions.csv", "_frames.csv" }) {
-            QStringList files = dir.entryList({ QString("metrics_*") + suffix }, QDir::Files, QDir::Name);
-            while (files.size() > kKeepRuns) {
-                dir.remove(files.takeFirst());
-            }
-        }
     }
 }
 
@@ -131,7 +122,10 @@ void FrameMetrics::Init(const std::string& logDir) {
         LogWarning("[Metrics] Could not create " + logDir + ", metrics are not written to file");
         return;
     }
-    PruneOldRuns(dir);
+    // Keep the newest kKeepRuns runs. Names sort by time (metrics_YYYYMMDD_HHMMSS_*).
+    for (const char* suffix : { "_sessions.csv", "_frames.csv" }) {
+        AssetPaths::PruneOldFiles(dir.absolutePath(), QString("metrics_*") + suffix, kKeepRuns);
+    }
 
     const QString stamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
     m_sessionLogPath = dir.filePath("metrics_" + stamp + "_sessions.csv").toStdString();

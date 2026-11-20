@@ -134,12 +134,6 @@ namespace {
         return QStandardPaths::findExecutable("python3");
 #endif
     }
-
-    void PruneLogs(const QString& dir) {
-        QDir logs(dir);
-        QStringList files = logs.entryList({ "*.log" }, QDir::Files, QDir::Name);
-        while (files.size() > kKeepLogs) logs.remove(files.takeFirst());
-    }
 }
 
 // ===========================================================================
@@ -189,10 +183,6 @@ LocalReconstruction::Tools LocalReconstruction::FindTools() {
     tools.python = FindPython();
     tools.nvidiaSmi = QStandardPaths::findExecutable("nvidia-smi");
     return tools;
-}
-
-QString LocalReconstruction::MissingTools(const GenerationRequest& request) {
-    return MissingTools(request, FindTools());
 }
 
 QString LocalReconstruction::MissingTools(const GenerationRequest& request, const Tools& tools) {
@@ -268,7 +258,7 @@ void LocalReconstruction::start(const GenerationRequest& request, const QString&
 
     const QString logDir = root + "/logs";
     QDir().mkpath(logDir);
-    PruneLogs(logDir);
+    AssetPaths::PruneOldFiles(logDir, "*.log", kKeepLogs); // local_<date>_<time>.log sorts by time
     m_log.close();
     m_log.setFileName(logDir + "/" + m_id + ".log");
     if (!m_log.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -344,8 +334,7 @@ void LocalReconstruction::start(const GenerationRequest& request, const QString&
                 return;
             }
         }
-        p.imageCount = media ? 0 : index;
-    }, [this, prepared] { onPrepared(*prepared); });
+    },[this, prepared] { onPrepared(*prepared); });
 }
 
 void LocalReconstruction::onPrepared(const Prepared& prepared) {
@@ -395,16 +384,14 @@ void LocalReconstruction::extractFrames() {
     };
     runTool(step, [this, mediaDir] {
         QDir(mediaDir).removeRecursively();
-        QStringList patterns;
-        for (const QString& suffix : kPhotoSuffixes) patterns << "*." + suffix;
-        const int frames = static_cast<int>(QDir(m_workspace + "/images").entryList(patterns, QDir::Files).size());
+        const int frames = static_cast<int>(
+            QDir(m_workspace + "/images").entryList(generation::NamePatterns(kPhotoSuffixes), QDir::Files).size());
         log(QString("Extracted %1 frames.").arg(frames));
         if (frames < kMinPhotos) {
             fail(QString("Extracted only %1 frame(s). Need at least %2 for a reconstruction - try a longer clip or a higher fps.")
                      .arg(frames).arg(kMinPhotos));
             return;
         }
-        m_prepared.imageCount = frames;
         if (m_request.removeBackground) generateMasks();
         else runColmap();
     });

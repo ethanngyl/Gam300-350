@@ -1298,11 +1298,11 @@ void MainWindow::onBuildFinished(const QString& plyPath, const QString& error) {
     qInfo("%s was built on this PC in %s: %s", qPrintable(name), qPrintable(elapsed),
           qPrintable(QDir::toNativeSeparators(plyPath)));
     statusBar()->showMessage(QString("Built %1 in %2").arg(QFileInfo(plyPath).fileName(), elapsed), kStatusMessageMs);
-    // The .ply is already saved in the chosen folder; only an .obj copy is left to make.
+    // The .ply is already saved in the chosen folder; only an .obj copy is left to make. That reads
+    // the .ply anyway, so it also does the import from the same read.
     if (m_buildFollowUp.copy != GenerationFollowUp::Copy::None) {
         saveGeneratedObj(plyPath, m_buildFollowUp);
-    }
-    if (m_buildFollowUp.importIntoScene) {
+    } else if (m_buildFollowUp.importIntoScene) {
         importSplat(plyPath);
     }
 }
@@ -1341,6 +1341,9 @@ void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollow
     if (m_copyThread) {
         qWarning("A model copy is already being saved; the .obj of %s was skipped. Use File > Export instead.",
                  qPrintable(QFileInfo(plyPath).fileName()));
+        if (followUp.importIntoScene) {
+            importSplat(plyPath);
+        }
         return;
     }
 
@@ -1362,18 +1365,42 @@ void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollow
     auto result = std::make_shared<ExportResult>();
     const std::string source = QDir::toNativeSeparators(plyPath).toLocal8Bit().toStdString();
     const std::filesystem::path nativeDest = dest.toStdWString();
+    // Import the splats read for the copy rather than reading the .ply a second time.
+    const bool importAfter = followUp.importIntoScene;
+    auto splats = std::make_shared<std::vector<SplatVertex>>();
+    auto original = std::make_shared<std::vector<SplatVertex>>(); // filled only when trimmed
+    const bool trim = m_trimOnImportAction->isChecked();
+    const TrimData trimSettings = m_trimSettings;
     // Load and convert on a worker thread: big scans take seconds and the .obj can be hundreds of MB.
-    m_copyThread = QThread::create([result, source, nativeDest, options] {
-        const std::vector<SplatVertex> splats = LoadSplatPly(source);
-        if (splats.empty()) {
+    m_copyThread = QThread::create([result, splats, original, source, nativeDest, options, importAfter, trim,
+                                    trimSettings] {
+        *splats = LoadSplatPly(source);
+        if (splats->empty()) {
             result->error = "The new model could not be read.";
             return;
         }
-        *result = ExportSplats({ ExportSource{ &splats, glm::mat4(1.0f) } }, nativeDest, options);
+        *result = ExportSplats({ ExportSource{ splats.get(), glm::mat4(1.0f) } }, nativeDest, options);
+        // Trimmed after the export, so the .obj holds every splat, as File > Export of the .ply would.
+        if (importAfter && trim) {
+            std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
+            if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
+                *original = std::move(*splats);
+                *splats = std::move(trimmed);
+            }
+        }
     });
-    connect(m_copyThread, &QThread::finished, this, [this, result, dest, fileName] {
+    connect(m_copyThread, &QThread::finished, this,
+            [this, result, splats, original, plyPath, dest, fileName, importAfter, trimSettings] {
         m_copyThread->deleteLater();
         m_copyThread = nullptr;
+        if (importAfter && !splats->empty()) {
+            SplatRenderer* renderer = m_viewport->renderer();
+            if (renderer && renderer->ModelCount() < static_cast<size_t>(SplatRenderer::kMaxModels)) {
+                finishImport(plyPath, *splats, *original, trimSettings);
+            } else {
+                importSplat(plyPath); // GL not ready or scene full: the import queue handles (and reports) both
+            }
+        }
         if (!result->ok) {
             qWarning("Saving %s failed: %s", qPrintable(fileName), result->error.c_str());
             statusBar()->showMessage(QString("Saving %1 failed").arg(fileName), kStatusMessageMs);

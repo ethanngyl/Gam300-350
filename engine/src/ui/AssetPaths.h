@@ -45,4 +45,14 @@ namespace AssetPaths {
         return dir;
     }
 
+    // Deletes all but the newest `keep` files in folder matching pattern, so per-run logs under
+    // the user data folder don't pile up. The names must sort by time ("..._20261120_075751...").
+    inline void PruneOldFiles(const QString& folder, const QString& pattern, int keep) {
+        QDir dir(folder);
+        QStringList files = dir.entryList({ pattern }, QDir::Files, QDir::Name);
+        while (files.size() > keep) {
+            dir.remove(files.takeFirst());
+        }
+    }
+
 } // namespace AssetPaths

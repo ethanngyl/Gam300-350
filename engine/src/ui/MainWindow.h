@@ -125,7 +125,8 @@ private:
     void cancelBuild();
     void setBuildBusy(bool busy);
     void refreshBuildLabel(); // m_buildText plus the elapsed time
-    // Converts a newly built model (plyPath) to .obj next to it, on a worker thread.
+    // Converts a newly built model (plyPath) to .obj next to it, on a worker thread. If
+    // followUp.importIntoScene, the splats it read are then imported too (one read of the .ply).
     void saveGeneratedObj(const QString& plyPath, const GenerationFollowUp& followUp);
 
     // Rebuilds the outliner/inspector from the renderer and updates which

@@ -57,7 +57,6 @@ public:
     // the engine or in the source tree (filled by tools/get-tools.ps1), then PATH.
     static Tools FindTools();
     // What this PC is missing to build the request, worded for the user. Empty = ready.
-    static QString MissingTools(const GenerationRequest& request);
     static QString MissingTools(const GenerationRequest& request, const Tools& tools);
     // Working folders and build logs: <user data>/local-builds.
     static QString BuildsRoot();
@@ -104,7 +103,6 @@ private:
         QString minInliersFlag;      // --TwoViewGeometry.min_num_inliers or --<matchingNs>.min_num_inliers
         QString itersFlag = "--total-train-iters";
         bool alphaMode = false;      // Brush understands --alpha-mode
-        int imageCount = 0;
     };
 
     void onPrepared(const Prepared& prepared);

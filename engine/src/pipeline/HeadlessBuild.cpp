@@ -17,7 +17,6 @@ each phase change to stdout.
 
 #include <QCoreApplication>
 #include <QDir>
-#include <QDirIterator>
 #include <QEventLoop>
 #include <QFileInfo>
 
@@ -113,18 +112,25 @@ int RunHeadlessBuild(const QStringList& args) {
         if (arg == "--build-model") continue;
         if (arg == "--out" && hasValue) outFolder = args[++i];
         else if (arg == "--name" && hasValue) request.name = args[++i];
-        else if (arg == "--iters" && hasValue) request.trainIters = args[++i].toInt();
-        else if (arg == "--fps" && hasValue) request.fps = args[++i].toDouble();
-        else if (arg == "--remove-background") request.removeBackground = true;
+        else if (arg == "--iters" && hasValue) {
+            // The same range as the dialog's spin box; the build would otherwise quietly clamp it.
+            bool ok = false;
+            request.trainIters = args[++i].toInt(&ok);
+            if (!ok || request.trainIters < generation::kMinTrainIters || request.trainIters > generation::kMaxTrainIters) {
+                Print(QString("--iters must be a whole number from %1 to %2 (got \"%3\").")
+                          .arg(generation::kMinTrainIters).arg(generation::kMaxTrainIters).arg(args[i]));
+                return 2;
+            }
+        } else if (arg == "--fps" && hasValue) {
+            bool ok = false;
+            request.fps = args[++i].toDouble(&ok);
+            if (!ok || request.fps <= 0.0) {
+                Print(QString("--fps must be a number above 0 (got \"%1\").").arg(args[i]));
+                return 2;
+            }
+        } else if (arg == "--remove-background") request.removeBackground = true;
         else if (QFileInfo(arg).isDir()) {
-            // Every photo in the folder, in name order (capture order).
-            QStringList patterns;
-            for (const QString& suffix : generation::kPhotoSuffixes) patterns << "*." + suffix;
-            QStringList found;
-            QDirIterator it(arg, patterns, QDir::Files);
-            while (it.hasNext()) found << it.next();
-            found.sort(Qt::CaseInsensitive);
-            request.files << found;
+            request.files << generation::PhotosInFolder(arg);
         } else if (QFileInfo(arg).isFile()) {
             request.files << QFileInfo(arg).absoluteFilePath();
         } else {

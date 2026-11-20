@@ -21,7 +21,6 @@ to build it (COLMAP, Brush, and Python for videos / background removal).
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
-#include <QDirIterator>
 #include <QDoubleSpinBox>
 #include <QLocale>
 #include <QSpinBox>
@@ -76,10 +75,13 @@ namespace {
     const QString kLastFolderKey = QStringLiteral("generate/lastFolder");
 
     QString NameFilter(bool media) {
-        const QStringList& suffixes = media ? kMediaSuffixes : kPhotoSuffixes;
-        QStringList patterns;
-        for (const QString& suffix : suffixes) patterns << "*." + suffix;
+        const QStringList patterns = generation::NamePatterns(media ? kMediaSuffixes : kPhotoSuffixes);
         return QString("%1 (%2)").arg(media ? "Videos and GIFs" : "Photos", patterns.join(' '));
+    }
+
+    // Whether path is the kind of file this build takes (videos/GIFs or photos).
+    bool FitsSource(bool media, const QString& path) {
+        return media ? generation::IsMediaFile(path) : generation::IsPhotoFile(path);
     }
 }
 
@@ -236,9 +238,8 @@ bool GenerateModelDialog::isMedia() const {
 
 void GenerateModelDialog::onSourceChanged() {
     // Files of the other kind can't go in this build, so drop them.
-    const QStringList& allowed = isMedia() ? kMediaSuffixes : kPhotoSuffixes;
     for (int i = m_files->count() - 1; i >= 0; --i) {
-        if (!allowed.contains(QFileInfo(m_files->item(i)->data(Qt::UserRole).toString()).suffix().toLower())) {
+        if (!FitsSource(isMedia(), m_files->item(i)->data(Qt::UserRole).toString())) {
             delete m_files->takeItem(i);
         }
     }
@@ -267,12 +268,7 @@ void GenerateModelDialog::addFolder() {
     if (folder.isEmpty()) return;
     settings.setValue(kLastFolderKey, folder);
 
-    QStringList patterns;
-    for (const QString& suffix : kPhotoSuffixes) patterns << "*." + suffix;
-    QStringList paths;
-    QDirIterator it(folder, patterns, QDir::Files);
-    while (it.hasNext()) paths << it.next();
-    paths.sort(Qt::CaseInsensitive); // capture order, which COLMAP matching benefits from
+    const QStringList paths = generation::PhotosInFolder(folder);
     // A capture folder's name usually describes the object, so it names the model if nothing else has.
     if (m_name->text().isEmpty() && !paths.isEmpty()) {
         m_name->setText(QFileInfo(folder).fileName().left(kMaxNameLength));
@@ -281,14 +277,13 @@ void GenerateModelDialog::addFolder() {
 }
 
 void GenerateModelDialog::addPaths(const QStringList& paths) {
-    const QStringList& allowed = isMedia() ? kMediaSuffixes : kPhotoSuffixes;
     QSet<QString> existing;
     for (int i = 0; i < m_files->count(); ++i) existing.insert(m_files->item(i)->data(Qt::UserRole).toString());
 
     for (const QString& path : paths) {
         const QFileInfo info(path);
         const QString absolute = info.absoluteFilePath();
-        if (!info.isFile() || existing.contains(absolute) || !allowed.contains(info.suffix().toLower())) continue;
+        if (!info.isFile() || existing.contains(absolute) || !FitsSource(isMedia(), path)) continue;
         existing.insert(absolute);
         auto* item = new QListWidgetItem(info.fileName(), m_files);
         item->setData(Qt::UserRole, absolute);
