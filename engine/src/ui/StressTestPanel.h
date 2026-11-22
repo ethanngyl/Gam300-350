@@ -6,6 +6,7 @@
 
 #include <vector>
 
+class QLabel;
 class QTableWidget;
 
 class StressTestPanel : public QWidget {
@@ -24,5 +25,9 @@ signals:
 	void selectTestRequested();
 
 private:
+	//Shows the explanation of the selected row under the table, or a hint if no row is selected
+	void ShowSelectedDescription();
+
 	QTableWidget* m_results = nullptr;
+	QLabel* m_description = nullptr;
 };

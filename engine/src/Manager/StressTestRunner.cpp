@@ -17,6 +17,12 @@ namespace {
 		fn();
 		return static_cast<double>(timer.nsecsElapsed()) / 1.0e6;
 	}
+
+	//Hover text for the rows, shared so every test words the two steps the same way
+	const QString kCreateTip = "Builds the splat data in memory (CPU only).";
+	const QString kApplyTip = "Makes the change in memory (CPU only).";
+	const QString kRedrawTip = "Draws one frame so the change shows on screen. Updates the splat data and sends it to the graphics card (CPU + GPU).";
+	const QString kTotalTip = "All the steps above added together.";
 }
 
 std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
@@ -31,10 +37,10 @@ std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
 	const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
 
 	return {
-		{ "Load: generate splats", count, generateMs },
-		{ "Load: SetSplats (CPU copy)", count, setMs },
-		{ "Load: first frame (upload + draw)", count, frameMs },
-		{ "Load: total", count, generateMs + setMs + frameMs },
+		{ "Load: Create splats", count, generateMs, kCreateTip },
+		{ "Load: Add to scene", count, setMs, "Hands the splats to the renderer as a new model (CPU only). Nothing is drawn yet." },
+		{ "Load: Redraw", count, frameMs, kRedrawTip },
+		{ "Load: Total", count, generateMs + setMs + frameMs, kTotalTip },
 	};
 }
 
@@ -54,8 +60,11 @@ std::vector<StressResult> StressTestRunner::TestSelect() {
 	m_viewport->RenderFrameBlocking(); //Block renderer
 
 	//Struct of test cases
-	struct Case { const char* label; size_t stride; };
-	const Case cases[] = { { "all", 1 }, { "half", 2 }, { "tenth", 10 } };
+	struct Case {
+		const char* label;
+		size_t stride;
+	};
+	const Case cases[] = { { "All", 1 }, { "Half", 2 }, { "Tenth", 10 } };
 
 	std::vector<StressResult> results;
 
@@ -79,8 +88,8 @@ std::vector<StressResult> StressTestRunner::TestSelect() {
 		const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
 
 		const QString label = QString("Select %1").arg(c.label);
-		results.push_back({ label + ": build + SetSelection (CPU)", selected, setMs });
-		results.push_back({ label + ": first frame (re-mark + upload)", selected, frameMs });
+		results.push_back({ label + ": Apply", selected, setMs, kApplyTip });
+		results.push_back({ label + ": Redraw", selected, frameMs, kRedrawTip });
 
 		//Back to nothing selected, so the next case starts the same way
 		renderer->ClearSelection();
@@ -101,6 +110,7 @@ std::vector<StressResult> StressTestRunner::TestSelect() {
 		renderer->ClearSelection();
 		m_viewport->RenderFrameBlocking(); //Un-marks the splats and uploads
 	});
-	results.push_back({ "Deselect all: clear + frame", total, clearMs });
+	results.push_back({ "Deselect all: Apply + Redraw", total, clearMs,
+		"Clears the selection in memory, then draws one frame so it shows on screen (CPU + GPU). Timed as one step." });
 	return results;
 }

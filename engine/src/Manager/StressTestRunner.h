@@ -9,9 +9,10 @@ class Viewport;
 
 //One timed step of a stress test, shown as a row in the stress test panel
 struct StressResult {
-	QString name;        //e.g. "Load: generate"
+	QString name;        //e.g. "Load: apply"
 	size_t splatCount;   //Splats the step worked on
 	double ms;           //Time the step took
+	QString tooltip;     //Simple explanation of the step, shown when hovering its row
 };
 
 //Runs the automated stress tests and times them. No UI, the panel only displays what comes back.
