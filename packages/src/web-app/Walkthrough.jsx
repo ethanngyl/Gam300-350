@@ -9,8 +9,10 @@
 First-run walkthrough of the dashboard (Genesis design). The page is
 dimmed and a glowing spotlight is drawn around one item at a time (Home's
 Recent section, then each sidebar item from top to bottom, or each dock
-item from left to right on phones), with a tooltip beside it: step count,
-title, a short line of text, and Skip / Next (Finish on the last step).
+item from left to right on phones), with a tooltip beside it, styled like
+the Genesis Figma: "Step 2 of 10" and "Skip tour", a bar with a segment per
+step, the title, a short line of text, and Back / Next (Finish on the last
+step).
 The tooltip goes to the right of sidebar items, under the top bar's and
 above the dock's. Escape skips. If a step's item is not on the screen,
 its tooltip is shown in the middle of the page instead; steps marked
@@ -201,6 +203,12 @@ function Walkthrough({ isGuest = false, onClose }) {
         setStepIndex((index) => index + 1);
     }
 
+    function goToPreviousStep() {
+        if (stepIndex === 0) return;
+        playSound('back');
+        setStepIndex((index) => index - 1);
+    }
+
     // Spotlight: the item plus padding. Dock items are round, so it is too.
     let spotlightStyle = null;
     let tooltipStyle;
@@ -239,10 +247,8 @@ function Walkthrough({ isGuest = false, onClose }) {
             {spotlightStyle && <div className="walkthrough-spotlight" style={spotlightStyle} />}
 
             <div className="walkthrough-tooltip" style={tooltipStyle} aria-live="polite">
-                <span className="walkthrough-progress">{stepIndex + 1} / {steps.length}</span>
-                <strong className="walkthrough-title">{step.title}</strong>
-                <p className="walkthrough-text">{stepText}</p>
-                <div className="walkthrough-actions">
+                <div className="walkthrough-head">
+                    <span className="walkthrough-progress">Step {stepIndex + 1} of {steps.length}</span>
                     {!isLastStep && (
                         <button
                             type="button"
@@ -252,9 +258,27 @@ function Walkthrough({ isGuest = false, onClose }) {
                                 finish();
                             }}
                         >
-                            Skip
+                            Skip tour
                         </button>
                     )}
+                </div>
+                {/* One segment per step; the ones done so far are filled. */}
+                <div className="walkthrough-segments" aria-hidden="true">
+                    {steps.map((tourStep, index) => (
+                        <span key={tourStep.title} className={index <= stepIndex ? 'is-done' : ''} />
+                    ))}
+                </div>
+                <strong className="walkthrough-title">{step.title}</strong>
+                <p className="walkthrough-text">{stepText}</p>
+                <div className="walkthrough-actions">
+                    <button
+                        type="button"
+                        className="walkthrough-back"
+                        onClick={goToPreviousStep}
+                        disabled={stepIndex === 0}
+                    >
+                        Back
+                    </button>
                     <button type="button" className="walkthrough-next" onClick={goToNextStep}>
                         {isLastStep ? 'Finish' : 'Next'}
                     </button>

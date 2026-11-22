@@ -1,96 +1,101 @@
 /* ============================================================
-   GENESIS theme - neutral charcoal with blue accent and amber highlight
+   GENESIS theme - deep teal and mint on black
    ============================================================ */
 
+/* Colours: the team's Palette C "Deep teal & mint" (Palette 4, 16 Nov 2026):
+   black #000000 with a #01161E glow, surface #124559, accent #598392, sage
+   #AEC3B0 (secondary text), mint #EFF6E0 (highlights), alert #CC1236.
+   Font: Raleway, as in the Figma. */
 :root {
     color-scheme: dark;
     /* ----- Fonts (loaded in index.html) ----- */
-    --forma-font: 'Inter', system-ui, sans-serif;
+    --forma-font: 'Raleway', system-ui, sans-serif;
     --forma-font-mono: 'JetBrains Mono', monospace;
     /* ----- Surfaces, darkest to lightest ----- */
-    --forma-bg: #0d0d0f;
-    --forma-sidebar: #121214;
-    --forma-panel: #18181b;
-    --forma-panel-alt: #202024;
-    --forma-panel-raised: #2a2a2f;
-    --forma-border: #242428;
-    --forma-border-strong: #34343a;
+    --forma-bg: #000000;
+    --forma-sidebar: #000000;
+    --forma-panel: #061e27;
+    --forma-panel-alt: #082a36;
+    --forma-panel-raised: #0f3a4a;
+    --forma-border: #0c2833;
+    --forma-border-strong: #174456;
     /* ----- Text ----- */
-    --forma-text: #f4f4f5;
-    --forma-text-soft: #d4d4d8;
-    --forma-heading: #fafafa;
-    --forma-text-muted: #a1a1aa;
-    --forma-text-dim: #8b8b94;
+    --forma-text: #e9f0df;
+    --forma-text-soft: #cbd8c8;
+    --forma-heading: #eff6e0;
+    --forma-text-muted: #aec3b0;
+    --forma-text-dim: #86a09f;
     /* Text on top of an accent or coral fill */
-    --forma-on-accent: #ffffff;
+    --forma-on-accent: #01161e;
     --forma-on-coral: #1a1204;
     /* ----- Accents ----- */
-    --forma-blue: #3b82f6;
-    --forma-blue-hover: #4f8df7;
-    --forma-teal-text: #73a7ff;
+    --forma-blue: #598392;
+    --forma-blue-hover: #6b95a3;
+    --forma-teal-text: #8db1bd;
     --forma-coral: #f59e0b;
-    --forma-green: #4fc4a6;
-    --forma-red: #f06f60;
-    --forma-red-text: #ff8c7c;
+    --forma-green: #7cc4a4;
+    --forma-red: #cc1236;
+    --forma-red-text: #f2637a;
     --forma-purple: #a78bfa;
     --forma-orange: #f97316;
     /* ----- Same colours as R, G, B for see-through tints:
              rgba(var(--forma-accent-rgb), 0.16) ----- */
-    --forma-accent-rgb: 59, 130, 246;
-    --forma-accent-light-rgb: 115, 167, 255;
+    --forma-accent-rgb: 89, 131, 146;
+    --forma-accent-light-rgb: 141, 177, 189;
     --forma-coral-rgb: 245, 158, 11;
-    --forma-red-rgb: 240, 111, 96;
-    --forma-green-rgb: 79, 196, 166;
+    --forma-red-rgb: 204, 18, 54;
+    --forma-green-rgb: 124, 196, 164;
     --forma-purple-rgb: 167, 139, 250;
     --forma-orange-rgb: 249, 115, 22;
-    --forma-bg-rgb: 13, 13, 15;
-    --forma-backdrop-rgb: 5, 5, 7;
+    --forma-bg-rgb: 0, 0, 0;
+    --forma-backdrop-rgb: 0, 6, 9;
     /* ----- Floating glass panels (the dock, the tab labels switch) ----- */
-    --forma-glass: rgba(24, 24, 27, 0.82);
-    --forma-glass-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px rgba(255, 255, 255, 0.05);
+    --forma-glass: rgba(1, 22, 30, 0.86);
+    --forma-glass-shadow: 0 18px 42px rgba(0, 0, 0, 0.6), inset 0 1px rgba(239, 246, 224, 0.05);
     /* Hover tint on dark-on-light rows */
-    --forma-hover-tint: rgba(255, 255, 255, 0.04);
+    --forma-hover-tint: rgba(239, 246, 224, 0.05);
 }
 
-    /* ----- Light theme (Account > Appearance, AppearanceSettings.js sets
-         data-theme on <html>). Same names, light values. ----- */
+    /* ----- Light theme (Account > Appearance or the top bar's sun / moon
+         button; AppearanceSettings.js sets data-theme on <html>). Same
+         names, light values from the same palette. ----- */
     :root[data-theme="light"] {
         color-scheme: light;
-        --forma-bg: #f4f4f6;
-        --forma-sidebar: #ffffff;
+        --forma-bg: #f4f8ec;
+        --forma-sidebar: #eff6e0;
         --forma-panel: #ffffff;
-        --forma-panel-alt: #f0f0f3;
-        --forma-panel-raised: #e6e6ea;
-        --forma-border: #e2e2e7;
-        --forma-border-strong: #cfcfd6;
-        --forma-text: #18181b;
-        --forma-text-soft: #3f3f46;
-        --forma-heading: #09090b;
-        --forma-text-muted: #52525b;
-        --forma-text-dim: #6b6b75;
-        --forma-on-accent: #ffffff;
+        --forma-panel-alt: #e8f0dd;
+        --forma-panel-raised: #dce7d3;
+        --forma-border: #d5dfcc;
+        --forma-border-strong: #aec3b0;
+        --forma-text: #01161e;
+        --forma-text-soft: #0f3342;
+        --forma-heading: #01161e;
+        --forma-text-muted: #3f5f68;
+        --forma-text-dim: #5c7a80;
+        --forma-on-accent: #eff6e0;
         --forma-on-coral: #1a1204;
-        --forma-blue: #2563eb;
-        --forma-blue-hover: #1d4ed8;
-        --forma-teal-text: #1d5fd6;
+        --forma-blue: #124559;
+        --forma-blue-hover: #0d3747;
+        --forma-teal-text: #124559;
         --forma-coral: #b45309;
-        --forma-green: #0f8a6c;
-        --forma-red: #d63a2b;
-        --forma-red-text: #c2321f;
+        --forma-green: #1f7a5a;
+        --forma-red: #cc1236;
+        --forma-red-text: #b0102f;
         --forma-purple: #7c3aed;
         --forma-orange: #c2410c;
-        --forma-accent-rgb: 37, 99, 235;
-        --forma-accent-light-rgb: 29, 95, 214;
+        --forma-accent-rgb: 18, 69, 89;
+        --forma-accent-light-rgb: 89, 131, 146;
         --forma-coral-rgb: 217, 119, 6;
-        --forma-red-rgb: 214, 58, 43;
-        --forma-green-rgb: 15, 138, 108;
+        --forma-red-rgb: 204, 18, 54;
+        --forma-green-rgb: 31, 122, 90;
         --forma-purple-rgb: 124, 58, 237;
         --forma-orange-rgb: 194, 65, 12;
-        --forma-bg-rgb: 244, 244, 246;
-        --forma-backdrop-rgb: 24, 24, 27;
-        --forma-glass: rgba(255, 255, 255, 0.86);
-        --forma-glass-shadow: 0 14px 36px rgba(24, 24, 27, 0.14), inset 0 1px rgba(255, 255, 255, 0.7);
-        --forma-hover-tint: rgba(24, 24, 27, 0.05);
+        --forma-bg-rgb: 244, 248, 236;
+        --forma-backdrop-rgb: 1, 22, 30;
+        --forma-glass: rgba(255, 255, 255, 0.88);
+        --forma-glass-shadow: 0 14px 36px rgba(1, 22, 30, 0.14), inset 0 1px rgba(255, 255, 255, 0.7);
+        --forma-hover-tint: rgba(1, 22, 30, 0.05);
     }
 
 html {

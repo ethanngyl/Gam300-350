@@ -65,6 +65,7 @@ import './App.css';
 import './AppShell.css';
 import './Pages.css';
 import './MobileShell.css';
+import './PaletteTheme.css';
 
 const SESSION_STORAGE_KEY = 'genesis-session';
 // Names of the pages a model can be opened from, for the model page's back link.
@@ -701,7 +702,6 @@ function App() {
                 <div className="genesis-main" key={pageTab}>
                     {pageTab === 'home' && (
                         <HomeScreen
-                            onNewGeneration={() => goToTab('capture')}
                             onEditPhotos={(files) => reviewPhotosInEditor(files)}
                             onNavigate={goToTab}
                             onOpenLibrary={openLibrary}

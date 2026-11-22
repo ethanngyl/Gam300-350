@@ -12,12 +12,12 @@ photos dialog, AddPhotosDialog.jsx, which hands the photos to the Photo
 Editor; Frames from video opens the Video Extractor; Build a scene opens
 the Scene Builder), then "Recent" with two tabs and a "View all" link.
 Phones show only Recent, as in the mobile Figma (Capture is in the tab
-bar). "Your files" shows the
-latest photo batches (tagged with their build's status: source photos,
-processing, failed or cancelled) and opens the Photo Library; "Generated
-models" shows the latest finished models and opens one in the full-page
-viewer. Both come from GET /jobs. With nothing made yet,
-it shows a single "Create your first 3D model" card instead.
+bar). "Your models" (shown first) has the latest finished models and
+opens one in the full-page viewer; "Your photos" has the latest photo
+batches (tagged with their build's status: source photos, processing,
+failed or cancelled) and opens the Photo Library. Both come from GET
+/jobs. With nothing made yet, it says "Nothing here yet. Ready to make
+your first model?" instead, as in the Figma.
 **************************************************************************/
 
 import { useEffect, useState } from 'react';
@@ -40,8 +40,8 @@ const START_ACTIONS = [
 ];
 
 const RECENT_TABS = [
-    { id: 'files', label: 'Your files' },
-    { id: 'models', label: 'Generated models' },
+    { id: 'models', label: 'Your models' },
+    { id: 'files', label: 'Your photos' },
 ];
 
 // The tag under a photo batch's name, from its job's status. Failed and
@@ -68,12 +68,12 @@ function formatTimeAgo(timestamp) {
     return new Date(timestamp).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
 }
 
-function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, onOpenModel }) {
+function HomeScreen({ onEditPhotos, onNavigate, onOpenLibrary, onOpenModel }) {
     const [isAddPhotosOpen, setIsAddPhotosOpen] = useState(false);
     const [jobs, setJobs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
-    const [recentTab, setRecentTab] = useState('files');
+    const [recentTab, setRecentTab] = useState('models');
 
     useEffect(() => {
         let isCancelled = false;
@@ -132,11 +132,6 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
         else onOpenModel(item.id);
     }
 
-    function startNewModel() {
-        playSound('confirm');
-        onNewGeneration();
-    }
-
     function startAction(actionId) {
         playSound('tap');
         if (actionId === 'photos') setIsAddPhotosOpen(true);
@@ -191,7 +186,7 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
                         onOpenLibrary(isShowingFiles ? 'photos' : 'models');
                     }}
                 >
-                    View all {isShowingFiles ? 'files' : 'models'} <Icon name="chevronRight" size={14} />
+                    View all {isShowingFiles ? 'photos' : 'models'} <Icon name="chevronRight" size={14} />
                 </button>
             </div>
 
@@ -199,14 +194,7 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
             {loadError && <p className="home-recent-note">Couldn't load your work: {loadError}</p>}
 
             {!isLoading && !loadError && !hasAnything && (
-                <div className="forma-card home-empty">
-                    <Icon name="camera" size={26} />
-                    <h3>Create your first 3D model</h3>
-                    <p>Take or upload photos of an object from every angle, and GENESIS builds the model for you.</p>
-                    <button className="forma-btn forma-btn-primary" onClick={startNewModel}>
-                        <Icon name="cubePlus" size={14} /> New model
-                    </button>
-                </div>
+                <p className="home-empty-note">Nothing here yet. Ready to make your first model?</p>
             )}
 
             {!isLoading && !loadError && hasAnything && recentItems.length === 0 && (
