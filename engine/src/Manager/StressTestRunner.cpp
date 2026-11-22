@@ -197,3 +197,74 @@ std::vector<StressResult> StressTestRunner::TestMove() {
 	}
 	return results;
 }
+
+std::vector<StressResult> StressTestRunner::TestDelete() {
+	SplatRenderer* renderer = m_viewport->renderer();
+	if (!renderer) {
+		return {};
+	}
+	const int modelIndex = renderer->GetSelectedModel();
+	SplatModel* model = renderer->GetModel(modelIndex);
+	const size_t total = renderer->GetSplatCount(modelIndex);
+	if (!model || total == 0) {
+		return {};
+	}
+
+	//Start from a clean, uploaded scene so the first case is not charged for earlier pending work
+	renderer->ClearSelection();
+	m_viewport->RenderFrameBlocking();
+
+	QUndoStack stack; //Private, the editor's own undo history is not touched
+	std::vector<StressResult> results;
+
+	struct Case {
+		const char* label;
+		size_t stride;
+		bool selected; //Select the splats first and delete the selection, like the editor does
+	};
+	const Case cases[] = { { "half of splats", 2, false }, { "selected tenth", 10, true } };
+
+	for (const Case& c : cases) {
+		std::vector<uint32_t> indices = MakeIndices(total, c.stride);
+		if (c.selected) {
+			//Selecting is set up outside the timing, this test measures the delete
+			renderer->SetSelection(modelIndex, indices);
+			m_viewport->RenderFrameBlocking();
+			indices = renderer->Selection();
+		}
+
+		//1 = keep, 0 = delete, the mask is part of the setup
+		std::vector<uint8_t> keepMask(total, 1);
+		for (uint32_t index : indices) {
+			keepMask[index] = 0;
+		}
+		const size_t deleted = indices.size();
+
+		const double applyMs = MeasureMs([&] { stack.push(new RemoveSplatsCommand(renderer, model, keepMask)); });
+		const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
+
+		const QString label = QString("Delete %1").arg(c.label);
+		results.push_back({ label + ": Apply", deleted, applyMs,
+			"Remembers the deleted splats for undo and removes them from the model in memory (CPU only)." });
+		results.push_back({ label + ": Redraw", deleted, frameMs, kRedrawTip });
+
+		//Bring the splats back and clear the selection, so the next case starts the same way
+		stack.undo();
+		renderer->ClearSelection();
+		m_viewport->RenderFrameBlocking();
+	}
+
+	//Deleting a whole model cannot be undone, so delete a copy that only exists for this test
+	if (renderer->ModelCount() < static_cast<size_t>(SplatRenderer::kMaxModels)) {
+		renderer->SetSplats(model->splats(), "StressTestCopy");
+		m_viewport->RenderFrameBlocking(); //Upload the copy first, so only the delete is timed below
+		const int copyIndex = static_cast<int>(renderer->ModelCount()) - 1;
+
+		const double applyMs = MeasureMs([&] { renderer->RemoveModel(copyIndex); });
+		const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
+		results.push_back({ "Delete model: Apply", total, applyMs,
+			"Removes the whole model from the scene in memory (CPU only)." });
+		results.push_back({ "Delete model: Redraw", total, frameMs, kRedrawTip });
+	}
+	return results;
+}

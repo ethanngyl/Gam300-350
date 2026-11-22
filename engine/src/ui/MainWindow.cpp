@@ -551,6 +551,14 @@ void MainWindow::createDocks() {
     connect(m_stressTestPanel, &StressTestPanel::moveTestRequested, this, [runStressTest] {
         runStressTest("Move test", [](StressTestRunner& runner) { return runner.TestMove(); });
     });
+    connect(m_stressTestPanel, &StressTestPanel::deleteTestRequested, this, [this, runStressTest] {
+        const bool ran = runStressTest("Delete test", [](StressTestRunner& runner) { return runner.TestDelete(); });
+        if (ran)
+        {
+            //The test briefly added and removed a model, make sure the panels still match the scene
+            refreshScenePanels();
+        }
+    });
 
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);
