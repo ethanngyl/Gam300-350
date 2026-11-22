@@ -76,7 +76,7 @@ const FEATURES = [
         title: 'Media library',
         text: 'Every model and every photo batch, together. Source photos stay linked to the model they built, so you can go back and rebuild with a better set.',
         image: mediaLibraryScreenshot,
-        imageAlt: 'The Media Library showing the cat statue, fox and Stonehenge models',
+        imageAlt: 'The Media Library showing four cat statue models',
     },
     {
         title: 'Scene builder',

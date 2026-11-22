@@ -1,7 +1,8 @@
 /* ============================================================
    Landing page (LandingScreen.jsx), laid out like the Genesis landing
-   page design. Colours come from the theme tokens (the palette isn't
-   final).
+   page design. Colours come from the theme tokens.
+   Sizes and spacing use clamp(), so the page scales smoothly as the
+   window resizes: clamp(smallest, scales with width, largest).
    ============================================================ */
 
 .landing-page {
@@ -13,9 +14,10 @@
 
 .landing-container {
     width: 100%;
-    max-width: 1248px;
+    /* 1248px on a laptop, growing to 1600px on a wide monitor. */
+    max-width: clamp(1248px, 82vw, 1600px);
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 clamp(16px, 3vw, 48px);
 }
 
 .landing-page h1,
@@ -55,7 +57,7 @@
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    height: 88px;
+    height: clamp(64px, 6vw, 96px);
 }
 
 .landing-logo {
@@ -114,7 +116,7 @@
 /* ---------- Headline ---------- */
 
 .landing-page .landing-hero {
-    padding-top: 100px;
+    padding-top: clamp(48px, 7vw, 128px);
 }
 
 .landing-headline-row {
@@ -125,7 +127,7 @@
 }
 
 .landing-hero h1 {
-    font-size: clamp(2.8rem, 7vw, 5.6rem);
+    font-size: clamp(2.6rem, 6.4vw, 7rem);
     line-height: 1.02;
 }
 
@@ -141,15 +143,16 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
     align-items: center;
-    gap: 24px;
-    margin-top: 96px;
+    gap: clamp(16px, 2vw, 40px);
+    margin-top: clamp(48px, 6.5vw, 128px);
 }
 
 .landing-photo-stack {
     position: relative;
     width: 100%;
-    max-width: 440px;
-    height: 320px;
+    max-width: 560px;
+    /* Height follows the width, so the photos keep their places as it shrinks. */
+    aspect-ratio: 10 / 9;
 }
 
 .landing-stack-photo {
@@ -163,32 +166,32 @@
 }
 
     .landing-stack-photo.is-photo-1 {
-        left: 0;
-        top: 30px;
+        left: 4%;
+        top: 8%;
         transform: rotate(-12deg);
     }
 
     .landing-stack-photo.is-photo-2 {
-        left: 18%;
+        left: 22%;
         top: 0;
         transform: rotate(-4deg);
     }
 
     .landing-stack-photo.is-photo-3 {
-        left: 38%;
-        top: 20px;
+        left: 42%;
+        top: 5%;
         transform: rotate(6deg);
     }
 
     .landing-stack-photo.is-photo-4 {
-        left: 12%;
-        top: 110px;
+        left: 16%;
+        top: 28%;
         transform: rotate(-3deg);
     }
 
     .landing-stack-photo.is-photo-5 {
-        left: 44%;
-        top: 70px;
+        left: 48%;
+        top: 18%;
         transform: rotate(8deg);
     }
 
@@ -248,9 +251,9 @@
 .landing-steps {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 48px;
-    margin-top: 88px;
-    padding-top: 28px;
+    gap: clamp(24px, 4vw, 72px);
+    margin-top: clamp(48px, 6vw, 112px);
+    padding-top: clamp(24px, 2.2vw, 40px);
     border-top: 1px solid var(--forma-border);
 }
 
@@ -262,20 +265,22 @@
 }
 
 .landing-step h3 {
-    font-size: 1.15rem;
+    font-size: clamp(1.35rem, 0.9rem + 1vw, 1.9rem);
+    letter-spacing: -0.01em;
 }
 
 .landing-step p {
-    margin-top: 10px;
+    max-width: 36ch;
+    margin-top: 12px;
     color: var(--forma-text-muted);
-    font-size: 0.92rem;
+    font-size: clamp(0.92rem, 0.82rem + 0.3vw, 1.08rem);
     line-height: 1.6;
 }
 
 /* ---------- Sections ---------- */
 
 .landing-page .landing-section {
-    padding-top: 160px;
+    padding-top: clamp(96px, 11vw, 200px);
 }
 
 .landing-section-head {
@@ -286,13 +291,13 @@
 }
 
     .landing-section-head h2 {
-        font-size: clamp(2rem, 4vw, 3.4rem);
+        font-size: clamp(2rem, 4vw, 4.4rem);
     }
 
     .landing-section-head p {
-        max-width: 380px;
+        max-width: 420px;
         color: var(--forma-text-muted);
-        font-size: 0.98rem;
+        font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.12rem);
         line-height: 1.6;
     }
 
@@ -300,15 +305,15 @@
 .landing-features {
     display: flex;
     flex-direction: column;
-    gap: 96px;
-    margin-top: 96px;
+    gap: clamp(56px, 7vw, 136px);
+    margin-top: clamp(48px, 6.5vw, 128px);
 }
 
 .landing-feature {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
     align-items: center;
-    gap: 64px;
+    gap: clamp(32px, 4.5vw, 88px);
 }
 
     .landing-feature.is-flipped {
@@ -320,13 +325,13 @@
         }
 
     .landing-feature h3 {
-        font-size: 1.9rem;
+        font-size: clamp(1.5rem, 1rem + 1.2vw, 2.5rem);
     }
 
     .landing-feature p {
         margin-top: 16px;
         color: var(--forma-text-muted);
-        font-size: 1.05rem;
+        font-size: clamp(0.98rem, 0.85rem + 0.35vw, 1.2rem);
         line-height: 1.7;
     }
 
@@ -343,7 +348,7 @@
     align-items: center;
     gap: 12px;
     max-width: none;
-    margin-top: 72px !important;
+    margin-top: clamp(48px, 5vw, 96px) !important;
     color: var(--forma-text-soft);
     font-size: 0.95rem;
 }
@@ -358,8 +363,8 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     align-items: end;
-    gap: 16px;
-    margin-top: 48px;
+    gap: clamp(12px, 1.2vw, 24px);
+    margin-top: clamp(32px, 3.5vw, 64px);
 }
 
 .landing-gallery-item img {
@@ -385,9 +390,9 @@
 .landing-plans {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 48px;
-    margin-top: 40px;
-    padding-top: 36px;
+    gap: clamp(24px, 4vw, 72px);
+    margin-top: clamp(32px, 3vw, 56px);
+    padding-top: clamp(24px, 2.5vw, 44px);
     border-top: 1px solid var(--forma-border);
 }
 
@@ -395,7 +400,7 @@
     display: flex;
     align-items: baseline;
     gap: 12px;
-    font-size: 1.6rem;
+    font-size: clamp(1.4rem, 1rem + 0.8vw, 2rem);
 }
 
     .landing-plan h3 small {
@@ -430,12 +435,12 @@
 }
 
 .landing-page .landing-cta {
-    padding-top: 160px;
-    padding-bottom: 120px;
+    padding-top: clamp(96px, 11vw, 200px);
+    padding-bottom: clamp(72px, 8vw, 160px);
 }
 
 .landing-cta h2 {
-    font-size: clamp(2.2rem, 5vw, 4rem);
+    font-size: clamp(2.2rem, 5vw, 5rem);
     line-height: 1.05;
 }
 
@@ -510,10 +515,6 @@
 }
 
 @media (max-width: 560px) {
-    .landing-nav-inner {
-        height: 64px;
-    }
-
     .landing-nav-actions {
         gap: 8px;
     }
@@ -522,32 +523,13 @@
             padding: 8px 12px;
         }
 
-    .landing-page .landing-hero {
-        padding-top: 56px;
-    }
-
     .landing-hero-visual {
         grid-template-columns: minmax(0, 1fr);
-        margin-top: 56px;
     }
 
     .landing-photo-stack {
-        max-width: 320px;
-        height: 250px;
+        max-width: 340px;
         margin: 0 auto;
-    }
-
-    .landing-page .landing-section {
-        padding-top: 104px;
-    }
-
-    .landing-features {
-        gap: 64px;
-        margin-top: 56px;
-    }
-
-    .landing-feature h3 {
-        font-size: 1.5rem;
     }
 
     .landing-footer-inner {
