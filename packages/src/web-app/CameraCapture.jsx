@@ -25,6 +25,10 @@ clicking it asks for the camera again. The Remove background option and
 the Model detail slider (training iteration cap) are here and in the Photo
 Editor; coming back from there ("Back to camera"), initialPhotos brings
 the batch and those choices back with it.
+On phones the page is the mobile Figma's full-screen camera instead: close
+at the top left, the shot count, and upload at the top right; Manual / Auto
+above the shutter; the last photo and Done (both open the batch in the
+Photo Editor) beside it. Auto-capture uses its default interval and cap.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,8 +40,11 @@ import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
 import { usePhotoThumbnails } from './PhotoThumbnails.js';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
+import { useMobileView } from './useMobileView.js';
 
 const HARD_CAP = 200;
+// Phones: the shot count reads "12 / 40 shots" (the fewest photos we suggest).
+const SUGGESTED_PHOTO_COUNT = 40;
 
 // Space is the capture shortcut, except while typing or on a focused
 // control outside the camera panel, where it keeps its normal job (e.g.
@@ -192,7 +199,7 @@ function CameraCapture({
                 setFocusMode('auto');
                 setFocusDistance(track.getSettings?.().focusDistance ?? support.distanceRange?.min ?? null);
                 if (support.autoMode) {
-                    track.applyConstraints({ advanced: [{ focusMode: support.autoMode }] }).catch(() => {});
+                    track.applyConstraints({ advanced: [{ focusMode: support.autoMode }] }).catch(() => { });
                 }
                 if (videoRef.current) {
                     videoRef.current.srcObject = mediaStream;
@@ -287,6 +294,15 @@ function CameraCapture({
     // Small copies for the thumbnails: showing the original photos made the
     // page lag with large batches (see PhotoThumbnails.js).
     const thumbnailUrls = usePhotoThumbnails(photos);
+    const isPhone = useMobileView();
+
+    // The preview <video> is a different element in the phone and desktop
+    // layouts, so give the stream to whichever one is showing.
+    useEffect(() => {
+        if (videoRef.current && stream && videoRef.current.srcObject !== stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [stream, isPhone]);
 
     // Check pending photos one at a time, same as the Photo Editor. Each
     // finished check updates the list, which starts the next one.
@@ -490,6 +506,167 @@ function CameraCapture({
 
         setIsBatchSent(true);
         setTimeout(() => setIsBatchSent(false), 2000);
+    }
+
+    const fileInput = (
+        <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileInputChange}
+            style={{ display: 'none' }}
+        />
+    );
+
+    if (isPhone) {
+        const lastPhoto = photos[photos.length - 1];
+        const hint = captureFeedback || uploadFeedback || focusNote
+            || (isAutoCapturing ? `Capturing every ${intervalSeconds}s...` : 'Move slowly around the object');
+
+        return (
+            <div className="capture-phone">
+                <div
+                    className={focusSupport?.canTapFocus ? 'capture-phone-viewport can-tap-focus' : 'capture-phone-viewport'}
+                    onClick={handlePreviewClick}
+                >
+                    <video ref={videoRef} autoPlay playsInline muted className="capture-video" />
+                    <canvas ref={canvasRef} style={{ display: 'none' }} />
+                    {focusRing && (
+                        <span
+                            key={focusRing.id}
+                            className="capture-focus-ring"
+                            style={{ left: `${focusRing.left}%`, top: `${focusRing.top}%` }}
+                        ></span>
+                    )}
+                </div>
+
+                {!stream && (
+                    <div className="capture-phone-message">
+                        <Icon name="camera" size={34} />
+                        <span>{error ? 'Camera not available' : 'Waiting for camera...'}</span>
+                        {error && (
+                            <button type="button" className="forma-btn" onClick={retryCamera}>Try again</button>
+                        )}
+                        <button
+                            type="button"
+                            className="forma-btn"
+                            onClick={() => {
+                                playSound('tap');
+                                handleBrowseClick();
+                            }}
+                        >
+                            <Icon name="upload" size={14} /> Upload photos instead
+                        </button>
+                    </div>
+                )}
+
+                <div className="capture-phone-frame" aria-hidden="true">
+                    <span className="capture-corner capture-corner-tl"></span>
+                    <span className="capture-corner capture-corner-tr"></span>
+                    <span className="capture-corner capture-corner-bl"></span>
+                    <span className="capture-corner capture-corner-br"></span>
+                </div>
+
+                <div className="capture-phone-top">
+                    <button
+                        type="button"
+                        className="capture-phone-round"
+                        aria-label="Close camera"
+                        onClick={() => {
+                            playSound('back');
+                            onBack();
+                        }}
+                    >
+                        <Icon name="close" size={18} />
+                    </button>
+                    <span className="capture-phone-count">{photos.length} / {SUGGESTED_PHOTO_COUNT} shots</span>
+                    <button
+                        type="button"
+                        className="capture-phone-round"
+                        aria-label="Upload photos"
+                        onClick={() => {
+                            playSound('tap');
+                            handleBrowseClick();
+                        }}
+                    >
+                        <Icon name="upload" size={18} />
+                    </button>
+                </div>
+
+                <div className="capture-phone-bottom">
+                    {stream && <p className="capture-phone-hint" role="status">{hint}</p>}
+                    {uploadError && <p className="capture-phone-hint is-error" role="alert">{uploadError}</p>}
+
+                    <div className="capture-phone-modes">
+                        <button
+                            type="button"
+                            className={captureMode === 'manual' ? 'is-active' : ''}
+                            onClick={() => {
+                                playSound('tap');
+                                handleModeChange('manual');
+                            }}
+                        >
+                            Manual
+                        </button>
+                        <button
+                            type="button"
+                            className={captureMode === 'auto' ? 'is-active' : ''}
+                            onClick={() => {
+                                playSound('tap');
+                                handleModeChange('auto');
+                            }}
+                        >
+                            Auto
+                        </button>
+                    </div>
+
+                    <div className="capture-phone-controls">
+                        <button
+                            type="button"
+                            className="capture-phone-last"
+                            aria-label="Review photos"
+                            disabled={!lastPhoto}
+                            onClick={() => {
+                                playSound('confirm');
+                                handleReview();
+                            }}
+                        >
+                            {lastPhoto && thumbnailUrls[lastPhoto.id] && <img src={thumbnailUrls[lastPhoto.id]} alt="" />}
+                        </button>
+                        <button
+                            type="button"
+                            className={isAutoCapturing ? 'capture-phone-shutter is-capturing' : 'capture-phone-shutter'}
+                            aria-label={captureMode === 'manual' ? 'Take photo' : isAutoCapturing ? 'Stop auto-capture' : 'Start auto-capture'}
+                            disabled={!stream}
+                            onClick={() => {
+                                if (captureMode === 'manual') {
+                                    capturePhoto(true);
+                                } else {
+                                    playSound('tap');
+                                    setIsAutoCapturing((wasCapturing) => !wasCapturing);
+                                }
+                            }}
+                        >
+                            <span />
+                        </button>
+                        <button
+                            type="button"
+                            className="capture-phone-done"
+                            disabled={photos.length === 0}
+                            onClick={() => {
+                                playSound('confirm');
+                                handleReview();
+                            }}
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+
+                {fileInput}
+            </div>
+        );
     }
 
     return (
@@ -714,14 +891,7 @@ function CameraCapture({
                         </button>
                         <span className="capture-dropzone-types">JPG - PNG - WEBP - HEIC</span>
 
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={handleFileInputChange}
-                            style={{ display: 'none' }}
-                        />
+                        {fileInput}
                     </div>
 
                     <button

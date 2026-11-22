@@ -1,0 +1,294 @@
+/* ============================================================
+   Log in / create account (LoginScreen.jsx), laid out like the
+   Genesis Figma: a hero panel on the left and the form on the
+   right; phones show the form only. Colours come from the theme
+   tokens.
+   ============================================================ */
+
+.auth-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    background: radial-gradient(ellipse at 10% 85%, rgba(var(--forma-accent-rgb), 0.12), transparent 55%), var(--forma-bg);
+    color: var(--forma-text);
+    font-family: var(--forma-font);
+}
+
+/* ---------- Logo (back to the landing page) ---------- */
+
+.auth-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--forma-heading);
+    font: 600 0.92rem var(--forma-font);
+    letter-spacing: 0.2em;
+    cursor: pointer;
+}
+
+.auth-logo-mark {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 12px;
+    background: var(--forma-panel);
+}
+
+    .auth-logo-mark img {
+        width: 24px;
+        height: 24px;
+    }
+
+/* ---------- Hero ---------- */
+
+.auth-hero {
+    display: flex;
+    flex-direction: column;
+    padding: 48px 72px;
+    border-right: 1px solid var(--forma-border);
+}
+
+.auth-hero-copy {
+    margin: auto 0;
+    max-width: 520px;
+}
+
+    .auth-hero-copy h2 {
+        margin: 0 0 20px;
+        color: var(--forma-heading);
+        font-size: clamp(2.6rem, 4.4vw, 4rem);
+        font-weight: 700;
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+    }
+
+    .auth-hero-copy p {
+        margin: 0;
+        color: var(--forma-text-muted);
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
+/* ---------- Form ---------- */
+
+.auth-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 32px;
+}
+
+.auth-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 400px;
+}
+
+    .auth-card h1 {
+        margin: 0 0 30px;
+        color: var(--forma-heading);
+        font-size: 1.75rem;
+        font-weight: 600;
+    }
+
+/* Phones only: the logo above the form, since the hero is hidden. */
+.auth-card-logo {
+    display: none;
+    margin-bottom: 36px;
+}
+
+.auth-eyebrow {
+    margin: 0 0 8px;
+    color: var(--forma-text-muted);
+    font: 500 0.7rem var(--forma-font-mono);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.auth-field-label {
+    color: var(--forma-text-soft);
+    font-size: 0.84rem;
+}
+
+.auth-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 46px;
+    padding: 0 14px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    background: var(--forma-panel);
+    color: var(--forma-text-dim);
+}
+
+    .auth-input:focus-within {
+        border-color: rgba(var(--forma-accent-rgb), 0.8);
+    }
+
+    .auth-input input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: var(--forma-text);
+        font: inherit;
+        font-size: 0.9rem;
+    }
+
+        .auth-input input::placeholder {
+            color: var(--forma-text-dim);
+        }
+
+.auth-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--forma-teal-text);
+    font: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .auth-link:hover {
+        text-decoration: underline;
+    }
+
+.auth-forgot {
+    align-self: flex-end;
+    margin: -10px 0 16px;
+    color: var(--forma-text-muted);
+}
+
+.auth-remember {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    color: var(--forma-text-muted);
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+.auth-error {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--forma-red-rgb), 0.45);
+    border-radius: 8px;
+    background: rgba(var(--forma-red-rgb), 0.1);
+    color: var(--forma-red);
+    font-size: 0.84rem;
+}
+
+.auth-submit {
+    justify-content: center;
+    height: 46px;
+    font-size: 0.92rem;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 26px 0 18px;
+    color: var(--forma-text-dim);
+    font-size: 0.78rem;
+}
+
+    .auth-divider::before,
+    .auth-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--forma-border);
+    }
+
+.auth-alternatives {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.auth-alternative {
+    justify-content: center;
+    gap: 10px;
+    height: 44px;
+}
+
+/* Forgot password */
+.auth-page .auth-note {
+    margin: -12px 0 20px;
+    color: var(--forma-text-muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.auth-notice {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--forma-green-rgb), 0.45);
+    border-radius: 8px;
+    background: rgba(var(--forma-green-rgb), 0.1);
+    color: var(--forma-green);
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
+.auth-reset-links {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+    .auth-reset-links .auth-link:disabled {
+        color: var(--forma-text-dim);
+        text-decoration: none;
+        cursor: default;
+    }
+
+.auth-switch {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin: 28px 0 0;
+    color: var(--forma-text-muted);
+    font-size: 0.84rem;
+}
+
+/* ---------- Phones and narrow windows: form only ---------- */
+
+@media (max-width: 900px) {
+    .auth-page {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .auth-hero {
+        display: none;
+    }
+
+    .auth-panel {
+        align-items: flex-start;
+        padding: 40px 20px;
+    }
+
+    .auth-card-logo {
+        display: block;
+    }
+}

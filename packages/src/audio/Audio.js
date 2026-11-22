@@ -16,6 +16,12 @@ useSoundSettings() gives components the current values and re-renders
 them on any change, so the Account page and the account menu stay in step.
 Each sound also has its own volume in SOUND_VOLUMES, so the mix is set
 in code and the original files stay untouched.
+The sounds are also grouped (SOUND_CATEGORIES): button sounds, the camera
+shutter and notification sounds. Each group can be switched off or turned
+down on its own (setSoundCategory, Account > Audio), on top of the overall
+volume.
+- SOUND_CATEGORY_IDS
+The groups, in the order Account > Audio lists them.
 Sounds: tap (buttons), confirm (start a build), back (leave / cancel),
 camera (shutter), success (model ready), error (build failed), tick (a
 build step finished).
@@ -54,8 +60,34 @@ const SOUND_VOLUMES = {
     tick: 1.0,
 };
 
+// Which group each sound belongs to.
+const SOUND_CATEGORIES = {
+    tap: 'buttons',
+    confirm: 'buttons',
+    back: 'buttons',
+    camera: 'camera',
+    success: 'notifications',
+    error: 'notifications',
+    tick: 'notifications',
+};
+
+export const SOUND_CATEGORY_IDS = ['buttons', 'camera', 'notifications'];
+
 const DEFAULT_VOLUME = 1.0;
 const SETTINGS_STORAGE_KEY = 'genesis-sound-settings';
+
+// Every group on, at full volume, until the user changes it.
+function defaultCategories() {
+    return Object.fromEntries(SOUND_CATEGORY_IDS.map((id) => [id, { isEnabled: true, volume: 1 }]));
+}
+
+// A saved group setting, or the default for anything missing or broken.
+function readCategory(saved) {
+    return {
+        isEnabled: saved?.isEnabled !== false,
+        volume: typeof saved?.volume === 'number' ? Math.min(1, Math.max(0, saved.volume)) : 1,
+    };
+}
 
 // Reads the saved settings once at load. Storage can be blocked (private
 // windows, site data off), so every access is wrapped.
@@ -65,9 +97,10 @@ function loadSoundSettings() {
         return {
             isMuted: saved?.isMuted === true,
             volume: typeof saved?.volume === 'number' ? Math.min(1, Math.max(0, saved.volume)) : DEFAULT_VOLUME,
+            categories: Object.fromEntries(SOUND_CATEGORY_IDS.map((id) => [id, readCategory(saved?.categories?.[id])])),
         };
     } catch {
-        return { isMuted: false, volume: DEFAULT_VOLUME };
+        return { isMuted: false, volume: DEFAULT_VOLUME, categories: defaultCategories() };
     }
 }
 
@@ -94,6 +127,14 @@ export function setSoundVolume(volume) {
     updateSoundSettings({ volume: Math.min(1, Math.max(0, volume)) });
 }
 
+// One group's settings. changes: { isEnabled } and/or { volume } (0-1).
+export function setSoundCategory(categoryId, changes) {
+    const current = soundSettings.categories[categoryId];
+    if (!current) return;
+    const next = readCategory({ ...current, ...changes });
+    updateSoundSettings({ categories: { ...soundSettings.categories, [categoryId]: next } });
+}
+
 function subscribeToSoundSettings(listener) {
     settingsListeners.add(listener);
     return () => settingsListeners.delete(listener);
@@ -103,7 +144,8 @@ function getSoundSettings() {
     return soundSettings;
 }
 
-// React hook: { isMuted, volume }, re-rendering whenever either changes.
+// React hook: { isMuted, volume, categories }, re-rendering on any change.
+// categories: { [id]: { isEnabled, volume } }.
 export function useSoundSettings() {
     return useSyncExternalStore(subscribeToSoundSettings, getSoundSettings);
 }
@@ -126,8 +168,11 @@ export function playSound(name, volumeScale = 1) {
         return;
     }
     if (soundSettings.isMuted || soundSettings.volume === 0) return;
+    const category = soundSettings.categories[SOUND_CATEGORIES[name]];
+    if (category && (!category.isEnabled || category.volume === 0)) return;
     const soundVolume = SOUND_VOLUMES[name] ?? 1;
-    audio.volume = Math.min(1, soundVolume * soundSettings.volume * volumeScale);
+    const categoryVolume = category?.volume ?? 1;
+    audio.volume = Math.min(1, soundVolume * soundSettings.volume * categoryVolume * volumeScale);
     audio.currentTime = 0;
     audio.play().catch(() => {
     });

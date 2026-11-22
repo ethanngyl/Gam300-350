@@ -26,9 +26,14 @@ job's background masks. Concurrent requests share one run.
 Puts a job's build (masks + COLMAP + Brush) in line (jobQueue.js), so only
 config.maxRunningJobs run at once. Waiting jobs are 'queued', with their
 place in job.detail. refreshQueue() lets go of jobs cancelled while waiting.
+- ensureThumbs(jobId) / thumbPath(jobId, name)
+Makes small WebP copies of all the job's photos (<id>_out/thumbs/) with
+tools/make_thumbs.py, for GET /jobs/:id/images/:name?size=small. One run
+per job, shared by concurrent requests; at most 2 jobs at a time.
 - afterJobEnds(job)
-Runs once a job is done, failed or cancelled: makes the cover while the
-photos and masks exist, tidies up working files (pruneJob), sends the job
+Runs once a job is done, failed or cancelled: makes the cover and the
+thumbnails while the photos and masks exist, tidies up working files
+(pruneJob), sends the job
 to the VM (client machines) and, on the VM with FILE_STORE=db, moves its
 model and photos into the database (dbstore.js).
 **************************************************************************/
@@ -40,6 +45,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { config } from '../config.js'
 import { requestCleanup } from '../cleanup.js'
+import { getDbImage, listDbImageNames } from '../db.js'
 import { moveImagesToDb, moveModelToDb } from '../dbstore.js'
 import { createJobQueue } from '../jobQueue.js'
 import { syncPendingJobs } from '../library.js'
@@ -229,6 +235,127 @@ export function ensureCover(jobId) {
     return making
 }
 
+// Thumbnails being made right now, by job id, so cards asking at the same
+// time share one run of make_thumbs.py.
+const thumbsInProgress = new Map()
+// When each job's thumbnails were last made (or failed). A missing one isn't
+// tried again for THUMB_RETRY_MS, so a photo Pillow can't read, or a machine
+// without Pillow, doesn't start Python on every card.
+const thumbsLastRun = new Map()
+const THUMB_RETRY_MS = 10 * 60_000
+// Python processes making thumbnails at once; more requests wait their turn,
+// so opening a large Library for the first time doesn't start dozens.
+const THUMB_RUNS_AT_ONCE = 2
+let thumbRunsActive = 0
+const thumbRunQueue = []
+
+// Waits for a free thumbnail run; releaseThumbRun() frees it.
+function takeThumbRun()
+{
+  if (thumbRunsActive < THUMB_RUNS_AT_ONCE)
+  {
+    thumbRunsActive++
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => thumbRunQueue.push(resolve))
+}
+
+function releaseThumbRun()
+{
+  const next = thumbRunQueue.shift()
+  if (next) next()
+  else thumbRunsActive--
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Where a photo's small copy is kept: <id>_out/thumbs/<name>.webp. Under
+    <id>_out, so deleting the job removes it and the VM's storage budget
+    counts it.
+  \param jobId
+    string (already checked against JOB_ID_RE)
+  \param name
+    The photo's file name (already checked)
+  \return
+    string path (the file may not exist yet)
+*/
+/************************************************************************/
+export function thumbPath(jobId, name)
+{
+  return path.join(config.jobsDir, `${jobId}_out`, 'thumbs', `${name}.webp`)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Makes small WebP copies of every photo of a job that doesn't have one
+    yet, with tools/make_thumbs.py: one Python run for the whole job. On
+    the VM with FILE_STORE=db, photos no longer on disk are written to a
+    temporary folder from the database first. Never rejects: a failure is
+    logged, and the caller serves the original photo instead.
+  \param jobId
+    string (already checked against JOB_ID_RE)
+  \param force
+    true to run even if the job was done in the last THUMB_RETRY_MS (used
+    when a job ends, before its photos move into the database)
+  \return
+    Promise, settled once the run is over
+*/
+/************************************************************************/
+export function ensureThumbs(jobId, { force = false } = {})
+{
+  const running = thumbsInProgress.get(jobId)
+  if (running) return force ? running.then(() => ensureThumbs(jobId, { force })) : running
+  const lastRun = thumbsLastRun.get(jobId)
+  if (!force && lastRun && Date.now() - lastRun < THUMB_RETRY_MS) return Promise.resolve()
+
+  const making = (async () =>
+  {
+    await takeThumbRun()
+    const thumbsDir = path.dirname(thumbPath(jobId, 'x'))
+    let tempDir = null
+    try
+    {
+      let imagesDir = path.join(config.jobsDir, jobId, 'images')
+      if (!fs.existsSync(imagesDir))
+      {
+        if (!filesInDb) return
+        // Only the photos still without a copy are written out.
+        const missing = listDbImageNames(jobId).filter((name) => !fs.existsSync(thumbPath(jobId, name)))
+        if (missing.length === 0) return
+        tempDir = path.join(config.jobsDir, `${jobId}_out`, `thumbs-src-${process.pid}-${Date.now()}`)
+        await fs.promises.mkdir(tempDir, { recursive: true })
+        for (const name of missing)
+        {
+          const image = getDbImage(jobId, name)
+          if (image) await fs.promises.writeFile(path.join(tempDir, name), image.data)
+        }
+        imagesDir = tempDir
+      }
+      await fs.promises.mkdir(thumbsDir, { recursive: true })
+      await execFileAsync(
+        config.pythonBin,
+        [config.thumbScript, imagesDir, thumbsDir],
+        { timeout: 120_000, windowsHide: true },
+      )
+    }
+    catch (err)
+    {
+      console.warn(`[backend] no thumbnails for ${jobId}: ${err.stderr?.trim() || err.message}`)
+    }
+    finally
+    {
+      thumbsLastRun.set(jobId, Date.now())
+      releaseThumbRun()
+      if (tempDir) await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    }
+  })()
+  thumbsInProgress.set(jobId, making)
+  making.finally(() => thumbsInProgress.delete(jobId))
+  return making
+}
+
 /************************************************************************/
 /*!
   \brief
@@ -239,7 +366,9 @@ export function ensureCover(jobId) {
       2. done: delete COLMAP/Brush working files and the masks (pruneJob);
       3. done, client machine: send it to the VM's shared library;
       4. done, VM with FILE_STORE=db: move its model into the database;
-      5. VM with FILE_STORE=db: move its photos into the database (also
+      5. make the photos' small copies (ensureThumbs), while they are
+         still files;
+      6. VM with FILE_STORE=db: move its photos into the database (also
          for failed / cancelled jobs, so their photos are kept).
     Never throws: each step logs its own problems.
   \param job
@@ -259,6 +388,7 @@ export async function afterJobEnds(job) {
             if (config.authMode === 'client' && !clientAuthProblem()) syncPendingJobs()
             if (filesInDb) await moveModelToDb(job)
         }
+        await ensureThumbs(job.id, { force: true })
         if (filesInDb) await moveImagesToDb(job.id)
         // Storage just grew: the VM checks its budget (cleanup.js).
         if (config.authMode === 'authority') requestCleanup()

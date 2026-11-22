@@ -20,7 +20,7 @@ Start a job from photos, or from videos / GIFs (frames extracted first).
 List, poll, rename, cancel and delete jobs (owner or admin).
 - GET /jobs/:id/images/:name, GET /jobs/:id/result.ply,
   GET /jobs/:id/cover.webp
-A job's photos, model and card cover.
+A job's photos (?size=small: a small copy), model and card cover.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -37,7 +37,7 @@ import { saveJob } from '../status.js'
 import { requireJobAccess, requireUser } from '../middleware/session.js'
 import { assignJobId, mediaUpload, onlyImages, onlyMedia, removeJobIfAborted, upload } from '../middleware/uploads.js'
 import { sendDbModel } from '../middleware/sendDbModel.js'
-import { MAX_JOB_NAME_LENGTH, afterJobEnds, ensureCover, frameOptions, getJob, parseTrainIters, queueBuild, refreshQueue } from '../services/jobs.js'
+import { MAX_JOB_NAME_LENGTH, afterJobEnds, ensureCover, ensureThumbs, frameOptions, getJob, parseTrainIters, thumbPath, queueBuild, refreshQueue } from '../services/jobs.js'
 import { listJobs } from '../adapters/jobSources/index.js'
 import { catalog } from '../catalog.js'
 
@@ -112,18 +112,38 @@ router.get(['/jobs', '/library/jobs'], requireUser, async (req, res) =>
     folder. Only the job's owner or an admin can load it. A job only in
     the VM's shared library is fetched from there. On the VM with
     FILE_STORE=db, a photo no longer on disk is served from the database.
+    ?size=small sends a small WebP copy instead (480 px on the longest
+    side, made by ensureThumbs the first time), for cards and grids. If the
+    copy can't be made, the original is sent.
   \return
-    401 if not logged in, 404 if image doesn't exist or isn't theirs, else
-    the image itself
+    401 if not logged in, 400 if size isn't "small", 404 if image doesn't
+    exist or isn't theirs, else the image itself
 */
 /************************************************************************/
-router.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJobAccess, (req, res) =>
+router.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], requireJobAccess, async (req, res) =>
 {
-  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+  const { size } = req.query
+  if (size !== undefined && size !== 'small')
+    return res.status(400).json({ error: 'size must be "small"' })
+  if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}${size ? '?size=small' : ''}`)
   const { id, name } = req.params
   if (!JOB_ID_RE.test(id) || !/^[\w.-]+$/.test(name) || !IMAGE_EXT_RE.test(name))
   {
     return res.status(404).json({ error: 'image not found' })
+  }
+  if (size === 'small')
+  {
+    const smallPath = thumbPath(id, name)
+    if (!fs.existsSync(smallPath)) await ensureThumbs(id)
+    if (fs.existsSync(smallPath))
+    {
+      res.setHeader('Cache-Control', 'private, max-age=86400')
+      return res.sendFile(smallPath, (err) =>
+      {
+        if (err && !res.headersSent) res.status(404).json({ error: 'image not found' })
+      })
+    }
+    // No copy: the original below.
   }
   const filePath = path.join(config.jobsDir, id, 'images', name)
   if (!fs.existsSync(filePath) && filesInDb)

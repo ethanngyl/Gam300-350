@@ -1,0 +1,257 @@
+/* ============================================================
+   Home (HomeScreen.jsx), laid out like the Genesis Figma: a banner
+   with three ways to start, then Recent as portrait cards. Selectors
+   start with .home-screen so they win over the older Home rules in
+   AppTheme.css. Colours come from the theme tokens.
+   ============================================================ */
+
+@media (min-width: 761px) {
+    .genesis-main .home-screen {
+        padding: 24px 32px 48px;
+    }
+}
+
+/* ---------- Banner ---------- */
+
+.home-screen .home-hero {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 36px;
+    padding: 30px 28px 28px;
+    border: 1px solid rgba(var(--forma-accent-rgb), 0.35);
+    border-radius: 14px;
+    background: radial-gradient(ellipse at 85% 10%, rgba(var(--forma-accent-rgb), 0.28), transparent 60%), linear-gradient(120deg, rgba(var(--forma-accent-rgb), 0.22), rgba(var(--forma-accent-rgb), 0.08));
+}
+
+/* Stacked layers on the right, like the Figma's 3D graphic. */
+.home-screen .home-hero-art {
+    position: absolute;
+    top: 10px;
+    right: 48px;
+    width: 220px;
+    height: 200px;
+    background: repeating-linear-gradient(90deg, rgba(var(--forma-accent-light-rgb), 0.16) 0 10px, transparent 10px 22px);
+    clip-path: polygon(0 18%, 70% 0, 100% 12%, 100% 100%, 30% 100%, 0 88%);
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+.home-screen .home-hero-eyebrow {
+    position: relative;
+    margin: 0 0 8px;
+    color: var(--forma-text-muted);
+    font: 500 0.7rem var(--forma-font-mono);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.home-screen .home-hero-title {
+    position: relative;
+    margin: 0 0 22px;
+    color: var(--forma-heading);
+    font-size: 1.85rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.home-screen .home-hero-actions {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.home-screen .home-hero-action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-height: 108px;
+    padding: 16px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 10px;
+    background: var(--forma-panel);
+    color: var(--forma-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+    .home-screen .home-hero-action:hover {
+        transform: translateY(-2px);
+        border-color: rgba(var(--forma-accent-rgb), 0.7);
+    }
+
+    .home-screen .home-hero-action:focus-visible {
+        outline: 2px solid var(--forma-teal-text);
+        outline-offset: 2px;
+    }
+
+.home-screen .home-hero-action-icon {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    background: var(--forma-panel-alt);
+    color: var(--forma-teal-text);
+}
+
+.home-screen .home-hero-action-title {
+    color: var(--forma-heading);
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.home-screen .home-hero-action-hint {
+    color: var(--forma-text-dim);
+    font-size: 0.78rem;
+}
+
+/* ---------- Recent ---------- */
+
+@media (min-width: 761px) {
+    .home-screen .home-recent-v2-header {
+        align-items: center;
+        margin-bottom: 18px;
+    }
+}
+
+.home-screen .home-recent-title-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+    .home-screen .home-recent-title-row .home-section-title {
+        margin: 0 !important;
+        font-size: 1.15rem;
+    }
+
+/* Segmented tabs, as in the Figma. */
+.home-screen .home-recent-tabs {
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 999px;
+}
+
+.home-screen .home-recent-tab {
+    margin: 0;
+    padding: 5px 12px;
+    border: 0;
+    border-radius: 999px;
+    font-size: 0.78rem;
+}
+
+    .home-screen .home-recent-tab.is-active {
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+    }
+
+.home-screen .home-view-all-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+    border: 0;
+    background: none;
+    color: var(--forma-text-muted);
+    font: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+    .home-screen .home-view-all-link:hover {
+        color: var(--forma-text);
+    }
+
+/* Portrait cards with the name and details under them. */
+.home-screen .home-file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+}
+
+.home-screen .home-file-card {
+    border: 0;
+    background: none;
+    overflow: visible;
+}
+
+    .home-screen .home-file-card:hover .home-file-preview {
+        border-color: rgba(var(--forma-accent-rgb), 0.7);
+    }
+
+.home-screen .home-file-preview {
+    aspect-ratio: 3 / 4;
+    overflow: hidden;
+    border: 1px solid var(--forma-border);
+    border-radius: 10px;
+}
+
+.home-screen .home-file-copy {
+    gap: 6px;
+    padding: 12px 2px 0;
+}
+
+.home-screen .home-file-name {
+    font-size: 0.92rem;
+    font-weight: 500;
+}
+
+.home-screen .home-file-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    min-width: 0;
+}
+
+    .home-screen .home-file-meta .home-file-kind {
+        white-space: nowrap;
+    }
+
+    .home-screen .home-file-meta .home-file-time {
+        margin: 0;
+        color: var(--forma-text-dim);
+        font: 0.7rem var(--forma-font-mono);
+        white-space: nowrap;
+    }
+
+/* ---------- Layout by width ---------- */
+
+/* Wider screens use the banner; phones keep the welcome line. */
+@media (min-width: 761px) {
+    .home-screen .home-phone-only {
+        display: none;
+    }
+}
+
+@media (max-width: 1000px) {
+    .home-screen .home-hero-art {
+        display: none;
+    }
+}
+
+@media (max-width: 760px) {
+    .home-screen .home-hero {
+        display: none;
+    }
+
+    .home-screen .home-recent-title-row {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .home-screen .home-view-all-link {
+        align-self: flex-start;
+    }
+
+    .home-screen .home-file-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+}

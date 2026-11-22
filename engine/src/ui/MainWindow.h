@@ -11,7 +11,8 @@ centre and arranges the editor around it: menu bar, main toolbar, status
 bar, and the dockable Scene (outliner), Inspector, Assets, My Models,
 Console and Audio panels, plus the Account menu for signing in with a web
 app account. It owns the scene-editing commands (import, select, rename,
-delete, render mode, export), loads .ply files and writes exports on
+delete, render mode, export), builds new models from photos or videos on
+this PC (Generate Model, no server), loads .ply files and writes exports on
 worker threads, accepts .ply
 drag-and-drop, and persists layout and preferences with QSettings.
 **************************************************************************/
@@ -33,11 +34,16 @@ class QLabel;
 class QMenu;
 class QProgressBar;
 class QThread;
+class QTimer;
 class QToolBar;
 
 #include "splat/SplatTrimmer.h"
+#include "ui/GenerateModelDialog.h" // GenerationFollowUp
 
+struct JobStatus;
 struct SplatVertex;
+class LocalReconstruction;
+class QPushButton;
 class SplatModel;
 
 class AssetBrowserPanel;
@@ -47,6 +53,7 @@ class ConsolePanel;
 class InspectorPanel;
 class OutlinerPanel;
 class RemoteModelsPanel;
+class StressTestPanel;
 class Viewport;
 
 class MainWindow : public QMainWindow {
@@ -87,6 +94,7 @@ private:
     // `trimData` is the values the import was trimmed with (stored on the model).
     void finishImport(const QString& path, std::vector<SplatVertex>& splats, std::vector<SplatVertex>& original,
                       const TrimData& trimData);
+    void generateStressTestSphere();               // adds a generated 1M-splat sphere to the scene
     void showTrimDialog();
     void applyDefaultTrim(const TrimData& trim);   // saves the global defaults used for new imports
     void applyModelTrim(const TrimData& trim);     // re-trims the selected model and stores the values on it
@@ -104,6 +112,22 @@ private:
     // Asks for export options and a file name, then writes the selected
     // model (or the whole scene) on a worker thread.
     void exportModels();
+    //Toggles developer mode
+    void toggleDevMode();
+    //Refreshes the dev mode menu text to match m_devMode
+    void updateDevModeAction();
+
+    // ---- generating a model (on this PC, no server) ----
+    // Asks what to build (GenerateModelDialog) and starts LocalReconstruction.
+    void showGenerateDialog();
+    void onBuildStatus(const JobStatus& status);
+    void onBuildFinished(const QString& plyPath, const QString& error);
+    void cancelBuild();
+    void setBuildBusy(bool busy);
+    void refreshBuildLabel(); // m_buildText plus the elapsed time
+    // Converts a newly built model (plyPath) to .obj next to it, on a worker thread. If
+    // followUp.importIntoScene, the splats it read are then imported too (one read of the .ply).
+    void saveGeneratedObj(const QString& plyPath, const GenerationFollowUp& followUp);
 
     // Rebuilds the outliner/inspector from the renderer and updates which
     // scene actions are enabled.
@@ -137,12 +161,14 @@ private:
     ConsolePanel* m_console = nullptr;
     AudioPanel* m_audio = nullptr;
     RemoteModelsPanel* m_remoteModels = nullptr;
+    StressTestPanel* m_stressTestPanel = nullptr; //Dev mode only, its dock is shown/hidden by updateDevModeAction
     QList<QDockWidget*> m_docks;
     QToolBar* m_toolBar = nullptr;
 
     //Actions.
     QAction* m_importAction = nullptr;
     QAction* m_exportAction = nullptr;
+    QAction* m_generateAction = nullptr;
     QAction* m_exitAction = nullptr;
     QAction* m_renameAction = nullptr;
     QAction* m_deleteAction = nullptr;
@@ -161,6 +187,7 @@ private:
     QAction* m_statsOverlayAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
     QAction* m_trimSettingsAction = nullptr;
+    QAction* m_stressTestSphereAction = nullptr;
     TrimData m_trimSettings;
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;
@@ -168,6 +195,7 @@ private:
     QAction* m_accountInfoAction = nullptr;
     QAction* m_signInAction = nullptr;
     QAction* m_signOutAction = nullptr;
+    QAction* m_devModeAction = nullptr;
 
     // Connection to the web app's backend (accounts, uploaded models).
     BackendClient* m_backend = nullptr;
@@ -179,12 +207,27 @@ private:
     QLabel* m_modeLabel = nullptr;
     QLabel* m_fpsLabel = nullptr;
     QElapsedTimer m_statsTimer;
+    QLabel* m_buildLabel = nullptr;       // model build: phase, detail, elapsed time
+    QProgressBar* m_buildBar = nullptr;
+    QPushButton* m_buildCancel = nullptr;
+
+    // Model build on this PC.
+    LocalReconstruction* m_localBuild = nullptr;
+    GenerationFollowUp m_buildFollowUp;
+    QString m_buildName;
+    QElapsedTimer m_buildClock;
+    QString m_buildText;           // phase + detail, without the elapsed time
+    QTimer* m_buildTick = nullptr; // redraws the elapsed time every second (COLMAP is quiet for minutes)
 
     // Import queue / worker.
     QStringList m_pendingImports;
     QPointer<QThread> m_loadThread;
     QPointer<QThread> m_exportThread;
+    QPointer<QThread> m_copyThread; // saving a generated model's .obj copy
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
+
+    //Dev mode
+    bool m_devMode = false;
 };

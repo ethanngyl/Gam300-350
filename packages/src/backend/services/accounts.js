@@ -19,6 +19,9 @@ The signup rules (email shape, password length, name), shared by
 The password check, with a per-email limit of 10 wrong passwords per 15
 minutes. Shared by /auth/login, the VM's /verify-account and the password
 change.
+- isValidEmail(email) / clearLoginFailures(email)
+The email rule, and lifting an email's wrong-password lock (after a
+password reset).
 - publicUser(user) / accountDetails(userId)
 What the frontend is told about a user (never the password hash), and the
 account page's details.
@@ -34,10 +37,37 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/
 // local), so attempts relayed through client machines count too.
 const failedLoginLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 10 })
 
-// Shared by signup and the account page's password change.
+// Shared by signup, the account page's password change and password reset.
 export const MIN_PASSWORD_LENGTH = 6
 
 // ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Whether a string looks like an email address (the same rule as signup).
+  \param email
+  any
+  \return
+    bool
+*/
+/************************************************************************/
+export function isValidEmail(email) {
+    return typeof email === 'string' && EMAIL_RE.test(email.trim())
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Lifts the wrong-password lock on an email (after a password reset, the
+    owner must be able to sign in straight away).
+  \param email
+  string
+*/
+/************************************************************************/
+export function clearLoginFailures(email) {
+    failedLoginLimiter.reset(email.trim().toLowerCase())
+}
 
 /************************************************************************/
 /*!

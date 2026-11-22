@@ -30,6 +30,7 @@ Tables:
               machine's users).
   scenes   -- Scene Builder scenes, each a versioned JSON document.
   perf_minutes -- API response times and website load times, per minute.
+  password_resets -- "Forgot password?" codes (hashed), one per account.
   synced_jobs, job_images, job_models, job_model_chunks -- the shared
               library (see below).
 - hashPassword(password)
@@ -106,6 +107,9 @@ converted in services/scenes.js; this file only stores them.
 - addPerfMinutes / listPerfMinutes / deletePerfOlderThan
 Per-minute API and page-load timing summaries (table perf_minutes, see
 services/performance.js).
+- savePasswordReset / getPasswordReset / countResetAttempt / deletePasswordReset
+"Forgot password?" codes, one per account, stored only as a hash (table
+password_resets, see services/passwordReset.js).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -151,8 +155,9 @@ await runMigrations(db, {
   log: (line) => console.log(`[backend] database: ${line}`),
 })
 
-// Expired sessions are useless; clear them out once per startup.
+// Expired sessions (and password reset codes) are useless; clear them out once per startup.
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
+db.prepare('DELETE FROM password_resets WHERE expires_at <= ?').run(Date.now())
 
 const insertUser = db.prepare(
   'INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?) RETURNING id, email, name, role, created_at'
@@ -320,6 +325,16 @@ const upsertPerfMinute = db.prepare(`
 `)
 const selectPerfSince = db.prepare('SELECT kind, name, minute, count, errors, sum_ms, max_ms, buckets FROM perf_minutes WHERE minute >= ?')
 const deletePerfBefore = db.prepare('DELETE FROM perf_minutes WHERE minute < ?')
+
+// "Forgot password?" codes (services/passwordReset.js): one per account.
+const upsertPasswordReset = db.prepare(`
+  INSERT INTO password_resets (user_id, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)
+  ON CONFLICT(user_id) DO UPDATE SET
+    code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0, created_at = excluded.created_at
+`)
+const selectPasswordReset = db.prepare('SELECT code_hash, expires_at, attempts, created_at FROM password_resets WHERE user_id = ?')
+const addResetAttempt = db.prepare('UPDATE password_resets SET attempts = attempts + 1 WHERE user_id = ? RETURNING attempts')
+const removePasswordReset = db.prepare('DELETE FROM password_resets WHERE user_id = ?')
 
 // users rows as the rest of the backend sees them (camelCase, dates in ms).
 function userFromRow(row)
@@ -1337,5 +1352,69 @@ export function listPerfMinutes(since)
 export function deletePerfOlderThan(before)
 {
   return Number(deletePerfBefore.run(before).changes)
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Saves a new "Forgot password?" code for a user, replacing any earlier
+    one (and its count of wrong tries).
+  \param userId
+  number
+  \param codeHash
+  string
+    The code's hash (hashPassword), never the code itself
+  \param expiresAt
+  number
+    When it stops working (epoch ms)
+*/
+/************************************************************************/
+export function savePasswordReset(userId, codeHash, expiresAt)
+{
+  upsertPasswordReset.run(userId, codeHash, expiresAt, Date.now())
+}
+
+/************************************************************************/
+/*!
+  \brief
+    A user's current "Forgot password?" code.
+  \param userId
+  number
+  \return
+    { codeHash, expiresAt, attempts, createdAt }, or null if none
+*/
+/************************************************************************/
+export function getPasswordReset(userId)
+{
+  const row = selectPasswordReset.get(userId)
+  return row ? { codeHash: row.code_hash, expiresAt: row.expires_at, attempts: row.attempts, createdAt: row.created_at } : null
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Counts one wrong code against a user's current reset code.
+  \param userId
+  number
+  \return
+    The number of wrong codes so far (0 if there is no code)
+*/
+/************************************************************************/
+export function countResetAttempt(userId)
+{
+  return addResetAttempt.get(userId)?.attempts ?? 0
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Deletes a user's "Forgot password?" code (used, or given up on).
+  \param userId
+  number
+*/
+/************************************************************************/
+export function deletePasswordReset(userId)
+{
+  removePasswordReset.run(userId)
 }
 // ----- End of Functions ----------------------------------------------------- //

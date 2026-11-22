@@ -10,12 +10,14 @@ Picture on a model card in the Library and the Model Viewer.
 - ModelCover({ coverUrl, photoUrl, icon })
 React component. Shows the object cut out of one of the job's photos
 (coverUrl, GET /jobs/:id/cover.webp, only on jobs with background masks).
-If there is none, or it fails to load, it shows the job's first photo
-(photoUrl), and without that the given icon.
+If there is none, or it fails to load, it shows the small copy of the
+job's first photo (photoUrl, see smallPhotoUrl), and without that the
+given icon.
 **************************************************************************/
 
 import { useState } from 'react';
 import Icon from './Icons.jsx';
+import { smallPhotoUrl } from './LibraryPhotos.js';
 
 function ModelCover({ coverUrl, photoUrl, icon }) {
     // The cut-out couldn't be loaded (e.g. the server couldn't make it).
@@ -34,7 +36,7 @@ function ModelCover({ coverUrl, photoUrl, icon }) {
         );
     }
     if (photoUrl) {
-        return <img className="library-thumb-image" src={photoUrl} alt="" loading="lazy" draggable={false} />;
+        return <img className="library-thumb-image" src={smallPhotoUrl(photoUrl)} alt="" loading="lazy" decoding="async" draggable={false} />;
     }
     return <Icon name={icon} size={44} />;
 }

@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "migrate": "node src/backend/migrate.js",
+    "mail:test": "node src/backend/services/mail.js",
     "test": "node --test --test-concurrency=1 \"src/backend/tests/*.test.js\"",
     "perf": "node src/backend/perf-budget.js",
     "load": "node src/backend/load-test.js",
@@ -24,6 +25,7 @@
     "express": "^5.2.1",
     "file-type": "^22.1.0",
     "multer": "^2.3.0",
+    "nodemailer": "10.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "^0.186.0"

@@ -611,6 +611,129 @@
     color: var(--forma-text-muted);
 }
 
+/* "Add model from library" (ModelPickerDialog), laid out like the Genesis
+   Figma: header, search with a count, a grid to pick from, then a footer. */
+.scene-builder-dialog.scene-builder-picker {
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.scene-builder-picker .scene-builder-dialog-head {
+    padding: 18px 20px 18px 24px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+.scene-builder-dialog-close {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--forma-text);
+    cursor: pointer;
+}
+
+.scene-builder-picker-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    padding: 20px 24px 24px;
+}
+
+.scene-builder-picker-search-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.scene-builder-picker-search {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 42px;
+    padding: 0 14px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 10px;
+    background: var(--forma-panel-alt);
+    color: var(--forma-text-dim);
+}
+
+    .scene-builder-picker-search input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: var(--forma-text);
+        font: inherit;
+        font-size: 0.86rem;
+    }
+
+.scene-builder-picker-count {
+    color: var(--forma-text-muted);
+    font: 0.72rem var(--forma-font-mono);
+    white-space: nowrap;
+}
+
+.scene-builder-picker .scene-builder-model-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.scene-builder-picker .scene-builder-model-card {
+    padding: 0 0 12px;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+    .scene-builder-picker .scene-builder-model-card.is-selected {
+        border-color: var(--forma-blue);
+        box-shadow: 0 0 0 1px var(--forma-blue);
+    }
+
+    .scene-builder-picker .scene-builder-model-card .scene-builder-model-name,
+    .scene-builder-picker .scene-builder-model-card .scene-builder-model-meta {
+        padding: 0 12px;
+    }
+
+.scene-builder-picker .scene-builder-model-thumb {
+    position: relative;
+    margin-bottom: 8px;
+    border-radius: 0;
+    background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 12px), var(--forma-panel-raised);
+}
+
+.scene-builder-model-tick {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--forma-blue);
+    color: var(--forma-on-accent);
+}
+
+.scene-builder-picker-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--forma-border);
+}
+
 .scene-builder-scene-list {
     list-style: none;
     margin: 0;

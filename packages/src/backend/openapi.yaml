@@ -182,7 +182,27 @@ paths:
       description: |
         On the VM, redirects to Google's account chooser with a one-use state
         cookie. On other machines, redirects to the VM's /auth/google.
+
+        A team machine (with a working VM connection) adds `return_to` (its
+        own `/api/v1/auth/google/finish`) and `return_state` (a random state
+        it also keeps in a cookie), so the sign-in ends on its own website:
+        the VM then sends the browser back there with a one-time code instead
+        of signing in on the VM's website. The VM only accepts a `return_to`
+        on a loopback address (localhost, 127.0.0.1, [::1]) or an origin in
+        its `GOOGLE_RETURN_ORIGINS`, with exactly that path; any other is
+        ignored.
       security: []
+      parameters:
+        - name: return_to
+          in: query
+          description: VM only. Where to send the browser back to, with the one-time code.
+          schema: { type: string }
+          example: http://localhost:5005/api/v1/auth/google/finish
+        - name: return_state
+          in: query
+          description: VM only. The team machine's state, sent back with the code.
+          schema: { type: string, pattern: '^[\w-]{16,128}$' }
+          example: Zm9vYmFyYmF6cXV4MTIz
       responses:
         '302':
           description: Redirect to Google (or the VM)
@@ -208,13 +228,130 @@ paths:
         - { name: error, in: query, schema: { type: string }, example: access_denied }
       responses:
         '302':
-          description: Signed in (to /) or failed (to /?login=google_failed or google_denied)
+          description: |
+            Signed in (to /) or failed (to /?login=google_failed or
+            google_denied). If the sign-in started on a team machine, back to
+            its `return_to` instead, with `state` and either a one-time
+            `code` (no session on the VM) or an `error`.
           headers:
             Location:
               schema: { type: string }
               example: /
         '503':
           description: Google sign-in isn't set up here
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Google sign-in is not available here. }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Email a 6-digit password reset code
+      description: |
+        If the email has an account, emails it a 6-digit code that works once,
+        for 15 minutes (`RESET_CODE_TTL_MIN`); a new request replaces the old
+        code. The reply is the same whether or not the account exists. Limits:
+        one request per email per minute and 3 per hour, 10 per IP address per
+        hour. The VM (or a machine in local mode) sends the email; a team
+        machine passes the request on to the VM.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+            example: { email: alice@example.com }
+      responses:
+        '202':
+          description: Sent if the account exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: "If an account exists for that email, we've sent it a 6-digit code. It works for 15 minutes." }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          description: Email isn't set up on the machine that holds the accounts, or the VM can't be reached
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: "Password reset by email isn't set up here. Ask a team admin to reset your password." }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Set a new password with the emailed code
+      description: |
+        An unknown email, a wrong code and an expired code all give the same
+        400. After 5 wrong codes the code stops working. On success every
+        session of the account is signed out (sign in again with the new
+        password), the wrong-password lock is lifted, and the owner is
+        emailed that the password changed. 20 tries per IP address per 15
+        minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetInput' }
+            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: Password changed. Sign in with your new password. }
+        '400':
+          description: Wrong or expired code, or a new password that is too short
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: That code is wrong or has expired. Check the email, or ask for a new code. }
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/google/finish:
+    get:
+      tags: [Auth]
+      operationId: finishGoogleSignInHere
+      summary: Back from the VM after Google sign-in (team machines)
+      description: |
+        The VM sends the browser here after a Google sign-in that started on
+        this team machine's website. `state` must match the cookie this
+        machine set in GET /auth/google (one use only). The one-time `code`
+        is redeemed with the VM (POST /redeem-google-code), the account is
+        copied here and a session starts.
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string }, example: 3vQ0bq7m1Xk2cG9yZXRoYW5mb3J0eXRocmVlY2hhcnM }
+        - { name: state, in: query, schema: { type: string }, example: Zm9vYmFyYmF6cXV4MTIz }
+        - { name: error, in: query, schema: { type: string, enum: [google_denied, google_failed] }, example: google_denied }
+      responses:
+        '302':
+          description: Signed in (to /) or failed (to /?login=google_failed or google_denied)
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SessionCookie'
+            Location:
+              schema: { type: string }
+              example: /
+        '503':
+          description: This machine isn't a team machine (AUTH_MODE isn't client)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -495,10 +632,18 @@ paths:
       tags: [Jobs]
       operationId: getJobImage
       summary: One of a job's photos
+      description: >-
+        The original photo, or with `size=small` a small WebP copy (480 px on
+        the longest side) for cards and grids. The copy is made the first
+        time it is asked for; if it can't be made, the original is sent.
       security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PhotoSize'
       responses:
         '200':
           $ref: '#/components/responses/Photo'
+        '400':
+          $ref: '#/components/responses/BadPhotoSize'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -871,6 +1016,130 @@ paths:
           $ref: '#/components/responses/TooManyAttempts'
         '503':
           $ref: '#/components/responses/NotAuthority'
+  /redeem-google-code:
+    post:
+      tags: [VM]
+      operationId: vmRedeemGoogleCode
+      summary: Trade a Google sign-in's one-time code for the account (for a team machine)
+      description: |
+        The code comes from GET /auth/google/callback when the sign-in started
+        on a team machine's website. Each code works once, for 60 seconds
+        (`GOOGLE_HANDOFF_TTL_SEC`).
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+            example: { code: 3vQ0bq7m1Xk2cG9yZXRoYW5mb3J0eXRocmVlY2hhcnM }
+      responses:
+        '200':
+          description: The account the code was made for
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VmUser' }
+              example: { id: 7, email: alice@example.com, name: Alice, role: user }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '404':
+          description: Unknown code, already used or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Unknown or expired code. }
+        '503':
+          $ref: '#/components/responses/NotAuthority'
+  /password-reset/request:
+    post:
+      tags: [VM]
+      operationId: vmRequestPasswordReset
+      summary: Email a reset code (for a team machine's "Forgot password?")
+      description: The same as POST /auth/forgot-password, run on the VM. A 429 also says when to try again.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+            example: { email: alice@example.com }
+      responses:
+        '202':
+          description: Sent if the account exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties: { message: { type: string } }
+              example: { message: "If an account exists for that email, we've sent it a 6-digit code. It works for 15 minutes." }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '429':
+          description: Too many requests for this email
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, retryAfterSec]
+                properties:
+                  error: { type: string }
+                  retryAfterSec: { type: integer }
+              example: { error: Too many attempts. Try again in 1 minute., retryAfterSec: 42 }
+        '503':
+          description: Not the VM, or email isn't set up on it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: This server is not the account authority. }
+  /password-reset/confirm:
+    post:
+      tags: [VM]
+      operationId: vmConfirmPasswordReset
+      summary: Set a new password with a reset code (for a team machine)
+      description: |
+        The same as POST /auth/reset-password, run on the VM. The reply names
+        the account, so the team machine signs it out of its own sessions too.
+      security: [{ authorityKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetInput' }
+            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, message]
+                properties:
+                  id: { type: integer }
+                  message: { type: string }
+              example: { id: 7, message: Password changed. Sign in with your new password. }
+        '400':
+          description: Wrong or expired code, or a new password that is too short
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: That code is wrong or has expired. Check the email, or ask for a new code. }
+        '401':
+          $ref: '#/components/responses/KeyRefused'
+        '503':
+          $ref: '#/components/responses/NotAuthority'
   /library/jobs:
     get:
       tags: [VM]
@@ -1028,9 +1297,12 @@ paths:
       security: [{ authorityKey: [] }]
       parameters:
         - $ref: '#/components/parameters/ActAsUser'
+        - $ref: '#/components/parameters/PhotoSize'
       responses:
         '200':
           $ref: '#/components/responses/Photo'
+        '400':
+          $ref: '#/components/responses/BadPhotoSize'
         '401':
           $ref: '#/components/responses/KeyOrUserRefused'
         '404':
@@ -1350,6 +1622,13 @@ components:
       required: true
       schema: { type: string, pattern: '^[\w.-]+\.(jpe?g|png)$' }
       example: 0000.jpg
+    PhotoSize:
+      name: size
+      in: query
+      required: false
+      description: '`small`: a small WebP copy (480 px on the longest side) instead of the original.'
+      schema: { type: string, enum: [small] }
+      example: small
     SceneId:
       name: id
       in: path
@@ -1691,6 +1970,15 @@ components:
         image/png:
           schema: { type: string, format: binary }
           example: (PNG bytes)
+        image/webp:
+          schema: { type: string, format: binary }
+          example: (WebP bytes, with size=small)
+    BadPhotoSize:
+      description: '`size` isn''t `small`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: size must be "small" }
     ImageNotFound:
       description: No such photo, or the job isn't the caller's
       content:
@@ -1832,6 +2120,13 @@ components:
         email: { type: string }
         name: { type: string }
         role: { enum: [user, admin] }
+    PasswordResetInput:
+      type: object
+      required: [email, code, newPassword]
+      properties:
+        email: { type: string }
+        code: { type: string, description: The 6 digits from the email }
+        newPassword: { type: string, minLength: 6 }
     Account:
       type: object
       required: [name, email, role, createdAt, memberSince, emailVerified, passwordChangedAt, signInMethods, photoVersion]
