@@ -548,6 +548,9 @@ void MainWindow::createDocks() {
     connect(m_stressTestPanel, &StressTestPanel::selectTestRequested, this, [runStressTest] {
         runStressTest("Select test", [](StressTestRunner& runner) { return runner.TestSelect(); });
     });
+    connect(m_stressTestPanel, &StressTestPanel::moveTestRequested, this, [runStressTest] {
+        runStressTest("Move test", [](StressTestRunner& runner) { return runner.TestMove(); });
+    });
 
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);

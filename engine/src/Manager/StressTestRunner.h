@@ -34,6 +34,14 @@ public:
 	//(the renderer re-marks the selected splats and uploads on its next draw)
 	std::vector<StressResult> TestSelect();
 
+	//Moves the selected model, then all, half and a selected tenth of its splats, timing each
+	//Uses the same undoable commands as the editor, on a private undo stack so the editor's undo history is untouched
+	//Every move is undone afterwards, so the model ends up exactly as it started
+	//Returns nothing if the renderer is not ready or no model is selected
+	//Each move is timed in two steps: the apply (building the undo data and changing the splats in memory)
+	//and the first frame after (uploading the changed splats and drawing)
+	std::vector<StressResult> TestMove();
+
 private:
 	Viewport* m_viewport;
 };
