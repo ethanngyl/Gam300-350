@@ -552,6 +552,9 @@ void MainWindow::createDocks() {
     connect(m_stressTestPanel, &StressTestPanel::moveTestRequested, this, [runStressTest] {
         runStressTest("Move test", [](StressTestRunner& runner) { return runner.TestMove(); });
     });
+    connect(m_stressTestPanel, &StressTestPanel::undoRedoTestRequested, this, [runStressTest] {
+        runStressTest("Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); });
+    });
     connect(m_stressTestPanel, &StressTestPanel::deleteTestRequested, this, [this, runStressTest] {
         const bool ran = runStressTest("Delete test", [](StressTestRunner& runner) { return runner.TestDelete(); });
         if (ran)

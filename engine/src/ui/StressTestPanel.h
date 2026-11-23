@@ -25,6 +25,7 @@ signals:
 	void selectTestRequested();
 	void moveTestRequested();
 	void deleteTestRequested();
+	void undoRedoTestRequested();
 
 private:
 	//Shows the explanation of the selected row under the table, or a hint if no row is selected

@@ -51,6 +51,14 @@ public:
 	//Each delete is timed in two steps: the apply (removing in memory) and the first frame after (uploading what is left and drawing)
 	std::vector<StressResult> TestDelete();
 
+	//Times undo and redo of a model move, a move of all splats and a delete of half the splats
+	//Each edit is pushed on a private undo stack as setup (not timed), then undone and redone under the timer
+	//Every edit is undone at the end, so the model ends up exactly as it started
+	//Returns nothing if the renderer is not ready or no model is selected
+	//Each undo and redo is timed in two steps: the apply (reverting or re-applying in memory)
+	//and the first frame after (uploading the changed splats and drawing)
+	std::vector<StressResult> TestUndoRedo();
+
 private:
 	Viewport* m_viewport;
 };

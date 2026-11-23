@@ -10,6 +10,8 @@
 #include <QElapsedTimer>
 #include <QUndoStack>
 
+#include <functional>
+
 #include <cstdint>
 
 namespace {
@@ -37,6 +39,8 @@ namespace {
 	const QString kApplyTip = "Makes the change in memory (CPU only).";
 	const QString kRedrawTip = "Draws one frame so the change shows on screen. Updates the splat data and sends it to the graphics card (CPU + GPU).";
 	const QString kTotalTip = "All the steps above added together.";
+	const QString kUndoTip = "Undoes the edit in memory (CPU only). Nothing is drawn yet.";
+	const QString kRedoTip = "Redoes the edit in memory (CPU only). Nothing is drawn yet.";
 }
 
 std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
@@ -265,6 +269,73 @@ std::vector<StressResult> StressTestRunner::TestDelete() {
 		results.push_back({ "Delete model: Apply", total, applyMs,
 			"Removes the whole model from the scene in memory (CPU only)." });
 		results.push_back({ "Delete model: Redraw", total, frameMs, kRedrawTip });
+	}
+	return results;
+}
+
+std::vector<StressResult> StressTestRunner::TestUndoRedo() {
+	SplatRenderer* renderer = m_viewport->renderer();
+	if (!renderer) {
+		return {};
+	}
+	const int modelIndex = renderer->GetSelectedModel();
+	SplatModel* model = renderer->GetModel(modelIndex);
+	const size_t total = renderer->GetSplatCount(modelIndex);
+	if (!model || total == 0) {
+		return {};
+	}
+
+	//Start from a clean, uploaded scene so the first case is not charged for earlier pending work
+	renderer->ClearSelection();
+	m_viewport->RenderFrameBlocking();
+
+	const glm::vec3 offset(0.5f, 0.0f, 0.0f);
+	const glm::mat4 delta = glm::translate(glm::mat4(1.0f), offset);
+	const std::vector<uint32_t> allIndices = MakeIndices(total, 1);
+	const std::vector<uint32_t> halfIndices = MakeIndices(total, 2);
+	std::vector<uint8_t> keepMask(total, 1); //1 = keep, 0 = delete, every 2nd splat goes
+	for (uint32_t index : halfIndices) {
+		keepMask[index] = 0;
+	}
+
+	struct Case {
+		const char* label;
+		size_t splatCount; //Splats the edit touches
+		std::function<QUndoCommand*()> makeEdit;
+	};
+	const Case cases[] = {
+		{ "move model", total, [&] {
+			const glm::mat4 before = model->GetTransform();
+			return new MoveModelCommand(model, before, glm::translate(before, offset));
+		} },
+		{ "move all splats", total, [&] { return new MoveSplatsCommand(renderer, model, allIndices, delta); } },
+		{ "delete half of splats", halfIndices.size(), [&] { return new RemoveSplatsCommand(renderer, model, keepMask); } },
+	};
+
+	QUndoStack stack; //Private, the editor's own undo history is not touched
+	std::vector<StressResult> results;
+
+	for (const Case& c : cases) {
+		//Setup, not timed: do the edit once so there is something to undo
+		stack.push(c.makeEdit());
+		m_viewport->RenderFrameBlocking();
+
+		const double undoApplyMs = MeasureMs([&] { stack.undo(); });
+		const double undoFrameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
+		const double redoApplyMs = MeasureMs([&] { stack.redo(); });
+		const double redoFrameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
+
+		const QString label = c.label;
+		results.push_back({ "Undo " + label + ": Apply", c.splatCount, undoApplyMs, kUndoTip });
+		results.push_back({ "Undo " + label + ": Redraw", c.splatCount, undoFrameMs, kRedrawTip });
+		results.push_back({ "Redo " + label + ": Apply", c.splatCount, redoApplyMs, kRedoTip });
+		results.push_back({ "Redo " + label + ": Redraw", c.splatCount, redoFrameMs, kRedrawTip });
+
+		//The edit is redone at this point, undo it so the model is back as it was, and start the next case empty
+		stack.undo();
+		stack.clear();
+		renderer->ClearSelection();
+		m_viewport->RenderFrameBlocking();
 	}
 	return results;
 }

@@ -21,12 +21,14 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	auto* selectTestButton = new QPushButton("Select Test", this);
 	auto* moveTestButton = new QPushButton("Move Test", this);
 	auto* deleteTestButton = new QPushButton("Delete Test", this);
+	auto* undoRedoTestButton = new QPushButton("Undo/Redo Test", this);
 	auto* clearButton = new QPushButton("Clear Results", this);
 	buttonRow->addWidget(testAllButton);
 	buttonRow->addWidget(loadTestButton);
 	buttonRow->addWidget(selectTestButton);
 	buttonRow->addWidget(moveTestButton);
 	buttonRow->addWidget(deleteTestButton);
+	buttonRow->addWidget(undoRedoTestButton);
 	buttonRow->addStretch(); //Keeps the buttons at their normal size instead of stretching across the dock
 	buttonRow->addWidget(clearButton);
 	layout->addLayout(buttonRow);
@@ -54,6 +56,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	connect(selectTestButton, &QPushButton::clicked, this, &StressTestPanel::selectTestRequested);
 	connect(moveTestButton, &QPushButton::clicked, this, &StressTestPanel::moveTestRequested);
 	connect(deleteTestButton, &QPushButton::clicked, this, &StressTestPanel::deleteTestRequested);
+	connect(undoRedoTestButton, &QPushButton::clicked, this, &StressTestPanel::undoRedoTestRequested);
 	connect(clearButton, &QPushButton::clicked, this, [this] {
 		m_results->setRowCount(0);
 		ShowSelectedDescription(); //Nothing is selected any more
