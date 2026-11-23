@@ -20,6 +20,7 @@ through renderer().
 
 #include "gfx/Camera.h"
 #include "gfx/CropBoxRenderer.h"
+#include "gfx/GridRenderer.h"
 #include "Manager/InputManager.h"
 #include "metrics/FrameMetrics.h"
 #include "splat/CropBox.h"
@@ -62,6 +63,9 @@ public:
     // Qt UI -> ImGui: whether the ImGui "Engine Stats" overlay is drawn.
     void setShowImGuiStats(bool show) { m_showImGuiStats = show; }
 
+    // Qt UI -> viewport: whether the ground grid, axes and coordinate labels are drawn.
+    void setShowGrid(bool show) { m_showGrid = show; }
+
     // The scene renderer the editor panels operate on. Null until the GL
     // context exists (i.e. before the widget is first shown).
     SplatRenderer* renderer() const { return m_renderer.get(); }
@@ -92,6 +96,9 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
+    //Grid overlay: unit numbers along the X and Z axes, an XYZ direction marker in the
+    //bottom left corner, and a drop line + coordinates for the selected model
+    void DrawGridLabels(const glm::mat4& view, const glm::mat4& proj);
     //Top right row of tool buttons, active tool is highlighted
     void DrawToolButtons();
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
@@ -149,4 +156,7 @@ private:
 
     CropBox m_cropBox;
     std::unique_ptr<CropBoxRenderer> m_cropBoxRenderer; // created once the GL context exists
+
+    std::unique_ptr<GridRenderer> m_gridRenderer; // created once the GL context exists
+    bool m_showGrid = true;
 };
