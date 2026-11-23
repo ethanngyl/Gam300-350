@@ -533,8 +533,9 @@ void MainWindow::createDocks() {
 
     //Link the tests to the stress test panel
     connect(m_stressTestPanel, &StressTestPanel::loadTestRequested, this, [this, runStressTest] {
-        const bool ran = runStressTest("Load test", [](StressTestRunner& runner) {
-            return runner.TestLoad(splat_generate::kStressTestSplatCount);
+        const size_t count = m_stressTestPanel->SplatCount(); //From the spin box in the panel
+        const bool ran = runStressTest("Load test", [count](StressTestRunner& runner) {
+            return runner.TestLoad(count);
         });
         if (ran)
         {
@@ -903,8 +904,9 @@ void MainWindow::runAllStressTests() {
         std::function<std::vector<StressResult>(StressTestRunner&)> run;
     };
     //Load goes first, it adds the sphere the others work on. Delete goes last, it adds and removes a model
+    const size_t count = m_stressTestPanel->SplatCount(); //From the spin box in the panel
     const std::vector<Step> steps = {
-        { "Load test", [](StressTestRunner& runner) { return runner.TestLoad(splat_generate::kStressTestSplatCount); } },
+        { "Load test", [count](StressTestRunner& runner) { return runner.TestLoad(count); } },
         { "Select test", [](StressTestRunner& runner) { return runner.TestSelect(); } },
         { "Move test", [](StressTestRunner& runner) { return runner.TestMove(); } },
         { "Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); } },

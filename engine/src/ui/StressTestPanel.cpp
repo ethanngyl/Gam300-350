@@ -1,5 +1,7 @@
 #include "StressTestPanel.h"
 
+#include "splat/SplatGenerator.h"
+
 #include <QBrush>
 #include <QColor>
 #include <QFont>
@@ -8,6 +10,7 @@
 #include <QLabel>
 #include <QLocale>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -22,6 +25,12 @@ namespace {
 		QColor(0x6e, 0x3a, 0x3a), //Red
 	};
 	constexpr int kTestColorCount = static_cast<int>(sizeof(kTestColors) / sizeof(kTestColors[0]));
+
+	//A splat is 64 bytes and the tests copy the splats several times
+	//Min limits of the splat count box
+	constexpr int kMinSplatCount = 1000;
+	//Max limits of the splat count box
+	constexpr int kMaxSplatCount = 10000000;
 }
 
 StressTestPanel::StressTestPanel(QWidget* parent)
@@ -50,6 +59,17 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	m_stopButton->setEnabled(false); //Only usable during Test All
 	buttonRow->addWidget(m_stopButton);
 	buttonRow->addStretch(); //Keeps the buttons at their normal size instead of stretching across the dock
+
+	//Size of the sphere the Load Test and Test All generate
+	buttonRow->addWidget(new QLabel("Splats:", this));
+	m_splatCount = new QSpinBox(this);
+	m_splatCount->setRange(kMinSplatCount, kMaxSplatCount);
+	m_splatCount->setSingleStep(100000);
+	m_splatCount->setValue(static_cast<int>(splat_generate::kStressTestSplatCount));
+	m_splatCount->setGroupSeparatorShown(true); //1,000,000 instead of 1000000
+	m_splatCount->setToolTip("How many splats the test sphere has. Large values use a lot of memory, "
+		"the move, delete and undo tests make several copies of the splats.");
+	buttonRow->addWidget(m_splatCount);
 	buttonRow->addWidget(clearButton);
 	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, deleteTestButton,
 		undoRedoTestButton, clearButton };
@@ -90,7 +110,12 @@ void StressTestPanel::SetRunning(bool running, bool stoppable) {
 	for (QPushButton* button : m_runButtons) {
 		button->setEnabled(!running);
 	}
+	m_splatCount->setEnabled(!running);
 	m_stopButton->setEnabled(running && stoppable);
+}
+
+size_t StressTestPanel::SplatCount() const {
+	return static_cast<size_t>(m_splatCount->value());
 }
 
 void StressTestPanel::ShowSelectedDescription() {

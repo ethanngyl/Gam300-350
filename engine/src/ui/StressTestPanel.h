@@ -11,6 +11,7 @@
 class QBrush;
 class QLabel;
 class QPushButton;
+class QSpinBox;
 class QTableWidget;
 
 class StressTestPanel : public QWidget {
@@ -27,6 +28,9 @@ public:
 
 	//Appends a bold, gray total row that belongs to no single test (e.g. the total of a whole Test All run)
 	void AddTotal(const QString& label, double ms, const QString& tooltip);
+
+	//How many splats the test sphere is generated with, set by the spin box in the panel
+	size_t SplatCount() const;
 
 	//While a test runs the buttons that start tests are disabled
 	//Stop is only usable if the run can be stopped (Test All, between tests)
@@ -54,5 +58,6 @@ private:
 	QLabel* m_description = nullptr;
 	QList<QPushButton*> m_runButtons; //Every button that starts something, disabled while a test runs
 	QPushButton* m_stopButton = nullptr;
+	QSpinBox* m_splatCount = nullptr; //Splats in the test sphere
 	QStringList m_testNames; //Tests in the order they first showed results, the position picks the row color
 };
