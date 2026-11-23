@@ -37,6 +37,7 @@ class QThread;
 class QTimer;
 class QToolBar;
 
+#include "metrics/FrameMetrics.h"
 #include "splat/SplatTrimmer.h"
 #include "ui/GenerateModelDialog.h" // GenerationFollowUp
 
@@ -95,6 +96,8 @@ private:
     void finishImport(const QString& path, std::vector<SplatVertex>& splats, std::vector<SplatVertex>& original,
                       const TrimData& trimData);
     void generateStressTestSphere();               // adds a generated 1M-splat sphere to the scene
+    void setMetricsRecording(bool on);             // starts / stops a frame metrics recording
+    void showRecordingSummary(const FrameMetrics::RecordingSummary& summary); // non-modal results box
     void showTrimDialog();
     void applyDefaultTrim(const TrimData& trim);   // saves the global defaults used for new imports
     void applyModelTrim(const TrimData& trim);     // re-trims the selected model and stores the values on it
@@ -185,6 +188,7 @@ private:
     QAction* m_gaussianAction = nullptr;
     QAction* m_recenterCameraAction = nullptr;
     QAction* m_statsOverlayAction = nullptr;
+    QAction* m_recordMetricsAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
     QAction* m_trimSettingsAction = nullptr;
     QAction* m_stressTestSphereAction = nullptr;

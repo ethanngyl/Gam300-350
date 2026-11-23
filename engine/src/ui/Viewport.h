@@ -74,6 +74,9 @@ public:
     // Moves the orbit camera's pan target back to where it started.
     void recenterCamera() { m_camera.ResetPosition(); }
 
+    // Frame metrics, for starting / stopping a recording from the editor.
+    FrameMetrics& metrics() { return m_metrics; }
+
 protected:
     void initializeGL() override;
     void paintGL() override;
@@ -92,6 +95,8 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
+    //Red "REC" timer with the running average fps and drops, top left, while a metrics recording runs
+    void DrawRecordingIndicator();
     //Top right row of tool buttons, active tool is highlighted
     void DrawToolButtons();
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.

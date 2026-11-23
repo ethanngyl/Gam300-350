@@ -40,6 +40,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QDir>
 #include <QDockWidget>
 #include <QDragEnterEvent>
@@ -57,6 +58,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QStyle>
 #include <QThread>
@@ -166,6 +168,10 @@ MainWindow::MainWindow() {
     };
     m_viewport->onCropBoxEdited = [this](const glm::mat4& before, const glm::mat4& after) {
         commitCropBoxEdit(before, after);
+    };
+    // Runs inside paintGL, so the results box is shown on the next event loop pass instead.
+    m_viewport->metrics().onRecordingFinished = [this](const FrameMetrics::RecordingSummary& summary) {
+        QTimer::singleShot(0, this, [this, summary] { showRecordingSummary(summary); });
     };
 
     // The renderer only exists once the GL context does (first show).
@@ -390,6 +396,12 @@ void MainWindow::createActions() {
     m_statsOverlayAction->setStatusTip("Show the FPS / splat count overlay in the viewport");
     connect(m_statsOverlayAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowImGuiStats(on); });
 
+    m_recordMetricsAction = new QAction("&Record Metrics", this);
+    m_recordMetricsAction->setCheckable(true);
+    m_recordMetricsAction->setShortcut(QKeySequence("Ctrl+Shift+R"));
+    m_recordMetricsAction->setStatusTip("Record frame rate, frame drops and splat count until stopped, then show the average");
+    connect(m_recordMetricsAction, &QAction::toggled, this, [this](bool on) { setMetricsRecording(on); });
+
     m_trimOnImportAction = new QAction("&Trim Splats on Import", this);
     m_trimOnImportAction->setCheckable(true);
     m_trimOnImportAction->setChecked(true);
@@ -468,6 +480,7 @@ void MainWindow::createMenus() {
     viewMenu->addSeparator();
     viewMenu->addAction(m_recenterCameraAction);
     viewMenu->addAction(m_statsOverlayAction);
+    viewMenu->addAction(m_recordMetricsAction);
 
     QMenu* accountMenu = menuBar()->addMenu("&Account");
     accountMenu->addAction(m_accountInfoAction);
@@ -505,6 +518,7 @@ void MainWindow::createToolBar() {
 
     m_toolBar->addAction(m_recenterCameraAction);
     m_toolBar->addAction(m_statsOverlayAction);
+    m_toolBar->addAction(m_recordMetricsAction);
     m_toolBar->addSeparator();
     m_toolBar->addAction(m_deleteAction);
 }
@@ -879,6 +893,80 @@ void MainWindow::generateStressTestSphere() {
                                 .arg(generateMs).arg(uploadMs);
     qInfo("%s.", qPrintable(message));
     statusBar()->showMessage(message, kStatusMessageMs);
+}
+
+void MainWindow::setMetricsRecording(bool on) {
+    FrameMetrics& metrics = m_viewport->metrics();
+    if (!on) {
+        metrics.StopRecording(); // the results box opens once the last frames are processed
+        statusBar()->showMessage("Recording stopped, saving...", kStatusMessageMs);
+        return;
+    }
+    if (metrics.IsRecording()) return;
+    if (!metrics.StartRecording()) {
+        //Put the button back without re-entering this function
+        const QSignalBlocker blocker(m_recordMetricsAction);
+        m_recordMetricsAction->setChecked(false);
+        QMessageBox::warning(this, "Record Metrics",
+                             "Could not start a recording. The metrics folder may not be writable "
+                             "(see the Console for details).");
+        return;
+    }
+    statusBar()->showMessage("Recording metrics. Press Ctrl+Shift+R (or the Record Metrics button) to stop.",
+                             kStatusMessageMs);
+}
+
+void MainWindow::showRecordingSummary(const FrameMetrics::RecordingSummary& s) {
+    if (m_recordMetricsAction && m_recordMetricsAction->isChecked()) {
+        const QSignalBlocker blocker(m_recordMetricsAction);
+        m_recordMetricsAction->setChecked(false);
+    }
+
+    const QLocale locale;
+    const auto splats = [&](std::size_t n) { return locale.toString(static_cast<qulonglong>(n)); };
+    const double dropPct = s.frames ? 100.0 * static_cast<double>(s.drops) / static_cast<double>(s.frames) : 0.0;
+    QString text = QString(
+        "<h3>Average frame rate: %1 FPS</h3>"
+        "<table cellspacing='4'>"
+        "<tr><td>Duration</td><td>%2 s (%3 frames)</td></tr>"
+        "<tr><td>1% low / slowest second</td><td>%4 / %5 FPS</td></tr>"
+        "<tr><td>Frame time avg / p95 / p99 / max</td><td>%6 / %7 / %8 / %9 ms</td></tr>"
+        "<tr><td>Frame drops</td><td>%10 (%11% of frames, %12 missed refreshes)</td></tr>"
+        "<tr><td>Splats</td><td>%13 - %14 (avg %15), up to %16 models</td></tr>"
+        "<tr><td>Display refresh</td><td>%17 Hz</td></tr>")
+        .arg(s.avgFps, 0, 'f', 1)
+        .arg(s.durationSec, 0, 'f', 1).arg(s.frames)
+        .arg(s.onePercentLowFps, 0, 'f', 1).arg(s.minSecondFps, 0, 'f', 1)
+        .arg(s.avgFrameMs, 0, 'f', 2).arg(s.p95FrameMs, 0, 'f', 2).arg(s.p99FrameMs, 0, 'f', 2).arg(s.maxFrameMs, 0, 'f', 2)
+        .arg(s.drops).arg(dropPct, 0, 'f', 1).arg(s.missedVsyncs)
+        .arg(splats(s.minSplats), splats(s.maxSplats), splats(static_cast<std::size_t>(s.avgSplats + 0.5)))
+        .arg(s.maxModels)
+        .arg(s.refreshHz, 0, 'f', 0);
+    if (s.pauses > 0) {
+        text += QString("<tr><td>Pauses left out</td><td>%1 (frames over 1 s, e.g. window minimised)</td></tr>").arg(s.pauses);
+    }
+    text += "</table><p>Saved to the metrics <i>recordings</i> folder. To chart it, start the metrics dashboard "
+            "(<code>packages/start-metrics.bat</code>) and open its <b>Engine</b> tab.</p>";
+
+    qInfo("Recording saved: %s", qPrintable(QString::fromStdString(s.jsonPath)));
+    statusBar()->showMessage(QString("Recording saved: average %1 FPS, %2 drops").arg(s.avgFps, 0, 'f', 1).arg(s.drops),
+                             kStatusMessageMs);
+
+    auto* box = new QMessageBox(this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setWindowTitle("Metrics Recording");
+    box->setTextFormat(Qt::RichText);
+    box->setText(text);
+    QPushButton* dashboardButton = box->addButton("Open Dashboard", QMessageBox::ActionRole);
+    QPushButton* folderButton = box->addButton("Show Folder", QMessageBox::ActionRole);
+    box->addButton(QMessageBox::Close);
+    const QString folder = QString::fromStdString(m_viewport->metrics().RecordingDir());
+    const QString id = QString::fromStdString(s.id);
+    connect(box, &QMessageBox::buttonClicked, this, [dashboardButton, folderButton, folder, id](QAbstractButton* button) {
+        if (button == dashboardButton) QDesktopServices::openUrl(QUrl("http://localhost:5010/#/engine/" + id));
+        else if (button == folderButton) QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
+    });
+    box->open(); //Non-modal for the viewport: the editor keeps running behind it
 }
 
 void MainWindow::showTrimDialog() {
@@ -1533,6 +1621,7 @@ void MainWindow::showControls() {
         "<tr><td>Left mouse drag</td><td>Pan (when not grabbing a gizmo)</td></tr>"
         "<tr><td>Mouse wheel</td><td>Zoom</td></tr>"
         "<tr><td>Home</td><td>Recenter camera</td></tr>"
+        "<tr><td>Ctrl+Shift+R</td><td>Start / stop recording metrics (FPS, drops, splats)</td></tr>"
         "<tr><td colspan='2'><br><b>Selected model</b> (viewport focused)</td></tr>"
         "<tr><td>Q / W / E / R</td><td>Pan / Translate / Rotate / Scale tool</td></tr>"
         "<tr><td>Up / Down</td><td>Nudge along X</td></tr>"

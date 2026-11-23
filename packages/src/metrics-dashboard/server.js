@@ -26,14 +26,22 @@ Liveness probe: { ok, uptimeSec }.
 { generatedAt, count, sources, records[] } for every run.
 - GET /api/metrics/:jobId
 One run's record, or 404.
+- GET /api/engine-recordings
+Summaries (no per-second series) of the engine's metrics recordings.
+- GET /api/engine-recordings/:id
+One recording's summary with its per-second series, or 404.
+- GET /api/engine-recordings/:id/csv
+That recording's per-frame CSV as a download.
 Environment: METRICS_PORT (5010), METRICS_HOST (127.0.0.1),
-METRICS_JOBS_DIR (falls back to JOBS_DIR, then ../backend/jobs).
+METRICS_JOBS_DIR (falls back to JOBS_DIR, then ../backend/jobs),
+ENGINE_METRICS_DIR (falls back to %APPDATA%/CoDefine/Codefine Engine/metrics/recordings).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
 import express from 'express'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -52,6 +60,20 @@ const JOBS_DIR = path.resolve(
   process.env.METRICS_JOBS_DIR || process.env.JOBS_DIR || path.join(__dirname, '..', 'backend', 'jobs'),
 )
 const DIST_DIR = path.join(__dirname, 'dist')
+
+// Engine metrics recordings (engine/src/metrics/FrameMetrics.cpp writes them to
+// <user data>/metrics/recordings, Qt's AppDataLocation for CoDefine / Codefine Engine).
+const ENGINE_REC_ID_RE = /^rec_\d{8}_\d{6}(_\d{1,3})?$/
+function defaultEngineRecordingsDir() {
+  let base = process.env.APPDATA
+  if (!base) {
+    base = process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : path.join(os.homedir(), '.local', 'share')
+  }
+  return path.join(base, 'CoDefine', 'Codefine Engine', 'metrics', 'recordings')
+}
+const ENGINE_DIR = path.resolve(process.env.ENGINE_METRICS_DIR || defaultEngineRecordingsDir())
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -291,6 +313,47 @@ async function loadRecords() {
   return { records, sources }
 }
 
+/************************************************************************/
+/*!
+  \brief
+  Shape check for an engine recording summary (<id>.json), so a foreign or
+  half-written file is skipped instead of breaking the Engine tab.
+*/
+/************************************************************************/
+function isEngineRecording(value) {
+  return Boolean(value) && typeof value === 'object' && typeof value.id === 'string' &&
+    ENGINE_REC_ID_RE.test(value.id) && typeof value.avgFps === 'number' && Array.isArray(value.seconds)
+}
+
+/************************************************************************/
+/*!
+  \brief
+  Reads every engine recording summary in ENGINE_DIR, newest first. The
+  per-second series is left out unless withSeconds is set (the list view
+  doesn't need it).
+*/
+/************************************************************************/
+async function loadEngineRecordings(withSeconds = false) {
+  let names
+  try {
+    names = await fsp.readdir(ENGINE_DIR)
+  } catch {
+    return [] // No recording made on this machine yet.
+  }
+  const recordings = await Promise.all(
+    names
+      .filter((n) => n.endsWith('.json') && ENGINE_REC_ID_RE.test(n.slice(0, -5)))
+      .map(async (n) => {
+        const rec = await readJson(path.join(ENGINE_DIR, n))
+        if (!isEngineRecording(rec)) return null
+        if (withSeconds) return rec
+        const { seconds, ...summary } = rec
+        return { ...summary, secondsCount: seconds.length }
+      }),
+  )
+  return recordings.filter(Boolean).sort((a, b) => b.id.localeCompare(a.id))
+}
+
 // ----- End of Functions ----------------------------------------------------- //
 
 const app = express()
@@ -319,6 +382,26 @@ app.get('/api/metrics/:jobId', async (req, res) => {
   res.json(rec)
 })
 
+app.get('/api/engine-recordings', async (req, res) => {
+  const recordings = await loadEngineRecordings(false)
+  res.json({ generatedAt: new Date().toISOString(), dir: ENGINE_DIR, count: recordings.length, recordings })
+})
+
+app.get('/api/engine-recordings/:id', async (req, res) => {
+  if (!ENGINE_REC_ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid recording id' })
+  const rec = await readJson(path.join(ENGINE_DIR, `${req.params.id}.json`))
+  if (!isEngineRecording(rec)) return res.status(404).json({ error: 'No such recording' })
+  res.json(rec)
+})
+
+// Raw per-frame CSV, as a download.
+app.get('/api/engine-recordings/:id/csv', (req, res) => {
+  if (!ENGINE_REC_ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid recording id' })
+  const file = path.join(ENGINE_DIR, `${req.params.id}.csv`)
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'No such recording' })
+  res.download(file, `${req.params.id}.csv`)
+})
+
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }))
 
 // Built frontend (npm run metrics:build). In dev, Vite serves it instead.
@@ -344,4 +427,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, HOST, () => {
   console.log(`[metrics] dashboard on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`)
   console.log(`[metrics] reading ${JOBS_DIR}`)
+  console.log(`[metrics] engine recordings from ${ENGINE_DIR}`)
 })
