@@ -62,6 +62,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QToolBar>
 #include <QUrl>
 
+#include <algorithm>
 #include <functional>
 
 #include <memory>
@@ -1091,6 +1092,19 @@ void MainWindow::applyCropBox() {
     else {
         keep = ComputeCropKeepMask(model->splats(), model->GetTransform(), box);
     }
+    //Removing every splat will leave an empty model, remove the model instead
+    //Counted from the mask first so no need to copy it
+    const size_t removeCount = static_cast<size_t>(std::count(keep.begin(), keep.end(), uint8_t(0)));
+    if (removeCount > 0 && removeCount == keep.size()) {
+        const QString name = QString::fromStdString(model->GetName());
+        cancelCropBox(); //The box belongs to the model that is about to go
+        deleteSelectedModel(); //Also clears the undo stack
+        const QString message = QString("Removed every splat of %1, so the model was deleted").arg(name);
+        qInfo("%s.", qPrintable(message));
+        statusBar()->showMessage(message, kStatusMessageMs);
+        return;
+    }
+
     auto* command = new RemoveSplatsCommand(renderer, model, keep);
     if (command->RemovedCount() == 0) {
         delete command;

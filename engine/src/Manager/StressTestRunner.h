@@ -45,7 +45,8 @@ public:
 	//Deletes half and a selected tenth of the selected model's splats, then deletes a whole model, timing each
 	//Splat deletes use the editor's undoable command on a private undo stack and are undone afterwards
 	//The model delete cannot be undone, so it deletes a temporary copy of the model made just for the test
-	//Everything is deleted only partly, never all of a model's splats, so the model is never left empty
+	//Splat deletes only remove part of the model. Deleting every splat deletes the model in the editor,
+	//so that case is the model delete below
 	//Returns nothing if the renderer is not ready or no model is selected
 	//Each delete is timed in two steps: the apply (removing in memory) and the first frame after (uploading what is left and drawing)
 	std::vector<StressResult> TestDelete();
