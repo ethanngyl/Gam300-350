@@ -52,12 +52,6 @@ struct Vertex {
     glm::vec4 color;
 };
 
-const glm::vec4 kMinorColor(0.32f, 0.34f, 0.40f, 0.30f);
-const glm::vec4 kMajorColor(0.50f, 0.52f, 0.60f, 0.60f);
-const glm::vec3 kAxisX(0.95f, 0.30f, 0.30f);
-const glm::vec3 kAxisY(0.35f, 0.90f, 0.40f);
-const glm::vec3 kAxisZ(0.30f, 0.55f, 1.00f);
-
 void AddLine(std::vector<Vertex>& out, const glm::vec3& a, const glm::vec3& b, const glm::vec4& color) {
     out.push_back({ a, color });
     out.push_back({ b, color });
@@ -71,6 +65,14 @@ void AddAxis(std::vector<Vertex>& out, const glm::vec3& direction, const glm::ve
 }
 
 std::vector<Vertex> BuildGrid() {
+    //Colours are locals, not file-scope globals: glm constructors aren't noexcept, so a global
+    //would be a static initialiser that may throw (clang-tidy bugprone-throwing-static-initialization)
+    const glm::vec4 kMinorColor(0.32f, 0.34f, 0.40f, 0.30f);
+    const glm::vec4 kMajorColor(0.50f, 0.52f, 0.60f, 0.60f);
+    const glm::vec3 kAxisX(0.95f, 0.30f, 0.30f);
+    const glm::vec3 kAxisY(0.35f, 0.90f, 0.40f);
+    const glm::vec3 kAxisZ(0.30f, 0.55f, 1.00f);
+
     std::vector<Vertex> vertices;
     const float e = GridRenderer::kExtent;
     const int steps = static_cast<int>(std::lround(e / GridRenderer::kMinorStep));
