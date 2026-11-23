@@ -63,6 +63,8 @@ import { scanJobs, setImageNameSource, setModelSource } from './scan.js'
 import { jobs, killChildren, restoreJob, setSkipSampleCopy } from './pipeline.js'
 import { actAsUser, loadUser, requireAuthorityKey } from './middleware/session.js'
 import { jsonErrorHandler, jsonNotFound } from './middleware/errors.js'
+import { limitRequests } from './middleware/limits.js'
+import { createLimiter } from './ratelimit.js'
 import { clientAuthProblem } from './services/authority.js'
 import { googleSignInReady } from './services/google.js'
 import { afterJobEnds, queueBuild } from './services/jobs.js'
@@ -195,6 +197,11 @@ const api = express.Router()
 // they name. 503 on any machine that isn't the account authority.
 api.use('/library', requireAuthorityKey, actAsUser)
 
+// General rate limit on every API request (RATE_LIMIT_API_PER_MIN), per
+// signed-in user or else per address; after /library so req.user is set for
+// both. The website's own files (express.static above) aren't counted.
+api.use(limitRequests(createLimiter({ windowMs: 60 * 1000, max: config.rateLimitApiPerMin })))
+
 // Each Router holds full paths, so the order only matters where two match
 // the same path: sample jobs answer for their own ids before the job routes.
 api.use(catalogRoutes)
@@ -282,6 +289,11 @@ const server = app.listen(config.port, () =>
   console.log(`[backend] Python: ${config.pythonBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
   console.log(`[backend] builds: ${config.maxRunningJobs} at a time (MAX_RUNNING_JOBS), the rest wait in line`)
+  // Rate limits (middleware/limits.js); 0 = off.
+  const limitText = (n, unit) => (n > 0 ? `${n}/${unit}` : 'off')
+  console.log(`[backend] rate limits: API ${limitText(config.rateLimitApiPerMin, 'min')}, ` +
+    `builds ${limitText(config.rateLimitBuildsPerHour, 'hour')} and ${limitText(config.rateLimitBuildsPerDay, 'day')}, ` +
+    `downloads ${limitText(config.rateLimitDownloadsPerHour, 'hour')}`)
   // Which account mode this machine is in, and whether it can work.
   if (config.authMode === 'authority')
   {

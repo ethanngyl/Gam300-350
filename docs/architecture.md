@@ -208,6 +208,41 @@ Every API request is timed (`middleware/timing.js`), and each machine reports it
 
 Any other path answers 404 with a JSON `{ error }`.
 
+## Rate limits
+
+Every limit uses `ratelimit.js`: fixed windows, counted in memory, so the
+counts reset when the server restarts. That's enough here, because only one
+machine (the VM) holds the accounts. Over a limit, the reply is **429** with
+a `Retry-After` header and `{ error, retryAfterSec }`
+(`middleware/limits.js`). On the VM, `TRUST_PROXY=loopback` makes the
+"address" the visitor's real one rather than Caddy's.
+
+| What | Limit | Counted per | Where | Setting |
+|---|---|---|---|---|
+| Every API call | 600 / minute | signed-in user, else address | `server.js` | `RATE_LIMIT_API_PER_MIN` |
+| Starting a build (`POST /upload`, `/jobs/from-media`) | 10 / hour and 30 / day | user (admins exempt) | `routes/jobs.js` | `RATE_LIMIT_BUILDS_PER_HOUR`, `_PER_DAY` |
+| Full model download (`GET .../result.ply` answered 200) | 60 / hour | user (admins exempt) | `routes/jobs.js` | `RATE_LIMIT_DOWNLOADS_PER_HOUR` |
+| Sign-in | 30 / 15 min | address | `routes/auth.js` | - |
+| Wrong passwords | 10 / 15 min (then locked) | email | `services/accounts.js` | - |
+| Sign-up | 10 / hour | address | `routes/auth.js` | - |
+| "Forgot password?" | 10 / hour; 1 / minute and 3 / hour | address; email | `routes/passwordReset.js`, `services/passwordReset.js` | - |
+| Reset password with a code | 20 / 15 min | address | `routes/passwordReset.js` | - |
+| Account edits | 30 / hour | user | `routes/account.js` | - |
+| Feedback | 10 / hour | user | `routes/feedback.js` | - |
+| Page-load timings | 30 / minute | address | `routes/metrics.js` | - |
+
+- **A setting of 0 switches that limit off.** `npm run perf` does this for
+  the API and download limits, because it makes about 1,000 calls a minute
+  as one user.
+- **Calls carrying the shared key (`X-Auth-Key`) don't count towards the
+  per-minute limit.** These are team machines calling the VM, e.g.
+  `/library` syncs, and one machine carries many users' traffic.
+- **The build and download limits only count successes.** A rejected upload
+  (400, 413) doesn't use up a build. A range read (the website reading a
+  model's header), a HEAD request or a 304 doesn't count as a download.
+- **The website's own files** (HTML, JS, images under `web-app/dist`) are
+  served before the API and aren't limited.
+
 ## Configuration and secrets
 
 - Every setting comes from environment variables, usually set in
