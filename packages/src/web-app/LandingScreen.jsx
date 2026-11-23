@@ -137,7 +137,7 @@ function LandingScreen({ onLogIn, onGetStarted }) {
                     </nav>
                     <div className="landing-nav-actions">
                         <button type="button" className="landing-text-button" onClick={logIn}>Log in</button>
-                        <button type="button" className="forma-btn forma-btn-primary" onClick={getStarted}>Get started</button>
+                        <button type="button" className="forma-btn forma-btn-primary landing-nav-button" onClick={getStarted}>Get started</button>
                     </div>
                 </div>
             </header>
@@ -146,9 +146,15 @@ function LandingScreen({ onLogIn, onGetStarted }) {
                 <section className="landing-container landing-hero">
                     <div className="landing-headline-row">
                         <h1>Build 3D models<br />from photos.</h1>
-                        <div className="landing-actions">
-                            {getStartedFreeButton}
-                            <button type="button" className="forma-btn landing-big-button" onClick={logIn}>Log in</button>
+                        <div className="landing-hero-intro">
+                            <p>
+                                Upload 40 to 80 photos of an object, or a walkaround video. Genesis turns
+                                them into a Gaussian splat model you can edit, stage and share in your browser.
+                            </p>
+                            <div className="landing-actions">
+                                {getStartedFreeButton}
+                                <button type="button" className="forma-btn landing-big-button landing-outline-button" onClick={logIn}>Log in</button>
+                            </div>
                         </div>
                     </div>
 
@@ -184,7 +190,7 @@ function LandingScreen({ onLogIn, onGetStarted }) {
                 <section className="landing-container landing-section" id="product">
                     <div className="landing-section-head">
                         <h2>Inside Genesis</h2>
-                        <p>The same workspace you log in to. Every picture here is a screenshot of the real app.</p>
+                        <p>The same workspace you log in to. Nothing here is a mock-up of a future feature.</p>
                     </div>
 
                     <div className="landing-features">

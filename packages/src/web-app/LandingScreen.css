@@ -1,6 +1,7 @@
 /* ============================================================
    Landing page (LandingScreen.jsx), laid out like the Genesis landing
-   page design. Colours come from the theme tokens.
+   page design. Colours come from the theme tokens; the font is IBM Plex
+   Sans and headings are white, as in the Figma (the app uses Raleway).
    Sizes and spacing use clamp(), so the page scales smoothly as the
    window resizes: clamp(smallest, scales with width, largest).
    ============================================================ */
@@ -9,7 +10,16 @@
     min-height: 100vh;
     background: radial-gradient(ellipse at 100% 100%, rgba(var(--forma-accent-rgb), 0.08), transparent 55%), var(--forma-bg);
     color: var(--forma-text);
+    /* The Figma's font for this page only. Set on the token, so headings
+       and buttons (which use var(--forma-font)) follow it too. */
+    --forma-font: 'IBM Plex Sans', 'Raleway', system-ui, sans-serif;
     font-family: var(--forma-font);
+    /* White headings on the dark page, as in the Figma. */
+    --forma-heading: #ffffff;
+}
+
+:root[data-theme="light"] .landing-page {
+    --forma-heading: #01161e;
 }
 
 .landing-container {
@@ -106,12 +116,41 @@
     gap: 16px;
 }
 
-.landing-big-button {
+/* .landing-page in front so these beat .forma-btn, whose CSS loads later. */
+.landing-page .landing-big-button {
     gap: 8px;
-    height: 46px;
+    height: 44px;
     padding: 0 22px;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
 }
+
+/* Top bar's Get started: a little bigger than the app's buttons. */
+.landing-page .landing-nav-button {
+    height: 44px;
+    padding: 0 22px;
+    font-size: 0.92rem;
+}
+
+/* Log in next to Get started free: an outline, no fill. */
+.landing-page .landing-outline-button {
+    border: 1px solid rgba(239, 246, 224, 0.45);
+    background: transparent;
+    color: var(--forma-heading);
+}
+
+    .landing-page .landing-outline-button:hover {
+        border-color: var(--forma-heading);
+        background: rgba(239, 246, 224, 0.06);
+    }
+
+:root[data-theme="light"] .landing-page .landing-outline-button {
+    border-color: var(--forma-border-strong);
+}
+
+    :root[data-theme="light"] .landing-page .landing-outline-button:hover {
+        border-color: var(--forma-heading);
+        background: rgba(1, 22, 30, 0.04);
+    }
 
 /* ---------- Headline ---------- */
 
@@ -131,11 +170,23 @@
     line-height: 1.02;
 }
 
+/* Intro text above the two buttons, beside the headline. */
+.landing-hero-intro {
+    max-width: 420px;
+    padding-bottom: 14px;
+}
+
+    .landing-hero-intro p {
+        margin-bottom: 24px;
+        color: var(--forma-text-muted);
+        font-size: clamp(0.98rem, 0.88rem + 0.3vw, 1.15rem);
+        line-height: 1.6;
+    }
+
 .landing-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    padding-bottom: 14px;
 }
 
 /* Photos on the left, dots, the finished model on the right. */
@@ -215,14 +266,18 @@
     aspect-ratio: 1 / 1;
     border: 1px solid var(--forma-border-strong);
     border-radius: 18px;
-    /* Dark in both themes: the render has a dark background. */
-    background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 14px), #0b0c10;
+    /* Dark in both themes, the same colour as the render's background so
+       its edges don't show. Faint stripes, like behind the app's covers. */
+    background: repeating-linear-gradient(135deg, rgba(239, 246, 224, 0.05) 0 1px, transparent 1px 12px), #0a0c10;
 }
 
     .landing-model-card img {
         width: 100%;
         height: 100%;
         object-fit: contain;
+        /* The render's dark background lets the stripes behind show
+           through; the model itself is brighter, so it stays as it is. */
+        mix-blend-mode: lighten;
     }
 
     .landing-model-card figcaption {
@@ -520,6 +575,7 @@
     }
 
         .landing-nav-actions .forma-btn {
+            height: auto;
             padding: 8px 12px;
         }
 
