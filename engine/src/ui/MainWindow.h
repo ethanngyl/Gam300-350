@@ -90,7 +90,6 @@ private:
     // `trimData` is the values the import was trimmed with (stored on the model).
     void finishImport(const QString& path, std::vector<SplatVertex>& splats, std::vector<SplatVertex>& original,
                       const TrimData& trimData);
-    void generateStressTestSphere();               // adds a generated 1M-splat sphere to the scene
     void showTrimDialog();
     void applyDefaultTrim(const TrimData& trim);   // saves the global defaults used for new imports
     void applyModelTrim(const TrimData& trim);     // re-trims the selected model and stores the values on it
@@ -177,7 +176,6 @@ private:
     QAction* m_statsOverlayAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
     QAction* m_trimSettingsAction = nullptr;
-    QAction* m_stressTestSphereAction = nullptr;
     TrimData m_trimSettings;
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;

@@ -376,10 +376,6 @@ void MainWindow::createActions() {
     m_trimSettingsAction->setStatusTip("Edit the default splat trim values used for new imports");
     connect(m_trimSettingsAction, &QAction::triggered, this, [this] { showTrimDialog(); });
 
-    m_stressTestSphereAction = new QAction("Generate Stress Test &Sphere (1M)", this);
-    m_stressTestSphereAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
-    connect(m_stressTestSphereAction, &QAction::triggered, this, [this] { generateStressTestSphere(); });
-
     m_devModeAction = new QAction(this);
     m_devModeAction->setStatusTip("Click to toggle developer mode, which shows the developer-only tabs");
     m_devModeAction->setCheckable(true); //Creates a checkbox
@@ -423,7 +419,6 @@ void MainWindow::createMenus() {
     editMenu->addAction(m_trimSettingsAction);
     editMenu->addSeparator();
     editMenu->addAction(m_devModeAction);
-    editMenu->addAction(m_stressTestSphereAction);
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
     QMenu* renderModeMenu = viewMenu->addMenu("Render &Mode");
@@ -973,35 +968,6 @@ void MainWindow::runAllStressTests() {
         message = QString("Test All finished: %1 of %2 tests ran.").arg(ran).arg(steps.size());
     }
     qInfo("%s", qPrintable(message));
-    statusBar()->showMessage(message, kStatusMessageMs);
-}
-
-void MainWindow::generateStressTestSphere() {
-    SplatRenderer* renderer = m_viewport->renderer();
-    if (!renderer) {
-        return; // GL not ready
-    }
-    if (renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
-        QMessageBox::warning(this, "Scene Full",
-                             QString("The scene already holds the maximum of %1 models.\nDelete a model to make room.")
-                                 .arg(SplatRenderer::kMaxModels));
-        return;
-    }
-
-    QElapsedTimer timer;
-    timer.start();
-    const std::vector<SplatVertex> splats = splat_generate::GenerateSphereSplats();
-    const qint64 generateMs = timer.restart();
-    renderer->SetSplats(splats, "StressTestSphere");
-    const qint64 uploadMs = timer.elapsed();
-
-    selectModel(static_cast<int>(renderer->ModelCount()) - 1);
-    refreshScenePanels();
-
-    const QString message = QString("Generated stress test sphere (%1 splats): generate %2 ms, load %3 ms")
-                                .arg(QLocale().toString(static_cast<qulonglong>(splats.size())))
-                                .arg(generateMs).arg(uploadMs);
-    qInfo("%s.", qPrintable(message));
     statusBar()->showMessage(message, kStatusMessageMs);
 }
 
