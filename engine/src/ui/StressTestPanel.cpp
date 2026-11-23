@@ -1,5 +1,7 @@
 #include "StressTestPanel.h"
 
+#include <QBrush>
+#include <QColor>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -7,6 +9,19 @@
 #include <QPushButton>
 #include <QTableWidget>
 #include <QVBoxLayout>
+
+namespace {
+	//Row colors, one per test. Dark and muted so the light table text stays readable on the dark theme
+	const QColor kTestColors[] = {
+		QColor(0x2b, 0x4a, 0x6f), //Blue
+		QColor(0x2f, 0x5c, 0x3e), //Green
+		QColor(0x6b, 0x55, 0x1f), //Amber
+		QColor(0x5e, 0x3a, 0x6e), //Purple
+		QColor(0x1f, 0x5f, 0x5f), //Teal
+		QColor(0x6e, 0x3a, 0x3a), //Red
+	};
+	constexpr int kTestColorCount = static_cast<int>(sizeof(kTestColors) / sizeof(kTestColors[0]));
+}
 
 StressTestPanel::StressTestPanel(QWidget* parent)
 	: QWidget(parent)
@@ -84,7 +99,15 @@ void StressTestPanel::ShowSelectedDescription() {
 	m_description->setText(item && !item->toolTip().isEmpty() ? item->toolTip() : "Select a row to see what it measures.");
 }
 
-void StressTestPanel::AddResults(const std::vector<StressResult>& results) {
+void StressTestPanel::AddResults(const std::vector<StressResult>& results, const QString& testName) {
+	//A test keeps the same color for as long as the panel lives, even after Clear Results
+	int testIndex = m_testNames.indexOf(testName);
+	if (testIndex < 0) {
+		m_testNames.append(testName);
+		testIndex = static_cast<int>(m_testNames.size()) - 1;
+	}
+	const QBrush rowColor(kTestColors[testIndex % kTestColorCount]);
+
 	const QLocale locale;
 	for (const StressResult& result : results) {
 		const int row = m_results->rowCount();
@@ -92,9 +115,11 @@ void StressTestPanel::AddResults(const std::vector<StressResult>& results) {
 		m_results->setItem(row, 0, new QTableWidgetItem(result.name));
 		m_results->setItem(row, 1, new QTableWidgetItem(locale.toString(static_cast<qulonglong>(result.splatCount))));
 		m_results->setItem(row, 2, new QTableWidgetItem(QString::number(result.ms, 'f', 2)));
-		//Same hover text on every cell of the row so it shows wherever the mouse is
+		//Same hover text and color on every cell of the row so it shows wherever the mouse is
 		for (int column = 0; column < m_results->columnCount(); ++column) {
-			m_results->item(row, column)->setToolTip(result.tooltip);
+			QTableWidgetItem* cell = m_results->item(row, column);
+			cell->setToolTip(result.tooltip);
+			cell->setBackground(rowColor);
 		}
 	}
 	m_results->scrollToBottom();

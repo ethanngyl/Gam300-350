@@ -524,7 +524,7 @@ void MainWindow::createDocks() {
         }
         else
         {
-            m_stressTestPanel->AddResults(results);
+            m_stressTestPanel->AddResults(results, name);
         }
 
         endStressRun();
@@ -936,7 +936,7 @@ void MainWindow::runAllStressTests() {
             }
             continue;
         }
-        m_stressTestPanel->AddResults(results);
+        m_stressTestPanel->AddResults(results, steps[i].name);
         ++ran;
 
         if (i == 0) {

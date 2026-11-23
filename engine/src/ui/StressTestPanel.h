@@ -3,6 +3,7 @@
 #include "../Manager/StressTestRunner.h"
 
 #include <QList>
+#include <QStringList>
 #include <QWidget>
 
 #include <vector>
@@ -19,7 +20,8 @@ public:
 	~StressTestPanel() override;
 
 	//Appends one row per result to the table
-	void AddResults(const std::vector<StressResult>& results);
+	//testName says which test produced them, every test gets its own row color so the rows can be told apart
+	void AddResults(const std::vector<StressResult>& results, const QString& testName);
 
 	//While a test runs the buttons that start tests are disabled
 	//Stop is only usable if the run can be stopped (Test All, between tests)
@@ -43,4 +45,5 @@ private:
 	QLabel* m_description = nullptr;
 	QList<QPushButton*> m_runButtons; //Every button that starts something, disabled while a test runs
 	QPushButton* m_stopButton = nullptr;
+	QStringList m_testNames; //Tests in the order they first showed results, the position picks the row color
 };
