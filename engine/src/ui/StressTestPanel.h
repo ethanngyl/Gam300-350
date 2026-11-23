@@ -8,6 +8,7 @@
 
 #include <vector>
 
+class QBrush;
 class QLabel;
 class QPushButton;
 class QTableWidget;
@@ -19,9 +20,13 @@ public:
 	explicit StressTestPanel(QWidget* parent = nullptr);
 	~StressTestPanel() override;
 
-	//Appends one row per result to the table
+	//Appends one row per result to the table, followed by a total row adding them up
 	//testName says which test produced them, every test gets its own row color so the rows can be told apart
-	void AddResults(const std::vector<StressResult>& results, const QString& testName);
+	//Returns the total, the time of all the rows added together in milliseconds
+	double AddResults(const std::vector<StressResult>& results, const QString& testName);
+
+	//Appends a bold, gray total row that belongs to no single test (e.g. the total of a whole Test All run)
+	void AddTotal(const QString& label, double ms, const QString& tooltip);
 
 	//While a test runs the buttons that start tests are disabled
 	//Stop is only usable if the run can be stopped (Test All, between tests)
@@ -40,6 +45,10 @@ signals:
 private:
 	//Shows the explanation of the selected row under the table, or a hint if no row is selected
 	void ShowSelectedDescription();
+
+	//Appends one row, with the tooltip and color on every cell
+	void AppendRow(const QString& name, const QString& splats, double ms, const QString& tooltip,
+		const QBrush& color, bool bold);
 
 	QTableWidget* m_results = nullptr;
 	QLabel* m_description = nullptr;

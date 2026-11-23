@@ -2,6 +2,7 @@
 
 #include <QBrush>
 #include <QColor>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -99,7 +100,27 @@ void StressTestPanel::ShowSelectedDescription() {
 	m_description->setText(item && !item->toolTip().isEmpty() ? item->toolTip() : "Select a row to see what it measures.");
 }
 
-void StressTestPanel::AddResults(const std::vector<StressResult>& results, const QString& testName) {
+void StressTestPanel::AppendRow(const QString& name, const QString& splats, double ms, const QString& tooltip,
+	const QBrush& color, bool bold) {
+	const int row = m_results->rowCount();
+	m_results->insertRow(row);
+	m_results->setItem(row, 0, new QTableWidgetItem(name));
+	m_results->setItem(row, 1, new QTableWidgetItem(splats));
+	m_results->setItem(row, 2, new QTableWidgetItem(QString::number(ms, 'f', 2)));
+	//Same hover text and color on every cell of the row so it shows wherever the mouse is
+	for (int column = 0; column < m_results->columnCount(); ++column) {
+		QTableWidgetItem* cell = m_results->item(row, column);
+		cell->setToolTip(tooltip);
+		cell->setBackground(color);
+		if (bold) {
+			QFont font = cell->font();
+			font.setBold(true);
+			cell->setFont(font);
+		}
+	}
+}
+
+double StressTestPanel::AddResults(const std::vector<StressResult>& results, const QString& testName) {
 	//A test keeps the same color for as long as the panel lives, even after Clear Results
 	int testIndex = m_testNames.indexOf(testName);
 	if (testIndex < 0) {
@@ -109,18 +130,24 @@ void StressTestPanel::AddResults(const std::vector<StressResult>& results, const
 	const QBrush rowColor(kTestColors[testIndex % kTestColorCount]);
 
 	const QLocale locale;
+	double totalMs = 0.0;
 	for (const StressResult& result : results) {
-		const int row = m_results->rowCount();
-		m_results->insertRow(row);
-		m_results->setItem(row, 0, new QTableWidgetItem(result.name));
-		m_results->setItem(row, 1, new QTableWidgetItem(locale.toString(static_cast<qulonglong>(result.splatCount))));
-		m_results->setItem(row, 2, new QTableWidgetItem(QString::number(result.ms, 'f', 2)));
-		//Same hover text and color on every cell of the row so it shows wherever the mouse is
-		for (int column = 0; column < m_results->columnCount(); ++column) {
-			QTableWidgetItem* cell = m_results->item(row, column);
-			cell->setToolTip(result.tooltip);
-			cell->setBackground(rowColor);
-		}
+		AppendRow(result.name, locale.toString(static_cast<qulonglong>(result.splatCount)), result.ms, result.tooltip,
+			rowColor, false);
+		totalMs += result.ms;
 	}
+
+	//The splat count is left blank, the steps above do not all work on the same number of splats
+	//%1 is a place holder like %i for ints in printf
+	AppendRow(QString("%1: Total").arg(testName), QString(), totalMs,
+		QString("All the timed steps of the %1 added together. Setup and clean-up are not timed, so this is less "
+			"than how long the test took to run.").arg(testName),
+		rowColor, true);
+	m_results->scrollToBottom();
+	return totalMs;
+}
+
+void StressTestPanel::AddTotal(const QString& label, double ms, const QString& tooltip) {
+	AppendRow(label, QString(), ms, tooltip, QBrush(QColor(0x55, 0x55, 0x5a)), true);
 	m_results->scrollToBottom();
 }

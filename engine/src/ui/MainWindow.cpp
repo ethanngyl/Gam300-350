@@ -914,6 +914,7 @@ void MainWindow::runAllStressTests() {
     beginStressRun(true);
     StressTestRunner runner(m_viewport);
     int ran = 0;
+    double grandTotalMs = 0.0; //Every test's total added together
     bool stopped = false;
     bool failed = false;
 
@@ -936,7 +937,7 @@ void MainWindow::runAllStressTests() {
             }
             continue;
         }
-        m_stressTestPanel->AddResults(results, steps[i].name);
+        grandTotalMs += m_stressTestPanel->AddResults(results, steps[i].name);
         ++ran;
 
         if (i == 0) {
@@ -945,6 +946,14 @@ void MainWindow::runAllStressTests() {
             selectModel(static_cast<int>(renderer->ModelCount()) - 1);
             refreshScenePanels();
         }
+    }
+
+    if (ran > 0) {
+        const QString label = stopped ? QString("Test All: Total (stopped, %1 of %2 tests)").arg(ran).arg(steps.size())
+                                      : QString("Test All: Total");
+        m_stressTestPanel->AddTotal(label, grandTotalMs,
+            "The totals of every test that ran added together. Setup and clean-up are not timed, so this is less "
+            "than how long Test All took to run.");
     }
 
     //The delete test briefly adds and removes a model, make sure the panels match the scene

@@ -38,7 +38,6 @@ namespace {
 	const QString kCreateTip = "Builds the splat data in memory (CPU only).";
 	const QString kApplyTip = "Makes the change in memory (CPU only).";
 	const QString kRedrawTip = "Draws one frame so the change shows on screen. Updates the splat data and sends it to the graphics card (CPU + GPU).";
-	const QString kTotalTip = "All the steps above added together.";
 	const QString kUndoTip = "Undoes the edit in memory (CPU only). Nothing is drawn yet.";
 	const QString kRedoTip = "Redoes the edit in memory (CPU only). Nothing is drawn yet.";
 }
@@ -58,7 +57,6 @@ std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
 		{ "Load: Create splats", count, generateMs, kCreateTip },
 		{ "Load: Add to scene", count, setMs, "Hands the splats to the renderer as a new model (CPU only). Nothing is drawn yet." },
 		{ "Load: Redraw", count, frameMs, kRedrawTip },
-		{ "Load: Total", count, generateMs + setMs + frameMs, kTotalTip },
 	};
 }
 
