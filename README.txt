@@ -86,6 +86,10 @@ Password reset email: "Forgot password?" emails a 6-digit code from a Gmail acco
   the VM's packages/src/backend/.env set SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=<the Gmail address>,
   SMTP_PASS=<the app password> and MAIL_FROM=Genesis <the Gmail address>, restart, then check with
   "npm run mail:test -- you@example.com" (in packages). Codes work once, for 15 minutes.
+Rate limits: every API call counts towards 600 a minute (per signed-in user, else per address), and each user may start 10 builds
+  an hour / 30 a day and download 60 models an hour (admins exempt); over a limit the reply is 429 with Retry-After. Set them
+  with RATE_LIMIT_API_PER_MIN, RATE_LIMIT_BUILDS_PER_HOUR, RATE_LIMIT_BUILDS_PER_DAY and RATE_LIMIT_DOWNLOADS_PER_HOUR in
+  .env (0 = off). The full list of limits is in docs/architecture.md ("Rate limits").
 Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
 packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
 packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
