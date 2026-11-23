@@ -1,7 +1,8 @@
 /* ============================================================
    Landing page (LandingScreen.jsx), laid out like the Genesis landing
-   page design. Colours come from the theme tokens; the font is IBM Plex
-   Sans and headings are white, as in the Figma (the app uses Raleway).
+   page design. Colours come from the theme tokens. As in the Figma,
+   headings and the logo use IBM Plex Sans and are white; the rest of the
+   text stays in the app's font (Raleway).
    Sizes and spacing use clamp(), so the page scales smoothly as the
    window resizes: clamp(smallest, scales with width, largest).
    ============================================================ */
@@ -10,11 +11,8 @@
     min-height: 100vh;
     background: radial-gradient(ellipse at 100% 100%, rgba(var(--forma-accent-rgb), 0.08), transparent 55%), var(--forma-bg);
     color: var(--forma-text);
-    /* The Figma's font for this page only. Set on the token, so headings
-       and buttons (which use var(--forma-font)) follow it too. */
-    --forma-font: 'IBM Plex Sans', 'Raleway', system-ui, sans-serif;
     font-family: var(--forma-font);
-    /* White headings on the dark page, as in the Figma. */
+    /* White headings on the dark page */
     --forma-heading: #ffffff;
 }
 
@@ -36,6 +34,12 @@
 .landing-page p,
 .landing-page figure {
     margin: 0;
+}
+
+/* Headings and the logo in IBM Plex Sans */
+.landing-page :is(h1, h2, h3),
+.landing-page .landing-logo {
+    font-family: 'IBM Plex Sans', var(--forma-font);
 }
 
 /* App.css gives every <section> a top border and padding; not here. */

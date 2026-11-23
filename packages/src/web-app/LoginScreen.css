@@ -15,6 +15,14 @@
     font-family: var(--forma-font);
 }
 
+    /* Headings and the logo in IBM Plex Sans; the rest of
+   the text stays in the app's font (Raleway). */
+    .auth-page :is(h1, h2),
+    .auth-page .auth-card-intro-title,
+    .auth-page .auth-logo {
+        font-family: 'IBM Plex Sans', var(--forma-font);
+    }
+
 /* ---------- Logo (back to the landing page) ---------- */
 
 .auth-logo {
