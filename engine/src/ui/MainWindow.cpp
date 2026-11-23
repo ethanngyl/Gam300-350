@@ -511,10 +511,10 @@ void MainWindow::createDocks() {
     //Lamda function to runner 1 stress test, type is inputted a input variable
     //Shows its results in the panel
     //The test runs on the GUI thread, so the UI freezes
-    //Disable the panel for the whole run so they are ignored
-    auto runStressTest = [this](const QString& name, std::function<std::vector<StressResult>(StressTestRunner&)> test) 
+    //Input is blocked for the whole run so clicks made meanwhile are ignored
+    auto runStressTest = [this](const QString& name, std::function<std::vector<StressResult>(StressTestRunner&)> test)
     {
-        m_stressTestPanel->setEnabled(false);
+        beginStressRun(false);
 
         StressTestRunner runner(m_viewport);
         const std::vector<StressResult> results = test(runner);
@@ -527,9 +527,7 @@ void MainWindow::createDocks() {
             m_stressTestPanel->AddResults(results);
         }
 
-        //Deliver the queued clicks now, while the panel is still disabled, so they are dropped
-        QCoreApplication::processEvents();
-        m_stressTestPanel->setEnabled(true);
+        endStressRun();
         return !results.empty();
     };
 
@@ -552,6 +550,8 @@ void MainWindow::createDocks() {
     connect(m_stressTestPanel, &StressTestPanel::moveTestRequested, this, [runStressTest] {
         runStressTest("Move test", [](StressTestRunner& runner) { return runner.TestMove(); });
     });
+    connect(m_stressTestPanel, &StressTestPanel::testAllRequested, this, [this] { runAllStressTests(); });
+    connect(m_stressTestPanel, &StressTestPanel::stopRequested, this, [this] { m_stopStressTests = true; });
     connect(m_stressTestPanel, &StressTestPanel::undoRedoTestRequested, this, [runStressTest] {
         runStressTest("Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); });
     });
@@ -843,6 +843,126 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     }
     qInfo("Imported %s (%s).", qPrintable(fileName), qPrintable(summary));
     statusBar()->showMessage(QString("Imported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (!m_stressTestRunning) {
+        return QMainWindow::eventFilter(watched, event);
+    }
+
+    switch (event->type()) {
+    case QEvent::Shortcut: //Keyboard shortcuts act on the scene
+        return true;
+    case QEvent::Close: //Closing mid-run would free what the test is using
+        if (watched == this) {
+            return true;
+        }
+        break;
+    case QEvent::KeyPress:
+    case QEvent::KeyRelease:
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::MouseButtonDblClick:
+    case QEvent::Wheel:
+    case QEvent::ContextMenu:
+    case QEvent::DragEnter:
+    case QEvent::DragMove:
+    case QEvent::Drop:
+    {
+        //Only the stress test panel (the table, and the Stop button) may receive input
+        auto* widget = qobject_cast<QWidget*>(watched);
+        if (widget && widget != m_stressTestPanel && !m_stressTestPanel->isAncestorOf(widget)) {
+            return true;
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::beginStressRun(bool stoppable) {
+    m_stressTestRunning = true;
+    m_stopStressTests = false;
+    qApp->installEventFilter(this);
+    m_stressTestPanel->SetRunning(true, stoppable);
+}
+
+void MainWindow::endStressRun() {
+    //Deliver the queued input now, while the filter is still dropping it
+    QCoreApplication::processEvents();
+    m_stressTestRunning = false;
+    qApp->removeEventFilter(this);
+    m_stressTestPanel->SetRunning(false, false);
+}
+
+void MainWindow::runAllStressTests() {
+    struct Step {
+        QString name;
+        std::function<std::vector<StressResult>(StressTestRunner&)> run;
+    };
+    //Load goes first, it adds the sphere the others work on. Delete goes last, it adds and removes a model
+    const std::vector<Step> steps = {
+        { "Load test", [](StressTestRunner& runner) { return runner.TestLoad(splat_generate::kStressTestSplatCount); } },
+        { "Select test", [](StressTestRunner& runner) { return runner.TestSelect(); } },
+        { "Move test", [](StressTestRunner& runner) { return runner.TestMove(); } },
+        { "Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); } },
+        { "Delete test", [](StressTestRunner& runner) { return runner.TestDelete(); } },
+    };
+
+    beginStressRun(true);
+    StressTestRunner runner(m_viewport);
+    int ran = 0;
+    bool stopped = false;
+    bool failed = false;
+
+    for (size_t i = 0; i < steps.size(); ++i) {
+        statusBar()->showMessage(QString("Test All: running %1 (%2 of %3)...")
+                                     .arg(steps[i].name).arg(i + 1).arg(steps.size()));
+        //Repaint the status and let a click on Stop through, the tests themselves cannot be interrupted
+        QCoreApplication::processEvents();
+        if (m_stopStressTests) {
+            stopped = true;
+            break;
+        }
+
+        const std::vector<StressResult> results = steps[i].run(runner);
+        if (results.empty()) {
+            qWarning("Test All: %s skipped.", qPrintable(steps[i].name));
+            if (i == 0) {
+                failed = true; //No sphere to run the others on, the renderer is not ready or the scene is full
+                break;
+            }
+            continue;
+        }
+        m_stressTestPanel->AddResults(results);
+        ++ran;
+
+        if (i == 0) {
+            //Same as an import, the new sphere becomes the selected model, which the other tests act on
+            SplatRenderer* renderer = m_viewport->renderer();
+            selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+            refreshScenePanels();
+        }
+    }
+
+    //The delete test briefly adds and removes a model, make sure the panels match the scene
+    refreshScenePanels();
+    endStressRun();
+
+    QString message;
+    if (failed) {
+        message = "Test All cancelled: the sphere could not be loaded (the renderer is not ready or the scene is full).";
+    }
+    else if (stopped) {
+        message = QString("Test All stopped: %1 of %2 tests ran.").arg(ran).arg(steps.size());
+    }
+    else {
+        message = QString("Test All finished: %1 of %2 tests ran.").arg(ran).arg(steps.size());
+    }
+    qInfo("%s", qPrintable(message));
+    statusBar()->showMessage(message, kStatusMessageMs);
 }
 
 void MainWindow::generateStressTestSphere() {

@@ -29,8 +29,14 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	buttonRow->addWidget(moveTestButton);
 	buttonRow->addWidget(deleteTestButton);
 	buttonRow->addWidget(undoRedoTestButton);
+	m_stopButton = new QPushButton("Stop", this);
+	m_stopButton->setToolTip("Stops Test All after the test that is running finishes");
+	m_stopButton->setEnabled(false); //Only usable during Test All
+	buttonRow->addWidget(m_stopButton);
 	buttonRow->addStretch(); //Keeps the buttons at their normal size instead of stretching across the dock
 	buttonRow->addWidget(clearButton);
+	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, deleteTestButton,
+		undoRedoTestButton, clearButton };
 	layout->addLayout(buttonRow);
 
 	//Table
@@ -49,9 +55,8 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	ShowSelectedDescription();
 
 	connect(m_results, &QTableWidget::itemSelectionChanged, this, [this] { ShowSelectedDescription(); });
-	connect(testAllButton, &QPushButton::clicked, this, [] {
-		//Empty for now
-	});
+	connect(testAllButton, &QPushButton::clicked, this, &StressTestPanel::testAllRequested);
+	connect(m_stopButton, &QPushButton::clicked, this, &StressTestPanel::stopRequested);
 	connect(loadTestButton, &QPushButton::clicked, this, &StressTestPanel::loadTestRequested);
 	connect(selectTestButton, &QPushButton::clicked, this, &StressTestPanel::selectTestRequested);
 	connect(moveTestButton, &QPushButton::clicked, this, &StressTestPanel::moveTestRequested);
@@ -64,6 +69,13 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 }
 
 StressTestPanel::~StressTestPanel() = default;
+
+void StressTestPanel::SetRunning(bool running, bool stoppable) {
+	for (QPushButton* button : m_runButtons) {
+		button->setEnabled(!running);
+	}
+	m_stopButton->setEnabled(running && stoppable);
+}
 
 void StressTestPanel::ShowSelectedDescription() {
 	const int row = m_results->currentRow();
