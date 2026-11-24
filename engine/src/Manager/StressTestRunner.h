@@ -35,7 +35,9 @@ public:
 	//(the renderer re-marks the selected splats and uploads on its next draw)
 	std::vector<StressResult> TestSelect();
 
-	//Trims the selected model with several sets of trim values (crop, density filter, the default settings), timing each
+	//Trims the selected model with several sets of trim values (crop, density filter, min alpha, the default settings), timing each
+	//A model whose splats all share one alpha (like the test sphere) would lose nothing to min alpha, so the min alpha
+	//cases trim a copy with the alpha spread from 0 to 1. A model with real varying alpha is trimmed as it is
 	//This is the same trimming the Inspector's trim settings do. Every trim is undone afterwards, so the model ends up
 	//exactly as it started. The model's stored trim values are not touched
 	//Returns nothing if the renderer is not ready or no model is selected

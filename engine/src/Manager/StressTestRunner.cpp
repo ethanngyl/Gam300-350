@@ -12,9 +12,12 @@
 
 #include <QDir>
 #include <QElapsedTimer>
+#include <QLocale>
 #include <QTemporaryDir>
 #include <QUndoStack>
 
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -116,33 +119,61 @@ std::vector<StressResult> StressTestRunner::TestTrim() {
 	//Every case trims from this copy and the model is put back to it after each case
 	const std::vector<SplatVertex> saved = model->splats();
 
+	//The test sphere is fully opaque, so min alpha would cut nothing on it
+	//If every splat has the same alpha, the min alpha cases trim a copy with the alpha spread evenly from 0 to 1 instead,
+	//so a min alpha of 0.25 cuts about a quarter. The model itself is never changed, only this copy is
+	//A model that really has varying alpha is trimmed as it is
+	bool flatAlpha = true;
+	for (const SplatVertex& splat : saved) {
+		if (splat.alpha != saved.front().alpha) {
+			flatAlpha = false;
+			break;
+		}
+	}
+	std::vector<SplatVertex> spreadAlpha;
+	if (flatAlpha) {
+		spreadAlpha = saved;
+		for (size_t i = 0; i < spreadAlpha.size(); ++i) {
+			//Steps of the golden ratio land evenly over 0..1 whatever the splat count
+			spreadAlpha[i].alpha = static_cast<float>(std::fmod(static_cast<double>(i) * 0.6180339887498949, 1.0));
+		}
+	}
+	const std::vector<SplatVertex>& alphaSource = flatAlpha ? spreadAlpha : saved;
+
 	//The density filter drops splats in cells holding fewer than this, scaled to the splat count so it cuts at any size
-	//The sphere is fully opaque, so min alpha would cut nothing and is left out
 	const int densityMin = std::max(2, static_cast<int>(total / 10000));
 	struct Case {
 		const char* label;
 		TrimData settings; //minAlpha, cropPct, voxelDivisions, minPerVoxel
+		bool byAlpha;      //Trim the copy with spread out alpha (if the model needs one), the others trim the model's own splats
 	};
 	const Case cases[] = {
-		{ "crop 5%", TrimData{ 0.0f, 5.0f, 0, 1 } },
-		{ "crop 25%", TrimData{ 0.0f, 25.0f, 0, 1 } },
-		{ "density filter", TrimData{ 0.0f, 0.0f, 50, densityMin } },
-		{ "crop 25% + density", TrimData{ 0.0f, 25.0f, 50, densityMin } },
-		{ "default settings", TrimData{} },
+		{ "crop 5%", TrimData{ 0.0f, 5.0f, 0, 1 }, false },
+		{ "crop 25%", TrimData{ 0.0f, 25.0f, 0, 1 }, false },
+		{ "density filter", TrimData{ 0.0f, 0.0f, 50, densityMin }, false },
+		{ "crop 25% + density", TrimData{ 0.0f, 25.0f, 50, densityMin }, false },
+		{ "min alpha 0.25", TrimData{ 0.25f, 0.0f, 0, 1 }, true },
+		{ "min alpha 0.5", TrimData{ 0.5f, 0.0f, 0, 1 }, true },
+		{ "min alpha 0.9", TrimData{ 0.9f, 0.0f, 0, 1 }, true },
+		{ "default settings", TrimData{}, false },
 	};
 
 	const QLocale locale;
 	std::vector<StressResult> results;
 	for (const Case& c : cases) {
+		const std::vector<SplatVertex>& source = c.byAlpha ? alphaSource : saved;
 		std::vector<SplatVertex> trimmed;
-		const double computeMs = MeasureMs([&] { trimmed = TrimSplats(saved, c.settings); });
+		const double computeMs = MeasureMs([&] { trimmed = TrimSplats(source, c.settings); });
 		const size_t kept = trimmed.size();
 
 		const QString label = QString("Trim %1").arg(c.label);
-		results.push_back({ label + ": Compute", total, computeMs,
-			QString("Works out which splats to cut and copies the rest (CPU only). Kept %1 of %2 splats (%3%).")
-				.arg(locale.toString(static_cast<qulonglong>(kept)), locale.toString(static_cast<qulonglong>(total)))
-				.arg(100.0 * static_cast<double>(kept) / static_cast<double>(total), 0, 'f', 1) });
+		QString computeTip = QString("Works out which splats to cut and copies the rest (CPU only). Kept %1 of %2 splats (%3%).")
+			.arg(locale.toString(static_cast<qulonglong>(kept)), locale.toString(static_cast<qulonglong>(total)))
+			.arg(100.0 * static_cast<double>(kept) / static_cast<double>(total), 0, 'f', 1);
+		if (c.byAlpha && flatAlpha) {
+			computeTip += " Every splat of this model has the same alpha, so a copy with the alpha spread evenly from 0 to 1 was trimmed.";
+		}
+		results.push_back({ label + ": Compute", total, computeMs, computeTip });
 
 		//The editor refuses a trim that would remove every splat
 		if (trimmed.empty()) {
