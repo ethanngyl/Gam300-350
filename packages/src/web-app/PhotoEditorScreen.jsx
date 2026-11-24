@@ -258,7 +258,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // Starts with the choice carried over from Camera Capture, if any.
     const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
     // Keep only the object the photos were taken around (walk-around captures).
-    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? true);
+    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? false);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     // Opened from Camera Capture, so it can send the photos back there.

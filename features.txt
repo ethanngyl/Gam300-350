@@ -64,7 +64,7 @@ Frame Extractor
 ---------------
 - Upload videos or animated GIFs by drag-and-drop or file picker (up to 10
   files, 2 GB each), set the frame rate, Remove background (on by default),
-  Keep only the main object (on by default) and model detail, then
+  Keep only the main object (off by default) and model detail, then
   "Process media".
 - Upload progress bar, with Cancel.
 - Live progress card while it runs, with Cancel.

@@ -71,7 +71,7 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
     // incoherent, and solving the camera positions takes far longer.
     const [removeBackground, setRemoveBackground] = useState(initialDraft?.removeBackground ?? true);
     // Keep only the object the video was filmed around (walk-around videos).
-    const [autoCrop, setAutoCrop] = useState(initialDraft?.autoCrop ?? true);
+    const [autoCrop, setAutoCrop] = useState(initialDraft?.autoCrop ?? false);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialDraft?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     const [error, setError] = useState(notice);

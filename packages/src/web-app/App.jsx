@@ -431,13 +431,13 @@ function App() {
     }
 
     // Opens the Photo Editor with the photos from Camera Capture loaded.
-    function reviewPhotosInEditor(files, { removeBackground = false, autoCrop = true, trainIters = null } = {}) {
+    function reviewPhotosInEditor(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
         goToTab('editor');
         setPhotosForEditor({ files, removeBackground, autoCrop, trainIters });
     }
 
     // Reopens Camera Capture with the photos that were in the Photo Editor.
-    function returnPhotosToCapture(files, { removeBackground = false, autoCrop = true, trainIters = null } = {}) {
+    function returnPhotosToCapture(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
         goToTab('capture');
         setPhotosForCapture({ files, removeBackground, autoCrop, trainIters });
     }
