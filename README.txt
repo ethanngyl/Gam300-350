@@ -198,6 +198,8 @@ The server accepts 1,000 to 30,000 iterations and clamps anything outside that r
 the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
 "Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
+"Keep only the main object" (same screens, off by default) removes everything outside the path the photos were taken from, such
+as neighbouring objects, walls and the ceiling, after training. It is skipped when the photos don't surround one object.
 
 23. With no photos in the batch, confirm "Use this batch" and "Review photos first" are disabled.
 24. Add photos taken all the way around the object, then click "Use this batch (N photos)".

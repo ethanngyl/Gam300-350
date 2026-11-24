@@ -101,6 +101,7 @@ private:
         QString extractionNs = "FeatureExtraction"; // COLMAP 4.x; 3.x says SiftExtraction
         QString matchingNs = "FeatureMatching";
         QString minInliersFlag;      // --TwoViewGeometry.min_num_inliers or --<matchingNs>.min_num_inliers
+        bool skipRedundantPoints = false; // mapper understands --Mapper.ba_global_ignore_redundant_points3D
         QString itersFlag = "--total-train-iters";
         bool alphaMode = false;      // Brush understands --alpha-mode
     };

@@ -109,7 +109,7 @@ function createBatchPhoto(file) {
 // addedFiles: photos chosen with the dock's Add photos button before
 // this page opened; they start in the batch. While the page is open,
 // onRegisterAddFiles(handler) hands App a function that adds more.
-// initialPhotos: { files, removeBackground, trainIters } handed back from the Photo
+// initialPhotos: { files, removeBackground, autoCrop, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
 function CameraCapture({
     onBatchReady,
@@ -154,6 +154,9 @@ function CameraCapture({
     // captures, where the static background makes the model come out flat.
     // Also set in the Photo Editor, and kept when coming back from it.
     const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Keep only the object the photos were taken around (walk-around
+    // captures). Also set in the Photo Editor, and kept when coming back.
+    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? false);
     // Model detail (training iteration cap), also set in the Photo Editor.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 
@@ -494,14 +497,14 @@ function CameraCapture({
     // this page and releases the thumbnails; the File objects stay valid.
     function handleReview() {
         setIsAutoCapturing(false);
-        onReviewPhotos(photos.map((p) => p.file), { removeBackground, trainIters });
+        onReviewPhotos(photos.map((p) => p.file), { removeBackground, autoCrop, trainIters });
     }
 
     // "Train model" is the only trigger that starts the reconstruction.
     function handleTrain() {
         const files = photos.map((p) => p.file);
         if (onBatchReady) {
-            onBatchReady(files, { removeBackground, trainIters });
+            onBatchReady(files, { removeBackground, autoCrop, trainIters });
         }
 
         setIsBatchSent(true);
@@ -955,6 +958,21 @@ function CameraCapture({
                         <span>
                             Remove background
                             <small>Turn on for turntable captures (object spins, camera stays still).</small>
+                        </span>
+                    </label>
+
+                    <label className="capture-option">
+                        <input
+                            type="checkbox"
+                            checked={autoCrop}
+                            onChange={(e) => {
+                                playSound('tap');
+                                setAutoCrop(e.target.checked);
+                            }}
+                        />
+                        <span>
+                            Keep only the main object
+                            <small>When you walk around an object, removes everything outside the path you took. Turn off for rooms and scenery.</small>
                         </span>
                     </label>
 

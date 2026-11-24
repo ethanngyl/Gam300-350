@@ -765,7 +765,10 @@
         gap: 20px;
     }
 
+    /* The message keeps a readable width; the switches wrap onto a second
+       line first when the bar is narrow. */
     .photo-editor-footer-text {
         flex: 1;
+        min-width: 160px;
     }
 }
