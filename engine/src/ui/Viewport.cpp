@@ -29,7 +29,11 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QScreen>
 #include <QWheelEvent>
+
+#include <algorithm>
+#include <cstdio>
 
 #include <stdexcept>
 #include <string>
@@ -54,6 +58,7 @@ Viewport::~Viewport() {
     }
     // GL resources must be released with this widget's context current.
     makeCurrent();
+    m_metrics.Shutdown(); // logs the open session and frees the GPU timer queries
     m_cropBoxRenderer.reset();
     m_renderer.reset();
     ImGui_ImplOpenGL3_Shutdown();
@@ -100,6 +105,8 @@ void Viewport::initializeGL() {
     ImGui::StyleColorsDark();
     ImGuiQtBackend::Init();
     ImGui_ImplOpenGL3_Init("#version 330");
+
+    m_metrics.Init((AssetPaths::UserDataDir() + "/metrics").toStdString());
 
     m_glInitialized = true;
     m_frameTimer.start();
@@ -203,6 +210,7 @@ void Viewport::FinishNudge() {
         if (m_nudgeMovesContents) m_renderer->ClearRegionPreview();
         m_nudgeMovesContents = false;
         if (m_cropBox.transform != m_nudgeBefore && onCropBoxEdited) {
+            FrameMetrics::ScopedCommit commitTimer(m_metrics);
             onCropBoxEdited(m_nudgeBefore, m_cropBox.transform);
         }
         return;
@@ -213,11 +221,15 @@ void Viewport::FinishNudge() {
     //Only report if the model is still there and actually moved
     if (model && model == m_renderer->GetModel(m_renderer->GetSelectedModel())
         && model->GetTransform() != m_nudgeBefore && onTransformEdited) {
+        FrameMetrics::ScopedCommit commitTimer(m_metrics);
         onTransformEdited(model, m_nudgeBefore, model->GetTransform());
     }
 }
 
 void Viewport::paintGL() {
+    const QScreen* displayScreen = screen();
+    m_metrics.BeginFrame(displayScreen ? displayScreen->refreshRate() : 60.0);
+
     float deltaTime = static_cast<float>(m_frameTimer.nsecsElapsed()) / 1.0e9f;
     m_frameTimer.restart();
     float fps = deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f;
@@ -233,6 +245,8 @@ void Viewport::paintGL() {
     const glm::mat4 view = m_camera.getView();
     const glm::mat4 proj = m_camera.getProjection(aspect);
     //Draw Splat/Pointcloud models
+    m_metrics.BeginSection(FrameMetrics::Section::Scene);
+    m_metrics.BeginGpuScene();
     m_renderer->Draw(view, proj, static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
     if (m_cropBox.active) {
         //Green when the gizmo moves the contents, otherwise orange for removing the inside and blue when keeping it
@@ -240,7 +254,11 @@ void Viewport::paintGL() {
         if (m_cropBox.moveContents) color = glm::vec3(0.3f, 1.0f, 0.4f);
         m_cropBoxRenderer->Draw(proj * view, m_cropBox.transform, color);
     }
+    m_metrics.EndGpuScene();
+    m_metrics.EndSection(FrameMetrics::Section::Scene);
 
+    //Overlay time excludes any drag commit inside DrawGizmo, which is timed on its own
+    m_metrics.BeginSection(FrameMetrics::Section::Overlay);
     ImGui_ImplOpenGL3_NewFrame();
     ImGuiQtBackend::NewFrame(*this, deltaTime);
     ImGui::NewFrame();
@@ -249,6 +267,10 @@ void Viewport::paintGL() {
     DrawImGui(fps);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    m_metrics.EndSection(FrameMetrics::Section::Overlay);
+
+    ReportMetricsActivity();
+    m_metrics.EndFrame(m_renderer->TotalSplatCount(), m_renderer->ModelCount());
 
     if (onStats) {
         onStats(fps, m_renderer->TotalSplatCount());
@@ -364,10 +386,12 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
 void Viewport::FinishGizmoDrag(SplatModel* model, bool editingBox) {
     if (m_dragIsCropBox) {
         if (editingBox && m_cropBox.transform != m_dragBefore && onCropBoxEdited) {
+            FrameMetrics::ScopedCommit commitTimer(m_metrics);
             onCropBoxEdited(m_dragBefore, m_cropBox.transform);
         }
     }
     else if (m_dragModel == model && model && model->GetTransform() != m_dragBefore && onTransformEdited) {
+        FrameMetrics::ScopedCommit commitTimer(m_metrics);
         onTransformEdited(model, m_dragBefore, model->GetTransform());
     }
     m_dragModel = nullptr;
@@ -375,6 +399,33 @@ void Viewport::FinishGizmoDrag(SplatModel* model, bool editingBox) {
     m_dragMovesContents = false;
     m_gizmoWasUsing = false;
     m_renderer->ClearRegionPreview(); //The callback above has baked the move into the splat data
+}
+
+void Viewport::ReportMetricsActivity() {
+    using Activity = FrameMetrics::Activity;
+    using Target = FrameMetrics::Target;
+    const auto boxTarget = [](bool movesContents) {
+        return movesContents ? Target::CropBoxContents : Target::CropBox;
+    };
+
+    if (m_gizmoWasUsing) {
+        Activity activity = Activity::GizmoTranslate;
+        if (m_dragToolMode == InputManager::ROTATE) activity = Activity::GizmoRotate;
+        else if (m_dragToolMode == InputManager::SCALE) activity = Activity::GizmoScale;
+        m_metrics.SetActivity(activity, m_dragIsCropBox ? boxTarget(m_dragMovesContents) : Target::Model);
+    }
+    else if (m_nudgeActive) {
+        m_metrics.SetActivity(Activity::Nudge, m_nudgeIsCropBox ? boxTarget(m_nudgeMovesContents) : Target::Model);
+    }
+    else if (m_rightHeld) {
+        m_metrics.SetActivity(Activity::CameraOrbit, Target::None);
+    }
+    else if (m_leftHeld) {
+        m_metrics.SetActivity(Activity::CameraPan, Target::None);
+    }
+    else {
+        m_metrics.SetActivity(Activity::Idle, Target::None);
+    }
 }
 
 void Viewport::DrawToolButtons() {
@@ -421,6 +472,25 @@ void Viewport::DrawImGui(float fps) {
                  ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                  ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
     ImGui::Text("%.1f FPS (%.2f ms)", fps, fps > 0.0f ? 1000.0f / fps : 0.0f);
+
+    //Frame metrics: last second averages, drops and a frame time graph
+    const FrameMetrics::LiveStats& live = m_metrics.Live();
+    ImGui::Text("1s avg %.1f FPS, worst %.1f ms", live.avgFps, live.worstFrameMs);
+    if (live.avgGpuSceneMs >= 0.0f) ImGui::Text("Scene CPU %.2f ms | GPU %.2f ms", live.avgCpuSceneMs, live.avgGpuSceneMs);
+    else ImGui::Text("Scene CPU %.2f ms | GPU n/a", live.avgCpuSceneMs);
+    const ImVec4 dropColor = live.dropsLastSecond > 0 ? ImVec4(1.0f, 0.45f, 0.4f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text);
+    ImGui::TextColored(dropColor, "Drops: %d last 1s, %llu total", live.dropsLastSecond,
+                       static_cast<unsigned long long>(live.totalDrops));
+    m_metrics.CopyIntervalHistory(m_frameTimePlot);
+    //Scale so one refresh sits at a third of the height: a dropped frame clearly sticks up
+    const float plotMax = std::max(live.expectedMs * 3.0f, 1.0f);
+    char plotLabel[48];
+    std::snprintf(plotLabel, sizeof(plotLabel), "frame ms (target %.1f)", live.expectedMs);
+    ImGui::PlotLines("##frametimes", m_frameTimePlot.data(), static_cast<int>(m_frameTimePlot.size()), 0,
+                     plotLabel, 0.0f, plotMax, ImVec2(220.0f, 48.0f));
+    if (m_metrics.CurrentActivity() != FrameMetrics::Activity::Idle) {
+        ImGui::Text("Measuring: %s", FrameMetrics::ActivityName(m_metrics.CurrentActivity()));
+    }
     ImGui::Separator();
     ImGui::Text("Models: %zu / %d", m_renderer->ModelCount(), SplatRenderer::kMaxModels);
     ImGui::Text("Splats: %zu", m_renderer->TotalSplatCount());
