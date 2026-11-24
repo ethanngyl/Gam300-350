@@ -23,8 +23,13 @@ public:
 
 	//Appends one row per result to the table, followed by a total row adding them up
 	//testName says which test produced them, every test gets its own row color so the rows can be told apart
+	//A failed result gets a red row marked FAILED, with a banner above the table until the results are cleared
+	//Failed rows are left out of the total
 	//Returns the total, the time of all the rows added together in milliseconds
 	double AddResults(const std::vector<StressResult>& results, const QString& testName);
+
+	//How many failed rows have been added since the results were last cleared
+	int FailedCount() const { return m_failedCount; }
 
 	//Appends a bold, gray total row that belongs to no single test (e.g. the total of a whole Test All run)
 	void AddTotal(const QString& label, double ms, const QString& tooltip);
@@ -53,11 +58,14 @@ private:
 	void ShowSelectedDescription();
 
 	//Appends one row, with the tooltip and color on every cell
-	void AppendRow(const QString& name, const QString& splats, double ms, const QString& tooltip,
-		const QBrush& color, bool bold);
+	//A failed row is drawn white on the color given (red), and is marked so the description can be drawn red too
+	void AppendRow(const QString& name, const QString& splats, const QString& time, const QString& tooltip,
+		const QBrush& color, bool bold, bool failed = false);
 
 	QTableWidget* m_results = nullptr;
 	QLabel* m_description = nullptr;
+	QLabel* m_failureBanner = nullptr; //Red bar above the table, only visible while there are failed rows
+	int m_failedCount = 0;
 	QList<QPushButton*> m_runButtons; //Every button that starts something, disabled while a test runs
 	QPushButton* m_stopButton = nullptr;
 	QSpinBox* m_splatCount = nullptr; //Splats in the test sphere

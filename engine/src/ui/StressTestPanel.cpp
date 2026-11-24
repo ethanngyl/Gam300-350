@@ -28,6 +28,9 @@ namespace {
 	};
 	constexpr int kTestColorCount = static_cast<int>(sizeof(kTestColors) / sizeof(kTestColors[0]));
 
+	//Failed rows are a stronger red than any test color, so they stand out from all of them
+	const QColor kFailColor(0xb4, 0x1e, 0x1e);
+
 	//A splat is 64 bytes and the tests copy the splats several times
 	//Min limits of the splat count box
 	constexpr int kMinSplatCount = 1000;
@@ -81,6 +84,13 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 		undoRedoTestButton, exportTestButton, clearButton };
 	layout->addLayout(buttonRow);
 
+	//Stays visible until Clear Results, so a failure is not missed even if the row has scrolled out of view
+	m_failureBanner = new QLabel(this);
+	m_failureBanner->setStyleSheet("background-color: #b41e1e; color: white; font-weight: bold; padding: 4px;");
+	m_failureBanner->setWordWrap(true);
+	m_failureBanner->setVisible(false);
+	layout->addWidget(m_failureBanner);
+
 	//Table
 	m_results = new QTableWidget(0, 3, this);
 	m_results->setHorizontalHeaderLabels({ "Test", "Splats", "Time (ms)" }); //Table header labels
@@ -108,6 +118,8 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	connect(undoRedoTestButton, &QPushButton::clicked, this, &StressTestPanel::undoRedoTestRequested);
 	connect(clearButton, &QPushButton::clicked, this, [this] {
 		m_results->setRowCount(0);
+		m_failedCount = 0;
+		m_failureBanner->setVisible(false);
 		ShowSelectedDescription(); //Nothing is selected any more
 	});
 }
@@ -131,24 +143,31 @@ void StressTestPanel::ShowSelectedDescription() {
 	const QTableWidgetItem* item = (row >= 0 && m_results->item(row, 0)) ? m_results->item(row, 0) : nullptr;
 	//The explanation is stored as the row's tooltip, so the label and the tooltip always say the same thing
 	m_description->setText(item && !item->toolTip().isEmpty() ? item->toolTip() : "Select a row to see what it measures.");
+	//The reason a step failed is drawn red as well
+	const bool failed = item && item->data(Qt::UserRole).toBool();
+	m_description->setStyleSheet(failed ? "color: #ff7b7b; font-weight: bold;" : QString());
 }
 
-void StressTestPanel::AppendRow(const QString& name, const QString& splats, double ms, const QString& tooltip,
-	const QBrush& color, bool bold) {
+void StressTestPanel::AppendRow(const QString& name, const QString& splats, const QString& time, const QString& tooltip,
+	const QBrush& color, bool bold, bool failed) {
 	const int row = m_results->rowCount();
 	m_results->insertRow(row);
 	m_results->setItem(row, 0, new QTableWidgetItem(name));
 	m_results->setItem(row, 1, new QTableWidgetItem(splats));
-	m_results->setItem(row, 2, new QTableWidgetItem(QString::number(ms, 'f', 2)));
+	m_results->setItem(row, 2, new QTableWidgetItem(time));
 	//Same hover text and color on every cell of the row so it shows wherever the mouse is
 	for (int column = 0; column < m_results->columnCount(); ++column) {
 		QTableWidgetItem* cell = m_results->item(row, column);
 		cell->setToolTip(tooltip);
 		cell->setBackground(color);
-		if (bold) {
+		if (bold || failed) {
 			QFont font = cell->font();
 			font.setBold(true);
 			cell->setFont(font);
+		}
+		if (failed) {
+			cell->setForeground(QBrush(Qt::white));
+			cell->setData(Qt::UserRole, true); //ShowSelectedDescription reads this
 		}
 	}
 }
@@ -164,23 +183,43 @@ double StressTestPanel::AddResults(const std::vector<StressResult>& results, con
 
 	const QLocale locale;
 	double totalMs = 0.0;
+	int failedInBatch = 0;
 	for (const StressResult& result : results) {
-		AppendRow(result.name, locale.toString(static_cast<qulonglong>(result.splatCount)), result.ms, result.tooltip,
-			rowColor, false);
-		totalMs += result.ms;
+		const QString splats = locale.toString(static_cast<qulonglong>(result.splatCount));
+		if (result.ok) {
+			AppendRow(result.name, splats, QString::number(result.ms, 'f', 2), result.tooltip, rowColor, false);
+			totalMs += result.ms;
+		}
+		else {
+			//A failed step has no time, it says FAILED instead of a number that could be read as a very fast result
+			++failedInBatch;
+			AppendRow(result.name + " (FAILED)", splats, "FAILED",
+				QString("FAILED: %1\n\n%2").arg(result.note, result.tooltip), QBrush(kFailColor), true, true);
+		}
 	}
 
 	//The splat count is left blank, the steps above do not all work on the same number of splats
 	//%1 is a place holder like %i for ints in printf
-	AppendRow(QString("%1: Total").arg(testName), QString(), totalMs,
-		QString("All the timed steps of the %1 added together. Setup and clean-up are not timed, so this is less "
-			"than how long the test took to run.").arg(testName),
-		rowColor, true);
+	QString totalName = QString("%1: Total").arg(testName);
+	QString totalTip = QString("All the timed steps of the %1 added together. Setup and clean-up are not timed, so this is less "
+		"than how long the test took to run.").arg(testName);
+	if (failedInBatch > 0) {
+		totalName += QString(" (%1 failed)").arg(failedInBatch);
+		totalTip += " Failed steps are not included, so this total is incomplete.";
+	}
+	AppendRow(totalName, QString(), QString::number(totalMs, 'f', 2), totalTip, rowColor, true);
+
+	if (failedInBatch > 0) {
+		m_failedCount += failedInBatch;
+		m_failureBanner->setText(QString("WARNING: %1 step(s) failed. See the red rows. Select a row to read the reason. "
+			"The totals are incomplete.").arg(m_failedCount));
+		m_failureBanner->setVisible(true);
+	}
 	m_results->scrollToBottom();
 	return totalMs;
 }
 
 void StressTestPanel::AddTotal(const QString& label, double ms, const QString& tooltip) {
-	AppendRow(label, QString(), ms, tooltip, QBrush(QColor(0x55, 0x55, 0x5a)), true);
+	AppendRow(label, QString(), QString::number(ms, 'f', 2), tooltip, QBrush(QColor(0x55, 0x55, 0x5a)), true);
 	m_results->scrollToBottom();
 }

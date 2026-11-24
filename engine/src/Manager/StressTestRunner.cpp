@@ -238,37 +238,32 @@ std::vector<StressResult> StressTestRunner::TestExport() {
 		return {};
 	}
 
-	//Mesh formats build a small shape per splat, 1M splats would be gigabytes and the .glb limit is 4 GB
-	constexpr size_t kMeshSplatCap = 100000;
+	//Every case exports every splat, mesh formats included, so the rows are comparable
 	const std::vector<SplatVertex>& all = model->splats();
-	const size_t meshCount = std::min(all.size(), kMeshSplatCap);
-	const std::vector<SplatVertex> meshSubset(all.begin(), all.begin() + static_cast<std::ptrdiff_t>(meshCount));
 
 	struct Case {
 		const char* label;
 		ExportFormat format;
 		ExportGeometry geometry;
-		bool mesh; //Only the first kMeshSplatCap splats are exported
 	};
 	const Case cases[] = {
-		{ "Gaussian PLY", ExportFormat::GaussianPly, ExportGeometry::Points, false },
-		{ "Splat file", ExportFormat::SplatFile, ExportGeometry::Points, false },
-		{ "PLY points", ExportFormat::PointCloudPly, ExportGeometry::Points, false },
-		{ "OBJ points", ExportFormat::Obj, ExportGeometry::Points, false },
-		{ "GLB points", ExportFormat::Glb, ExportGeometry::Points, false },
-		{ "GLB mesh", ExportFormat::Glb, ExportGeometry::Mesh, true },
-		{ "STL mesh", ExportFormat::Stl, ExportGeometry::Mesh, true },
+		{ "Gaussian PLY", ExportFormat::GaussianPly, ExportGeometry::Points },
+		{ "Splat file", ExportFormat::SplatFile, ExportGeometry::Points },
+		{ "PLY points", ExportFormat::PointCloudPly, ExportGeometry::Points },
+		{ "OBJ points", ExportFormat::Obj, ExportGeometry::Points },
+		{ "GLB points", ExportFormat::Glb, ExportGeometry::Points },
+		{ "GLB mesh", ExportFormat::Glb, ExportGeometry::Mesh },
+		{ "STL mesh", ExportFormat::Stl, ExportGeometry::Mesh },
 	};
 
 	const QLocale locale;
 	std::vector<StressResult> results;
 	for (const Case& c : cases) {
-		const std::vector<SplatVertex>& splats = c.mesh ? meshSubset : all;
 		ExportOptions options;
 		options.format = c.format;
 		options.geometry = c.geometry;
 		//The model's transform is baked in, like an export from the editor
-		const std::vector<ExportSource> sources = { ExportSource{ &splats, model->GetTransform() } };
+		const std::vector<ExportSource> sources = { ExportSource{ &all, model->GetTransform() } };
 		const QString path = dir.filePath(QString("export") + QString::fromLatin1(ExportFormatExtension(c.format)));
 
 		ExportResult exported;
@@ -278,8 +273,16 @@ std::vector<StressResult> StressTestRunner::TestExport() {
 		const qint64 bytes = QFileInfo(path).size();
 		QFile::remove(path); //Not kept, whether or not the export worked
 
+		const QString name = QString("Export %1").arg(c.label);
 		if (!exported.ok) {
+			//Still gets a row, so the results always have the same rows and a failure cannot be mistaken for a case that did not run
+			const QString reason = QString::fromStdString(exported.error);
 			qWarning("Export test: %s failed: %s", c.label, exported.error.c_str());
+			results.push_back({ name, all.size(), 0.0,
+				QString("Tried to save %1 splats as a %2 file in a temporary folder (%3).")
+					.arg(locale.toString(static_cast<qulonglong>(all.size())),
+						QString::fromLatin1(ExportFormatName(c.format)), QDir::toNativeSeparators(dir.path())),
+				false, reason });
 			continue;
 		}
 
@@ -287,14 +290,12 @@ std::vector<StressResult> StressTestRunner::TestExport() {
 			"The file is deleted straight away. The time ends when the operating system has the file, it is not forced onto the drive.")
 			.arg(locale.toString(static_cast<qulonglong>(exported.splatCount)),
 				QString::fromLatin1(ExportFormatName(c.format)), locale.formattedDataSize(bytes));
-		if (c.mesh) {
-			tip += QString(" Mesh export turns every splat into a small shape, so only the first %1 splats are exported. "
-				"That made %2 vertices and %3 triangles.")
-				.arg(locale.toString(static_cast<qulonglong>(meshCount)),
-					locale.toString(static_cast<qulonglong>(exported.vertexCount)),
+		if (c.geometry == ExportGeometry::Mesh) {
+			tip += QString(" Mesh export turns every splat into a small shape. That made %1 vertices and %2 triangles.")
+				.arg(locale.toString(static_cast<qulonglong>(exported.vertexCount)),
 					locale.toString(static_cast<qulonglong>(exported.triangleCount)));
 		}
-		results.push_back({ QString("Export %1").arg(c.label), exported.splatCount, ms, tip });
+		results.push_back({ name, exported.splatCount, ms, tip });
 	}
 	return results;
 }

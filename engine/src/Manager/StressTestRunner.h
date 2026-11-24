@@ -13,6 +13,8 @@ struct StressResult {
 	size_t splatCount;   //Splats the step worked on
 	double ms;           //Time the step took
 	QString tooltip;     //Simple explanation of the step, shown when hovering its row
+	bool ok = true;      //False if the step could not run (e.g. out of disk space). It still gets a row, so a log never has a gap
+	QString note;        //Why it failed, only set when ok is false
 };
 
 //Runs the automated stress tests and times them. No UI, the panel only displays what comes back.
@@ -48,9 +50,10 @@ public:
 
 	//Exports the selected model in each file format the editor offers, timing each
 	//Every file is written to a temporary folder and deleted as soon as it is measured, nothing is kept
-	//The scene is not changed. Returns nothing if the renderer is not ready, no model is selected, or no file could be written
-	//Mesh formats turn every splat into a small shape (millions of triangles for a big model), so those cases only
-	//export the first 100,000 splats. The row says how many splats each case exported
+	//The scene is not changed. Returns nothing if the renderer is not ready or no model is selected
+	//Every case exports every splat of the model, so the rows can be compared with each other and between runs
+	//Mesh formats turn every splat into a small shape (6 vertices and 8 triangles each), so they need the most memory and disk space
+	//A case that fails (out of disk space or memory) still gets a row, marked as failed with the reason
 	std::vector<StressResult> TestExport();
 
 	//Moves the selected model, then all, half and a selected tenth of its splats, timing each

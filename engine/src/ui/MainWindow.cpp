@@ -560,7 +560,16 @@ void MainWindow::createDocks() {
         }
         else
         {
+            const int failedBefore = m_stressTestPanel->FailedCount();
             m_stressTestPanel->AddResults(results, name);
+            const int failedNow = m_stressTestPanel->FailedCount() - failedBefore;
+            if (failedNow > 0)
+            {
+                //The panel already shows a red banner, this puts it in the status bar and the Console as well
+                const QString warning = QString("%1: %2 step(s) failed. See the red rows in the Stress Test panel.").arg(name).arg(failedNow);
+                qWarning("%s", qPrintable(warning));
+                statusBar()->showMessage(warning, kStatusMessageMs);
+            }
         }
 
         endStressRun();
@@ -984,6 +993,7 @@ void MainWindow::runAllStressTests() {
 
     beginStressRun(true);
     StressTestRunner runner(m_viewport);
+    const int failedBefore = m_stressTestPanel->FailedCount(); //To tell this run's failures from earlier ones
     int ran = 0;
     double grandTotalMs = 0.0; //Every test's total added together
     bool stopped = false;
@@ -1019,12 +1029,17 @@ void MainWindow::runAllStressTests() {
         }
     }
 
+    const int failedSteps = m_stressTestPanel->FailedCount() - failedBefore; //Steps that failed during this run
     if (ran > 0) {
-        const QString label = stopped ? QString("Test All: Total (stopped, %1 of %2 tests)").arg(ran).arg(steps.size())
-                                      : QString("Test All: Total");
-        m_stressTestPanel->AddTotal(label, grandTotalMs,
-            "The totals of every test that ran added together. Setup and clean-up are not timed, so this is less "
-            "than how long Test All took to run.");
+        QString label = stopped ? QString("Test All: Total (stopped, %1 of %2 tests)").arg(ran).arg(steps.size())
+                                : QString("Test All: Total");
+        QString tip = "The totals of every test that ran added together. Setup and clean-up are not timed, so this is less "
+            "than how long Test All took to run.";
+        if (failedSteps > 0) {
+            label += QString(" (%1 failed)").arg(failedSteps);
+            tip += " Failed steps are not included, so this total is incomplete.";
+        }
+        m_stressTestPanel->AddTotal(label, grandTotalMs, tip);
     }
 
     //The delete test briefly adds and removes a model, make sure the panels match the scene
@@ -1041,7 +1056,14 @@ void MainWindow::runAllStressTests() {
     else {
         message = QString("Test All finished: %1 of %2 tests ran.").arg(ran).arg(steps.size());
     }
-    qInfo("%s", qPrintable(message));
+    if (failedSteps > 0) {
+        //Failures are easy to miss in a long run, so say it in the status bar and the Console as well as the red rows
+        message += QString(" WARNING: %1 step(s) failed, see the red rows in the Stress Test panel.").arg(failedSteps);
+        qWarning("%s", qPrintable(message));
+    }
+    else {
+        qInfo("%s", qPrintable(message));
+    }
     statusBar()->showMessage(message, kStatusMessageMs);
 }
 
