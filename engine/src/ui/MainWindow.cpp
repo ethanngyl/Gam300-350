@@ -1294,8 +1294,14 @@ void MainWindow::applyCropBox() {
     if (removeCount > 0 && removeCount == keep.size()) {
         const QString name = QString::fromStdString(model->GetName());
         cancelCropBox(); //The box belongs to the model that is about to go
-        deleteSelectedModel(); //Also clears the undo stack
-        const QString message = QString("Removed every splat of %1, so the model was deleted").arg(name);
+        //Undoable, unlike deleteSelectedModel. The restored model is a new object, so older
+        //commands that point at this one have to go first
+        m_undo.clear();
+        m_undo.push(new DeleteModelCommand(renderer, model, [this] {
+            m_inspector->setModel(nullptr); //Drop the pointer before the model is freed
+            m_cropBoxModel = nullptr;       //The address may be reused by the next model
+        }));
+        const QString message = QString("Removed every splat of %1, so the model was deleted (Ctrl+Z to undo)").arg(name);
         qInfo("%s.", qPrintable(message));
         statusBar()->showMessage(message, kStatusMessageMs);
         return;

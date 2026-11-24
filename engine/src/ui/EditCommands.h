@@ -8,6 +8,7 @@ Push calls redo() straight away, so the edit is applied by the command itself
 #pragma once
 
 #include "splat/SplatData.h"
+#include "splat/SplatTrimmer.h"
 
 #include <glm/glm.hpp>
 
@@ -15,6 +16,7 @@ Push calls redo() straight away, so the edit is applied by the command itself
 #include <QUndoCommand>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -111,6 +113,35 @@ private:
     SplatModel* m_model;
     std::vector<uint32_t> m_indices;   //Ascending positions the removed splats had before removal
     std::vector<SplatVertex> m_removed; //The removed splats, in the same order as m_indices
+};
+
+//Removes a whole model from the scene, and puts it back on undo
+//Redo copies everything needed to rebuild the model (splats, untrimmed original, trim values, name,
+//transform, hidden flag) and then removes it. Undo adds it back at the end of the scene list and selects it.
+//The restored model is a new object, so commands that pointed at the old one would dangle:
+//clear the undo stack before pushing this. The renderer must outlive the command.
+class DeleteModelCommand : public QUndoCommand {
+public:
+    //beforeRemove runs just before the model is freed, so the caller can drop pointers to it (inspector, crop box)
+    DeleteModelCommand(SplatRenderer* renderer, SplatModel* model, std::function<void()> beforeRemove,
+                       QUndoCommand* parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    SplatRenderer* m_renderer;
+    SplatModel* m_model; //The live model while it's in the scene, nullptr while it's deleted
+    std::function<void()> m_beforeRemove;
+
+    //Saved while the model is deleted, emptied again once it's restored
+    std::vector<SplatVertex> m_splats;
+    std::vector<SplatVertex> m_original; //Empty if the model kept no separate untrimmed copy
+    std::string m_name;
+    glm::mat4 m_transform = glm::mat4(1.0f);
+    TrimData m_trimData{};
+    bool m_trimmed = false;
+    bool m_hidden = false;
 };
 
 //Replaces some of a model's splats with edited versions (moved, rotated or scaled)
