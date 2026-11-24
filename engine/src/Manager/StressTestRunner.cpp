@@ -140,10 +140,32 @@ std::vector<StressResult> StressTestRunner::TestTrim() {
 	}
 	const std::vector<SplatVertex>& alphaSource = flatAlpha ? spreadAlpha : saved;
 
+	//Min alpha values that cut about the lowest 25%, 50% and 90% of the splats, read from the alpha values of the model itself
+	//Fixed values would cut very different amounts from different models, this way every model loses about the same share
+	//Ties (many splats with the same alpha) can make the real cut a little smaller, the Compute row says how much was kept
+	std::vector<float> alphas;
+	alphas.reserve(alphaSource.size());
+	for (const SplatVertex& splat : alphaSource) {
+		if (std::isfinite(splat.alpha)) {
+			alphas.push_back(splat.alpha);
+		}
+	}
+	auto alphaForCut = [&alphas](double fraction) {
+		if (alphas.empty()) {
+			return 0.0f; //0 means min alpha is off
+		}
+		const size_t index = std::min(alphas.size() - 1, static_cast<size_t>(fraction * static_cast<double>(alphas.size())));
+		std::nth_element(alphas.begin(), alphas.begin() + static_cast<std::ptrdiff_t>(index), alphas.end());
+		return alphas[index];
+	};
+	const float alphaCut25 = alphaForCut(0.25);
+	const float alphaCut50 = alphaForCut(0.50);
+	const float alphaCut90 = alphaForCut(0.90);
+
 	//The density filter drops splats in cells holding fewer than this, scaled to the splat count so it cuts at any size
 	const int densityMin = std::max(2, static_cast<int>(total / 10000));
 	struct Case {
-		const char* label;
+		QString label;
 		TrimData settings; //minAlpha, cropPct, voxelDivisions, minPerVoxel
 		bool byAlpha;      //Trim the copy with spread out alpha (if the model needs one), the others trim the model's own splats
 	};
@@ -152,9 +174,9 @@ std::vector<StressResult> StressTestRunner::TestTrim() {
 		{ "crop 25%", TrimData{ 0.0f, 25.0f, 0, 1 }, false },
 		{ "density filter", TrimData{ 0.0f, 0.0f, 50, densityMin }, false },
 		{ "crop 25% + density", TrimData{ 0.0f, 25.0f, 50, densityMin }, false },
-		{ "min alpha 0.25", TrimData{ 0.25f, 0.0f, 0, 1 }, true },
-		{ "min alpha 0.5", TrimData{ 0.5f, 0.0f, 0, 1 }, true },
-		{ "min alpha 0.9", TrimData{ 0.9f, 0.0f, 0, 1 }, true },
+		{ "min alpha (lowest 25%)", TrimData{ alphaCut25, 0.0f, 0, 1 }, true },
+		{ "min alpha (lowest 50%)", TrimData{ alphaCut50, 0.0f, 0, 1 }, true },
+		{ "min alpha (lowest 90%)", TrimData{ alphaCut90, 0.0f, 0, 1 }, true },
 		{ "default settings", TrimData{}, false },
 	};
 
@@ -170,8 +192,11 @@ std::vector<StressResult> StressTestRunner::TestTrim() {
 		QString computeTip = QString("Works out which splats to cut and copies the rest (CPU only). Kept %1 of %2 splats (%3%).")
 			.arg(locale.toString(static_cast<qulonglong>(kept)), locale.toString(static_cast<qulonglong>(total)))
 			.arg(100.0 * static_cast<double>(kept) / static_cast<double>(total), 0, 'f', 1);
-		if (c.byAlpha && flatAlpha) {
-			computeTip += " Every splat of this model has the same alpha, so a copy with the alpha spread evenly from 0 to 1 was trimmed.";
+		if (c.byAlpha) {
+			computeTip += QString(" Min alpha used: %1.").arg(static_cast<double>(c.settings.minAlpha), 0, 'f', 4);
+			if (flatAlpha) {
+				computeTip += " Every splat of this model has the same alpha, so a copy with the alpha spread evenly from 0 to 1 was trimmed.";
+			}
 		}
 		results.push_back({ label + ": Compute", total, computeMs, computeTip });
 
