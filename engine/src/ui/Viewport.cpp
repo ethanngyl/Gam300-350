@@ -67,6 +67,16 @@ Viewport::~Viewport() {
     doneCurrent();
 }
 
+void Viewport::RenderFrameBlocking() {
+    if (!m_glInitialized) {
+        return;
+    }
+    repaint(); //Runs paintGL synchronously
+    makeCurrent();
+    glFinish(); //GL calls return early, wait so the GPU work is counted
+    doneCurrent();
+}
+
 void Viewport::initializeGL() {
     glewExperimental = GL_TRUE;
     GLenum glewStatus = glewInit();

@@ -362,6 +362,31 @@ const colmapStrictMapperArgs = colmapStrict
     ]
     : []
 
+// Leave redundant 3D points out of the mapper's full-model bundle
+// adjustments, the slow part of recovering camera positions. Tested on the
+// Panther photos: 311 photos mapped in 18.8 min instead of 29.9, 105 photos in
+// 127 s instead of 170, with every photo still placed and the reprojection
+// error up only 0.01-0.02 px. The flag is new in COLMAP 4 and older builds
+// exit on an unknown option, so it is only passed when the mapper lists it.
+// COLMAP_SKIP_REDUNDANT_POINTS=0 turns it off.
+function colmapMapperHasFlag(exe, flag) {
+    try {
+        const r = spawnSync(exe, ['mapper', '--help'], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            windowsHide: true,
+        })
+        return `${r.stdout ?? ''}${r.stderr ?? ''}`.includes(flag)
+    } catch {
+        return false
+    }
+}
+const redundantPointsFlag = '--Mapper.ba_global_ignore_redundant_points3D'
+const colmapFastMapperArgs =
+    process.env.COLMAP_SKIP_REDUNDANT_POINTS !== '0' && colmapMapperHasFlag(colmapBin, redundantPointsFlag)
+        ? [redundantPointsFlag, '1']
+        : []
+
 /**
  * Central config for the reconstruction backend.
  *
@@ -407,6 +432,14 @@ function parseOrigins(value) {
     return origins
 }
 
+// A RATE_LIMIT_* setting: a whole number of requests, 0 to switch that limit
+// off; missing or empty gives the default.
+function limitSetting(name, fallback) {
+    const raw = process.env[name]
+    if (raw === undefined || raw.trim() === '') return fallback
+    return Math.max(0, Math.floor(Number(raw)) || 0)
+}
+
 export const config = {
     // The repository's root folder (sample data paths are relative to it).
     repoRoot,
@@ -449,6 +482,9 @@ export const config = {
     // when COLMAP_STRICT=0.
     colmapStrictMatcherArgs,
     colmapStrictMapperArgs,
+    // Faster mapper bundle adjustment (see above); empty when
+    // COLMAP_SKIP_REDUNDANT_POINTS=0 or the COLMAP build lacks the flag.
+    colmapFastMapperArgs,
 
     // Reference data (feedback categories, training presets, the photo
     // minimum): see catalog.js.
@@ -487,6 +523,9 @@ export const config = {
     // Recenters/rescales the trained splat into the viewer's frame.
     normalizeScript:
         process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
+    // Optional auto-crop: keeps only the object the photos were taken around,
+    // worked out from COLMAP's camera positions (jobs with autoCrop set).
+    autoCropScript: process.env.AUTO_CROP_SCRIPT || path.join(toolsDir, 'auto_crop.py'),
     // Optional background removal: writes per-photo foreground masks that
     // COLMAP and Brush use to ignore the background (turntable captures).
     maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),
@@ -559,6 +598,16 @@ export const config = {
     // Caddy forwards from the same machine, so req.ip is the real client
     // address (for rate limits) and req.secure reflects HTTPS (for cookies).
     trustProxy: process.env.TRUST_PROXY || null,
+    // Rate limits (middleware/limits.js; docs/architecture.md "Rate limits").
+    // 0 switches a limit off. API requests per minute, per signed-in user or
+    // else per address (team machines using the shared key aren't counted);
+    // builds started (accepted uploads) per user per hour and per day; full
+    // result.ply downloads per user per hour. Admins are exempt from the
+    // build and download limits.
+    rateLimitApiPerMin: limitSetting('RATE_LIMIT_API_PER_MIN', 600),
+    rateLimitBuildsPerHour: limitSetting('RATE_LIMIT_BUILDS_PER_HOUR', 10),
+    rateLimitBuildsPerDay: limitSetting('RATE_LIMIT_BUILDS_PER_DAY', 30),
+    rateLimitDownloadsPerHour: limitSetting('RATE_LIMIT_DOWNLOADS_PER_HOUR', 60),
     // Largest profile photo accepted (PUT /auth/me/avatar). The website
     // shrinks photos to a 256 x 256 JPEG first, which is far smaller.
     maxAvatarKB: 256,

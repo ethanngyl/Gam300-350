@@ -86,6 +86,10 @@ Password reset email: "Forgot password?" emails a 6-digit code from a Gmail acco
   the VM's packages/src/backend/.env set SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=<the Gmail address>,
   SMTP_PASS=<the app password> and MAIL_FROM=Genesis <the Gmail address>, restart, then check with
   "npm run mail:test -- you@example.com" (in packages). Codes work once, for 15 minutes.
+Rate limits: every API call counts towards 600 a minute (per signed-in user, else per address), and each user may start 10 builds
+  an hour / 30 a day and download 60 models an hour (admins exempt); over a limit the reply is 429 with Retry-After. Set them
+  with RATE_LIMIT_API_PER_MIN, RATE_LIMIT_BUILDS_PER_HOUR, RATE_LIMIT_BUILDS_PER_DAY and RATE_LIMIT_DOWNLOADS_PER_HOUR in
+  .env (0 = off). The full list of limits is in docs/architecture.md ("Rate limits").
 Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
 packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
 packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
@@ -194,6 +198,8 @@ The server accepts 1,000 to 30,000 iterations and clamps anything outside that r
 the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
 "Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
+"Keep only the main object" (same screens, off by default) removes everything outside the path the photos were taken from, such
+as neighbouring objects, walls and the ceiling, after training. It is skipped when the photos don't surround one object.
 
 23. With no photos in the batch, confirm "Use this batch" and "Review photos first" are disabled.
 24. Add photos taken all the way around the object, then click "Use this batch (N photos)".

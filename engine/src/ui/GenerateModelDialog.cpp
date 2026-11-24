@@ -69,6 +69,7 @@ namespace {
     const QString kCustomItersKey = QStringLiteral("generate/customIters");
     const QString kFpsKey = QStringLiteral("generate/fps");
     const QString kRemoveBackgroundKey = QStringLiteral("generate/removeBackground");
+    const QString kAutoCropKey = QStringLiteral("generate/autoCrop");
     const QString kImportKey = QStringLiteral("generate/import");
     const QString kCopyKey = QStringLiteral("generate/copy");
     const QString kCopyFolderKey = QStringLiteral("generate/copyFolder");
@@ -186,6 +187,13 @@ GenerateModelDialog::GenerateModelDialog(QWidget* parent)
                                    "Use it for turntable captures where the object spins and the camera stays still.");
     m_removeBackground->setChecked(settings.value(kRemoveBackgroundKey, false).toBool());
     options->addRow("", m_removeBackground);
+
+    m_autoCrop = new QCheckBox("Keep only the main object", this);
+    m_autoCrop->setToolTip("When you walk around an object, removes everything outside the path you took "
+                           "(neighbouring objects, walls, the ceiling). Skipped if the photos don't surround "
+                           "one object. Turn off for rooms and scenery.");
+    m_autoCrop->setChecked(settings.value(kAutoCropKey, false).toBool());
+    options->addRow("", m_autoCrop);
 
     m_import = new QCheckBox("Import into the scene when it's ready", this);
     m_import->setChecked(settings.value(kImportKey, true).toBool());
@@ -344,6 +352,7 @@ GenerationRequest GenerateModelDialog::request() const {
     for (int i = 0; i < m_files->count(); ++i) request.files << m_files->item(i)->data(Qt::UserRole).toString();
     request.name = m_name->text().trimmed();
     request.removeBackground = m_removeBackground->isChecked();
+    request.autoCrop = m_autoCrop->isChecked();
     const int preset = m_detail->currentData().toInt();
     request.trainIters = preset == kCustomDetail ? m_customIters->value() : preset;
     request.fps = isMedia() ? m_fps->value() : 0.0;
@@ -365,6 +374,7 @@ void GenerateModelDialog::accept() {
     settings.setValue(kCustomItersKey, m_customIters->value());
     settings.setValue(kFpsKey, m_fps->value());
     settings.setValue(kRemoveBackgroundKey, m_removeBackground->isChecked());
+    settings.setValue(kAutoCropKey, m_autoCrop->isChecked());
     settings.setValue(kImportKey, m_import->isChecked());
     settings.setValue(kCopyKey, m_copy->currentData().toInt());
     settings.setValue(kCopyFolderKey, m_copyFolder->text().trimmed());

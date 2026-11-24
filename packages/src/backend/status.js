@@ -95,6 +95,7 @@ export function saveJob(job, { throttle = false } = {}) {
         sampleFile: job.sampleFile ?? null,
         imageCount: job.imageCount ?? null,
         removeBackground: job.removeBackground ?? false,
+        autoCrop: job.autoCrop ?? false,
         trainIters: job.trainIters ?? null,
         createdAt: job.createdAt,
         updatedAt: now,
