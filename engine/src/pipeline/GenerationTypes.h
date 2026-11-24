@@ -28,6 +28,7 @@ struct GenerationRequest {
     QStringList files;
     QString name;                  // empty = a default name
     bool removeBackground = false; // mask out the background first (turntable captures)
+    bool autoCrop = false;         // keep only the object the photos surround (walk-around captures)
     int trainIters = 0;            // training iteration cap, 0 = default
     double fps = 0.0;              // Media only: frames taken per second of video, 0 = default
 };
@@ -36,7 +37,7 @@ struct GenerationRequest {
 struct JobStatus {
     QString id;
     QString status;   // queued / running / done / error / cancelled
-    QString phase;    // extract / masking / colmap-* / training / normalize / done
+    QString phase;    // extract / masking / colmap-* / training / crop / normalize / done
     QString detail;   // e.g. the training iteration counter
     QString error;
     double progress = 0.0; // 0..1

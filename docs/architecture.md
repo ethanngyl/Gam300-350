@@ -153,8 +153,8 @@ needs the shared key.
 
 | Method | Path | Who | Reply |
 |---|---|---|---|
-| POST | `/upload` | user | 202 `{ id, imageCount }`. Multipart `images` (8+ JPEG / PNG), optional `trainIters`, `removeBackground` |
-| POST | `/jobs/from-media` | user | 202 `{ id }`. Multipart `media` (videos / GIFs), optional `fps`, `maxFrames`, `trainIters`, `removeBackground` |
+| POST | `/upload` | user | 202 `{ id, imageCount }`. Multipart `images` (8+ JPEG / PNG), optional `trainIters`, `removeBackground`, `autoCrop` |
+| POST | `/jobs/from-media` | user | 202 `{ id }`. Multipart `media` (videos / GIFs), optional `fps`, `maxFrames`, `trainIters`, `removeBackground`, `autoCrop` |
 | GET | `/jobs` | user | 200 JobSummary list of the user's jobs (admins: all), from the sources in `JOB_SOURCES` |
 | GET | `/jobs/:id` | owner | 200 status, phase, progress, log tail |
 | PATCH | `/jobs/:id` | owner | 200 `{ id, name, sampleFile }` (rename) |

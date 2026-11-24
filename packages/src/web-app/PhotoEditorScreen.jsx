@@ -239,9 +239,9 @@ function CropOverlay({ crop, onChange }) {
     );
 }
 
-// initialPhotos: { files, removeBackground, trainIters } handed over from
+// initialPhotos: { files, removeBackground, autoCrop, trainIters } handed over from
 // Camera Capture, or null when the editor is opened on its own.
-// onBackToCapture(files, { removeBackground, trainIters }) sends the photos
+// onBackToCapture(files, { removeBackground, autoCrop, trainIters }) sends the photos
 // to Camera Capture.
 function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null, onBackToCapture }) {
     const isPhone = useIsPhone();
@@ -257,6 +257,8 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // captures, where the static background makes the model come out flat.
     // Starts with the choice carried over from Camera Capture, if any.
     const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    // Keep only the object the photos were taken around (walk-around captures).
+    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? true);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     // Opened from Camera Capture, so it can send the photos back there.
@@ -416,7 +418,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // out" choices only live in the editor, so they reset.
     function backToCapture() {
         playSound(isFromCapture ? 'back' : 'tap');
-        onBackToCapture(photos.map((photo) => photo.file), { removeBackground, trainIters });
+        onBackToCapture(photos.map((photo) => photo.file), { removeBackground, autoCrop, trainIters });
     }
 
     function openFilePicker() {
@@ -641,6 +643,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
         setRemoveBackground(event.target.checked);
     }
 
+    function handleAutoCropChange(event) {
+        playSound('tap');
+        setAutoCrop(event.target.checked);
+    }
+
     async function handleGenerate() {
         playSound('confirm');
         setIsCropping(false);
@@ -654,7 +661,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
             }
             // On success App switches to the processing screen; on failure it
             // sets uploadError, which is shown in the bottom bar.
-            await onGenerateModel(filesToUpload, { removeBackground, trainIters });
+            await onGenerateModel(filesToUpload, { removeBackground, autoCrop, trainIters });
         } finally {
             setPreparedCount(null);
         }
@@ -1162,6 +1169,18 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                     onChange={handleRemoveBackgroundChange}
                                 />
                                 Remove background
+                            </label>
+                            <label
+                                className="photo-editor-originals"
+                                title="When you walk around an object, removes everything outside the path you took. Turn off for rooms and scenery."
+                            >
+                                <input
+                                    type="checkbox"
+                                    className="photo-editor-switch"
+                                    checked={autoCrop}
+                                    onChange={handleAutoCropChange}
+                                />
+                                Keep only the main object
                             </label>
                         </div>
                         <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} disabled={isPreparing} />

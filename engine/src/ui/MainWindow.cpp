@@ -114,6 +114,7 @@ namespace {
             { "colmap-matching", "Matching photos" },
             { "colmap-mapping", "Recovering camera positions" },
             { "training", "Training 3D model" },
+            { "crop", "Keeping the main object" },
             { "normalize", "Finalizing model" },
             { "done", "Done" },
         };

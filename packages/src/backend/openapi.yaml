@@ -478,7 +478,8 @@ paths:
                 images: { type: array, items: { type: string, format: binary } }
                 trainIters: { type: integer, minimum: 1000, maximum: 30000, description: Training iterations (a catalog preset) }
                 removeBackground: { type: string, enum: ['true', 'false'] }
-            example: { images: [0001.jpg, 0002.jpg, 0003.jpg, 0004.jpg, 0005.jpg, 0006.jpg, 0007.jpg, 0008.jpg], trainIters: 7000, removeBackground: 'false' }
+                autoCrop: { type: string, enum: ['true', 'false'], description: Keep only the object the photos were taken around (skipped if they don't surround one) }
+            example: { images: [0001.jpg, 0002.jpg, 0003.jpg, 0004.jpg, 0005.jpg, 0006.jpg, 0007.jpg, 0008.jpg], trainIters: 7000, removeBackground: 'false', autoCrop: 'true' }
       responses:
         '202':
           description: The job started
@@ -521,7 +522,8 @@ paths:
                 maxFrames: { type: integer, description: Most frames to extract }
                 trainIters: { type: integer, minimum: 1000, maximum: 30000 }
                 removeBackground: { type: string, enum: ['true', 'false'] }
-            example: { media: [turntable.mp4], fps: 2, maxFrames: 120, trainIters: 7000, removeBackground: 'true' }
+                autoCrop: { type: string, enum: ['true', 'false'], description: Keep only the object the frames were filmed around }
+            example: { media: [turntable.mp4], fps: 2, maxFrames: 120, trainIters: 7000, removeBackground: 'true', autoCrop: 'false' }
       responses:
         '202':
           description: The job started
@@ -1907,6 +1909,7 @@ components:
             updatedAt: 1791102300000
             imageCount: 24
             removeBackground: false
+            autoCrop: true
             hasResult: false
             logTail: ['Training step 4200 / 7000']
     JobNotFound:
@@ -2147,7 +2150,7 @@ components:
         photoVersion: { type: ['integer', 'null'], description: Changes with each new photo; null when there is none }
     JobStatus:
       type: object
-      required: [id, status, phase, progress, detail, error, updatedAt, imageCount, removeBackground, hasResult, logTail]
+      required: [id, status, phase, progress, detail, error, updatedAt, imageCount, removeBackground, autoCrop, hasResult, logTail]
       properties:
         id: { type: string }
         status: { enum: [queued, running, done, error, cancelled] }
@@ -2158,6 +2161,7 @@ components:
         updatedAt: { type: ['number', 'null'] }
         imageCount: { type: ['integer', 'null'] }
         removeBackground: { type: boolean }
+        autoCrop: { type: boolean }
         hasResult: { type: boolean }
         logTail: { type: array, items: { type: string } }
     FeedbackInput:

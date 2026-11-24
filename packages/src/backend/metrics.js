@@ -426,6 +426,9 @@ export async function recordPlyMetrics(job, { rawPly, finalPly, normalized, log 
         rawPlyBytes: rawBytes,
         finalPlyBytes: finalBytes,
         normalized: !!normalized,
+        // { cropped, kept, removed, ... } or { cropped: false, reason } when
+        // the job asked for auto-crop (see autoCropPly in pipeline.js).
+        autoCrop: m.autoCrop ?? undefined,
         rawPly: rawPly ? path.relative(config.jobsDir, rawPly).split(path.sep).join('/') : null,
         finalPly: finalPly ? path.relative(config.jobsDir, finalPly).split(path.sep).join('/') : null,
       },

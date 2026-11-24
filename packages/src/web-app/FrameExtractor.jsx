@@ -14,14 +14,14 @@ detail (training iteration cap, via TrainingQualitySlider). The drop zone,
 chosen files, fps and "Process media" share one box, with a note under it on
 how frames are picked.
 "Process media" hands the files and settings to App through
-onStartBuild({ files, fps, trainIters, removeBackground }). App opens the
+onStartBuild({ files, fps, trainIters, removeBackground, autoCrop }). App opens the
 full-screen processing screen (Processing.jsx), the same one photo builds
 use, which shows the upload as its first step and then the build's progress;
 a finished model opens on the model page. The file rules and the upload live
 in mediaJobs.js. There is no Back button; the sidebar (or the dock on
 phones) handles navigation.
 - FrameExtractor({ onStartBuild, initialDraft, notice })
-initialDraft ({ files, fps, trainIters, removeBackground }, from App) fills
+initialDraft ({ files, fps, trainIters, removeBackground, autoCrop }, from App) fills
 the form in again after a failed or cancelled build. notice is a message
 shown in the form's error line, e.g. after a reload stopped an upload.
 **************************************************************************/
@@ -70,6 +70,8 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
     // a video of a turntable otherwise makes the model come out flat or
     // incoherent, and solving the camera positions takes far longer.
     const [removeBackground, setRemoveBackground] = useState(initialDraft?.removeBackground ?? true);
+    // Keep only the object the video was filmed around (walk-around videos).
+    const [autoCrop, setAutoCrop] = useState(initialDraft?.autoCrop ?? true);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialDraft?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     const [error, setError] = useState(notice);
@@ -145,6 +147,7 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
             fps: Number(fps) || 2,
             trainIters,
             removeBackground,
+            autoCrop,
         });
     }
 
@@ -249,6 +252,21 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
                         <span>
                             Remove background
                             <small>Keeps just the object. Turn off to keep the surroundings in the model.</small>
+                        </span>
+                    </label>
+
+                    <label className="fx-option">
+                        <input
+                            type="checkbox"
+                            checked={autoCrop}
+                            onChange={(e) => {
+                                playSound('tap');
+                                setAutoCrop(e.target.checked);
+                            }}
+                        />
+                        <span>
+                            Keep only the main object
+                            <small>When the video walks around an object, removes everything outside the path it took. Turn off for rooms and scenery.</small>
                         </span>
                     </label>
 

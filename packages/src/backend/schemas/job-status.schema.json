@@ -18,6 +18,7 @@
     "sampleFile": { "type": ["string", "null"] },
     "imageCount": { "type": ["integer", "null"], "minimum": 0 },
     "removeBackground": { "type": "boolean" },
+    "autoCrop": { "type": "boolean" },
     "trainIters": { "type": ["integer", "null"], "minimum": 1 },
     "createdAt": { "type": "number" },
     "updatedAt": { "type": "number" },

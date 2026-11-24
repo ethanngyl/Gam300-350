@@ -75,6 +75,9 @@ router.post('/upload', requireUser, assignJobId, upload.array('images', config.m
     // Optional multipart text field: mask out the background before COLMAP
     // (needed for turntable captures, see generateMasks in pipeline.js).
     job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
+    // Optional multipart text field: keep only the object the photos were
+    // taken around (see autoCropPly in pipeline.js).
+    job.autoCrop = ['true', '1', 'on'].includes(String(req.body?.autoCrop).toLowerCase())
     // Optional multipart text field: training iteration cap (Fast / Normal / Detailed).
     job.trainIters = parseTrainIters(req.body?.trainIters)
     saveJob(job) // gives upload-only jobs a status record from the start
@@ -165,8 +168,8 @@ router.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], require
     Create a reconstruction job from uploaded videos / GIFs. Frames are
     extracted server side (tools/extract_frames.py) into the job's images/
     folder, then the same COLMAP + Brush pipeline runs. Multipart body: media
-    (the files), and the optional text fields fps, maxFrames, trainIters and
-    removeBackground.
+    (the files), and the optional text fields fps, maxFrames, trainIters,
+    removeBackground and autoCrop.
     The job is owned by the logged-in user. requireUser runs before
     assignJobId so a logged-out request never creates a folder.
   \return
@@ -196,6 +199,7 @@ router.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, me
     job.source = 'media'
     // Mask out the background before COLMAP, see generateMasks in pipeline.js.
     job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
+    job.autoCrop = ['true', '1', 'on'].includes(String(req.body?.autoCrop).toLowerCase())
     job.trainIters = parseTrainIters(trainIters)
     saveJob(job)
 
@@ -230,6 +234,7 @@ router.get(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res
     updatedAt: job.updatedAt ?? null,
     imageCount: job.imageCount ?? null,
     removeBackground: !!job.removeBackground,
+    autoCrop: !!job.autoCrop,
     hasResult: job.status === 'done' && !!job.resultPath,
     logTail: job.log.slice(-40),
   })

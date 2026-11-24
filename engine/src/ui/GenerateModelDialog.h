@@ -80,6 +80,7 @@ private:
     QDoubleSpinBox* m_fps = nullptr;
     QLabel* m_fpsLabel = nullptr;
     QCheckBox* m_removeBackground = nullptr;
+    QCheckBox* m_autoCrop = nullptr;
     QCheckBox* m_import = nullptr;
     QComboBox* m_copy = nullptr;
     QLineEdit* m_copyFolder = nullptr;
