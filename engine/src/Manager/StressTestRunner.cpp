@@ -12,6 +12,8 @@
 
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
 #include <QLocale>
 #include <QTemporaryDir>
 #include <QUndoStack>
@@ -214,6 +216,85 @@ std::vector<StressResult> StressTestRunner::TestTrim() {
 		//Put all the splats back, so the next case starts the same way
 		renderer->UpdateModel(model, saved);
 		m_viewport->RenderFrameBlocking();
+	}
+	return results;
+}
+
+std::vector<StressResult> StressTestRunner::TestExport() {
+	SplatRenderer* renderer = m_viewport->renderer();
+	if (!renderer) {
+		return {};
+	}
+	const int modelIndex = renderer->GetSelectedModel();
+	SplatModel* model = renderer->GetModel(modelIndex);
+	if (!model || model->splats().empty()) {
+		return {};
+	}
+
+	//The folder and any file still in it are deleted when dir goes out of scope
+	QTemporaryDir dir;
+	if (!dir.isValid()) {
+		qWarning("Export test: could not create a temporary folder.");
+		return {};
+	}
+
+	//Mesh formats build a small shape per splat, 1M splats would be gigabytes and the .glb limit is 4 GB
+	constexpr size_t kMeshSplatCap = 100000;
+	const std::vector<SplatVertex>& all = model->splats();
+	const size_t meshCount = std::min(all.size(), kMeshSplatCap);
+	const std::vector<SplatVertex> meshSubset(all.begin(), all.begin() + static_cast<std::ptrdiff_t>(meshCount));
+
+	struct Case {
+		const char* label;
+		ExportFormat format;
+		ExportGeometry geometry;
+		bool mesh; //Only the first kMeshSplatCap splats are exported
+	};
+	const Case cases[] = {
+		{ "Gaussian PLY", ExportFormat::GaussianPly, ExportGeometry::Points, false },
+		{ "Splat file", ExportFormat::SplatFile, ExportGeometry::Points, false },
+		{ "PLY points", ExportFormat::PointCloudPly, ExportGeometry::Points, false },
+		{ "OBJ points", ExportFormat::Obj, ExportGeometry::Points, false },
+		{ "GLB points", ExportFormat::Glb, ExportGeometry::Points, false },
+		{ "GLB mesh", ExportFormat::Glb, ExportGeometry::Mesh, true },
+		{ "STL mesh", ExportFormat::Stl, ExportGeometry::Mesh, true },
+	};
+
+	const QLocale locale;
+	std::vector<StressResult> results;
+	for (const Case& c : cases) {
+		const std::vector<SplatVertex>& splats = c.mesh ? meshSubset : all;
+		ExportOptions options;
+		options.format = c.format;
+		options.geometry = c.geometry;
+		//The model's transform is baked in, like an export from the editor
+		const std::vector<ExportSource> sources = { ExportSource{ &splats, model->GetTransform() } };
+		const QString path = dir.filePath(QString("export") + QString::fromLatin1(ExportFormatExtension(c.format)));
+
+		ExportResult exported;
+		const double ms = MeasureMs([&] {
+			exported = ExportSplats(sources, std::filesystem::path(path.toStdWString()), options);
+		});
+		const qint64 bytes = QFileInfo(path).size();
+		QFile::remove(path); //Not kept, whether or not the export worked
+
+		if (!exported.ok) {
+			qWarning("Export test: %s failed: %s", c.label, exported.error.c_str());
+			continue;
+		}
+
+		QString tip = QString("Saves %1 splats as a %2 file in a temporary folder (CPU + disk). File size: %3. "
+			"The file is deleted straight away. The time ends when the operating system has the file, it is not forced onto the drive.")
+			.arg(locale.toString(static_cast<qulonglong>(exported.splatCount)),
+				QString::fromLatin1(ExportFormatName(c.format)), locale.formattedDataSize(bytes));
+		if (c.mesh) {
+			tip += QString(" Mesh export turns every splat into a small shape, so only the first %1 splats are exported. "
+				"That made %2 vertices and %3 triangles.")
+				.arg(locale.toString(static_cast<qulonglong>(meshCount)),
+					locale.toString(static_cast<qulonglong>(exported.vertexCount)),
+					locale.toString(static_cast<qulonglong>(exported.triangleCount)));
+		}
+		results.push_back({ QString("Export %1").arg(c.label), exported.splatCount, ms, tip });
 	}
 	return results;
 }

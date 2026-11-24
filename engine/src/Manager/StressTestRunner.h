@@ -46,6 +46,13 @@ public:
 	//and the first frame after (uploading what is left and drawing)
 	std::vector<StressResult> TestTrim();
 
+	//Exports the selected model in each file format the editor offers, timing each
+	//Every file is written to a temporary folder and deleted as soon as it is measured, nothing is kept
+	//The scene is not changed. Returns nothing if the renderer is not ready, no model is selected, or no file could be written
+	//Mesh formats turn every splat into a small shape (millions of triangles for a big model), so those cases only
+	//export the first 100,000 splats. The row says how many splats each case exported
+	std::vector<StressResult> TestExport();
+
 	//Moves the selected model, then all, half and a selected tenth of its splats, timing each
 	//Uses the same undoable commands as the editor, on a private undo stack so the editor's undo history is untouched
 	//Every move is undone afterwards, so the model ends up exactly as it started

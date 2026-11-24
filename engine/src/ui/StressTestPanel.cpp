@@ -23,6 +23,8 @@ namespace {
 		QColor(0x5e, 0x3a, 0x6e), //Purple
 		QColor(0x1f, 0x5f, 0x5f), //Teal
 		QColor(0x6e, 0x3a, 0x3a), //Red
+		QColor(0x55, 0x62, 0x2a), //Olive
+		QColor(0x70, 0x2f, 0x5a), //Magenta
 	};
 	constexpr int kTestColorCount = static_cast<int>(sizeof(kTestColors) / sizeof(kTestColors[0]));
 
@@ -48,6 +50,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	auto* trimTestButton = new QPushButton("Trim Test", this);
 	auto* deleteTestButton = new QPushButton("Delete Test", this);
 	auto* undoRedoTestButton = new QPushButton("Undo/Redo Test", this);
+	auto* exportTestButton = new QPushButton("Export Test", this);
 	auto* clearButton = new QPushButton("Clear Results", this);
 	buttonRow->addWidget(testAllButton);
 	buttonRow->addWidget(loadTestButton);
@@ -56,6 +59,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	buttonRow->addWidget(trimTestButton);
 	buttonRow->addWidget(deleteTestButton);
 	buttonRow->addWidget(undoRedoTestButton);
+	buttonRow->addWidget(exportTestButton);
 	m_stopButton = new QPushButton("Stop", this);
 	m_stopButton->setToolTip("Stops Test All after the test that is running finishes");
 	m_stopButton->setEnabled(false); //Only usable during Test All
@@ -74,7 +78,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	buttonRow->addWidget(m_splatCount);
 	buttonRow->addWidget(clearButton);
 	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, trimTestButton, deleteTestButton,
-		undoRedoTestButton, clearButton };
+		undoRedoTestButton, exportTestButton, clearButton };
 	layout->addLayout(buttonRow);
 
 	//Table
@@ -99,6 +103,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	connect(selectTestButton, &QPushButton::clicked, this, &StressTestPanel::selectTestRequested);
 	connect(moveTestButton, &QPushButton::clicked, this, &StressTestPanel::moveTestRequested);
 	connect(trimTestButton, &QPushButton::clicked, this, &StressTestPanel::trimTestRequested);
+	connect(exportTestButton, &QPushButton::clicked, this, &StressTestPanel::exportTestRequested);
 	connect(deleteTestButton, &QPushButton::clicked, this, &StressTestPanel::deleteTestRequested);
 	connect(undoRedoTestButton, &QPushButton::clicked, this, &StressTestPanel::undoRedoTestRequested);
 	connect(clearButton, &QPushButton::clicked, this, [this] {
