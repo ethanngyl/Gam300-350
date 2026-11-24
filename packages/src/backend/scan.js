@@ -262,6 +262,8 @@ export async function scanJob(id, jobsDir = config.jobsDir)
       trainIters: Number.isInteger(saved?.trainIters) ? saved.trainIters : null,
       // Whether status.json was there (server.js only resumes those).
       hasRecord: Boolean(saved),
+      removeBackground: saved?.removeBackground ?? false,
+      autoCrop: saved?.autoCrop ?? false,
       // birthtime is 0 on some filesystems; fall back to mtime.
       createdAt: saved?.createdAt ?? (st.birthtimeMs || st.mtimeMs),
       updatedAt: saved?.updatedAt ?? st.mtimeMs,

@@ -40,9 +40,14 @@ and Brush ignore the background. Only used when job.removeBackground is set.
 - runMediaPipeline(job, opts)
 Extracts the frames, checks there are at least catalog.minPhotos (8), then
 runs runPipeline.
+- autoCropPly(job, sparseDir, rawPly, outDir)
+Runs tools/auto_crop.py to keep only the object the photos were taken
+around. Returns the cropped .ply, or rawPly if the crop was skipped or
+failed. Only used when job.autoCrop is set.
 - runPipeline(job)
 The full reconstruction: COLMAP features, matching and mapping, Brush
-training, normalizing the .ply, and copying it into the engine's samples.
+training, the optional auto-crop, normalizing the .ply, and copying it into
+the engine's samples.
 - setSkipSampleCopy(flag)
 Turns off the engine samples copy (the VM keeps models in the database).
 - sampleFileName(job)
@@ -77,7 +82,8 @@ import { saveJob } from './status.js'
       { id, status, phase, progress, log[], error, createdAt, resultPath }
     status: queued | running | done | error | cancelled
     phase:  upload | extract | masking | colmap-features |
-            colmap-matching | colmap-mapping | training | normalize | done
+            colmap-matching | colmap-mapping | training | crop |
+            normalize | done
 */
 /************************************************************************/
 export const jobs = new Map()
@@ -110,6 +116,7 @@ function makeJob(id) {
         cancelled: false, // set by cancelJob(); makes the pipeline stop between stages
         child: null, // the tool process currently running for this job, if any
         removeBackground: false, // mask out the background before COLMAP (turntables)
+        autoCrop: false, // keep only the object the photos surround (walk-around captures)
         trainIters: null, // iteration cap for Brush chosen by the user; null = config.trainIters
     }
     jobs.set(id, job)
@@ -538,6 +545,50 @@ async function generateMasks(job, imagesDir, jobDir) {
     return colmapMaskDir
 }
 
+/************************************************************************/
+/*!
+  \brief
+    Keep only the object the photos were taken around, with
+    tools/auto_crop.py: it finds the spot the cameras point at and removes
+    the splats outside the path they were taken from (and far above or
+    below). Best-effort: if the capture doesn't look like a walk-around, or
+    the script fails, the uncropped model is used and the job carries on.
+    The result is recorded in job.metrics.autoCrop.
+  \param job
+    The job being built
+  \param sparseDir
+    string
+    The job's COLMAP sparse/ folder (the model Brush trained from)
+  \param rawPly
+    string
+    Brush's export, in COLMAP's coordinates
+  \param outDir
+    string
+    The job's <id>_out folder; the crop is written there as cropped.ply
+  \return
+    The .ply to normalize: cropped.ply, or rawPly if nothing was cropped
+*/
+/************************************************************************/
+export async function autoCropPly(job, sparseDir, rawPly, outDir) {
+    setPhase(job, 'crop', 0.985)
+    const croppedPly = path.join(outDir, 'cropped.ply')
+    const reportPath = path.join(outDir, 'crop.json')
+    await fsp.rm(reportPath, { force: true })
+    try {
+        await run(job, config.pythonBin, [config.autoCropScript, sparseDir, rawPly, croppedPly, '--report', reportPath])
+        const result = JSON.parse(await fsp.readFile(reportPath, 'utf8'))
+        ;(job.metrics ??= {}).autoCrop = result
+        return result.cropped && fs.existsSync(croppedPly) ? croppedPly : rawPly
+    } catch (err) {
+        if (job.cancelled) return rawPly
+        appendLog(job, `\nAuto-crop failed (${err.message}); keeping the whole model.`)
+        ;(job.metrics ??= {}).autoCrop = { cropped: false, reason: err.message }
+        return rawPly
+    } finally {
+        await fsp.rm(reportPath, { force: true }).catch(() => { })
+    }
+}
+
 // Shown for any flavor of "mapper couldn't build a model from these photos":
 // it exiting non-zero (e.g. no good initial image pair) and it exiting 0 but
 // writing no sparse model both mean the same thing to the user.
@@ -607,6 +658,7 @@ export async function runPipeline(job) {
                 '--image_path', imagesDir,
                 '--output_path', sparseDir,
                 ...config.colmapStrictMapperArgs,
+                ...config.colmapFastMapperArgs,
             ])
         } catch (err) {
             // Cancellation and timeouts already have a clear, specific message -- only
@@ -689,6 +741,12 @@ export async function runPipeline(job) {
             throw new Error('Training finished but no .ply was exported.')
         }
 
+        // --- Optional: keep only the main object ---
+        // Before normalizing, so the model is centred and sized on the object
+        // alone. Brush exports in COLMAP's frame, so sparse/ applies directly.
+        const plyToNormalize = job.autoCrop ? await autoCropPly(job, sparseDir, rawPly, outDir) : rawPly
+        if (job.cancelled) return
+
         // --- Normalize into the viewer's frame ---
         // COLMAP reconstructs in an arbitrary world frame (object far from the
         // origin, arbitrary scale), which loads but can render off-screen in the
@@ -698,13 +756,13 @@ export async function runPipeline(job) {
         const finalPly = path.join(outDir, 'result.ply')
         let normalized = false
         try {
-            await run(job, config.pythonBin, [config.normalizeScript, rawPly, finalPly])
+            await run(job, config.pythonBin, [config.normalizeScript, plyToNormalize, finalPly])
             job.resultPath = finalPly
             normalized = true
         } catch (err) {
-            // Best-effort: if normalization fails, still hand back the raw export.
+            // Best-effort: if normalization fails, still hand back the (cropped) export.
             appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
-            job.resultPath = rawPly
+            job.resultPath = plyToNormalize
         }
 
     // Timing / iteration / hardware stats for this .ply, written to
@@ -879,6 +937,8 @@ export function restoreJob(record) {
         trainIters: record.trainIters ?? null,
         name: record.name,
         sampleFile: record.sampleFile,
+        removeBackground: record.removeBackground ?? false,
+        autoCrop: record.autoCrop ?? false,
         updatedAt: record.updatedAt,
         log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
     })

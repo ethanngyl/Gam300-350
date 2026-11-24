@@ -209,6 +209,8 @@ To show how much slower builds at once are: start a build from two accounts at t
 and start two from one), then compare the timings in jobs/metrics.jsonl with the same builds run one after the other.
 
 "Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
+"Keep only the main object" (same screens, off by default) removes everything outside the path the photos were taken from, such
+as neighbouring objects, walls and the ceiling, after training. It is skipped when the photos don't surround one object.
 
 23. With no photos in the batch, confirm "Use this batch" and "Review photos first" are disabled.
 24. Add photos taken all the way around the object, then click "Use this batch (N photos)".
@@ -264,7 +266,7 @@ Sounds:
 Known limitations to note while testing (not bugs):
 - "Continue with Google" only shows a message.
 - "Forgot password?" answers that it isn't set up until the VM has the Gmail settings (SMTP_*) in its .env.
-- Scene Builder: clean-up, render mode, reset view, screenshot and an exact drop to floor are waiting on scene functions in the
+- Scene Builder: clean-up, render mode, reset view and screenshot are waiting on scene functions in the
   WebAssembly engine. Scenes are saved only in this browser (localStorage): the backend has scene routes (/api/v1/scenes),
   but the web app doesn't use them yet (SCENES_API_READY in SceneStorage.js).
 - COLMAP can fail on photo sets with poor overlap or low quality; this is an expected pipeline limitation, not a website bug.

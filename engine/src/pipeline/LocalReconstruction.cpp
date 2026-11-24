@@ -16,6 +16,7 @@ messages. Keep the tool arguments in step with pipeline.js / config.js.
 
 #include "pipeline/GenerationSettings.h"
 #include "pipeline/PlyNormalizer.h"
+#include "pipeline/SplatAutoCrop.h"
 #include "ui/AssetPaths.h"
 
 #include <QCoreApplication>
@@ -32,6 +33,7 @@ messages. Keep the tool arguments in step with pipeline.js / config.js.
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 
 namespace {
@@ -55,6 +57,7 @@ namespace {
     constexpr int kMaxFrames = 200;
     constexpr int kFrameTimeoutMs = 30 * 60 * 1000;
     const QString kMaskModel = QStringLiteral("isnet-general-use");
+    const QString kRedundantPointsFlag = QStringLiteral("--Mapper.ba_global_ignore_redundant_points3D");
     // Build logs kept in BuildsRoot()/logs.
     constexpr int kKeepLogs = 20;
 
@@ -270,7 +273,9 @@ void LocalReconstruction::start(const GenerationRequest& request, const QString&
     m_status.status = "running";
     setPhase("upload", 0.0, "Checking the tools...");
     log(QString("Building on this PC: %1 file(s), %2 iterations%3")
-            .arg(request.files.size()).arg(request.trainIters).arg(request.removeBackground ? ", background removed" : ""));
+            .arg(request.files.size()).arg(request.trainIters)
+            .arg(QString(request.removeBackground ? ", background removed" : "")
+                 + (request.autoCrop ? ", main object only" : "")));
     log("COLMAP: " + QDir::toNativeSeparators(m_tools.colmap));
     log("Brush:  " + QDir::toNativeSeparators(m_tools.brush));
 
@@ -306,6 +311,9 @@ void LocalReconstruction::start(const GenerationRequest& request, const QString&
         p.minInliersFlag = matcherHelp.contains("--TwoViewGeometry.min_num_inliers")
                                ? QStringLiteral("--TwoViewGeometry.min_num_inliers")
                                : "--" + p.matchingNs + ".min_num_inliers";
+        // config.js colmapFastMapperArgs: new in COLMAP 4, older builds exit on the unknown flag.
+        p.skipRedundantPoints = qEnvironmentVariable("COLMAP_SKIP_REDUNDANT_POINTS") != "0"
+            && RunForOutput(colmap, { "mapper", "--help" }, m_cancelled).contains(kRedundantPointsFlag);
 
         // Brush v0.3.0 says --total-steps, newer builds --total-train-iters.
         const QString brushHelp = RunForOutput(m_tools.brush, { "--help" }, m_cancelled);
@@ -457,6 +465,9 @@ void LocalReconstruction::runColmap() {
                 << "--Mapper.init_min_num_inliers" << "200"
                 << "--Mapper.abs_pose_min_num_inliers" << "60"
                 << "--Mapper.abs_pose_min_inlier_ratio" << "0.35";
+    // Leaves redundant points out of the full-model bundle adjustments: on 311 Panther photos
+    // mapping took 18.8 min instead of 29.9, with every photo still placed.
+    if (m_prepared.skipRedundantPoints) mapper.args << kRedundantPointsFlag << "1";
     mapper.failMessage = kNoModelMessage;
 
     runTool(features, [this, matching, mapper, sparse] {
@@ -523,7 +534,8 @@ void LocalReconstruction::finishModel() {
         return;
     }
     const QString rawPly = QDir(m_exportDir).filePath(plys.last());
-    setPhase("normalize", 0.99);
+    const bool autoCrop = m_request.autoCrop;
+    setPhase(autoCrop ? "crop" : "normalize", 0.99);
 
     struct Result {
         QString path;
@@ -535,18 +547,48 @@ void LocalReconstruction::finishModel() {
     if (name.isEmpty()) name = "Model " + QDateTime::currentDateTime().toString("yyyy-MM-dd HHmm");
     const QString exportDir = m_exportDir;
     const QString outputFolder = m_outputFolder;
+    const QString sparseDir = m_workspace + "/sparse";
 
     m_unclaimedResult.clear();
     // Captures this for m_cancelled / m_unclaimedResult: the destructor waits for the worker.
-    runWorker([this, result, rawPly, name, exportDir, outputFolder] {
+    runWorker([this, result, rawPly, name, exportDir, outputFolder, autoCrop, sparseDir] {
+        // Keep only the object the photos were taken around, before normalizing so the model is
+        // centred and sized on it alone. Best effort, like the backend: if the capture doesn't
+        // suit it or it fails, the whole model is kept. Brush exports in COLMAP's frame, so the
+        // camera poses in sparse/ apply directly.
+        QString toNormalize = rawPly;
+        if (autoCrop) {
+            const QString cropped = exportDir + "/cropped.ply";
+            AutoCropReport crop;
+            QString cropError;
+            try {
+                cropError = AutoCropSplatPly(sparseDir, rawPly, cropped, crop);
+            } catch (const std::exception& e) {
+                cropError = QString("out of memory or bad data (%1)").arg(QString::fromLocal8Bit(e.what()));
+            }
+            if (!cropError.isEmpty()) {
+                result->log << "Auto-crop failed (" + cropError + "); keeping the whole model.";
+            } else if (!crop.cropped) {
+                result->log << "Auto-crop skipped: " + crop.reason;
+            } else {
+                toNormalize = cropped;
+                result->log << QString("Auto-crop kept %1 of %2 splats (%3%) around the main object "
+                                       "(%4/%5 photos aimed at it, %6 degree arc)")
+                                   .arg(crop.kept).arg(crop.total)
+                                   .arg(std::lround(100.0 * static_cast<double>(crop.kept) / static_cast<double>(crop.total)))
+                                   .arg(crop.camerasAimed).arg(crop.cameras).arg(std::lround(crop.arcDegrees));
+            }
+        }
+        if (m_cancelled) return;
+
         // Recentre and rescale into the viewer's frame. Best effort, like the backend: if it fails
-        // the raw export is used.
-        QString source = rawPly;
+        // the (cropped) export is used.
+        QString source = toNormalize;
         const QString normalized = exportDir + "/result.ply";
         QString summary;
         QString error;
         try {
-            error = NormalizeSplatPly(rawPly, normalized, 1.5, &summary);
+            error = NormalizeSplatPly(toNormalize, normalized, 1.5, &summary);
         } catch (const std::exception& e) {
             // An exception escaping this worker thread would end the whole editor.
             error = QString("out of memory or bad data (%1)").arg(QString::fromLocal8Bit(e.what()));
