@@ -41,6 +41,7 @@ signals:
 	void loadTestRequested();
 	void selectTestRequested();
 	void moveTestRequested();
+	void trimTestRequested();
 	void deleteTestRequested();
 	void undoRedoTestRequested();
 	void testAllRequested();

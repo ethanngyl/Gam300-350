@@ -45,6 +45,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	auto* loadTestButton = new QPushButton("Load Test", this);
 	auto* selectTestButton = new QPushButton("Select Test", this);
 	auto* moveTestButton = new QPushButton("Move Test", this);
+	auto* trimTestButton = new QPushButton("Trim Test", this);
 	auto* deleteTestButton = new QPushButton("Delete Test", this);
 	auto* undoRedoTestButton = new QPushButton("Undo/Redo Test", this);
 	auto* clearButton = new QPushButton("Clear Results", this);
@@ -52,6 +53,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	buttonRow->addWidget(loadTestButton);
 	buttonRow->addWidget(selectTestButton);
 	buttonRow->addWidget(moveTestButton);
+	buttonRow->addWidget(trimTestButton);
 	buttonRow->addWidget(deleteTestButton);
 	buttonRow->addWidget(undoRedoTestButton);
 	m_stopButton = new QPushButton("Stop", this);
@@ -71,7 +73,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 		"the move, delete and undo tests make several copies of the splats.");
 	buttonRow->addWidget(m_splatCount);
 	buttonRow->addWidget(clearButton);
-	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, deleteTestButton,
+	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, trimTestButton, deleteTestButton,
 		undoRedoTestButton, clearButton };
 	layout->addLayout(buttonRow);
 
@@ -96,6 +98,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	connect(loadTestButton, &QPushButton::clicked, this, &StressTestPanel::loadTestRequested);
 	connect(selectTestButton, &QPushButton::clicked, this, &StressTestPanel::selectTestRequested);
 	connect(moveTestButton, &QPushButton::clicked, this, &StressTestPanel::moveTestRequested);
+	connect(trimTestButton, &QPushButton::clicked, this, &StressTestPanel::trimTestRequested);
 	connect(deleteTestButton, &QPushButton::clicked, this, &StressTestPanel::deleteTestRequested);
 	connect(undoRedoTestButton, &QPushButton::clicked, this, &StressTestPanel::undoRedoTestRequested);
 	connect(clearButton, &QPushButton::clicked, this, [this] {

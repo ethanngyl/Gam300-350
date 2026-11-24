@@ -35,6 +35,14 @@ public:
 	//(the renderer re-marks the selected splats and uploads on its next draw)
 	std::vector<StressResult> TestSelect();
 
+	//Trims the selected model with several sets of trim values (crop, density filter, the default settings), timing each
+	//This is the same trimming the Inspector's trim settings do. Every trim is undone afterwards, so the model ends up
+	//exactly as it started. The model's stored trim values are not touched
+	//Returns nothing if the renderer is not ready or no model is selected
+	//Each trim is timed in three steps: computing which splats to cut (CPU), replacing the model's splats in memory (CPU),
+	//and the first frame after (uploading what is left and drawing)
+	std::vector<StressResult> TestTrim();
+
 	//Moves the selected model, then all, half and a selected tenth of its splats, timing each
 	//Uses the same undoable commands as the editor, on a private undo stack so the editor's undo history is untouched
 	//Every move is undone afterwards, so the model ends up exactly as it started

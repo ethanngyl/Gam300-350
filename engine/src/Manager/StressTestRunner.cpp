@@ -4,6 +4,7 @@
 #include "splat/SplatGenerator.h"
 #include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
+#include "splat/SplatTrimmer.h"
 #include "ui/EditCommands.h"
 #include "ui/Viewport.h"
 
@@ -93,6 +94,72 @@ std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
 		{ "Load: Add to scene", loaded, setMs, "Hands the splats to the renderer as a new model (CPU only). Nothing is drawn yet." },
 		{ "Load: Redraw", loaded, frameMs, kRedrawTip },
 	};
+}
+
+std::vector<StressResult> StressTestRunner::TestTrim() {
+	SplatRenderer* renderer = m_viewport->renderer();
+	if (!renderer) {
+		return {};
+	}
+	const int modelIndex = renderer->GetSelectedModel();
+	SplatModel* model = renderer->GetModel(modelIndex);
+	const size_t total = renderer->GetSplatCount(modelIndex);
+	if (!model || total == 0) {
+		return {};
+	}
+
+	//Start from a clean, uploaded scene so the first case is not charged for earlier pending work
+	//The selection holds splat positions, which trimming changes
+	renderer->ClearSelection();
+	m_viewport->RenderFrameBlocking();
+
+	//Every case trims from this copy and the model is put back to it after each case
+	const std::vector<SplatVertex> saved = model->splats();
+
+	//The density filter drops splats in cells holding fewer than this, scaled to the splat count so it cuts at any size
+	//The sphere is fully opaque, so min alpha would cut nothing and is left out
+	const int densityMin = std::max(2, static_cast<int>(total / 10000));
+	struct Case {
+		const char* label;
+		TrimData settings; //minAlpha, cropPct, voxelDivisions, minPerVoxel
+	};
+	const Case cases[] = {
+		{ "crop 5%", TrimData{ 0.0f, 5.0f, 0, 1 } },
+		{ "crop 25%", TrimData{ 0.0f, 25.0f, 0, 1 } },
+		{ "density filter", TrimData{ 0.0f, 0.0f, 50, densityMin } },
+		{ "crop 25% + density", TrimData{ 0.0f, 25.0f, 50, densityMin } },
+		{ "default settings", TrimData{} },
+	};
+
+	const QLocale locale;
+	std::vector<StressResult> results;
+	for (const Case& c : cases) {
+		std::vector<SplatVertex> trimmed;
+		const double computeMs = MeasureMs([&] { trimmed = TrimSplats(saved, c.settings); });
+		const size_t kept = trimmed.size();
+
+		const QString label = QString("Trim %1").arg(c.label);
+		results.push_back({ label + ": Compute", total, computeMs,
+			QString("Works out which splats to cut and copies the rest (CPU only). Kept %1 of %2 splats (%3%).")
+				.arg(locale.toString(static_cast<qulonglong>(kept)), locale.toString(static_cast<qulonglong>(total)))
+				.arg(100.0 * static_cast<double>(kept) / static_cast<double>(total), 0, 'f', 1) });
+
+		//The editor refuses a trim that would remove every splat
+		if (trimmed.empty()) {
+			continue;
+		}
+
+		const double applyMs = MeasureMs([&] { renderer->UpdateModel(model, trimmed); });
+		const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
+		results.push_back({ label + ": Apply", kept, applyMs,
+			"Replaces the model's splats with the trimmed ones in memory (CPU only). Nothing is drawn yet." });
+		results.push_back({ label + ": Redraw", kept, frameMs, kRedrawTip });
+
+		//Put all the splats back, so the next case starts the same way
+		renderer->UpdateModel(model, saved);
+		m_viewport->RenderFrameBlocking();
+	}
+	return results;
 }
 
 std::vector<StressResult> StressTestRunner::TestSelect() {

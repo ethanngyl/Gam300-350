@@ -587,6 +587,9 @@ void MainWindow::createDocks() {
     connect(m_stressTestPanel, &StressTestPanel::moveTestRequested, this, [runStressTest] {
         runStressTest("Move test", [](StressTestRunner& runner) { return runner.TestMove(); });
     });
+    connect(m_stressTestPanel, &StressTestPanel::trimTestRequested, this, [runStressTest] {
+        runStressTest("Trim test", [](StressTestRunner& runner) { return runner.TestTrim(); });
+    });
     connect(m_stressTestPanel, &StressTestPanel::testAllRequested, this, [this] { runAllStressTests(); });
     connect(m_stressTestPanel, &StressTestPanel::stopRequested, this, [this] { m_stopStressTests = true; });
     connect(m_stressTestPanel, &StressTestPanel::undoRedoTestRequested, this, [runStressTest] {
@@ -970,6 +973,7 @@ void MainWindow::runAllStressTests() {
         { "Load test", [count](StressTestRunner& runner) { return runner.TestLoad(count); } },
         { "Select test", [](StressTestRunner& runner) { return runner.TestSelect(); } },
         { "Move test", [](StressTestRunner& runner) { return runner.TestMove(); } },
+        { "Trim test", [](StressTestRunner& runner) { return runner.TestTrim(); } },
         { "Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); } },
         { "Delete test", [](StressTestRunner& runner) { return runner.TestDelete(); } },
     };
