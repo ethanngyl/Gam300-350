@@ -407,6 +407,14 @@ function parseOrigins(value) {
     return origins
 }
 
+// A RATE_LIMIT_* setting: a whole number of requests, 0 to switch that limit
+// off; missing or empty gives the default.
+function limitSetting(name, fallback) {
+    const raw = process.env[name]
+    if (raw === undefined || raw.trim() === '') return fallback
+    return Math.max(0, Math.floor(Number(raw)) || 0)
+}
+
 export const config = {
     // The repository's root folder (sample data paths are relative to it).
     repoRoot,
@@ -559,6 +567,16 @@ export const config = {
     // Caddy forwards from the same machine, so req.ip is the real client
     // address (for rate limits) and req.secure reflects HTTPS (for cookies).
     trustProxy: process.env.TRUST_PROXY || null,
+    // Rate limits (middleware/limits.js; docs/architecture.md "Rate limits").
+    // 0 switches a limit off. API requests per minute, per signed-in user or
+    // else per address (team machines using the shared key aren't counted);
+    // builds started (accepted uploads) per user per hour and per day; full
+    // result.ply downloads per user per hour. Admins are exempt from the
+    // build and download limits.
+    rateLimitApiPerMin: limitSetting('RATE_LIMIT_API_PER_MIN', 600),
+    rateLimitBuildsPerHour: limitSetting('RATE_LIMIT_BUILDS_PER_HOUR', 10),
+    rateLimitBuildsPerDay: limitSetting('RATE_LIMIT_BUILDS_PER_DAY', 30),
+    rateLimitDownloadsPerHour: limitSetting('RATE_LIMIT_DOWNLOADS_PER_HOUR', 60),
     // Largest profile photo accepted (PUT /auth/me/avatar). The website
     // shrinks photos to a 256 x 256 JPEG first, which is far smaller.
     maxAvatarKB: 256,

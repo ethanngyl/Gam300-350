@@ -31,6 +31,28 @@ to the API is recorded here, newest first.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
 
+## v1 additions: 2026-11-23 (nothing breaks)
+
+Rate limits on the whole API and on the most expensive routes (see
+docs/architecture.md, "Rate limits"):
+- **Every API call** counts towards a per-minute limit per signed-in user,
+  or per address for guests (`RATE_LIMIT_API_PER_MIN`, default 600). Calls
+  with the shared key (team machines) don't count.
+- **`POST /upload`, `POST /jobs/from-media`:** 429 once the user has started
+  10 builds in an hour or 30 in a day (`RATE_LIMIT_BUILDS_PER_HOUR`,
+  `RATE_LIMIT_BUILDS_PER_DAY`). Only accepted builds (202) count, and admins
+  are exempt.
+- **`GET /jobs/:id/result.ply`** (and `/library/...`): 429 after 60 full
+  downloads in an hour (`RATE_LIMIT_DOWNLOADS_PER_HOUR`). Range reads, HEAD
+  and 304s don't count, and admins are exempt.
+- **Every 429** now has `retryAfterSec` in its body next to `error`, and a
+  `Retry-After` header. The existing limits (sign-in, sign-up, ...) answer
+  the same way; before, some had only `error`.
+- **Longer waits** read in hours ("Try again in 3 hours") instead of minutes.
+
+The website and the engine already show `error` from any failed upload, so
+neither needed a change.
+
 ## v1 additions: 2026-11-16 (nothing breaks)
 
 Small photo copies, so the Library doesn't load a full 12 MP photo per card:

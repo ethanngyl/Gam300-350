@@ -25,6 +25,15 @@ info:
     (`X-Act-As-User`). A team machine answers its users' requests by passing
     them on to these.
 
+    **Rate limits.** Every API call counts towards a per-minute limit (per
+    signed-in user, or per address for guests; 600 by default). Starting
+    builds (`POST /upload`, `POST /jobs/from-media`) and full model downloads
+    are also limited per user (10 builds an hour and 30 a day, 60 downloads
+    an hour by default; admins exempt), as are sign-in, sign-up, password
+    reset, account edits and feedback. Over a limit the reply is 429 with a
+    `Retry-After` header and `retryAfterSec`. Calls with the shared key
+    (`X-Auth-Key`) don't count towards the per-minute limit.
+
     **Formats.** Dates are UTC epoch milliseconds, sizes are bytes, ids are
     UUIDs (see docs/data-schema.md). Errors are `{ "error": "..." }`. JSON
     request bodies may be up to 2 MB (a saved scene of 500 objects fits).
@@ -501,6 +510,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '413':
           $ref: '#/components/responses/TooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /jobs/from-media:
     post:
       tags: [Jobs]
@@ -543,6 +554,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '413':
           $ref: '#/components/responses/TooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /jobs:
     get:
       tags: [Jobs]
@@ -655,7 +668,10 @@ paths:
       tags: [Jobs]
       operationId: getJobModel
       summary: Download the finished model (.ply)
-      description: Supports byte ranges (`Range`), HEAD and ETag.
+      description: |
+        Supports byte ranges (`Range`), HEAD and ETag. Full downloads (a GET
+        answered 200) are limited per user per hour (429); range reads, HEAD
+        and 304s don't count, and admins are exempt.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/Range'
@@ -668,6 +684,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/ResultNotReady'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /jobs/{id}/cover.webp:
     parameters:
       - $ref: '#/components/parameters/JobId'
@@ -1327,6 +1345,8 @@ paths:
           $ref: '#/components/responses/KeyOrUserRefused'
         '404':
           $ref: '#/components/responses/ResultNotReady'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /library/jobs/{id}/cover.webp:
     parameters:
       - $ref: '#/components/parameters/JobId'
@@ -1801,15 +1821,20 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
           example: { error: That file is too large -- each photo must be under 30 MB. }
     TooManyAttempts:
-      description: A rate limit was reached (Retry-After says when to try again)
+      description: A rate limit was reached (Retry-After and retryAfterSec say when to try again)
       headers:
         Retry-After:
           schema: { type: integer }
           example: 840
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { error: Too many attempts. Try again in 14 minutes. }
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Error'
+              - type: object
+                properties:
+                  retryAfterSec: { type: integer, description: Seconds until the limit lifts }
+          example: { error: Too many attempts. Try again in 14 minutes., retryAfterSec: 840 }
     Unavailable:
       description: A team machine can't reach the VM, or the service isn't set up here
       content:
