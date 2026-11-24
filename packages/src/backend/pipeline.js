@@ -437,18 +437,24 @@ export async function extractMediaFrames(job, { fps, maxFrames } = {}) {
   \brief
     Run a reconstruction job seeded from uploaded media: extract frames,
     then run the normal reconstruction pipeline. Intended to be called in
-    the background (not awaited) after responding to the client.
+    the background (not awaited) after responding to the client. The
+    extraction starts at once (it uses the CPU, not the GPU); the build
+    after it goes through `build`, which the server sets to queueBuild
+    (services/jobs.js) so it waits its turn.
   \param job
     The job to run
   \param opts
     object
     Optional { fps, maxFrames }, passed to extractMediaFrames
+  \param build
+    function
+    Optional. Runs the build once the frames exist (default runPipeline)
   \return
     nothing; sets the job to error if fewer than catalog.minPhotos frames
     were extracted or extraction failed
 */
 /************************************************************************/
-export async function runMediaPipeline(job, opts = {}) {
+export async function runMediaPipeline(job, opts = {}, build = runPipeline) {
     try {
         const count = await extractMediaFrames(job, opts)
         job.imageCount = count
@@ -468,7 +474,8 @@ export async function runMediaPipeline(job, opts = {}) {
         }
         return
     }
-    await runPipeline(job)
+    if (job.cancelled) return
+    await build(job)
 }
 
 /************************************************************************/
@@ -925,10 +932,12 @@ export function restoreJob(record) {
         resultPath: record.resultPath,
         imageCount: record.imageCount,
         source: record.source,
+        // A job still waiting to be built keeps its settings over a restart.
+        removeBackground: Boolean(record.removeBackground),
+        autoCrop: Boolean(record.autoCrop),
+        trainIters: record.trainIters ?? null,
         name: record.name,
         sampleFile: record.sampleFile,
-        removeBackground: record.removeBackground ?? false,
-        autoCrop: record.autoCrop ?? false,
         updatedAt: record.updatedAt,
         log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
     })

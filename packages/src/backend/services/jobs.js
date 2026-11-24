@@ -22,6 +22,12 @@ The per-job settings a new job is sent with, within the server's limits.
 Makes the job's card cover (<id>_out/cover.webp) with tools/make_cover.py
 the first time it is asked for: the object cut out of a photo with the
 job's background masks. Concurrent requests share one run.
+- queueBuild(job) / refreshQueue()
+Puts a job's build (masks + COLMAP + Brush) in line (jobQueue.js): each
+user runs config.maxRunningJobsPerUser builds at once (1), different users
+at the same time, and the machine at most config.maxRunningJobs (0 = no
+limit). Waiting jobs are 'queued', with what they wait for in job.detail.
+refreshQueue() lets go of jobs cancelled while waiting.
 - ensureThumbs(jobId) / thumbPath(jobId, name)
 Makes small WebP copies of all the job's photos (<id>_out/thumbs/) with
 tools/make_thumbs.py, for GET /jobs/:id/images/:name?size=small. One run
@@ -41,18 +47,112 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { config } from '../config.js'
 import { requestCleanup } from '../cleanup.js'
-import { getDbImage, listDbImageNames } from '../db.js'
+import { getDbImage, getJobOwnerId, listDbImageNames } from '../db.js'
 import { moveImagesToDb, moveModelToDb } from '../dbstore.js'
+import { createJobQueue } from '../jobQueue.js'
 import { syncPendingJobs } from '../library.js'
-import { jobs, pruneJob, restoreJob } from '../pipeline.js'
+import { jobs, pruneJob, restoreJob, runPipeline } from '../pipeline.js'
 import { scanJob } from '../scan.js'
+import { saveJob } from '../status.js'
 import { clientAuthProblem } from './authority.js'
 
 const filesInDb = config.filesInDb
 
 export const MAX_JOB_NAME_LENGTH = 80
 
+// Builds waiting their turn; see queueBuild. Builds are counted per owner
+// (the user who started them); jobs without a recorded owner share one count.
+const buildQueue = createJobQueue({
+  maxPerOwner: config.maxRunningJobsPerUser,
+  maxRunning: config.maxRunningJobs,
+  ownerOf: jobOwner,
+  onChange: showPlacesInLine,
+})
+
 // ----- Start of Functions --------------------------------------------------- //
+
+// The user who started a job, or null (none recorded, or no database).
+function jobOwner(job)
+{
+  try
+  {
+    return getJobOwnerId(job.id)
+  }
+  catch (err)
+  {
+    console.error(`[backend] job queue: no owner for ${job.id}:`, err.message)
+    return null
+  }
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Shows each waiting job what it waits for: status 'queued' (the
+    website shows "Waiting to start") and, in job.detail, either its
+    owner's earlier builds or the builds ahead of it on a full machine. A
+    video job keeps its finished extraction on the bar.
+  \param waiting
+    The waiting jobs, first in line first, as { job, waitingFor, ahead }
+    (see createJobQueue in jobQueue.js)
+  \return
+    nothing
+*/
+/************************************************************************/
+function showPlacesInLine(waiting)
+{
+  waiting.forEach(({ job, waitingFor, ahead }) =>
+  {
+    const builds = `build${ahead === 1 ? '' : 's'}`
+    const detail = waitingFor === 'own'
+      ? `Waiting for your ${ahead === 1 ? 'earlier build' : `${ahead} earlier builds`} to finish`
+      : `Waiting for ${ahead} ${builds} ahead of yours`
+    if (job.status === 'queued' && job.detail === detail) return
+    job.status = 'queued'
+    job.phase = 'upload'
+    job.progress = job.source === 'media' ? 0.05 : 0
+    job.detail = detail
+    saveJob(job)
+  })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Puts a job's build (background masks, COLMAP, Brush) in line: it
+    starts now if its owner has fewer than config.maxRunningJobsPerUser
+    builds running (and the machine is under config.maxRunningJobs, if
+    set), else when the builds it waits for have ended. First come, first
+    served among the builds allowed to start.
+  \param job
+    The job to build (its photos are in jobs/<id>/images/)
+  \return
+    Promise that settles once the build has ended (never rejects), or once
+    the job was cancelled while waiting
+*/
+/************************************************************************/
+export function queueBuild(job)
+{
+  return buildQueue.enqueue(job, () =>
+  {
+    job.detail = null
+    return runPipeline(job)
+  })
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Lets go of jobs cancelled while waiting, so the others' places update
+    straight away. Call after cancelJob.
+  \return
+    nothing
+*/
+/************************************************************************/
+export function refreshQueue()
+{
+  buildQueue.refresh()
+}
 
 /************************************************************************/
 /*!

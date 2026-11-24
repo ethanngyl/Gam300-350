@@ -197,6 +197,17 @@ through GET /api/v1/catalog.
 The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from
 the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
+Each user runs one build at a time; different users' builds run at the same time on the machine's GPU. Start a second build of
+your own while one is running, and it shows "Waiting to start" ("Waiting for your earlier build to finish"), then starts by
+itself when your first one ends. Cancelling it while it waits takes it out of the line.
+If the backend restarts, waiting builds start again in their original order; a build that was running is marked interrupted.
+Settings, in packages/src/backend/.env:
+- MAX_RUNNING_JOBS=1 caps the whole machine at one build at a time for everyone (unset = no cap). Builds at once share the GPU,
+  so each is slower and they can run out of GPU memory; set this on a machine with a small GPU.
+- MAX_RUNNING_JOBS_PER_USER=2 lets one user run two builds at once (default 1).
+To show how much slower builds at once are: start a build from two accounts at the same time (or set MAX_RUNNING_JOBS_PER_USER=2
+and start two from one), then compare the timings in jobs/metrics.jsonl with the same builds run one after the other.
+
 "Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
 "Keep only the main object" (same screens, off by default) removes everything outside the path the photos were taken from, such
 as neighbouring objects, walls and the ceiling, after training. It is skipped when the photos don't surround one object.

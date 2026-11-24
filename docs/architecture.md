@@ -165,6 +165,32 @@ needs the shared key.
 | GET | `/jobs/:id/cover.webp` | owner | the card cover (binary); 404 if none |
 | PUT | `/library/jobs/:id` | team machines (shared key) | 201 `{ id, bytes }`. Stores a finished job on the VM |
 
+**Build queue.** A build is background masking, then COLMAP, then Brush, all
+on the machine's one GPU (`jobQueue.js`, `queueBuild` in `services/jobs.js`).
+- **Per user (default):** each user runs `MAX_RUNNING_JOBS_PER_USER` builds
+  at once (default 1). Their next builds wait for their own earlier ones.
+  Different users' builds run at the same time.
+- **Per machine (optional):** `MAX_RUNNING_JOBS` caps how many builds the
+  machine runs at once, whoever started them. It's unset by default, meaning
+  no cap. Builds running together share the GPU, so each one is slower, and
+  they can run out of GPU memory. `MAX_RUNNING_JOBS=1` gives one build at a
+  time for everyone. The startup log shows both settings, and warns when
+  there's no machine cap.
+- **Order:** first come, first served among the builds allowed to start. A
+  user whose own earlier build is still running doesn't hold up other users.
+- **While a job waits:** it reads `status: 'queued'`, with `detail` saying
+  what it waits for. The website shows "Waiting to start".
+  - its owner's builds: "Waiting for your earlier build to finish", or "Waiting for your N earlier builds to finish";
+  - a full machine: "Waiting for N builds ahead of yours".
+- **Who owns a build:** the user who started it (`jobs.owner_id`). Jobs with
+  no recorded owner share one allowance.
+- **Cancelling or deleting a waiting job** takes it out of the line.
+- **Videos and GIFs:** frame extraction runs straight away (it uses the CPU),
+  and only the build after it waits.
+- **After a restart:** builds still waiting (a `queued` `status.json`) rejoin
+  the line, oldest first, with their settings. A build that had started is
+  marked interrupted.
+
 ### Feedback
 
 | Method | Path | Who | Reply |
