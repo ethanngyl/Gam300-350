@@ -36,6 +36,9 @@ namespace {
 	constexpr int kTotalRole = Qt::UserRole + 2;    //bool, true for the row that collapses and expands its group
 	constexpr int kBaseNameRole = Qt::UserRole + 3; //QString, the total row's name without the arrow
 
+	//If new results start with their rows hidden, showing only the total. Set to false to start them open
+	constexpr bool kCollapseByDefault = true;
+
 	//The arrow in front of a total row's name, pointing down while its rows are shown and right while they are hidden
 	QString TotalLabel(const QString& baseName, bool collapsed) {
 		return QString(QChar(collapsed ? 0x25B8 : 0x25BE)) + QLatin1Char(' ') + baseName;
@@ -304,6 +307,11 @@ double StressTestPanel::AddResults(const std::vector<StressResult>& results, con
 		m_failureBanner->setText(QString("WARNING: %1 step(s) failed. See the red rows. Select a row to read the reason. "
 			"The totals are incomplete.").arg(m_failedCount));
 		m_failureBanner->setVisible(true);
+	}
+
+	//Failed rows stay visible even when collapsed, so a failure is never hidden by this
+	if (kCollapseByDefault) {
+		SetGroupCollapsed(group, true);
 	}
 	m_results->scrollToBottom();
 	return totalMs;
