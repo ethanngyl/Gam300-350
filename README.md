@@ -191,8 +191,51 @@ The local numbers above are the server's own speed; over the network to the VM, 
 
 How we test that the app stays up and correct with many users at the same time:
 
-- **`npm test` (every push, in CI):** `concurrency.test.js` runs 30 users through a whole visit at the same moment (sign up, account, catalog, jobs, create / list / edit / read / delete a scene, feedback, sign out), each from their own IP address. It checks there are no failed requests and no 5xx, each user only ever sees their own scene, the database totals add up (30 accounts, 30 feedback, 0 scenes left), 25 simultaneous edits of one scene all succeed without deadlocking, and the server still answers within 1 s afterwards. Every test has a time limit, so a freeze fails instead of hanging.
+- **`npm test` (every push, in CI):** `concurrency.test.js` runs 30 users through a whole visit at the same moment (sign up, account, catalog, jobs, create / list / edit / read / delete a scene, feedback, sign out), each from their own IP address. It checks there are no failed requests and no 5xx, each user only ever sees their own scene, the database totals add up (30 accounts, 30 feedback, 0 scenes left), 25 simultaneous edits of one scene all succeed without deadlocking, 8 photo uploads (builds) and 4 rejected ones sent at once while 10 users browse all get the right answer, every build leaves the queue, the rejected uploads leave no folder behind, and the server still answers within 1 s afterwards. Every test has a time limit, so a freeze fails instead of hanging.
 - **`npm run load` (in packages):** the same visit for `LOAD_USERS` users at once (default 100) over `LOAD_ROUNDS` rounds (default 3), with p50 / p95 per route under that load. Exits with 1 on any failure.
+
+### Stress tests
+
+The stress tests (in packages; `stress-test.js`) push past normal use. Like the load test, each one starts the real backend on temporary data, set up like the VM: the real rate limits, `UV_THREADPOOL_SIZE=16`, and every simulated user is a new account from their own address. "Light routes" means every route of a visit except sign-up and sign-in, which are slow on purpose (password hashing). `STRESS_P95_MS` (default 1000 ms) is the point where the site feels broken. The 200 ms budget is for normal use.
+
+- **`npm run stress:ramp`: where does it break?**
+  - **What it does:** more and more users at once, one visit each (`STRESS_STEPS`, default `50,100,200,400,800`). It stops at the first step with a failed request, a 5xx, or light routes' p95 over `STRESS_P95_MS`.
+  - **What it reports:**
+    - requests per second and p95 per step;
+    - the most users within the 200 ms budget;
+    - the most users under the limit;
+    - the breaking point.
+  - **Pass:** reaching a breaking point is the result, so the run fails only if the server stops answering.
+- **`npm run stress:heavy`: do builds, model downloads and sign-ins slow everyone else down?**
+  - **What it does:** users browse throughout (`STRESS_LANES`, default 20). After a baseline (`STRESS_BASELINE_SEC`, default 10), all of these start at once:
+    - `STRESS_DOWNLOADS` (20) full downloads of the fox model;
+    - `STRESS_UPLOADS` (10) uploads of 50 photos each;
+    - 5 uploads with too few photos;
+    - 50 sign-ins.
+  - **Pass:**
+    - every request gets the right answer;
+    - every download is complete;
+    - every build leaves the queue within 2 minutes;
+    - rejected uploads leave no folder behind;
+    - there's no 5xx;
+    - browsing p95 during the heavy work stays under `STRESS_P95_MS`.
+
+    Test machines have no COLMAP, so each build fails at its first step. This tests the upload path and the queue, not a real build's GPU load.
+- **`npm run stress:soak`: do memory or speed drift over time?**
+  - **What it does:** `STRESS_LANES` (default 10) users browse, with `STRESS_PAUSE_MS` (2000) between visits, for `STRESS_MINUTES` (30). Each minute it prints a row with the server's memory, requests, light p95 and failures.
+  - **Pass:**
+    - no failures;
+    - memory at the end (last 3 minutes) stays under `STRESS_MAX_GROWTH` (1.5) times its size after warm-up (minutes 3–5);
+    - light p95 over the last 3 minutes stays under `STRESS_P95_MS`.
+
+    Some memory growth is expected, because every visit adds an account. The per-minute table is the evidence.
+
+None of these are in `npm test`, because they take minutes. Run them on mains power with other programs closed: the load is generated on the same machine, so its numbers are lower than what a separate VM could handle.
+
+Latest stress results: 24/11/2026, ASUS Laptop NVIDIA GeForce RTX 4060 Laptop GPU (8 GB).
+- Ramp can have up to 100 users at once within a 200ms budget, up to 400 users under 1s, and up to 1200 users on this laptop. 
+- Heavy browsing p95 went from 20 to 89ms while 20m models were downloaded, each download completed at 7s, sign in p95 is 337ms. 
+- Soak: memory grew from 86MB to 146MB in 3 minutes at the ned of a 30 minutes test, will continue to test further.
 
 Latest `npm run load` (2026-11-08, same laptop, 100 users at once x 3 rounds = 3,600 requests): **0 failed requests, 0 server errors**, about 690 requests/s, server answering in 1 ms afterwards. Under that load the light routes (catalog, jobs, scenes, feedback) stay at p95 45-240 ms.
 
