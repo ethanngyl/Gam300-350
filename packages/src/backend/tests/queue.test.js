@@ -6,10 +6,12 @@
 \par Software Engineering Project 5
 \date 17-11-2026
 \brief
-The build queue (jobQueue.js): builds run one at a time (or
-MAX_RUNNING_JOBS), first come first served; waiting jobs are told their
-place; a job cancelled while waiting leaves the line; a failing build
-doesn't stop the line. After a restart, builds that were waiting are
+The build queue (jobQueue.js): each user runs one build at a time (or
+MAX_RUNNING_JOBS_PER_USER) and different users at the same time, unless
+the machine is capped (MAX_RUNNING_JOBS); first come first served among
+the builds allowed to start; waiting jobs are told what they wait for; a
+job cancelled while waiting leaves the line; a failing build doesn't stop
+the line. After a restart, builds that were waiting are
 resumed with their settings, a build that had started is "interrupted",
 and a folder without a status.json is never started.
 **************************************************************************/
@@ -29,10 +31,11 @@ const BARE = 'ffffffff-1111-2222-3333-444444444444'
 // ----- Helpers ------------------------------------------------------- //
 
 // A fake build the test finishes by hand: start() records that it started
-// and returns a promise that settles on finish() (or fail()).
-function fakeBuild(id, started)
+// and returns a promise that settles on finish() (or fail()). owner is the
+// user who started it (the queues below read it with ownerOf).
+function fakeBuild(id, started, owner = 'alice')
 {
-  const job = { id, cancelled: false }
+  const job = { id, owner, cancelled: false }
   let finish, fail
   const ended = new Promise((resolve, reject) => { finish = resolve; fail = reject })
   return {
@@ -60,25 +63,80 @@ async function waitFor(check, what)
 
 // ----- Tests --------------------------------------------------------- //
 
+// The queue the server makes by default: one build at a time per user, no
+// limit for the machine. options can change that.
+const queueOf = (options = {}) => createJobQueue({ maxPerOwner: 1, ownerOf: (job) => job.owner, ...options })
+
+// What onChange reported, as "id:waitingFor:ahead" strings.
+const placesOf = (waiting) => waiting.map(({ job, waitingFor, ahead }) => `${job.id}:${waitingFor}:${ahead}`)
+
 describe('the build queue', () =>
 {
-  test('one at a time, first come first served, each told its place', async () =>
+  test('each user runs one build at a time; different users at the same time', async () =>
   {
     const started = []
     const places = []
-    const queue = createJobQueue({ maxRunning: 1, onChange: (waiting) => places.push(waiting.map((job) => job.id)) })
-    const [a, b, c] = ['a', 'b', 'c'].map((id) => fakeBuild(id, started))
+    const queue = queueOf({ onChange: (waiting) => places.push(placesOf(waiting)) })
+    const a1 = fakeBuild('a1', started, 'alice')
+    const a2 = fakeBuild('a2', started, 'alice')
+    const a3 = fakeBuild('a3', started, 'alice')
+    const b1 = fakeBuild('b1', started, 'bob')
+    const ended = [a1, a2, a3, b1].map((build) => queue.enqueue(build.job, build.start))
+    await settle()
+    assert.deepEqual(started, ['a1', 'b1'])
+    assert.deepEqual(queue.snapshot(), { running: 2, waiting: ['a2', 'a3'] })
+    assert.deepEqual(places.at(-1), ['a2:own:1', 'a3:own:2'], 'each told how many of their own builds are ahead')
+
+    b1.finish()
+    await settle()
+    await settle()
+    assert.deepEqual(started, ['a1', 'b1'], 'bob finishing doesn\'t start alice\'s next build')
+
+    a1.finish()
+    await settle()
+    await settle()
+    assert.deepEqual(started, ['a1', 'b1', 'a2'])
+    assert.deepEqual(places.at(-1), ['a3:own:1'])
+
+    a2.finish()
+    await settle()
+    await settle()
+    assert.deepEqual(started, ['a1', 'b1', 'a2', 'a3'])
+    a3.finish()
+    await Promise.all(ended)
+    assert.deepEqual(queue.snapshot(), { running: 0, waiting: [] })
+  })
+
+  test('a user isn\'t held up by another user\'s waiting builds', async () =>
+  {
+    const started = []
+    const queue = queueOf()
+    const builds = [['a1', 'alice'], ['a2', 'alice'], ['b1', 'bob'], ['c1', 'carol']].map(([id, owner]) => fakeBuild(id, started, owner))
+    builds.forEach((build) => queue.enqueue(build.job, build.start))
+    await settle()
+    assert.deepEqual(started, ['a1', 'b1', 'c1'])
+    assert.deepEqual(queue.snapshot().waiting, ['a2'])
+  })
+
+  test('a machine limit of 1: one at a time for everyone, first come first served, each told its place', async () =>
+  {
+    const started = []
+    const places = []
+    const queue = queueOf({ maxRunning: 1, onChange: (waiting) => places.push(placesOf(waiting)) })
+    const a = fakeBuild('a', started, 'alice')
+    const b = fakeBuild('b', started, 'bob')
+    const c = fakeBuild('c', started, 'carol')
     const ended = [a, b, c].map((build) => queue.enqueue(build.job, build.start))
     await settle()
     assert.deepEqual(started, ['a'])
     assert.deepEqual(queue.snapshot(), { running: 1, waiting: ['b', 'c'] })
-    assert.deepEqual(places.at(-1), ['b', 'c'])
+    assert.deepEqual(places.at(-1), ['b:machine:1', 'c:machine:2'])
 
     a.finish()
     await ended[0]
     await settle()
     assert.deepEqual(started, ['a', 'b'])
-    assert.deepEqual(places.at(-1), ['c'])
+    assert.deepEqual(places.at(-1), ['c:machine:1'])
 
     b.finish()
     await settle()
@@ -89,10 +147,27 @@ describe('the build queue', () =>
     assert.deepEqual(queue.snapshot(), { running: 0, waiting: [] })
   })
 
-  test('maxRunning 2 runs two at once', async () =>
+  test('a machine limit still lets a user\'s own limit decide who goes next', async () =>
   {
     const started = []
-    const queue = createJobQueue({ maxRunning: 2 })
+    const places = []
+    const queue = queueOf({ maxRunning: 2, onChange: (waiting) => places.push(placesOf(waiting)) })
+    const builds = [['a1', 'alice'], ['a2', 'alice'], ['b1', 'bob'], ['c1', 'carol']].map(([id, owner]) => fakeBuild(id, started, owner))
+    builds.forEach((build) => queue.enqueue(build.job, build.start))
+    await settle()
+    assert.deepEqual(started, ['a1', 'b1'], 'two at once on the machine; a2 waits for a1')
+    assert.deepEqual(places.at(-1), ['a2:own:1', 'c1:machine:1'])
+
+    builds[2].finish() // b1
+    await settle()
+    await settle()
+    assert.deepEqual(started, ['a1', 'b1', 'c1'], 'carol goes next: alice still has a build running')
+  })
+
+  test('maxPerOwner 2 lets one user run two at once', async () =>
+  {
+    const started = []
+    const queue = queueOf({ maxPerOwner: 2 })
     const builds = ['a', 'b', 'c'].map((id) => fakeBuild(id, started))
     builds.forEach((build) => queue.enqueue(build.job, build.start))
     await settle()
@@ -107,7 +182,7 @@ describe('the build queue', () =>
   {
     const started = []
     const places = []
-    const queue = createJobQueue({ maxRunning: 1, onChange: (waiting) => places.push(waiting.map((job) => job.id)) })
+    const queue = queueOf({ onChange: (waiting) => places.push(waiting.map(({ job }) => job.id)) })
     const [a, b, c] = ['a', 'b', 'c'].map((id) => fakeBuild(id, started))
     queue.enqueue(a.job, a.start)
     const bEnded = queue.enqueue(b.job, b.start)
@@ -127,7 +202,7 @@ describe('the build queue', () =>
   test('a build that fails doesn\'t stop the line', async () =>
   {
     const started = []
-    const queue = createJobQueue({ maxRunning: 1 })
+    const queue = queueOf()
     const [a, b] = ['a', 'b'].map((id) => fakeBuild(id, started))
     const aEnded = queue.enqueue(a.job, a.start)
     queue.enqueue(b.job, b.start)

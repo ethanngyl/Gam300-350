@@ -428,10 +428,14 @@ export const config = {
     colmapBin,
     brushBin,
 
-    // Builds (masks + COLMAP + Brush) running at once on this machine; more
-    // wait in line (jobQueue.js). They share one GPU, so 1 unless it has the
-    // memory for more.
-    maxRunningJobs: Math.max(1, Math.floor(Number(process.env.MAX_RUNNING_JOBS)) || 1),
+    // Builds (masks + COLMAP + Brush) one user can have running at once; their
+    // next ones wait in line (jobQueue.js). Different users' builds run at the
+    // same time.
+    maxRunningJobsPerUser: Math.max(1, Math.floor(Number(process.env.MAX_RUNNING_JOBS_PER_USER)) || 1),
+    // Builds running at once on this machine, whoever started them; 0 or unset
+    // = no limit. They share one GPU, so builds at once are each slower and can
+    // run out of GPU memory: 1 gives one build at a time for everyone.
+    maxRunningJobs: Math.max(0, Math.floor(Number(process.env.MAX_RUNNING_JOBS)) || 0),
 
     // Training knobs. Fewer iterations = faster demo, lower quality.
     trainIters: Number(process.env.TRAIN_ITERS) || 10000,

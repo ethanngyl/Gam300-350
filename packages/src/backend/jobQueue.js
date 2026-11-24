@@ -6,12 +6,15 @@
 \par Software Engineering Project 5
 \date 17-11-2026
 \brief
-The line reconstruction builds wait in, so a machine runs only a few at a
-time (config.maxRunningJobs, 1 by default): COLMAP and Brush share one GPU,
-and two builds at once are each slower and can run out of GPU memory.
-First come, first served. No imports, so the tests can use it directly;
-services/jobs.js creates the one the server uses.
-- createJobQueue({ maxRunning, onChange })
+The line reconstruction builds wait in. Each user runs a few builds at a
+time (config.maxRunningJobsPerUser, 1 by default) and waits for their own
+earlier builds; different users' builds run at the same time. The whole
+machine can also be capped (config.maxRunningJobs, no cap by default):
+COLMAP and Brush share one GPU, and builds at once are each slower and can
+run out of GPU memory. First come, first served among the builds allowed
+to start. No imports, so the tests can use it directly; services/jobs.js
+creates the one the server uses.
+- createJobQueue({ maxPerOwner, maxRunning, ownerOf, onChange })
 Returns { enqueue(job, start), refresh(), snapshot() }.
 **************************************************************************/
 
@@ -21,36 +24,69 @@ Returns { enqueue(job, start), refresh(), snapshot() }.
 /*!
   \brief
     Creates a job queue.
+  \param maxPerOwner
+    number
+    How many jobs one owner may have running at once (at least 1)
   \param maxRunning
     number
-    How many jobs may run at once (at least 1)
+    Optional. How many jobs may run at once in all; 0 (the default) means
+    no limit
+  \param ownerOf
+    function
+    Optional. job => its owner (any value; jobs with the same owner share
+    maxPerOwner). Read once, when the job is queued. By default every job
+    has the same owner (null)
   \param onChange
     function
-    Optional. Called with the waiting jobs, first in line first, whenever
-    the line changes (to show each job its place)
+    Optional. Called whenever the line changes (to show each job its
+    place), with the waiting jobs, first in line first, each as
+    { job, waitingFor, ahead }: waitingFor is 'own' (its owner's earlier
+    builds) or 'machine' (the machine is full), and ahead is how many of
+    those have to finish before it can start
   \return
     { enqueue, refresh, snapshot }:
     - enqueue(job, start): start() runs the job and returns a promise. It
-      is called now if there is room, else when the jobs ahead are done.
-      Returns a promise that settles when the run has ended (never
+      is called now if there is room, else when the jobs it waits for are
+      done. Returns a promise that settles when the run has ended (never
       rejects), or at once if the job was cancelled (job.cancelled) while
       waiting.
     - refresh(): drops cancelled jobs from the line and reports the change.
     - snapshot(): { running: number, waiting: job ids }, for tests.
 */
 /************************************************************************/
-export function createJobQueue({ maxRunning, onChange = () => {} })
+export function createJobQueue({ maxPerOwner, maxRunning = 0, ownerOf = () => null, onChange = () => {} })
 {
-  const limit = Math.max(1, Math.floor(maxRunning) || 1)
-  // Each waiting entry: { job, start, done } (done resolves enqueue's promise).
+  const perOwner = Math.max(1, Math.floor(maxPerOwner) || 1)
+  const machineLimit = Math.max(0, Math.floor(maxRunning) || 0) // 0 = no limit
+  // Each waiting entry: { job, owner, start, done } (done resolves enqueue's promise).
   const waiting = []
+  const runningByOwner = new Map() // owner -> jobs running
   let running = 0
+
+  const ownerRunning = (owner) => runningByOwner.get(owner) ?? 0
+  const machineFull = () => machineLimit > 0 && running >= machineLimit
+
+  // What each waiting job waits for, in line order (see onChange).
+  function places()
+  {
+    const ownWaitingBefore = new Map()
+    let machineWaitingBefore = 0
+    return waiting.map(({ job, owner }) =>
+    {
+      const ownAhead = ownerRunning(owner) + (ownWaitingBefore.get(owner) ?? 0)
+      ownWaitingBefore.set(owner, (ownWaitingBefore.get(owner) ?? 0) + 1)
+      if (ownAhead >= perOwner) return { job, waitingFor: 'own', ahead: ownAhead - perOwner + 1 }
+      const ahead = Math.max(1, running + machineWaitingBefore - machineLimit + 1)
+      machineWaitingBefore++
+      return { job, waitingFor: 'machine', ahead }
+    })
+  }
 
   function report()
   {
     try
     {
-      onChange(waiting.map((entry) => entry.job))
+      onChange(places())
     }
     catch (err)
     {
@@ -58,29 +94,42 @@ export function createJobQueue({ maxRunning, onChange = () => {} })
     }
   }
 
-  // Runs one job and starts the next when it ends, whatever the outcome.
+  // Runs one job and starts the next ones when it ends, whatever the outcome.
   function launch(entry)
   {
     running++
+    runningByOwner.set(entry.owner, ownerRunning(entry.owner) + 1)
     Promise.resolve()
       .then(() => entry.start())
       .catch((err) => console.error(`[backend] job ${entry.job.id} failed to run:`, err))
       .finally(() =>
       {
         running--
+        const left = ownerRunning(entry.owner) - 1
+        if (left > 0) runningByOwner.set(entry.owner, left)
+        else runningByOwner.delete(entry.owner)
         entry.done()
         pump()
       })
   }
 
-  // Lets go of cancelled jobs, then starts jobs while there is room.
+  // Lets go of cancelled jobs, then starts, in line order, every waiting job
+  // whose owner has room while the machine has room. The others keep their
+  // place.
   function pump()
   {
     let changed = dropCancelled()
-    while (running < limit && waiting.length > 0)
+    for (let i = 0; i < waiting.length && !machineFull(); )
     {
-      launch(waiting.shift())
-      changed = true
+      if (ownerRunning(waiting[i].owner) < perOwner)
+      {
+        launch(waiting.splice(i, 1)[0])
+        changed = true
+      }
+      else
+      {
+        i++
+      }
     }
     if (changed) report()
   }
@@ -101,8 +150,10 @@ export function createJobQueue({ maxRunning, onChange = () => {} })
   {
     return new Promise((resolve) =>
     {
-      const entry = { job, start, done: resolve }
-      if (running < limit && waiting.length === 0)
+      const entry = { job, owner: ownerOf(job), start, done: resolve }
+      // Nobody it would overtake: its owner has no earlier build waiting.
+      const ownEarlierWaiting = waiting.some((other) => other.owner === entry.owner)
+      if (!machineFull() && ownerRunning(entry.owner) < perOwner && !ownEarlierWaiting)
       {
         launch(entry)
         return
