@@ -21,10 +21,11 @@ class StressTestRunner {
 public:
 	explicit StressTestRunner(Viewport* viewport) : m_viewport(viewport) {}
 
-	//Generates a sphere and adds it to the scene, timing each phase
-	//Returns nothing if the renderer is not ready or the scene is full
-	//Phases: generating the splats, handing them to the renderer, and the first frame after
-	//(the renderer defers its GPU upload to the next draw, so that frame is where the real load cost is).
+	//Generates a sphere, saves it to a temporary .ply like a normal model, then loads that file and adds it to the scene
+	//Returns nothing if the renderer is not ready, the scene is full, or the file could not be saved or read back
+	//Generating and saving are setup and are not timed. The timed phases are the same ones an import goes through:
+	//reading the file from disk, handing the splats to the renderer, and the first frame after
+	//(the renderer defers its GPU upload to the next draw, so that frame is where the real upload cost is).
 	std::vector<StressResult> TestLoad(size_t count);
 
 	//Selects every splat, every 2nd and every 10th splat of the selected model, timing each then times clearing the selection.

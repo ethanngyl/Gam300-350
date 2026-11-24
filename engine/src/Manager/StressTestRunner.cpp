@@ -1,16 +1,22 @@
 #include "StressTestRunner.h"
 
+#include "splat/SplatExporter.h"
 #include "splat/SplatGenerator.h"
+#include "splat/SplatLoader.h"
 #include "splat/SplatRenderer.h"
 #include "ui/EditCommands.h"
 #include "ui/Viewport.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <QDir>
 #include <QElapsedTimer>
+#include <QTemporaryDir>
 #include <QUndoStack>
 
+#include <filesystem>
 #include <functional>
+#include <string>
 
 #include <cstdint>
 
@@ -35,7 +41,6 @@ namespace {
 	}
 
 	//Hover text for the rows, shared so every test words the two steps the same way
-	const QString kCreateTip = "Builds the splat data in memory (CPU only).";
 	const QString kApplyTip = "Makes the change in memory (CPU only).";
 	const QString kRedrawTip = "Draws one frame so the change shows on screen. Updates the splat data and sends it to the graphics card (CPU + GPU).";
 	const QString kUndoTip = "Undoes the edit in memory (CPU only). Nothing is drawn yet.";
@@ -48,15 +53,45 @@ std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
 		return {};
 	}
 
+	//Setup, not timed: generate the sphere and save it like a normal model, so the load below reads a real .ply
+	//The folder and the file in it are deleted when dir goes out of scope
+	QTemporaryDir dir;
+	if (!dir.isValid()) {
+		qWarning("Load test: could not create a temporary folder.");
+		return {};
+	}
+	const QString path = dir.filePath("StressTestSphere.ply");
+	{
+		const std::vector<SplatVertex> generated = splat_generate::GenerateSphereSplats(count);
+		ExportOptions options;
+		options.format = ExportFormat::GaussianPly; //The format the importer reads
+		const ExportResult saved = ExportSplats({ ExportSource{ &generated, glm::mat4(1.0f) } },
+			std::filesystem::path(path.toStdWString()), options);
+		if (!saved.ok) {
+			qWarning("Load test: could not save the test sphere: %s", saved.error.c_str());
+			return {};
+		}
+	} //The generated splats are freed here, so they are not held in memory while the file is read back
+
+	//Same call an import makes
 	std::vector<SplatVertex> splats;
-	const double generateMs = MeasureMs([&] { splats = splat_generate::GenerateSphereSplats(count); });
+	const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
+	const double readMs = MeasureMs([&] { splats = LoadSplatPly(nativePath); });
+	if (splats.empty()) {
+		qWarning("Load test: the saved test sphere could not be read back.");
+		return {};
+	}
+	const size_t loaded = splats.size();
+
 	const double setMs = MeasureMs([&] { renderer->SetSplats(splats, "StressTestSphere"); });
 	const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
 
 	return {
-		{ "Load: Create splats", count, generateMs, kCreateTip },
-		{ "Load: Add to scene", count, setMs, "Hands the splats to the renderer as a new model (CPU only). Nothing is drawn yet." },
-		{ "Load: Redraw", count, frameMs, kRedrawTip },
+		{ "Load: Read from disk", loaded, readMs,
+			"Reads the saved .ply file and turns it into splats (disk + CPU). This is the same code an import uses. "
+			"The file was just written, so the operating system probably still has it cached may be faster than first read of an old file." },
+		{ "Load: Add to scene", loaded, setMs, "Hands the splats to the renderer as a new model (CPU only). Nothing is drawn yet." },
+		{ "Load: Redraw", loaded, frameMs, kRedrawTip },
 	};
 }
 

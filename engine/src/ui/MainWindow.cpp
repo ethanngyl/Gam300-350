@@ -556,7 +556,7 @@ void MainWindow::createDocks() {
         const std::vector<StressResult> results = test(runner);
         if (results.empty())
         {
-            statusBar()->showMessage(QString("%1 skipped: the renderer is not ready, or the scene is full or has no selected model.").arg(name), kStatusMessageMs);
+            statusBar()->showMessage(QString("%1 skipped: the renderer is not ready, the scene is full, no model is selected, or the test file could not be saved or read (see the Console).").arg(name), kStatusMessageMs);
         }
         else
         {
