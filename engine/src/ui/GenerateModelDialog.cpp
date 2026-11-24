@@ -193,7 +193,7 @@ GenerateModelDialog::GenerateModelDialog(QWidget* parent)
     m_autoCrop->setToolTip("When you walk around an object, removes everything outside the path you took "
                            "(neighbouring objects, walls, the ceiling). Skipped if the photos don't surround "
                            "one object. Turn off for rooms and scenery.");
-    m_autoCrop->setChecked(settings.value(kAutoCropKey, true).toBool());
+    m_autoCrop->setChecked(settings.value(kAutoCropKey, false).toBool());
     options->addRow("", m_autoCrop);
 
     m_import = new QCheckBox("Import into the scene when it's ready", this);

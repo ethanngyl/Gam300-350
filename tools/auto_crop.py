@@ -45,6 +45,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
 import os
@@ -253,7 +254,7 @@ def find_centre(cams):
         misses = [ray_miss(c, p) for c in cams]
         typical = median([m for m, _front in misses])
         limit = max(2.0 * typical, 1e-9)
-        inliers = [c for c, (m, front) in zip(cams, misses) if front and m <= limit]
+        inliers = [c for c, (m, front) in zip(cams, misses, strict=True) if front and m <= limit]
         if len(inliers) < MIN_CAMERAS:
             raise Skip("too few photos point at the same spot")
 
@@ -318,7 +319,7 @@ def radial_profile(hull, bins):
 
 def largest_gap_degrees(angles):
     s = sorted(a % (2 * math.pi) for a in angles)
-    gaps = [b - a for a, b in zip(s, s[1:])] + [s[0] + 2 * math.pi - s[-1]]
+    gaps = [b - a for a, b in itertools.pairwise(s)] + [s[0] + 2 * math.pi - s[-1]]
     return math.degrees(max(gaps))
 
 
@@ -390,7 +391,7 @@ def build_region(cams, inliers, centre, height_factor, points=()):
     # Path the photographer walked, closed by mirroring it through the centre.
     # Cameras much further out than the rest (a stray shot from across the
     # room) would stretch the region, so they're left out of the outline.
-    outline = [pt for pt, r in zip(flat, radii) if r <= 2.5 * horizontal_distance]
+    outline = [pt for pt, r in zip(flat, radii, strict=True) if r <= 2.5 * horizontal_distance]
     hull = convex_hull(outline + [(-x, -y) for x, y in outline])
     if len(hull) < 3:
         raise Skip("the camera positions don't enclose an area")
