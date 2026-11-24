@@ -59,6 +59,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	auto* layout = new QVBoxLayout(this);
 
 	auto* buttonRow = new QHBoxLayout();
+	auto* buttonRow2nd = new QHBoxLayout();
 	auto* testAllButton = new QPushButton("Test All", this);
 	auto* loadTestButton = new QPushButton("Load Test", this);
 	auto* selectTestButton = new QPushButton("Select Test", this);
@@ -98,12 +99,14 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	collapseAllButton->setToolTip("Hides every test's rows and leaves its total. Failed rows stay visible.");
 	auto* expandAllButton = new QPushButton("Expand All", this);
 	expandAllButton->setToolTip("Shows every test's rows again. Double-click a total row to do one test.");
-	buttonRow->addWidget(collapseAllButton);
-	buttonRow->addWidget(expandAllButton);
+	buttonRow2nd->addWidget(collapseAllButton);
+	buttonRow2nd->addWidget(expandAllButton);
 	buttonRow->addWidget(clearButton);
 	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, trimTestButton, deleteTestButton,
 		undoRedoTestButton, exportTestButton, clearButton };
+
 	layout->addLayout(buttonRow);
+	layout->addLayout(buttonRow2nd);
 
 	//Stays visible until Clear Results, so a failure is not missed even if the row has scrolled out of view
 	m_failureBanner = new QLabel(this);
