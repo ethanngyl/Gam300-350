@@ -31,6 +31,16 @@ namespace {
 	//Failed rows are a stronger red than any test color, so they stand out from all of them
 	const QColor kFailColor(0xb4, 0x1e, 0x1e);
 
+	//Data stored on the first cell of every row (Qt::UserRole itself holds the failed flag)
+	constexpr int kGroupRole = Qt::UserRole + 1;    //int, which test's rows this is, -1 for a row with no group
+	constexpr int kTotalRole = Qt::UserRole + 2;    //bool, true for the row that collapses and expands its group
+	constexpr int kBaseNameRole = Qt::UserRole + 3; //QString, the total row's name without the arrow
+
+	//The arrow in front of a total row's name, pointing down while its rows are shown and right while they are hidden
+	QString TotalLabel(const QString& baseName, bool collapsed) {
+		return QString(QChar(collapsed ? 0x25B8 : 0x25BE)) + QLatin1Char(' ') + baseName;
+	}
+
 	//A splat is 64 bytes and the tests copy the splats several times
 	//Min limits of the splat count box
 	constexpr int kMinSplatCount = 1000;
@@ -79,6 +89,14 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	m_splatCount->setToolTip("How many splats the test sphere has. Large values use a lot of memory, "
 		"the move, delete and undo tests make several copies of the splats.");
 	buttonRow->addWidget(m_splatCount);
+
+	//Not in m_runButtons, they do not start a test so they stay usable while one runs
+	auto* collapseAllButton = new QPushButton("Collapse All", this);
+	collapseAllButton->setToolTip("Hides every test's rows and leaves its total. Failed rows stay visible.");
+	auto* expandAllButton = new QPushButton("Expand All", this);
+	expandAllButton->setToolTip("Shows every test's rows again. Double-click a total row to do one test.");
+	buttonRow->addWidget(collapseAllButton);
+	buttonRow->addWidget(expandAllButton);
 	buttonRow->addWidget(clearButton);
 	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, trimTestButton, deleteTestButton,
 		undoRedoTestButton, exportTestButton, clearButton };
@@ -116,8 +134,22 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	connect(exportTestButton, &QPushButton::clicked, this, &StressTestPanel::exportTestRequested);
 	connect(deleteTestButton, &QPushButton::clicked, this, &StressTestPanel::deleteTestRequested);
 	connect(undoRedoTestButton, &QPushButton::clicked, this, &StressTestPanel::undoRedoTestRequested);
+	connect(collapseAllButton, &QPushButton::clicked, this, [this] { SetAllGroupsCollapsed(true); });
+	connect(expandAllButton, &QPushButton::clicked, this, [this] { SetAllGroupsCollapsed(false); });
+	//Double-clicking a total row collapses or expands the rows of its test
+	connect(m_results, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
+		const QTableWidgetItem* first = m_results->item(row, 0);
+		if (first && first->data(kTotalRole).toBool()) {
+			const int group = first->data(kGroupRole).toInt();
+			if (group >= 0) {
+				SetGroupCollapsed(group, !m_collapsedGroups.contains(group));
+			}
+		}
+	});
 	connect(clearButton, &QPushButton::clicked, this, [this] {
 		m_results->setRowCount(0);
+		m_collapsedGroups.clear();
+		m_nextGroup = 0;
 		m_failedCount = 0;
 		m_failureBanner->setVisible(false);
 		ShowSelectedDescription(); //Nothing is selected any more
@@ -142,19 +174,68 @@ void StressTestPanel::ShowSelectedDescription() {
 	const int row = m_results->currentRow();
 	const QTableWidgetItem* item = (row >= 0 && m_results->item(row, 0)) ? m_results->item(row, 0) : nullptr;
 	//The explanation is stored as the row's tooltip, so the label and the tooltip always say the same thing
-	m_description->setText(item && !item->toolTip().isEmpty() ? item->toolTip() : "Select a row to see what it measures.");
+	m_description->setText(item && !item->toolTip().isEmpty() ? item->toolTip()
+		: "Select a row to see what it measures. Double-click a total row to collapse or expand its test.");
 	//The reason a step failed is drawn red as well
 	const bool failed = item && item->data(Qt::UserRole).toBool();
 	m_description->setStyleSheet(failed ? "color: #ff7b7b; font-weight: bold;" : QString());
 }
 
+void StressTestPanel::SetGroupCollapsed(int group, bool collapsed) {
+	if (collapsed) {
+		m_collapsedGroups.insert(group);
+	}
+	else {
+		m_collapsedGroups.remove(group);
+	}
+
+	for (int row = 0; row < m_results->rowCount(); ++row) {
+		QTableWidgetItem* first = m_results->item(row, 0);
+		if (!first || first->data(kGroupRole).toInt() != group) {
+			continue;
+		}
+		if (first->data(kTotalRole).toBool()) {
+			first->setText(TotalLabel(first->data(kBaseNameRole).toString(), collapsed));
+		}
+		else {
+			//A failed row stays visible, so a failure cannot hide behind a total
+			const bool failed = first->data(Qt::UserRole).toBool();
+			m_results->setRowHidden(row, collapsed && !failed);
+		}
+	}
+
+	//A hidden row cannot stay selected, the description would be explaining something that is not on screen
+	const int current = m_results->currentRow();
+	if (current >= 0 && m_results->isRowHidden(current)) {
+		m_results->clearSelection();
+		m_results->setCurrentItem(nullptr);
+	}
+	ShowSelectedDescription();
+}
+
+void StressTestPanel::SetAllGroupsCollapsed(bool collapsed) {
+	//Every group has exactly one total row
+	QList<int> groups;
+	for (int row = 0; row < m_results->rowCount(); ++row) {
+		const QTableWidgetItem* first = m_results->item(row, 0);
+		if (first && first->data(kTotalRole).toBool() && first->data(kGroupRole).toInt() >= 0) {
+			groups.append(first->data(kGroupRole).toInt());
+		}
+	}
+	for (int group : groups) {
+		SetGroupCollapsed(group, collapsed);
+	}
+}
+
 void StressTestPanel::AppendRow(const QString& name, const QString& splats, const QString& time, const QString& tooltip,
-	const QBrush& color, bool bold, bool failed) {
+	const QBrush& color, bool bold, bool failed, int group, bool isTotal) {
 	const int row = m_results->rowCount();
 	m_results->insertRow(row);
 	m_results->setItem(row, 0, new QTableWidgetItem(name));
 	m_results->setItem(row, 1, new QTableWidgetItem(splats));
 	m_results->setItem(row, 2, new QTableWidgetItem(time));
+	m_results->item(row, 0)->setData(kGroupRole, group); //Always set, so a row never reads as group 0 by accident
+	m_results->item(row, 0)->setData(kTotalRole, isTotal);
 	//Same hover text and color on every cell of the row so it shows wherever the mouse is
 	for (int column = 0; column < m_results->columnCount(); ++column) {
 		QTableWidgetItem* cell = m_results->item(row, column);
@@ -181,20 +262,24 @@ double StressTestPanel::AddResults(const std::vector<StressResult>& results, con
 	}
 	const QBrush rowColor(kTestColors[testIndex % kTestColorCount]);
 
+	//All the rows of this call, and their total row, are one group that can be collapsed together
+	const int group = m_nextGroup++;
+
 	const QLocale locale;
 	double totalMs = 0.0;
 	int failedInBatch = 0;
 	for (const StressResult& result : results) {
 		const QString splats = locale.toString(static_cast<qulonglong>(result.splatCount));
 		if (result.ok) {
-			AppendRow(result.name, splats, QString::number(result.ms, 'f', 2), result.tooltip, rowColor, false);
+			AppendRow(result.name, splats, QString::number(result.ms, 'f', 2), result.tooltip, rowColor, false,
+				false, group);
 			totalMs += result.ms;
 		}
 		else {
 			//A failed step has no time, it says FAILED instead of a number that could be read as a very fast result
 			++failedInBatch;
 			AppendRow(result.name + " (FAILED)", splats, "FAILED",
-				QString("FAILED: %1\n\n%2").arg(result.note, result.tooltip), QBrush(kFailColor), true, true);
+				QString("FAILED: %1\n\n%2").arg(result.note, result.tooltip), QBrush(kFailColor), true, true, group);
 		}
 	}
 
@@ -207,7 +292,12 @@ double StressTestPanel::AddResults(const std::vector<StressResult>& results, con
 		totalName += QString(" (%1 failed)").arg(failedInBatch);
 		totalTip += " Failed steps are not included, so this total is incomplete.";
 	}
-	AppendRow(totalName, QString(), QString::number(totalMs, 'f', 2), totalTip, rowColor, true);
+	totalTip += " Double-click this row to collapse or expand the steps above it.";
+	//A total with a failed step is red, so it is noticed even while its rows are collapsed
+	const QBrush totalColor = failedInBatch > 0 ? QBrush(kFailColor) : rowColor;
+	AppendRow(TotalLabel(totalName, false), QString(), QString::number(totalMs, 'f', 2), totalTip, totalColor, true,
+		false, group, true);
+	m_results->item(m_results->rowCount() - 1, 0)->setData(kBaseNameRole, totalName); //So the arrow can change without losing the name
 
 	if (failedInBatch > 0) {
 		m_failedCount += failedInBatch;

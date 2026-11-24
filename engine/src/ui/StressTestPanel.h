@@ -3,6 +3,7 @@
 #include "../Manager/StressTestRunner.h"
 
 #include <QList>
+#include <QSet>
 #include <QStringList>
 #include <QWidget>
 
@@ -59,13 +60,20 @@ private:
 
 	//Appends one row, with the tooltip and color on every cell
 	//A failed row is drawn white on the color given (red), and is marked so the description can be drawn red too
+	//group says which test's rows it belongs to (-1 for none), isTotal marks the row that collapses and expands the group
 	void AppendRow(const QString& name, const QString& splats, const QString& time, const QString& tooltip,
-		const QBrush& color, bool bold, bool failed = false);
+		const QBrush& color, bool bold, bool failed = false, int group = -1, bool isTotal = false);
+
+	//Hides the rows of one test and leaves its total row, or shows them again. Failed rows stay visible either way
+	void SetGroupCollapsed(int group, bool collapsed);
+	void SetAllGroupsCollapsed(bool collapsed);
 
 	QTableWidget* m_results = nullptr;
 	QLabel* m_description = nullptr;
 	QLabel* m_failureBanner = nullptr; //Red bar above the table, only visible while there are failed rows
 	int m_failedCount = 0;
+	int m_nextGroup = 0;              //Each AddResults call is one group, so each test run can be collapsed on its own
+	QSet<int> m_collapsedGroups;
 	QList<QPushButton*> m_runButtons; //Every button that starts something, disabled while a test runs
 	QPushButton* m_stopButton = nullptr;
 	QSpinBox* m_splatCount = nullptr; //Splats in the test sphere
