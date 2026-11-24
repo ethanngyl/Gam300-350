@@ -172,3 +172,72 @@ void MoveSplatsCommand::undo() {
 void MoveSplatsCommand::redo() {
     Write(m_after);
 }
+
+DeleteModelCommand::DeleteModelCommand(SplatRenderer* renderer, SplatModel* model, std::function<void()> beforeRemove,
+                                       QUndoCommand* parent)
+    : QUndoCommand(parent), m_renderer(renderer), m_model(model), m_beforeRemove(std::move(beforeRemove))
+{
+    setText(QString("Delete %1").arg(QString::fromStdString(model->GetName())));
+}
+
+void DeleteModelCommand::redo() {
+    if (!m_model) {
+        return; //Undo couldn't restore it (scene was full), nothing to remove
+    }
+    int index = -1;
+    for (int i = 0; i < static_cast<int>(m_renderer->ModelCount()); ++i) {
+        if (m_renderer->GetModel(i) == m_model) {
+            index = i;
+            break;
+        }
+    }
+    if (index < 0) {
+        m_model = nullptr;
+        return;
+    }
+
+    //Keep everything needed to rebuild it
+    m_splats = m_model->splats();
+    //SourceSplats() returns the current splats when no separate untrimmed copy is kept
+    if (&m_model->SourceSplats() != &m_model->splats()) {
+        m_original = m_model->SourceSplats();
+    }
+    m_name = m_model->GetName();
+    m_transform = m_model->GetTransform();
+    m_trimData = m_model->GetTrimData();
+    m_trimmed = m_model->IsTrimmed();
+    m_hidden = m_model->GetIsHidden();
+
+    if (m_beforeRemove) {
+        m_beforeRemove();
+    }
+    m_renderer->ClearSelection(); //Model indices shift when one is removed
+    m_renderer->RemoveModel(index);
+    m_model = nullptr;
+}
+
+void DeleteModelCommand::undo() {
+    if (m_model) {
+        return; //Already in the scene
+    }
+    if (m_renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
+        qWarning("Can't undo deleting %s: the scene already holds the maximum of %d models.", m_name.c_str(),
+                 SplatRenderer::kMaxModels);
+        return;
+    }
+
+    m_renderer->SetSplats(m_splats, m_name);
+    const int index = static_cast<int>(m_renderer->ModelCount()) - 1;
+    m_model = m_renderer->GetModel(index);
+    m_model->SetTransform(m_transform);
+    m_model->SetTrimData(m_trimData, m_trimmed);
+    m_model->SetHidden(m_hidden);
+    if (!m_original.empty()) {
+        m_model->SetOriginal(std::move(m_original));
+    }
+    m_renderer->SelectModel(index);
+
+    //The scene holds the data again, free the saved copy
+    std::vector<SplatVertex>().swap(m_splats);
+    std::vector<SplatVertex>().swap(m_original);
+}

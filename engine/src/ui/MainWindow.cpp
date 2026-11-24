@@ -35,6 +35,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "ui/RemoteModelsPanel.h"
 #include "ui/TrimDialog.h"
 #include "ui/StressTestPanel.h"
+#include "Manager/StressTestRunner.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -63,6 +64,9 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QTimer>
 #include <QToolBar>
 #include <QUrl>
+
+#include <algorithm>
+#include <functional>
 
 #include <memory>
 
@@ -412,10 +416,6 @@ void MainWindow::createActions() {
     m_trimSettingsAction->setStatusTip("Edit the default splat trim values used for new imports");
     connect(m_trimSettingsAction, &QAction::triggered, this, [this] { showTrimDialog(); });
 
-    m_stressTestSphereAction = new QAction("Generate Stress Test &Sphere (1M)", this);
-    m_stressTestSphereAction->setStatusTip("Add a generated sphere of one million splats to the scene for stress testing");
-    connect(m_stressTestSphereAction, &QAction::triggered, this, [this] { generateStressTestSphere(); });
-
     m_devModeAction = new QAction(this);
     m_devModeAction->setStatusTip("Click to toggle developer mode, which shows the developer-only tabs");
     m_devModeAction->setCheckable(true); //Creates a checkbox
@@ -460,7 +460,6 @@ void MainWindow::createMenus() {
     editMenu->addAction(m_trimSettingsAction);
     editMenu->addSeparator();
     editMenu->addAction(m_devModeAction);
-    editMenu->addAction(m_stressTestSphereAction);
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
     QMenu* renderModeMenu = viewMenu->addMenu("Render &Mode");
@@ -544,8 +543,79 @@ void MainWindow::createDocks() {
     m_audio = new AudioPanel(this);
     QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
 
-    m_stressTestPanel = new StressTestPanel(this); //Empty for now, the stress test controls go here
+    m_stressTestPanel = new StressTestPanel(this);
     QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestPanel, Qt::BottomDockWidgetArea);
+    //Lamda function to runner 1 stress test, type is inputted a input variable
+    //Shows its results in the panel
+    //The test runs on the GUI thread, so the UI freezes
+    //Input is blocked for the whole run so clicks made meanwhile are ignored
+    auto runStressTest = [this](const QString& name, std::function<std::vector<StressResult>(StressTestRunner&)> test)
+    {
+        beginStressRun(false);
+
+        StressTestRunner runner(m_viewport);
+        const std::vector<StressResult> results = test(runner);
+        if (results.empty())
+        {
+            statusBar()->showMessage(QString("%1 skipped: the renderer is not ready, the scene is full, no model is selected, or the test file could not be saved or read (see the Console).").arg(name), kStatusMessageMs);
+        }
+        else
+        {
+            const int failedBefore = m_stressTestPanel->FailedCount();
+            m_stressTestPanel->AddResults(results, name);
+            const int failedNow = m_stressTestPanel->FailedCount() - failedBefore;
+            if (failedNow > 0)
+            {
+                //The panel already shows a red banner, this puts it in the status bar and the Console as well
+                const QString warning = QString("%1: %2 step(s) failed. See the red rows in the Stress Test panel.").arg(name).arg(failedNow);
+                qWarning("%s", qPrintable(warning));
+                statusBar()->showMessage(warning, kStatusMessageMs);
+            }
+        }
+
+        endStressRun();
+        return !results.empty();
+    };
+
+    //Link the tests to the stress test panel
+    connect(m_stressTestPanel, &StressTestPanel::loadTestRequested, this, [this, runStressTest] {
+        const size_t count = m_stressTestPanel->SplatCount(); //From the spin box in the panel
+        const bool ran = runStressTest("Load test", [count](StressTestRunner& runner) {
+            return runner.TestLoad(count);
+        });
+        if (ran)
+        {
+            //Same as an import, the new sphere becomes the selected model
+            SplatRenderer* renderer = m_viewport->renderer();
+            selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+            refreshScenePanels();
+        }
+    });
+    connect(m_stressTestPanel, &StressTestPanel::selectTestRequested, this, [runStressTest] {
+        runStressTest("Select test", [](StressTestRunner& runner) { return runner.TestSelect(); });
+    });
+    connect(m_stressTestPanel, &StressTestPanel::moveTestRequested, this, [runStressTest] {
+        runStressTest("Move test", [](StressTestRunner& runner) { return runner.TestMove(); });
+    });
+    connect(m_stressTestPanel, &StressTestPanel::exportTestRequested, this, [runStressTest] {
+        runStressTest("Export test", [](StressTestRunner& runner) { return runner.TestExport(); });
+    });
+    connect(m_stressTestPanel, &StressTestPanel::trimTestRequested, this, [runStressTest] {
+        runStressTest("Trim test", [](StressTestRunner& runner) { return runner.TestTrim(); });
+    });
+    connect(m_stressTestPanel, &StressTestPanel::testAllRequested, this, [this] { runAllStressTests(); });
+    connect(m_stressTestPanel, &StressTestPanel::stopRequested, this, [this] { m_stopStressTests = true; });
+    connect(m_stressTestPanel, &StressTestPanel::undoRedoTestRequested, this, [runStressTest] {
+        runStressTest("Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); });
+    });
+    connect(m_stressTestPanel, &StressTestPanel::deleteTestRequested, this, [this, runStressTest] {
+        const bool ran = runStressTest("Delete test", [](StressTestRunner& runner) { return runner.TestDelete(); });
+        if (ran)
+        {
+            //The test briefly added and removed a model, make sure the panels still match the scene
+            refreshScenePanels();
+        }
+    });
 
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);
@@ -853,32 +923,148 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
     statusBar()->showMessage(QString("Imported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
 }
 
-void MainWindow::generateStressTestSphere() {
-    SplatRenderer* renderer = m_viewport->renderer();
-    if (!renderer) {
-        return; // GL not ready
-    }
-    if (renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
-        QMessageBox::warning(this, "Scene Full",
-                             QString("The scene already holds the maximum of %1 models.\nDelete a model to make room.")
-                                 .arg(SplatRenderer::kMaxModels));
-        return;
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (!m_stressTestRunning) {
+        return QMainWindow::eventFilter(watched, event);
     }
 
-    QElapsedTimer timer;
-    timer.start();
-    const std::vector<SplatVertex> splats = splat_generate::GenerateSphereSplats();
-    const qint64 generateMs = timer.restart();
-    renderer->SetSplats(splats, "StressTestSphere");
-    const qint64 uploadMs = timer.elapsed();
+    switch (event->type()) {
+    case QEvent::Shortcut: //Keyboard shortcuts act on the scene
+        return true;
+    case QEvent::Close: //Closing mid-run would free what the test is using
+        if (watched == this) {
+            return true;
+        }
+        break;
+    case QEvent::KeyPress:
+    case QEvent::KeyRelease:
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::MouseButtonDblClick:
+    case QEvent::Wheel:
+    case QEvent::ContextMenu:
+    case QEvent::DragEnter:
+    case QEvent::DragMove:
+    case QEvent::Drop:
+    {
+        //Only the stress test panel (the table, and the Stop button) may receive input
+        auto* widget = qobject_cast<QWidget*>(watched);
+        if (widget && widget != m_stressTestPanel && !m_stressTestPanel->isAncestorOf(widget)) {
+            return true;
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
 
-    selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+void MainWindow::beginStressRun(bool stoppable) {
+    m_stressTestRunning = true;
+    m_stopStressTests = false;
+    qApp->installEventFilter(this);
+    m_stressTestPanel->SetRunning(true, stoppable);
+}
+
+void MainWindow::endStressRun() {
+    //Deliver the queued input now, while the filter is still dropping it
+    QCoreApplication::processEvents();
+    m_stressTestRunning = false;
+    qApp->removeEventFilter(this);
+    m_stressTestPanel->SetRunning(false, false);
+}
+
+void MainWindow::runAllStressTests() {
+    struct Step {
+        QString name;
+        std::function<std::vector<StressResult>(StressTestRunner&)> run;
+    };
+    //Load goes first, it adds the sphere the others work on. Delete goes last, it adds and removes a model
+    const size_t count = m_stressTestPanel->SplatCount(); //From the spin box in the panel
+    const std::vector<Step> steps = {
+        { "Load test", [count](StressTestRunner& runner) { return runner.TestLoad(count); } },
+        { "Select test", [](StressTestRunner& runner) { return runner.TestSelect(); } },
+        { "Move test", [](StressTestRunner& runner) { return runner.TestMove(); } },
+        { "Trim test", [](StressTestRunner& runner) { return runner.TestTrim(); } },
+        { "Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); } },
+        { "Export test", [](StressTestRunner& runner) { return runner.TestExport(); } },
+        { "Delete test", [](StressTestRunner& runner) { return runner.TestDelete(); } },
+    };
+
+    beginStressRun(true);
+    StressTestRunner runner(m_viewport);
+    const int failedBefore = m_stressTestPanel->FailedCount(); //To tell this run's failures from earlier ones
+    int ran = 0;
+    double grandTotalMs = 0.0; //Every test's total added together
+    bool stopped = false;
+    bool failed = false;
+
+    for (size_t i = 0; i < steps.size(); ++i) {
+        statusBar()->showMessage(QString("Test All: running %1 (%2 of %3)...")
+                                     .arg(steps[i].name).arg(i + 1).arg(steps.size()));
+        //Repaint the status and let a click on Stop through, the tests themselves cannot be interrupted
+        QCoreApplication::processEvents();
+        if (m_stopStressTests) {
+            stopped = true;
+            break;
+        }
+
+        const std::vector<StressResult> results = steps[i].run(runner);
+        if (results.empty()) {
+            qWarning("Test All: %s skipped.", qPrintable(steps[i].name));
+            if (i == 0) {
+                failed = true; //No sphere to run the others on, the renderer is not ready or the scene is full
+                break;
+            }
+            continue;
+        }
+        grandTotalMs += m_stressTestPanel->AddResults(results, steps[i].name);
+        ++ran;
+
+        if (i == 0) {
+            //Same as an import, the new sphere becomes the selected model, which the other tests act on
+            SplatRenderer* renderer = m_viewport->renderer();
+            selectModel(static_cast<int>(renderer->ModelCount()) - 1);
+            refreshScenePanels();
+        }
+    }
+
+    const int failedSteps = m_stressTestPanel->FailedCount() - failedBefore; //Steps that failed during this run
+    if (ran > 0) {
+        QString label = stopped ? QString("Test All: Total (stopped, %1 of %2 tests)").arg(ran).arg(steps.size())
+                                : QString("Test All: Total");
+        QString tip = "The totals of every test that ran added together. Setup and clean-up are not timed, so this is less "
+            "than how long Test All took to run.";
+        if (failedSteps > 0) {
+            label += QString(" (%1 failed)").arg(failedSteps);
+            tip += " Failed steps are not included, so this total is incomplete.";
+        }
+        m_stressTestPanel->AddTotal(label, grandTotalMs, tip);
+    }
+
+    //The delete test briefly adds and removes a model, make sure the panels match the scene
     refreshScenePanels();
+    endStressRun();
 
-    const QString message = QString("Generated stress test sphere (%1 splats): generate %2 ms, load %3 ms")
-                                .arg(QLocale().toString(static_cast<qulonglong>(splats.size())))
-                                .arg(generateMs).arg(uploadMs);
-    qInfo("%s.", qPrintable(message));
+    QString message;
+    if (failed) {
+        message = "Test All cancelled: the sphere could not be loaded (the renderer is not ready or the scene is full).";
+    }
+    else if (stopped) {
+        message = QString("Test All stopped: %1 of %2 tests ran.").arg(ran).arg(steps.size());
+    }
+    else {
+        message = QString("Test All finished: %1 of %2 tests ran.").arg(ran).arg(steps.size());
+    }
+    if (failedSteps > 0) {
+        //Failures are easy to miss in a long run, so say it in the status bar and the Console as well as the red rows
+        message += QString(" WARNING: %1 step(s) failed, see the red rows in the Stress Test panel.").arg(failedSteps);
+        qWarning("%s", qPrintable(message));
+    }
+    else {
+        qInfo("%s", qPrintable(message));
+    }
     statusBar()->showMessage(message, kStatusMessageMs);
 }
 
@@ -1103,6 +1289,25 @@ void MainWindow::applyCropBox() {
     else {
         keep = ComputeCropKeepMask(model->splats(), model->GetTransform(), box);
     }
+    //Removing every splat will leave an empty model, remove the model instead
+    //Counted from the mask first so no need to copy it
+    const size_t removeCount = static_cast<size_t>(std::count(keep.begin(), keep.end(), uint8_t(0)));
+    if (removeCount > 0 && removeCount == keep.size()) {
+        const QString name = QString::fromStdString(model->GetName());
+        cancelCropBox(); //The box belongs to the model that is about to go
+        //Undoable, unlike deleteSelectedModel. The restored model is a new object, so older
+        //commands that point at this one have to go first
+        m_undo.clear();
+        m_undo.push(new DeleteModelCommand(renderer, model, [this] {
+            m_inspector->setModel(nullptr); //Drop the pointer before the model is freed
+            m_cropBoxModel = nullptr;       //The address may be reused by the next model
+        }));
+        const QString message = QString("Removed every splat of %1, so the model was deleted (Ctrl+Z to undo)").arg(name);
+        qInfo("%s.", qPrintable(message));
+        statusBar()->showMessage(message, kStatusMessageMs);
+        return;
+    }
+
     auto* command = new RemoveSplatsCommand(renderer, model, keep);
     if (command->RemovedCount() == 0) {
         delete command;
