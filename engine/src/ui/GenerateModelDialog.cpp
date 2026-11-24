@@ -8,9 +8,8 @@
 \brief
 Implements GenerateModelDialog: the file list (add files / add folder /
 remove), the model name, detail preset, frames per second for videos,
-background removal, keeping only the main object and the after-build
-options, with the same rules the backend enforces (at least 8 photos,
-.jpg/.png only, up to 300 photos or
+background removal and the after-build options, with the same rules the
+backend enforces (at least 8 photos, .jpg/.png only, up to 400 photos or
 10 videos) checked up front, plus a live check that this PC has the tools
 to build it (COLMAP, Brush, and Python for videos / background removal).
 **************************************************************************/

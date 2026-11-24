@@ -498,7 +498,7 @@ export const config = {
     maxJsonBodyMB: 2,
 
     // Upload limits.
-    maxFiles: 300,
+    maxFiles: 400,
     maxFileSizeMB: 30,
     // Videos / GIFs per Frame Extractor job, and the size of each. Their frames
     // still count towards frameMaxFrames. FrameExtractor.jsx checks the same limits.

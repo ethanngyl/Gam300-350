@@ -103,16 +103,28 @@ Scene Builder
 - Add models from the library; move, rotate and scale the selected one with
   a three.js gizmo (dragging elsewhere orbits the camera); W/A/S/D slide it
   along the ground relative to the camera (Shift for bigger steps); drop to
-  floor; duplicate; delete; undo/redo; save and reopen.
+  floor (sets the model's base, measured from its splats, on the ground);
+  duplicate; delete; undo/redo; save and reopen.
+- Sandbox grid on the ground: fine lines every 0.25 m, stronger ones every
+  metre, red X / green Y / blue Z axes, fading out towards the horizon;
+  Grid toggle; Snap moves in whole grid cells (W/A/S/D too).
+- New models are scaled so their footprint fills one 1 m grid square and
+  stand on the floor; "Fit to grid" does the same again later.
+- A model that can't load is marked "failed" with the reason (signed out,
+  deleted or another account's, server unreachable, not a gaussian splat
+  .ply, damaged download), and the other models keep loading.
+- Camera: the scroll wheel zooms toward the mouse pointer; F (or
+  double-clicking a model in the outliner, or Focus on phones) smoothly
+  frames the selected model and orbits around it; clicking a model orbits
+  around the clicked spot.
 - Desktop extras: outliner with hide, an inspector with exact values,
   snapping, render mode, background colour, screenshot and keyboard
   shortcuts.
 - Phone: a bottom toolbar and bottom sheets, with a limit on how many models
   a scene holds.
 - Not done yet:
-  - Clean-up, render mode, reset view, screenshot and an exact drop to floor
-    are waiting on scene functions in the WebAssembly engine
-    (SceneEngine.js).
+  - Clean-up, render mode, reset view and screenshot are waiting on scene
+    functions in the WebAssembly engine (SceneEngine.js).
   - Scenes are saved only in the browser (localStorage). The backend has
     /api/v1/scenes routes, but the web app doesn't use them yet
     (SCENES_API_READY in SceneStorage.js).
