@@ -233,9 +233,9 @@ The stress tests (in packages; `stress-test.js`) push past normal use. Like the 
 None of these are in `npm test`, because they take minutes. Run them on mains power with other programs closed: the load is generated on the same machine, so its numbers are lower than what a separate VM could handle.
 
 Latest stress results: 24/11/2026, ASUS Laptop NVIDIA GeForce RTX 4060 Laptop GPU (8 GB).
-- Ramp can have up to 100 users at once within a 200ms budget, up to 400 users under 1s, and up to 1200 users on this laptop. 
-- Heavy browsing p95 went from 20 to 89ms while 20m models were downloaded, each download completed at 7s, sign in p95 is 337ms. 
-- Soak: memory grew from 86MB to 146MB in 3 minutes at the ned of a 30 minutes test, will continue to test further.
+- Ramp can have up to 100 users at once within a 200ms budget, up to 400 users under 1s, and up to 800 users on this laptop. 
+- Heavy browsing p95 went from 20 to 89ms while 20 fox models were downloaded, each download completed at 7s, sign in p95 is 337ms. 
+- Soak: memory 88 → 119 MB, a full cleanup back to 89 MB at minute 37, 0 failures.
 
 Latest `npm run load` (2026-11-08, same laptop, 100 users at once x 3 rounds = 3,600 requests): **0 failed requests, 0 server errors**, about 690 requests/s, server answering in 1 ms afterwards. Under that load the light routes (catalog, jobs, scenes, feedback) stay at p95 45-240 ms.
 
