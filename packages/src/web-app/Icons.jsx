@@ -13,6 +13,7 @@ Usage: <Icon name="layers" size={16} />
 
 const ICON_PATHS = {
     cube: (<><path d="m12 2 9 5v10l-9 5-9-5V7z" /><path d="m12 12-9-5M12 12l9-5M12 12v10" /></>),
+    grid: (<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></>),
     cubePlus: (<><path d="m10 5 7 4v8l-7 4-7-4V9z" /><path d="m10 13-7-4M10 13l7-4M10 13v8" /><path d="M19 2v6M16 5h6" /></>),
     home: (<><path d="M3 11 12 3l9 8" /><path d="M5 10v10h5v-6h4v6h5V10" /></>),
     layers: (<><path d="M12 3 21 8 12 13 3 8z" /><path d="M3 12l9 5 9-5" /><path d="M3 16l9 5 9-5" /></>),

@@ -249,7 +249,7 @@ Sounds:
 Known limitations to note while testing (not bugs):
 - "Continue with Google" only shows a message.
 - "Forgot password?" answers that it isn't set up until the VM has the Gmail settings (SMTP_*) in its .env.
-- Scene Builder: clean-up, render mode, reset view, screenshot and an exact drop to floor are waiting on scene functions in the
+- Scene Builder: clean-up, render mode, reset view and screenshot are waiting on scene functions in the
   WebAssembly engine. Scenes are saved only in this browser (localStorage): the backend has scene routes (/api/v1/scenes),
   but the web app doesn't use them yet (SCENES_API_READY in SceneStorage.js).
 - COLMAP can fail on photo sets with poor overlap or low quality; this is an expected pipeline limitation, not a website bug.
