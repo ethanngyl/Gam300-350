@@ -934,11 +934,10 @@ export function restoreJob(record) {
         source: record.source,
         // A job still waiting to be built keeps its settings over a restart.
         removeBackground: Boolean(record.removeBackground),
+        autoCrop: Boolean(record.autoCrop),
         trainIters: record.trainIters ?? null,
         name: record.name,
         sampleFile: record.sampleFile,
-        removeBackground: record.removeBackground ?? false,
-        autoCrop: record.autoCrop ?? false,
         updatedAt: record.updatedAt,
         log: [...(record.logTail ?? [])], // so /jobs/:id still has a log tail after a restart
     })
