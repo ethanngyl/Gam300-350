@@ -54,42 +54,75 @@ namespace {
 }
 
 std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
+	//The sphere is generated here and handed over, so it is freed as soon as it is saved
+	Report("Load: generating the sphere");
+	return LoadThroughDisk(splat_generate::GenerateSphereSplats(count), "StressTestSphere");
+}
+
+std::vector<StressResult> StressTestRunner::TestLoadCopy() {
 	SplatRenderer* renderer = m_viewport->renderer();
-	if (!renderer || renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
+	if (!renderer) {
+		return {};
+	}
+	SplatModel* model = renderer->GetModel(renderer->GetSelectedModel());
+	if (!model || model->splats().empty()) {
 		return {};
 	}
 
-	//Setup, not timed: generate the sphere and save it like a normal model, so the load below reads a real .ply
+	//A copy of the selected model's splats is saved and loaded back, the model itself and its file are not touched
+	const std::string copyName = model->GetName() + " (load test copy)";
+	std::vector<StressResult> results = LoadThroughDisk(model->splats(), copyName);
+	if (results.empty()) {
+		return results;
+	}
+
+	//The copy was only there to time the load. Take it back out (it is the last model), so the scene is as it was
+	//The selected model keeps its place, removing the last one does not shift any index
+	renderer->RemoveModel(static_cast<int>(renderer->ModelCount()) - 1);
+	m_viewport->RenderFrameBlocking();
+	return results;
+}
+
+std::vector<StressResult> StressTestRunner::LoadThroughDisk(std::vector<SplatVertex> source, const std::string& modelName) {
+	SplatRenderer* renderer = m_viewport->renderer();
+	if (!renderer || renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels) || source.empty()) {
+		return {};
+	}
+
+	//Setup, not timed: save the splats like a normal model, so the load below reads a real .ply
 	//The folder and the file in it are deleted when dir goes out of scope
+	Report("Load: saving the test file");
 	QTemporaryDir dir;
 	if (!dir.isValid()) {
 		qWarning("Load test: could not create a temporary folder.");
 		return {};
 	}
-	const QString path = dir.filePath("StressTestSphere.ply");
+	const QString path = dir.filePath("LoadTest.ply");
 	{
-		const std::vector<SplatVertex> generated = splat_generate::GenerateSphereSplats(count);
 		ExportOptions options;
 		options.format = ExportFormat::GaussianPly; //The format the importer reads
-		const ExportResult saved = ExportSplats({ ExportSource{ &generated, glm::mat4(1.0f) } },
+		const ExportResult saved = ExportSplats({ ExportSource{ &source, glm::mat4(1.0f) } },
 			std::filesystem::path(path.toStdWString()), options);
 		if (!saved.ok) {
-			qWarning("Load test: could not save the test sphere: %s", saved.error.c_str());
+			qWarning("Load test: could not save the test file: %s", saved.error.c_str());
 			return {};
 		}
-	} //The generated splats are freed here, so they are not held in memory while the file is read back
+	}
+	std::vector<SplatVertex>().swap(source); //Freed, so the splats are not held in memory twice while the file is read back
 
 	//Same call an import makes
+	Report("Load: reading the file from disk");
 	std::vector<SplatVertex> splats;
 	const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
 	const double readMs = MeasureMs([&] { splats = LoadSplatPly(nativePath); });
 	if (splats.empty()) {
-		qWarning("Load test: the saved test sphere could not be read back.");
+		qWarning("Load test: the saved test file could not be read back.");
 		return {};
 	}
 	const size_t loaded = splats.size();
 
-	const double setMs = MeasureMs([&] { renderer->SetSplats(splats, "StressTestSphere"); });
+	Report("Load: adding to the scene and redrawing");
+	const double setMs = MeasureMs([&] { renderer->SetSplats(splats, modelName); });
 	const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
 
 	return {
@@ -115,6 +148,7 @@ std::vector<StressResult> StressTestRunner::TestTrim() {
 
 	//Start from a clean, uploaded scene so the first case is not charged for earlier pending work
 	//The selection holds splat positions, which trimming changes
+	Report("Trim: preparing the test data");
 	renderer->ClearSelection();
 	m_viewport->RenderFrameBlocking();
 
@@ -185,6 +219,7 @@ std::vector<StressResult> StressTestRunner::TestTrim() {
 	const QLocale locale;
 	std::vector<StressResult> results;
 	for (const Case& c : cases) {
+		Report(QString("Trim %1").arg(c.label));
 		const std::vector<SplatVertex>& source = c.byAlpha ? alphaSource : saved;
 		std::vector<SplatVertex> trimmed;
 		const double computeMs = MeasureMs([&] { trimmed = TrimSplats(source, c.settings); });
@@ -259,6 +294,7 @@ std::vector<StressResult> StressTestRunner::TestExport() {
 	const QLocale locale;
 	std::vector<StressResult> results;
 	for (const Case& c : cases) {
+		Report(QString("Export %1").arg(c.label));
 		ExportOptions options;
 		options.format = c.format;
 		options.geometry = c.geometry;
@@ -326,6 +362,7 @@ std::vector<StressResult> StressTestRunner::TestSelect() {
 
 	//Loop for each test case
 	for (const Case& c : cases) {
+		Report(QString("Select %1").arg(c.label));
 		std::vector<uint32_t> indices;
 		const double setMs = MeasureMs([&]
 			{
@@ -353,6 +390,7 @@ std::vector<StressResult> StressTestRunner::TestSelect() {
 	}
 
 	//Deselecting a full selection, the selection itself is set up outside the timing
+	Report("Deselect all");
 	std::vector<uint32_t> everything(total);
 	for (size_t i = 0; i < total; ++i) 
 	{
@@ -392,6 +430,7 @@ std::vector<StressResult> StressTestRunner::TestMove() {
 	std::vector<StressResult> results;
 
 	//Moving the whole model only changes its transform, the splat data is not touched
+	Report("Move model");
 	{
 		const glm::mat4 before = model->GetTransform();
 		const glm::mat4 after = glm::translate(before, offset);
@@ -415,6 +454,7 @@ std::vector<StressResult> StressTestRunner::TestMove() {
 	const glm::mat4 delta = glm::translate(glm::mat4(1.0f), offset);
 
 	for (const Case& c : cases) {
+		Report(QString("Move %1").arg(c.label));
 		std::vector<uint32_t> indices = MakeIndices(total, c.stride);
 		if (c.selected) {
 			//Selecting is set up outside the timing, this test measures the move
@@ -467,6 +507,7 @@ std::vector<StressResult> StressTestRunner::TestDelete() {
 	const Case cases[] = { { "half of splats", 2, false }, { "selected tenth", 10, true } };
 
 	for (const Case& c : cases) {
+		Report(QString("Delete %1").arg(c.label));
 		std::vector<uint32_t> indices = MakeIndices(total, c.stride);
 		if (c.selected) {
 			//Selecting is set up outside the timing, this test measures the delete
@@ -497,6 +538,7 @@ std::vector<StressResult> StressTestRunner::TestDelete() {
 	}
 
 	//Deleting a whole model cannot be undone, so delete a copy that only exists for this test
+	Report("Delete model");
 	if (renderer->ModelCount() < static_cast<size_t>(SplatRenderer::kMaxModels)) {
 		renderer->SetSplats(model->splats(), "StressTestCopy");
 		m_viewport->RenderFrameBlocking(); //Upload the copy first, so only the delete is timed below
@@ -554,6 +596,7 @@ std::vector<StressResult> StressTestRunner::TestUndoRedo() {
 	std::vector<StressResult> results;
 
 	for (const Case& c : cases) {
+		Report(QString("Undo/redo %1").arg(c.label));
 		//Setup, not timed: do the edit once so there is something to undo
 		stack.push(c.makeEdit());
 		m_viewport->RenderFrameBlocking();
