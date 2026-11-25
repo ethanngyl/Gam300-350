@@ -36,7 +36,7 @@ A model or job name made safe to use as a file name on any OS.******************
 namespace generation {
 
 constexpr int kMinPhotos = 8;
-constexpr int kMaxPhotos = 300;
+constexpr int kMaxPhotos = 400;
 constexpr int kMaxMediaFiles = 10;
 
 constexpr int kMinTrainIters = 1000;

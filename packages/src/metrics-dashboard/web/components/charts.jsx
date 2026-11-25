@@ -17,6 +17,9 @@ Single-series line over time with markers and a crosshair.
 One stacked horizontal bar per run, segment per pipeline phase.
 - BarList({ items, format })
 Single-series horizontal bars with the value labelled at the end.
+- TimeSeriesChart({ points, yFormat, bars, refY, renderTooltip })
+One value per second of an engine recording, as a line or bars, with an
+optional dashed reference line (display refresh rate).
 **************************************************************************/
 
 import { useState } from 'react'
@@ -177,6 +180,94 @@ export function PhaseBreakdown({ records, onSelect }) {
       )}
     </div>
   )
+}
+
+// One value per second of an engine recording (points: [{ x: second, y: number | null, ... }]).
+// A line by default, or one bar per second. Gaps (y: null) break the line. refY draws a dashed
+// reference line (e.g. the display refresh rate) labelled refLabel.
+export function TimeSeriesChart({ points, yFormat, height = 200, bars = false, color = 'var(--series-1)',
+  refY, refLabel, ariaLabel, renderTooltip }) {
+  const [ref, width] = useElementWidth()
+  const [hover, setHover] = useState(null)
+  const m = { top: 14, right: 16, bottom: 28, left: 64 }
+  const w = Math.max(width - m.left - m.right, 10)
+  const h = height - m.top - m.bottom
+
+  const values = points.map((p) => p.y).filter((v) => typeof v === 'number')
+  const ticks = niceTicks(Math.max(...values, refY ?? 0, 0) || 1)
+  const yMax = ticks.at(-1)
+  const lastX = points.length ? points.at(-1).x : 0
+  const band = w / Math.max(points.length, 1)
+  const x = bars ? (t) => (t + 0.5) * band : linear([0, Math.max(lastX, 1)], [0, w])
+  const y = linear([0, yMax], [h, 0])
+
+  let path = ''
+  let penDown = false
+  for (const p of points) {
+    if (typeof p.y !== 'number') {
+      penDown = false
+      continue
+    }
+    path += `${penDown ? 'L' : 'M'}${x(p.x).toFixed(1)},${y(p.y).toFixed(1)}`
+    penDown = true
+  }
+  const xTicks = niceTicks(Math.max(lastX, 1), 5).filter((t) => t <= lastX)
+
+  function onMove(e) {
+    if (!points.length) return
+    const box = e.currentTarget.getBoundingClientRect()
+    const px = e.clientX - box.left - m.left
+    const i = bars ? Math.floor(px / band) : Math.round((px / w) * Math.max(lastX, 1))
+    setHover(points[Math.min(Math.max(i, 0), points.length - 1)])
+  }
+
+  return (
+    <div ref={ref} className="chart">
+      {width > 0 && (
+        <svg width={width} height={height} role="img" aria-label={ariaLabel}
+          onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+          <g transform={`translate(${m.left},${m.top})`}>
+            {ticks.map((t) => (
+              <g key={t}>
+                <line className="grid" x1={0} x2={w} y1={y(t)} y2={y(t)} />
+                <text className="axis-label" x={-10} y={y(t)} dy="0.32em" textAnchor="end">{yFormat(t)}</text>
+              </g>
+            ))}
+            {xTicks.map((t) => (
+              <text key={t} className="axis-label" x={x(t)} y={h + 20} textAnchor="middle">{fmtClockAxis(t)}</text>
+            ))}
+            {typeof refY === 'number' && refY > 0 && (
+              <g>
+                <line x1={0} x2={w} y1={y(refY)} y2={y(refY)} stroke="var(--text-muted)" strokeDasharray="5 4" />
+                {refLabel && <text className="axis-label" x={w} y={y(refY) - 5} textAnchor="end">{refLabel}</text>}
+              </g>
+            )}
+            {hover && <line className="crosshair" x1={x(hover.x)} x2={x(hover.x)} y1={0} y2={h} />}
+            {bars
+              ? points.map((p) => (typeof p.y === 'number' && p.y > 0 ? (
+                <rect key={p.x} x={x(p.x) - Math.max(band * 0.4, 0.5)} width={Math.max(band * 0.8, 1)}
+                  y={y(p.y)} height={h - y(p.y)} rx={Math.min(2, band * 0.2)} fill={color}
+                  opacity={hover && hover.x !== p.x ? 0.55 : 1} />
+              ) : null))
+              : <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />}
+            {!bars && hover && typeof hover.y === 'number' && (
+              <circle cx={x(hover.x)} cy={y(hover.y)} r={4.5} fill={color} stroke="var(--surface-1)" strokeWidth={2} />
+            )}
+          </g>
+        </svg>
+      )}
+      {hover && renderTooltip && (
+        <Tooltip x={m.left + x(hover.x)} y={m.top + (typeof hover.y === 'number' ? y(hover.y) : h / 2)} width={width}>
+          {renderTooltip(hover)}
+        </Tooltip>
+      )}
+    </div>
+  )
+}
+
+function fmtClockAxis(sec) {
+  const s = Math.round(sec)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 export function BarList({ items, format, ariaLabel }) {

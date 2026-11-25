@@ -281,11 +281,11 @@ function App() {
     const [namePromptJobId, setNamePromptJobId] = useState(null);
     const [uploadError, setUploadError] = useState(null);
     // Batch sent from Camera Capture's "Review photos first" to the Photo
-    // Editor: { files, removeBackground, trainIters }. Cleared on any other
-    // navigation.
+    // Editor: { files, removeBackground, autoCrop, trainIters }. Cleared on
+    // any other navigation.
     const [photosForEditor, setPhotosForEditor] = useState(null);
     // Batch sent back from the Photo Editor's "Back to camera", so Camera
-    // Capture reopens with those photos: { files, removeBackground, trainIters }.
+    // Capture reopens with those photos: { files, removeBackground, autoCrop, trainIters }.
     // Cleared on any other navigation.
     const [photosForCapture, setPhotosForCapture] = useState(null);
     // Photos chosen with the dock's Add photos button, handed to the
@@ -432,15 +432,15 @@ function App() {
     }
 
     // Opens the Photo Editor with the photos from Camera Capture loaded.
-    function reviewPhotosInEditor(files, { removeBackground = false, trainIters = null } = {}) {
+    function reviewPhotosInEditor(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
         goToTab('editor');
-        setPhotosForEditor({ files, removeBackground, trainIters });
+        setPhotosForEditor({ files, removeBackground, autoCrop, trainIters });
     }
 
     // Reopens Camera Capture with the photos that were in the Photo Editor.
-    function returnPhotosToCapture(files, { removeBackground = false, trainIters = null } = {}) {
+    function returnPhotosToCapture(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
         goToTab('capture');
-        setPhotosForCapture({ files, removeBackground, trainIters });
+        setPhotosForCapture({ files, removeBackground, autoCrop, trainIters });
     }
 
     function openLibrary(subTab) {
@@ -457,13 +457,15 @@ function App() {
 
     // Uploads the real batch to the backend and starts reconstruction.
     // trainIters is the training iteration cap (Fast / Normal / Detailed);
-    // left out, the server uses its default.
-    async function handleBatchReady(files, { removeBackground = false, trainIters = null } = {}) {
+    // left out, the server uses its default. autoCrop keeps only the object
+    // the photos were taken around.
+    async function handleBatchReady(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
         setUploadError(null);
         try {
             const form = new FormData();
             // Text fields go before the files so the server has them as the upload streams in.
             form.append('removeBackground', String(removeBackground));
+            form.append('autoCrop', String(autoCrop));
             if (trainIters) form.append('trainIters', String(trainIters));
             for (const file of files) form.append('images', file);
             const res = await fetch('/api/v1/upload', { method: 'POST', body: form });
@@ -501,7 +503,7 @@ function App() {
 
     // Starts a Frame Extractor build and shows the processing screen at once,
     // uploading the files from here (with progress). The job id arrives after.
-    async function startMediaBuild({ files, fps, trainIters, removeBackground }) {
+    async function startMediaBuild({ files, fps, trainIters, removeBackground, autoCrop = false }) {
         mediaBuildCountRef.current += 1;
         const buildNumber = mediaBuildCountRef.current;
         const isStillCurrent = () => mediaBuildCountRef.current === buildNumber;
@@ -512,7 +514,7 @@ function App() {
         // is no longer aborted (see abortMediaUploadRef below).
         let hasSentAllBytes = false;
 
-        setFrameExtractorDraft({ files, fps, trainIters, removeBackground });
+        setFrameExtractorDraft({ files, fps, trainIters, removeBackground, autoCrop });
         setFrameExtractorNotice(null);
         // The upload's address (#/extractor/uploading) replaces the Frame
         // Extractor's, as the build's own address replaces it later.
@@ -523,6 +525,7 @@ function App() {
             fileCount: files.length,
             fps,
             removeBackground,
+            autoCrop,
             previewUrl: URL.createObjectURL(firstFile),
             isGif: /\.gif$/i.test(firstFile.name),
             uploadFraction: 0,
@@ -533,7 +536,7 @@ function App() {
         try {
             const newJobId = await uploadMedia(
                 files,
-                { fps, trainIters, removeBackground },
+                { fps, trainIters, removeBackground, autoCrop },
                 (xhr) => {
                     xhr.upload.addEventListener('load', () => {
                         hasSentAllBytes = true;

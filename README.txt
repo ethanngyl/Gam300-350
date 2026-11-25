@@ -79,13 +79,18 @@ packages/src/backend/openapi.yaml: the API reference (OpenAPI 3.1) with an examp
 Tests: "npm test" (in packages) runs the backend tests (auth, the OpenAPI contract, no secrets in the repo, migrations, scenes, API versions, adapters, performance, 30 users at once). CI runs them on every push.
 Lint (all blocking in CI): "npm run lint" in packages (ESLint), "ruff check --config ruff.toml tools" (Python), and engine/lint-cpp.sh (clang-tidy on the engine renderer; pip install clang-tidy==22.1.8).
 Performance: "npm run perf" (in packages) measures API p50 / p95 against the budget in README.md ("Performance budget"), on a temporary server; exits 1 if a route is over budget. The latest measured numbers (engine, web viewer on desktop and phone, API, deployed VM) are in README.md under "Latest measurements".
-Load: "npm run load" (in packages) runs LOAD_USERS users (default 100) through a whole visit at the same time, LOAD_ROUNDS times (default 3), and reports failures and p95 under load. "npm test" also runs a 30-user concurrency test (concurrency.test.js).
+Load: "npm run load" (in packages) runs LOAD_USERS users (default 100) through a whole visit at the same time, LOAD_ROUNDS times (default 3), and reports failures and p95 under load. "npm test" also runs a 30-user concurrency test (concurrency.test.js), including uploads at once.
+Stress (in packages, minutes each, not in CI): "npm run stress:ramp" finds how many users at once the server takes before it breaks, "npm run stress:heavy" checks that model downloads, uploads (builds) and sign-ins don't slow everyone else down, and "npm run stress:soak" watches memory and speed for 30 minutes (STRESS_MINUTES). Settings and pass rules are in README.md ("Stress tests").
 Performance: every API request is timed, and the website reports how long it took to load. Signed in as an admin, GET /api/v1/metrics/performance?window=1h (or 24h, 7d) shows p50 / p95 / p99 per route and for page loads on that machine. Kept 7 days (PERF_KEEP_DAYS).
 Password reset email: "Forgot password?" emails a 6-digit code from a Gmail account. Only the VM sends it (team machines ask the
   VM). On the team's Gmail account turn on 2-Step Verification, then Google Account > Security > App passwords > create one. In
   the VM's packages/src/backend/.env set SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=<the Gmail address>,
   SMTP_PASS=<the app password> and MAIL_FROM=Genesis <the Gmail address>, restart, then check with
   "npm run mail:test -- you@example.com" (in packages). Codes work once, for 15 minutes.
+Rate limits: every API call counts towards 600 a minute (per signed-in user, else per address), and each user may start 10 builds
+  an hour / 30 a day and download 60 models an hour (admins exempt); over a limit the reply is 429 with Retry-After. Set them
+  with RATE_LIMIT_API_PER_MIN, RATE_LIMIT_BUILDS_PER_HOUR, RATE_LIMIT_BUILDS_PER_DAY and RATE_LIMIT_DOWNLOADS_PER_HOUR in
+  .env (0 = off). The full list of limits is in docs/architecture.md ("Rate limits").
 Database changes are numbered migrations in packages/src/backend/migrations; the backend applies them at startup. "npm run migrate -- --db <file>" (in packages) migrates any database file, including a new empty one.
 packages/src/backend/.env.example: every backend setting (ports, server addresses, keys). Copy it to .env; never commit .env.
 packages/api-tests: a curl test client that calls the API on its own (api-smoke.bat on Windows, api-smoke.sh elsewhere). See its README.md.
@@ -193,7 +198,20 @@ through GET /api/v1/catalog.
 The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from
 the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
+Each user runs one build at a time; different users' builds run at the same time on the machine's GPU. Start a second build of
+your own while one is running, and it shows "Waiting to start" ("Waiting for your earlier build to finish"), then starts by
+itself when your first one ends. Cancelling it while it waits takes it out of the line.
+If the backend restarts, waiting builds start again in their original order; a build that was running is marked interrupted.
+Settings, in packages/src/backend/.env:
+- MAX_RUNNING_JOBS=1 caps the whole machine at one build at a time for everyone (unset = no cap). Builds at once share the GPU,
+  so each is slower and they can run out of GPU memory; set this on a machine with a small GPU.
+- MAX_RUNNING_JOBS_PER_USER=2 lets one user run two builds at once (default 1).
+To show how much slower builds at once are: start a build from two accounts at the same time (or set MAX_RUNNING_JOBS_PER_USER=2
+and start two from one), then compare the timings in jobs/metrics.jsonl with the same builds run one after the other.
+
 "Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
+"Keep only the main object" (same screens, off by default) removes everything outside the path the photos were taken from, such
+as neighbouring objects, walls and the ceiling, after training. It is skipped when the photos don't surround one object.
 
 23. With no photos in the batch, confirm "Use this batch" and "Review photos first" are disabled.
 24. Add photos taken all the way around the object, then click "Use this batch (N photos)".
@@ -249,7 +267,7 @@ Sounds:
 Known limitations to note while testing (not bugs):
 - "Continue with Google" only shows a message.
 - "Forgot password?" answers that it isn't set up until the VM has the Gmail settings (SMTP_*) in its .env.
-- Scene Builder: clean-up, render mode, reset view, screenshot and an exact drop to floor are waiting on scene functions in the
+- Scene Builder: clean-up, render mode, reset view and screenshot are waiting on scene functions in the
   WebAssembly engine. Scenes are saved only in this browser (localStorage): the backend has scene routes (/api/v1/scenes),
   but the web app doesn't use them yet (SCENES_API_READY in SceneStorage.js).
 - COLMAP can fail on photo sets with poor overlap or low quality; this is an expected pipeline limitation, not a website bug.

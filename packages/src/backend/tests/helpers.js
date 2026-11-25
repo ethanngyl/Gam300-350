@@ -15,7 +15,8 @@ A new empty folder under the system's temp folder.
 - isolatedEnv(dir, extra)
 Environment variables for a backend that only uses dir.
 - startServer(dir, env)
-The real backend in a child process; resolves once it answers (or exits).
+The real backend in a child process; resolves once it answers (or exits),
+with its address, process id, log and stop().
 - call(base, method, path, options)
 One HTTP request; the reply's status, headers and body (JSON when it is).
 - signUp(base, user) / sessionCookie(reply)
@@ -40,7 +41,7 @@ export const REPO_ROOT = path.join(BACKEND_DIR, '..', '..', '..')
 export const SAMPLE_PHOTO = path.join(REPO_ROOT, 'Sample Image Set', '0001.jpg')
 
 // Backend settings a developer's shell might have set; none may reach a test server.
-const BACKEND_SETTING_RE = /^(AUTH_|VM_|GOOGLE_|SMTP_|MAIL_|RESET_CODE_|FILE_STORE|JOB_SOURCES|CATALOG_FILE|SAMPLE_DATA_FILE|TRUST_PROXY|STORAGE_|CLEANUP_|FEEDBACK_|MACHINE_NAME|SYNC_|MIN_FREE|DATA_DIR|JOBS_DIR|ENGINE_SAMPLES|PORT$|COLMAP_|BRUSH_|TRAIN_ITERS|MAX_|FRAME_|MASK_|COVER_|THUMB_|NORMALIZE_|ENV_FILE)/
+const BACKEND_SETTING_RE = /^(AUTH_|VM_|GOOGLE_|SMTP_|MAIL_|RESET_CODE_|FILE_STORE|JOB_SOURCES|CATALOG_FILE|SAMPLE_DATA_FILE|TRUST_PROXY|STORAGE_|CLEANUP_|FEEDBACK_|MACHINE_NAME|SYNC_|MIN_FREE|DATA_DIR|JOBS_DIR|ENGINE_SAMPLES|PORT$|COLMAP_|BRUSH_|TRAIN_ITERS|MAX_|FRAME_|MASK_|COVER_|THUMB_|NORMALIZE_|RATE_LIMIT_|ENV_FILE)/
 
 // ----- Start of Functions --------------------------------------------------- //
 
@@ -130,6 +131,7 @@ export async function startServer(dir, env = {})
   return {
     base,
     exited,
+    pid: child.pid, // for reading the server's memory (stress-test.js soak)
     get exitCode() { return exitCode },
     log: () => log,
     stop: async () =>

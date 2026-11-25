@@ -32,6 +32,8 @@ role from the VM's own database.
 - requireAuthorityKey (middleware)
 On the VM, guards /register, /verify-account and /library/... with the
 shared AUTH_API_KEY.
+- hasAuthorityKey(req)
+Whether a request carries the shared key (also used by the rate limits).
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -253,12 +255,26 @@ export function actAsUser(req, _res, next)
 export function requireAuthorityKey(req, res, next) {
     if (config.authMode !== 'authority')
         return res.status(503).json({ error: 'This server is not the account authority.' })
+    if (!hasAuthorityKey(req)) return res.status(401).json({ error: 'Unauthorized.' })
+    next()
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Whether the request carries this server's shared key (X-Auth-Key), i.e.
+    comes from a team machine. Used by requireAuthorityKey and by the
+    general rate limit, which doesn't count team-machine traffic.
+  \param req
+    The request
+  \return
+    bool. Always false when no AUTH_API_KEY is set.
+*/
+/************************************************************************/
+export function hasAuthorityKey(req) {
     const key = Buffer.from(req.get('X-Auth-Key') ?? '')
     // constant-time compare so the key can't be guessed by timing. Byte
     // lengths must match first or timingSafeEqual throws.
-    const expected = Buffer.from(config.authApiKey)
-    if (expected.length === 0 || key.length !== expected.length ||
-        !crypto.timingSafeEqual(key, expected))
-        return res.status(401).json({ error: 'Unauthorized.' })
-    next()
+    const expected = Buffer.from(config.authApiKey ?? '')
+    return expected.length > 0 && key.length === expected.length && crypto.timingSafeEqual(key, expected)
 }

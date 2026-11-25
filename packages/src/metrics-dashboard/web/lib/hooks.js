@@ -58,7 +58,8 @@ export function useMetrics(refreshMs) {
 
 export function useHashRoute(routes, fallback) {
   const read = useCallback(() => {
-    const key = window.location.hash.replace(/^#\/?/, '')
+    // First path segment, so #/engine/<recording id> still selects the Engine tab.
+    const key = window.location.hash.replace(/^#\/?/, '').split('/')[0]
     return routes.includes(key) ? key : fallback
   }, [routes, fallback])
   const [route, setRoute] = useState(read)

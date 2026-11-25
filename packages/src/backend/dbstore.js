@@ -202,15 +202,19 @@ export async function migrateToDb()
     .filter((e) => e.isDirectory() && JOB_ID_RE.test(e.name) && !e.name.endsWith('_out'))
     .map((e) => e.name)
 
-  const photosPending = jobIds.filter(hasImagesOnDisk)
   // Finished jobs, as { id, resultPath, sampleFile } from their status.json.
   const finished = []
+  // Jobs waiting to be built: server.js resumes them, and the build needs
+  // their photos as files (they move in once it ends, see afterJobEnds).
+  const waiting = new Set()
   for (const id of jobIds)
   {
     const saved = await readStatus(id)
     if (saved?.status === 'done' && saved.result)
       finished.push({ id, resultPath: path.join(config.jobsDir, saved.result), sampleFile: saved.sampleFile })
+    if (saved?.status === 'queued') waiting.add(id)
   }
+  const photosPending = jobIds.filter((id) => !waiting.has(id) && hasImagesOnDisk(id))
   const modelsPending = finished.filter((job) => fs.existsSync(job.resultPath))
 
   if ((photosPending.length > 0 && !hasDbImages()) || (modelsPending.length > 0 && !hasDbModels()))

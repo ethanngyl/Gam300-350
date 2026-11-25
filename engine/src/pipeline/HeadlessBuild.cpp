@@ -129,6 +129,7 @@ int RunHeadlessBuild(const QStringList& args) {
                 return 2;
             }
         } else if (arg == "--remove-background") request.removeBackground = true;
+        else if (arg == "--auto-crop") request.autoCrop = true;
         else if (QFileInfo(arg).isDir()) {
             request.files << generation::PhotosInFolder(arg);
         } else if (QFileInfo(arg).isFile()) {
@@ -140,7 +141,7 @@ int RunHeadlessBuild(const QStringList& args) {
     }
     if (request.files.isEmpty()) {
         Print("Usage: Codefine --build-model <photo folder | photos... | videos...> [--out <folder>] "
-              "[--name <name>] [--iters <n>] [--fps <n>] [--remove-background]\n"
+              "[--name <name>] [--iters <n>] [--fps <n>] [--remove-background] [--auto-crop]\n"
               "From cmd.exe, use: start /b /wait \"\" Codefine.exe --build-model ... "
               "(waits for the build and sets %ERRORLEVEL%)");
         return 2;
