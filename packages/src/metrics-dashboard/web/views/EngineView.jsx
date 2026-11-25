@@ -41,6 +41,13 @@ export default function EngineView({ refreshKey, autoRefresh }) {
   const [detail, setDetail] = useState({ id: null, rec: null, error: null })
   const listCtl = useRef(null)
 
+  // Follow back / forward and hand-edited #/engine/<id> links, not just the hash on mount.
+  useEffect(() => {
+    const onHash = () => setSelectedId(idFromHash())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
   const loadList = useCallback(() => {
     listCtl.current?.abort()
     const ctl = new AbortController()

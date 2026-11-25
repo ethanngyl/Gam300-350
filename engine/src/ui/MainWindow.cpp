@@ -902,14 +902,21 @@ void MainWindow::setMetricsRecording(bool on) {
         statusBar()->showMessage("Recording stopped, saving...", kStatusMessageMs);
         return;
     }
-    if (metrics.IsRecording()) return;
-    if (!metrics.StartRecording()) {
+    const FrameMetrics::StartResult result = metrics.StartRecording();
+    if (result == FrameMetrics::StartResult::AlreadyRecording) return;
+    if (result != FrameMetrics::StartResult::Started) {
         //Put the button back without re-entering this function
         const QSignalBlocker blocker(m_recordMetricsAction);
         m_recordMetricsAction->setChecked(false);
-        QMessageBox::warning(this, "Record Metrics",
-                             "Could not start a recording. The metrics folder may not be writable "
-                             "(see the Console for details).");
+        if (result == FrameMetrics::StartResult::StillSaving) {
+            //The last recording's final frames are still being processed (about half a second on heavy scenes)
+            statusBar()->showMessage("Still saving the previous recording. Try again in a moment.", kStatusMessageMs);
+        }
+        else {
+            QMessageBox::warning(this, "Record Metrics",
+                                 "Could not start a recording. The metrics folder may not be writable "
+                                 "(see the Console for details).");
+        }
         return;
     }
     statusBar()->showMessage("Recording metrics. Press Ctrl+Shift+R (or the Record Metrics button) to stop.",
@@ -943,7 +950,7 @@ void MainWindow::showRecordingSummary(const FrameMetrics::RecordingSummary& s) {
         .arg(s.maxModels)
         .arg(s.refreshHz, 0, 'f', 0);
     if (s.pauses > 0) {
-        text += QString("<tr><td>Pauses left out</td><td>%1 (frames over 1 s, e.g. window minimised)</td></tr>").arg(s.pauses);
+        text += QString("<tr><td>Pauses left out</td><td>%1 (idle frames over 1 s, e.g. window minimised)</td></tr>").arg(s.pauses);
     }
     text += "</table><p>Saved to the metrics <i>recordings</i> folder. To chart it, start the metrics dashboard "
             "(<code>packages/start-metrics.bat</code>) and open its <b>Engine</b> tab.</p>";
@@ -962,8 +969,13 @@ void MainWindow::showRecordingSummary(const FrameMetrics::RecordingSummary& s) {
     box->addButton(QMessageBox::Close);
     const QString folder = QString::fromStdString(m_viewport->metrics().RecordingDir());
     const QString id = QString::fromStdString(s.id);
-    connect(box, &QMessageBox::buttonClicked, this, [dashboardButton, folderButton, folder, id](QAbstractButton* button) {
-        if (button == dashboardButton) QDesktopServices::openUrl(QUrl("http://localhost:5010/#/engine/" + id));
+    //Same port the dashboard server uses (packages/src/metrics-dashboard/server.js reads METRICS_PORT)
+    bool portOk = false;
+    int port = qEnvironmentVariableIntValue("METRICS_PORT", &portOk);
+    if (!portOk || port <= 0 || port > 65535) port = 5010;
+    const QString dashboardUrl = QString("http://localhost:%1/#/engine/%2").arg(port).arg(id);
+    connect(box, &QMessageBox::buttonClicked, this, [dashboardButton, folderButton, folder, dashboardUrl](QAbstractButton* button) {
+        if (button == dashboardButton) QDesktopServices::openUrl(QUrl(dashboardUrl));
         else if (button == folderButton) QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
     });
     box->open(); //Non-modal for the viewport: the editor keeps running behind it

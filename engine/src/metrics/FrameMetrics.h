@@ -110,7 +110,7 @@ public:
         float maxFrameMs = 0.0f;
         std::uint64_t drops = 0;
         std::uint64_t missedVsyncs = 0;
-        std::uint64_t pauses = 0;        // frames over a second (window hidden / minimised), left out of the averages
+        std::uint64_t pauses = 0;        // idle frames over a second (window hidden / minimised), left out of the averages
         std::size_t minSplats = 0;
         std::size_t maxSplats = 0;
         double avgSplats = 0.0;
@@ -178,10 +178,18 @@ public:
     // Recording: while on, every frame (frame time, fps, drop, splat and model count) is written to
     // <logDir>/recordings/rec_<time>.csv. Stopping writes a .json summary next to it once the last
     // recorded frame has been processed (a few frames later), then calls onRecordingFinished.
-    // Returns false if already recording or file output is off.
-    bool StartRecording();
+    enum class StartResult {
+        Started,
+        AlreadyRecording,
+        StillSaving,  // a stopped recording is still waiting for its last frames; try again shortly
+        NoOutput,     // file output is off (the metrics folder could not be created)
+        FileError,    // the recording's .csv could not be created
+    };
+    StartResult StartRecording();
     void StopRecording();
     bool IsRecording() const { return m_recording && m_recEndId == kNoEnd; }
+    // True from StopRecording until the stopped recording's summary has been written.
+    bool IsSavingRecording() const { return m_recording && m_recEndId != kNoEnd; }
     RecordingLive LiveRecording() const;
     // Folder the recordings are written to (empty if file output is off).
     const std::string& RecordingDir() const { return m_recordingDir; }

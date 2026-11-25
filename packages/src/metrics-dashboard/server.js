@@ -351,7 +351,12 @@ async function loadEngineRecordings(withSeconds = false) {
         return { ...summary, secondsCount: seconds.length }
       }),
   )
-  return recordings.filter(Boolean).sort((a, b) => b.id.localeCompare(a.id))
+  // Newest first by start time. Two recordings started in the same second share startedAt, so fall
+  // back to the id compared numerically (rec_X_10 after rec_X_2).
+  const started = (r) => Date.parse(r.startedAt) || 0
+  return recordings
+    .filter(Boolean)
+    .sort((a, b) => started(b) - started(a) || b.id.localeCompare(a.id, 'en', { numeric: true }))
 }
 
 // ----- End of Functions ----------------------------------------------------- //

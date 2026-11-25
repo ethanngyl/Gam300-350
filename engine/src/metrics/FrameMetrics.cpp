@@ -29,6 +29,7 @@ per run, the newest kKeepRuns runs are kept) under the user data folder.
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <utility>
 
 namespace {
     // A frame longer than this many refreshes missed at least one vsync.
@@ -49,6 +50,31 @@ namespace {
     constexpr int kKeepRecordings = 50;
     // Cap on per-recording frame intervals kept for percentiles (~1 h at 144 Hz).
     constexpr std::size_t kMaxRecordingSamples = 600000;
+
+    // Sort key for a recording id rec_<yyyyMMdd_HHmmss>[_n]: the timestamp, then n (no suffix = 1),
+    // so rec_X_10 sorts after rec_X_2.
+    std::pair<QString, int> RecordingSortKey(const QString& id) {
+        constexpr int kStampLength = 19; // "rec_" + "yyyyMMdd_HHmmss"
+        const int n = id.size() > kStampLength + 1 ? id.mid(kStampLength + 1).toInt() : 1;
+        return { id.left(kStampLength), n };
+    }
+
+    // Deletes all but the newest `keep` recordings. Each one's .csv, .json and any leftover .json.tmp
+    // go together, so a crash mid-recording can't leave older recordings with half a pair.
+    void PruneRecordings(const QString& folder, int keep) {
+        const QDir dir(folder);
+        QStringList ids;
+        for (const QString& name : dir.entryList({ "rec_*.csv", "rec_*.json", "rec_*.json.tmp" }, QDir::Files)) {
+            const QString id = name.left(name.indexOf('.'));
+            if (!ids.contains(id)) ids.append(id);
+        }
+        std::sort(ids.begin(), ids.end(), [](const QString& a, const QString& b) {
+            return RecordingSortKey(a) > RecordingSortKey(b); // newest first
+        });
+        for (int i = keep; i < ids.size(); ++i) {
+            for (const char* ext : { ".csv", ".json", ".json.tmp" }) QFile::remove(dir.filePath(ids[i] + ext));
+        }
+    }
 
     // Escapes a string for a JSON string literal.
     std::string JsonString(const std::string& s) {
@@ -168,9 +194,7 @@ void FrameMetrics::Init(const std::string& logDir) {
     const QString recordingDir = dir.filePath("recordings");
     if (QDir().mkpath(recordingDir)) {
         m_recordingDir = recordingDir.toStdString();
-        for (const char* pattern : { "rec_*.csv", "rec_*.json" }) {
-            AssetPaths::PruneOldFiles(recordingDir, pattern, kKeepRecordings);
-        }
+        PruneRecordings(recordingDir, kKeepRecordings);
     }
     if (m_sessionCsv && m_frameCsv) {
         LogInfo("[Metrics] Logging interaction sessions to " + m_sessionLogPath);
@@ -546,8 +570,10 @@ void FrameMetrics::UpdateLive() {
     m_live.dropsLastSecond = drops;
 }
 
-bool FrameMetrics::StartRecording() {
-    if (m_recording || m_recordingDir.empty()) return false;
+FrameMetrics::StartResult FrameMetrics::StartRecording() {
+    if (IsRecording()) return StartResult::AlreadyRecording;
+    if (IsSavingRecording()) return StartResult::StillSaving;
+    if (m_recordingDir.empty()) return StartResult::NoOutput;
 
     const QDir dir(QString::fromStdString(m_recordingDir));
     const QDateTime now = QDateTime::currentDateTime();
@@ -561,7 +587,7 @@ bool FrameMetrics::StartRecording() {
     m_recCsv.open(m_recCsvPath, std::ios::out | std::ios::trunc);
     if (!m_recCsv) {
         LogWarning("[Metrics] Could not create " + m_recCsvPath + ", recording not started");
-        return false;
+        return StartResult::FileError;
     }
     m_recCsv << "t_s,frame_ms,fps,dropped,missed_vsyncs,splats,models,activity,cpu_scene_ms,gpu_scene_ms\n";
 
@@ -591,7 +617,7 @@ bool FrameMetrics::StartRecording() {
     m_recSeconds.clear();
 
     LogInfo("[Metrics] Recording started: " + m_recCsvPath);
-    return true;
+    return StartResult::Started;
 }
 
 void FrameMetrics::StopRecording() {
@@ -624,9 +650,10 @@ void FrameMetrics::RecordFrame(const FrameRecord& frame) {
         const double t = frame.startSeconds - m_recFirstSeconds;
         m_recLastEndSeconds = frame.startSeconds + frame.intervalMs / 1000.0;
         const float scene = frame.cpuMs[static_cast<std::size_t>(Section::Scene)];
-        // A frame over a second is the window being hidden or the app stalled outside rendering:
-        // counted, but left out of the averages so it doesn't swamp them.
-        const bool pause = frame.intervalMs > kIdleStallMs;
+        // An idle frame over a second is the window being hidden or the app waiting for input:
+        // counted, but left out of the averages so it doesn't swamp them. A long frame during an
+        // interaction is a real hitch and stays in (the same rule FinalizePending uses).
+        const bool pause = frame.activity == Activity::Idle && frame.intervalMs > kIdleStallMs;
 
         // One bucket per second for the dashboard's charts (capped at a day).
         const auto second = static_cast<std::size_t>(std::max(t, 0.0));
@@ -737,6 +764,7 @@ void FrameMetrics::FinishRecording() {
     // Summary + per second series, read by the metrics dashboard. Written to a temp file first so
     // the dashboard never reads half a file.
     const std::string tmpPath = s.jsonPath + ".tmp";
+    bool jsonOk = false;
     {
         std::ofstream json(tmpPath, std::ios::out | std::ios::trunc);
         json << "{\n";
@@ -774,18 +802,22 @@ void FrameMetrics::FinishRecording() {
         }
         json << (m_recSeconds.empty() ? "]\n" : "\n  ]\n");
         json << "}\n";
+        json.flush();
+        jsonOk = json.good();
     }
-    QFile::remove(QString::fromStdString(s.jsonPath));
-    if (!QFile::rename(QString::fromStdString(tmpPath), QString::fromStdString(s.jsonPath))) {
-        LogWarning("[Metrics] Could not write the recording summary " + s.jsonPath);
+    if (jsonOk) {
+        QFile::remove(QString::fromStdString(s.jsonPath));
+        jsonOk = QFile::rename(QString::fromStdString(tmpPath), QString::fromStdString(s.jsonPath));
     }
+    if (!jsonOk) QFile::remove(QString::fromStdString(tmpPath));
 
     LogInfo(Format("[Metrics] Recording %s: %.1f s, %llu frames, avg %.1f FPS (1%% low %.1f), p95 %.2f ms, "
                    "%llu drops, splats %zu-%zu",
                    s.id.c_str(), s.durationSec, static_cast<unsigned long long>(s.frames), s.avgFps,
                    s.onePercentLowFps, s.p95FrameMs, static_cast<unsigned long long>(s.drops),
                    s.minSplats, s.maxSplats));
-    LogInfo("[Metrics] Saved " + s.csvPath + " and " + s.jsonPath);
+    if (jsonOk) LogInfo("[Metrics] Saved " + s.csvPath + " and " + s.jsonPath);
+    else LogWarning("[Metrics] Could not write the recording summary " + s.jsonPath + " (frames kept in " + s.csvPath + ")");
 
     m_recIntervals.clear();
     m_recIntervals.shrink_to_fit();
