@@ -63,8 +63,11 @@ import { scanJobs, setImageNameSource, setModelSource } from './scan.js'
 import { jobs, killChildren, restoreJob, setSkipSampleCopy } from './pipeline.js'
 import { actAsUser, loadUser, requireAuthorityKey } from './middleware/session.js'
 import { jsonErrorHandler, jsonNotFound } from './middleware/errors.js'
+import { limitRequests } from './middleware/limits.js'
+import { createLimiter } from './ratelimit.js'
 import { clientAuthProblem } from './services/authority.js'
 import { googleSignInReady } from './services/google.js'
+import { afterJobEnds, queueBuild } from './services/jobs.js'
 import jobRoutes from './routes/jobs.js'
 import libraryStoreRoutes from './routes/libraryStore.js'
 import authRoutes from './routes/auth.js'
@@ -114,6 +117,19 @@ for (const record of restored) {
 }
 
 console.log(`[backend] restored ${restored.length} job(s) from ${config.jobsDir}`)
+
+// Builds that were waiting their turn when the server stopped: back in line,
+// oldest first. (A build that had started is "interrupted" instead, see
+// scanJob.) Only jobs someone submitted, which always have a status.json.
+const waitingBuilds = restored
+  .filter((record) => record.status === 'queued' && record.hasRecord)
+  .sort((a, b) => a.createdAt - b.createdAt)
+for (const record of waitingBuilds)
+{
+  const job = jobs.get(record.id)
+  if (job) queueBuild(job).finally(() => afterJobEnds(job))
+}
+if (waitingBuilds.length > 0) console.log(`[backend] resumed ${waitingBuilds.length} waiting build(s)`)
 
 // Staging folders left by shared-library uploads cut off mid-way (crash or
 // restart during a PUT /library/jobs/:id). Their jobs are re-sent later.
@@ -180,6 +196,11 @@ const api = express.Router()
 // /library/..., with the shared key instead of a cookie, acting as the user
 // they name. 503 on any machine that isn't the account authority.
 api.use('/library', requireAuthorityKey, actAsUser)
+
+// General rate limit on every API request (RATE_LIMIT_API_PER_MIN), per
+// signed-in user or else per address; after /library so req.user is set for
+// both. The website's own files (express.static above) aren't counted.
+api.use(limitRequests(createLimiter({ windowMs: 60 * 1000, max: config.rateLimitApiPerMin })))
 
 // Each Router holds full paths, so the order only matters where two match
 // the same path: sample jobs answer for their own ids before the job routes.
@@ -267,6 +288,15 @@ const server = app.listen(config.port, () =>
   console.log(`[backend] Brush:  ${config.brushBin}`)
   console.log(`[backend] Python: ${config.pythonBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
+  console.log(`[backend] builds: ${config.maxRunningJobsPerUser} at a time per user (MAX_RUNNING_JOBS_PER_USER), ` +
+    `${config.maxRunningJobs > 0 ? `${config.maxRunningJobs} at a time` : 'no limit'} per machine (MAX_RUNNING_JOBS); the rest wait in line`)
+  if (config.maxRunningJobs === 0)
+    console.warn('[backend] builds: different users\' builds share the GPU at the same time (each slower, and they can run out of GPU memory); set MAX_RUNNING_JOBS to cap them')
+  // Rate limits (middleware/limits.js); 0 = off.
+  const limitText = (n, unit) => (n > 0 ? `${n}/${unit}` : 'off')
+  console.log(`[backend] rate limits: API ${limitText(config.rateLimitApiPerMin, 'min')}, ` +
+    `builds ${limitText(config.rateLimitBuildsPerHour, 'hour')} and ${limitText(config.rateLimitBuildsPerDay, 'day')}, ` +
+    `downloads ${limitText(config.rateLimitDownloadsPerHour, 'hour')}`)
   // Which account mode this machine is in, and whether it can work.
   if (config.authMode === 'authority')
   {

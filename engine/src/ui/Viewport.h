@@ -76,6 +76,9 @@ public:
 
     // Frame metrics, for starting / stopping a recording from the editor.
     FrameMetrics& metrics() { return m_metrics; }
+    //Draws one frame now and waits for the GPU to finish it, instead of waiting for the next vsync.
+    //Let the stress tests time work that the renderer defers to its next Draw (e.g. uploads).
+    void RenderFrameBlocking();
 
 protected:
     void initializeGL() override;

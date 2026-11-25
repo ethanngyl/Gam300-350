@@ -25,6 +25,15 @@ info:
     (`X-Act-As-User`). A team machine answers its users' requests by passing
     them on to these.
 
+    **Rate limits.** Every API call counts towards a per-minute limit (per
+    signed-in user, or per address for guests; 600 by default). Starting
+    builds (`POST /upload`, `POST /jobs/from-media`) and full model downloads
+    are also limited per user (10 builds an hour and 30 a day, 60 downloads
+    an hour by default; admins exempt), as are sign-in, sign-up, password
+    reset, account edits and feedback. Over a limit the reply is 429 with a
+    `Retry-After` header and `retryAfterSec`. Calls with the shared key
+    (`X-Auth-Key`) don't count towards the per-minute limit.
+
     **Formats.** Dates are UTC epoch milliseconds, sizes are bytes, ids are
     UUIDs (see docs/data-schema.md). Errors are `{ "error": "..." }`. JSON
     request bodies may be up to 2 MB (a saved scene of 500 objects fits).
@@ -464,7 +473,7 @@ paths:
       operationId: uploadPhotos
       summary: Start a job from photos
       description: |
-        8 or more JPEG / PNG photos (at most 300, 30 MB each). Returns at once;
+        8 or more JPEG / PNG photos (at most 400, 30 MB each). Returns at once;
         COLMAP and Brush run in the background, so poll GET /jobs/{id}.
       security: [{ sessionCookie: [] }]
       requestBody:
@@ -478,7 +487,8 @@ paths:
                 images: { type: array, items: { type: string, format: binary } }
                 trainIters: { type: integer, minimum: 1000, maximum: 30000, description: Training iterations (a catalog preset) }
                 removeBackground: { type: string, enum: ['true', 'false'] }
-            example: { images: [0001.jpg, 0002.jpg, 0003.jpg, 0004.jpg, 0005.jpg, 0006.jpg, 0007.jpg, 0008.jpg], trainIters: 7000, removeBackground: 'false' }
+                autoCrop: { type: string, enum: ['true', 'false'], description: Keep only the object the photos were taken around (skipped if they don't surround one) }
+            example: { images: [0001.jpg, 0002.jpg, 0003.jpg, 0004.jpg, 0005.jpg, 0006.jpg, 0007.jpg, 0008.jpg], trainIters: 7000, removeBackground: 'false', autoCrop: 'true' }
       responses:
         '202':
           description: The job started
@@ -501,6 +511,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '413':
           $ref: '#/components/responses/TooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /jobs/from-media:
     post:
       tags: [Jobs]
@@ -521,7 +533,8 @@ paths:
                 maxFrames: { type: integer, description: Most frames to extract }
                 trainIters: { type: integer, minimum: 1000, maximum: 30000 }
                 removeBackground: { type: string, enum: ['true', 'false'] }
-            example: { media: [turntable.mp4], fps: 2, maxFrames: 120, trainIters: 7000, removeBackground: 'true' }
+                autoCrop: { type: string, enum: ['true', 'false'], description: Keep only the object the frames were filmed around }
+            example: { media: [turntable.mp4], fps: 2, maxFrames: 120, trainIters: 7000, removeBackground: 'true', autoCrop: 'false' }
       responses:
         '202':
           description: The job started
@@ -543,6 +556,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '413':
           $ref: '#/components/responses/TooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /jobs:
     get:
       tags: [Jobs]
@@ -655,7 +670,10 @@ paths:
       tags: [Jobs]
       operationId: getJobModel
       summary: Download the finished model (.ply)
-      description: Supports byte ranges (`Range`), HEAD and ETag.
+      description: |
+        Supports byte ranges (`Range`), HEAD and ETag. Full downloads (a GET
+        answered 200) are limited per user per hour (429); range reads, HEAD
+        and 304s don't count, and admins are exempt.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/Range'
@@ -668,6 +686,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/ResultNotReady'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /jobs/{id}/cover.webp:
     parameters:
       - $ref: '#/components/parameters/JobId'
@@ -835,7 +855,7 @@ paths:
                   - { id: normal, label: Normal, iterations: 7000 }
                   - { id: detailed, label: Detailed, iterations: 10000 }
                 defaultTrainingPreset: normal
-                limits: { maxPhotos: 300, maxPhotoSizeMB: 30, maxMediaFiles: 10, maxMediaSizeMB: 2048, maxFrameFps: 30, minTrainIters: 1000, maxTrainIters: 30000, maxAvatarKB: 256 }
+                limits: { maxPhotos: 400, maxPhotoSizeMB: 30, maxMediaFiles: 10, maxMediaSizeMB: 2048, maxFrameFps: 30, minTrainIters: 1000, maxTrainIters: 30000, maxAvatarKB: 256 }
   /openapi.yaml:
     get:
       tags: [Catalog]
@@ -1327,6 +1347,8 @@ paths:
           $ref: '#/components/responses/KeyOrUserRefused'
         '404':
           $ref: '#/components/responses/ResultNotReady'
+        '429':
+          $ref: '#/components/responses/TooManyAttempts'
   /library/jobs/{id}/cover.webp:
     parameters:
       - $ref: '#/components/parameters/JobId'
@@ -1801,15 +1823,20 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
           example: { error: That file is too large -- each photo must be under 30 MB. }
     TooManyAttempts:
-      description: A rate limit was reached (Retry-After says when to try again)
+      description: A rate limit was reached (Retry-After and retryAfterSec say when to try again)
       headers:
         Retry-After:
           schema: { type: integer }
           example: 840
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-          example: { error: Too many attempts. Try again in 14 minutes. }
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Error'
+              - type: object
+                properties:
+                  retryAfterSec: { type: integer, description: Seconds until the limit lifts }
+          example: { error: Too many attempts. Try again in 14 minutes., retryAfterSec: 840 }
     Unavailable:
       description: A team machine can't reach the VM, or the service isn't set up here
       content:
@@ -1907,6 +1934,7 @@ components:
             updatedAt: 1791102300000
             imageCount: 24
             removeBackground: false
+            autoCrop: true
             hasResult: false
             logTail: ['Training step 4200 / 7000']
     JobNotFound:
@@ -2147,7 +2175,7 @@ components:
         photoVersion: { type: ['integer', 'null'], description: Changes with each new photo; null when there is none }
     JobStatus:
       type: object
-      required: [id, status, phase, progress, detail, error, updatedAt, imageCount, removeBackground, hasResult, logTail]
+      required: [id, status, phase, progress, detail, error, updatedAt, imageCount, removeBackground, autoCrop, hasResult, logTail]
       properties:
         id: { type: string }
         status: { enum: [queued, running, done, error, cancelled] }
@@ -2158,6 +2186,7 @@ components:
         updatedAt: { type: ['number', 'null'] }
         imageCount: { type: ['integer', 'null'] }
         removeBackground: { type: boolean }
+        autoCrop: { type: boolean }
         hasResult: { type: boolean }
         logTail: { type: array, items: { type: string } }
     FeedbackInput:

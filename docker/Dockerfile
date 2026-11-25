@@ -62,7 +62,7 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /app/tools/requirements.txt onnxruntime
 
 # App: same layout as the repo so config.js resolves tools/ correctly.
-COPY tools/extract_frames.py tools/make_masks.py tools/normalize_ply.py /app/tools/
+COPY tools/extract_frames.py tools/make_masks.py tools/normalize_ply.py tools/auto_crop.py /app/tools/
 COPY --from=web /app/packages /app/packages
 
 # UV_THREADPOOL_SIZE: 16 worker threads instead of 4, so a burst of sign-ups

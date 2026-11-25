@@ -72,6 +72,8 @@ protected:
     void closeEvent(QCloseEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    //Only installed while a stress test runs: drops input aimed at anything but the stress test panel
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     // ---- construction ----
@@ -120,6 +122,12 @@ private:
     //Refreshes the dev mode menu text to match m_devMode
     void updateDevModeAction();
 
+    //Stress tests run on the GUI thread, so input is blocked from begin to end
+    //Only the stress test panel stays usable, and its Stop button if the run can be stopped
+    void beginStressRun(bool stoppable);
+    void endStressRun();
+    //Runs every stress test in order, stopping early if Stop is pressed (checked between tests)
+    void runAllStressTests();
     // ---- generating a model (on this PC, no server) ----
     // Asks what to build (GenerateModelDialog) and starts LocalReconstruction.
     void showGenerateDialog();
@@ -191,7 +199,6 @@ private:
     QAction* m_recordMetricsAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
     QAction* m_trimSettingsAction = nullptr;
-    QAction* m_stressTestSphereAction = nullptr;
     TrimData m_trimSettings;
     QAction* m_resetLayoutAction = nullptr;
     QMenu* m_recentMenu = nullptr;
@@ -234,4 +241,6 @@ private:
 
     //Dev mode
     bool m_devMode = false;
+    bool m_stressTestRunning = false; //Input outside the stress test panel is dropped while true
+    bool m_stopStressTests = false;   //Set by Stop, Test All checks it between tests
 };

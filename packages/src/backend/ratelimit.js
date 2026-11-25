@@ -6,14 +6,19 @@
 \par Software Engineering Project 5
 \date 21-10-2026
 \brief
-A small in-memory, fixed-window rate limiter used to slow down password
-guessing and signup spam. Counters live in this process only, so they reset
-when the server restarts -- fine for this purpose, and no extra package or
-database table is needed.
+A small in-memory, fixed-window rate limiter. It slows down password
+guessing and signup spam, limits how many builds and model downloads each
+user can start, and caps how many API requests one user or address can make
+(middleware/limits.js, docs/architecture.md "Rate limits"). Counters live
+in this process only, so they reset when the server restarts -- fine for
+this purpose (one VM holds the accounts), and no extra package or database
+table is needed.
 - createLimiter({ windowMs, max })
-Returns a limiter. hit(key) counts one event for key (an IP address or an
-email) and says whether it is still allowed; check(key) asks without
-counting; reset(key) clears the key (e.g. after a successful login).
+Returns a limiter. hit(key) counts one event for key (an IP address, an
+email or a user id) and says whether it is still allowed; check(key) asks
+without counting; reset(key) clears the key (e.g. after a successful
+login). max 0 (or less) switches the limiter off: everything is allowed,
+which is how a RATE_LIMIT_* setting of 0 turns a limit off.
 **************************************************************************/
 
 // ----- Start of Functions --------------------------------------------------- //
@@ -24,7 +29,7 @@ counting; reset(key) clears the key (e.g. after a successful login).
     Makes a limiter that allows at most max events per key within each
     window of windowMs. A key's window starts at its first event.
   \param options
-    { windowMs, max }
+    { windowMs, max }. max <= 0: no limit (always allowed).
   \return
     { hit(key), check(key), reset(key) }. hit and check return
     { allowed, retryAfterSec }.
@@ -32,6 +37,13 @@ counting; reset(key) clears the key (e.g. after a successful login).
 /************************************************************************/
 export function createLimiter({ windowMs, max })
 {
+  if (!(max > 0))
+  {
+    // Switched off: nothing to count, and no sweep timer.
+    const allowed = () => ({ allowed: true, retryAfterSec: 0 })
+    return { hit: allowed, check: allowed, reset: () => {} }
+  }
+
   const entries = new Map() // key -> { count, resetAt }
 
   // Drop finished windows now and then so the map can't grow forever.

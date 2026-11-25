@@ -153,8 +153,8 @@ needs the shared key.
 
 | Method | Path | Who | Reply |
 |---|---|---|---|
-| POST | `/upload` | user | 202 `{ id, imageCount }`. Multipart `images` (8+ JPEG / PNG), optional `trainIters`, `removeBackground` |
-| POST | `/jobs/from-media` | user | 202 `{ id }`. Multipart `media` (videos / GIFs), optional `fps`, `maxFrames`, `trainIters`, `removeBackground` |
+| POST | `/upload` | user | 202 `{ id, imageCount }`. Multipart `images` (8+ JPEG / PNG), optional `trainIters`, `removeBackground`, `autoCrop` |
+| POST | `/jobs/from-media` | user | 202 `{ id }`. Multipart `media` (videos / GIFs), optional `fps`, `maxFrames`, `trainIters`, `removeBackground`, `autoCrop` |
 | GET | `/jobs` | user | 200 JobSummary list of the user's jobs (admins: all), from the sources in `JOB_SOURCES` |
 | GET | `/jobs/:id` | owner | 200 status, phase, progress, log tail |
 | PATCH | `/jobs/:id` | owner | 200 `{ id, name, sampleFile }` (rename) |
@@ -164,6 +164,32 @@ needs the shared key.
 | GET / HEAD | `/jobs/:id/result.ply` | owner | the model (binary, byte ranges supported) |
 | GET | `/jobs/:id/cover.webp` | owner | the card cover (binary); 404 if none |
 | PUT | `/library/jobs/:id` | team machines (shared key) | 201 `{ id, bytes }`. Stores a finished job on the VM |
+
+**Build queue.** A build is background masking, then COLMAP, then Brush, all
+on the machine's one GPU (`jobQueue.js`, `queueBuild` in `services/jobs.js`).
+- **Per user (default):** each user runs `MAX_RUNNING_JOBS_PER_USER` builds
+  at once (default 1). Their next builds wait for their own earlier ones.
+  Different users' builds run at the same time.
+- **Per machine (optional):** `MAX_RUNNING_JOBS` caps how many builds the
+  machine runs at once, whoever started them. It's unset by default, meaning
+  no cap. Builds running together share the GPU, so each one is slower, and
+  they can run out of GPU memory. `MAX_RUNNING_JOBS=1` gives one build at a
+  time for everyone. The startup log shows both settings, and warns when
+  there's no machine cap.
+- **Order:** first come, first served among the builds allowed to start. A
+  user whose own earlier build is still running doesn't hold up other users.
+- **While a job waits:** it reads `status: 'queued'`, with `detail` saying
+  what it waits for. The website shows "Waiting to start".
+  - its owner's builds: "Waiting for your earlier build to finish", or "Waiting for your N earlier builds to finish";
+  - a full machine: "Waiting for N builds ahead of yours".
+- **Who owns a build:** the user who started it (`jobs.owner_id`). Jobs with
+  no recorded owner share one allowance.
+- **Cancelling or deleting a waiting job** takes it out of the line.
+- **Videos and GIFs:** frame extraction runs straight away (it uses the CPU),
+  and only the build after it waits.
+- **After a restart:** builds still waiting (a `queued` `status.json`) rejoin
+  the line, oldest first, with their settings. A build that had started is
+  marked interrupted.
 
 ### Feedback
 
@@ -193,6 +219,41 @@ needs the shared key.
 Every API request is timed (`middleware/timing.js`), and each machine reports its own numbers.
 
 Any other path answers 404 with a JSON `{ error }`.
+
+## Rate limits
+
+Every limit uses `ratelimit.js`: fixed windows, counted in memory, so the
+counts reset when the server restarts. That's enough here, because only one
+machine (the VM) holds the accounts. Over a limit, the reply is **429** with
+a `Retry-After` header and `{ error, retryAfterSec }`
+(`middleware/limits.js`). On the VM, `TRUST_PROXY=loopback` makes the
+"address" the visitor's real one rather than Caddy's.
+
+| What | Limit | Counted per | Where | Setting |
+|---|---|---|---|---|
+| Every API call | 600 / minute | signed-in user, else address | `server.js` | `RATE_LIMIT_API_PER_MIN` |
+| Starting a build (`POST /upload`, `/jobs/from-media`) | 10 / hour and 30 / day | user (admins exempt) | `routes/jobs.js` | `RATE_LIMIT_BUILDS_PER_HOUR`, `_PER_DAY` |
+| Full model download (`GET .../result.ply` answered 200) | 60 / hour | user (admins exempt) | `routes/jobs.js` | `RATE_LIMIT_DOWNLOADS_PER_HOUR` |
+| Sign-in | 30 / 15 min | address | `routes/auth.js` | - |
+| Wrong passwords | 10 / 15 min (then locked) | email | `services/accounts.js` | - |
+| Sign-up | 10 / hour | address | `routes/auth.js` | - |
+| "Forgot password?" | 10 / hour; 1 / minute and 3 / hour | address; email | `routes/passwordReset.js`, `services/passwordReset.js` | - |
+| Reset password with a code | 20 / 15 min | address | `routes/passwordReset.js` | - |
+| Account edits | 30 / hour | user | `routes/account.js` | - |
+| Feedback | 10 / hour | user | `routes/feedback.js` | - |
+| Page-load timings | 30 / minute | address | `routes/metrics.js` | - |
+
+- **A setting of 0 switches that limit off.** `npm run perf` does this for
+  the API and download limits, because it makes about 1,000 calls a minute
+  as one user.
+- **Calls carrying the shared key (`X-Auth-Key`) don't count towards the
+  per-minute limit.** These are team machines calling the VM, e.g.
+  `/library` syncs, and one machine carries many users' traffic.
+- **The build and download limits only count successes.** A rejected upload
+  (400, 413) doesn't use up a build. A range read (the website reading a
+  model's header), a HEAD request or a 304 doesn't count as a download.
+- **The website's own files** (HTML, JS, images under `web-app/dist`) are
+  served before the API and aren't limited.
 
 ## Configuration and secrets
 

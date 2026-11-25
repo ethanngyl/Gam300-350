@@ -21,6 +21,9 @@ List, poll, rename, cancel and delete jobs (owner or admin).
 - GET /jobs/:id/images/:name, GET /jobs/:id/result.ply,
   GET /jobs/:id/cover.webp
 A job's photos (?size=small: a small copy), model and card cover.
+Starting builds and downloading models are rate-limited per user
+(RATE_LIMIT_BUILDS_PER_HOUR / _PER_DAY, RATE_LIMIT_DOWNLOADS_PER_HOUR;
+admins exempt): 429 with Retry-After once used up.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -31,18 +34,43 @@ import { config } from '../config.js'
 import { getDbImage, getDbModelInfo, isJobSynced, setJobOwner, unmarkJobSynced } from '../db.js'
 import { deleteJobData } from '../cleanup.js'
 import { forwardToVm, proxyToVm } from '../library.js'
-import { cancelJob, makeJob, pickSampleFileName, runMediaPipeline, runPipeline, sampleFileName } from '../pipeline.js'
+import { cancelJob, makeJob, pickSampleFileName, runMediaPipeline, sampleFileName } from '../pipeline.js'
 import { IMAGE_EXT_RE, JOB_ID_RE } from '../scan.js'
 import { saveJob } from '../status.js'
 import { requireJobAccess, requireUser } from '../middleware/session.js'
+import { limitPerUser, waitText } from '../middleware/limits.js'
+import { createLimiter } from '../ratelimit.js'
 import { assignJobId, mediaUpload, onlyImages, onlyMedia, removeJobIfAborted, upload } from '../middleware/uploads.js'
 import { sendDbModel } from '../middleware/sendDbModel.js'
-import { MAX_JOB_NAME_LENGTH, afterJobEnds, ensureCover, ensureThumbs, frameOptions, getJob, parseTrainIters, thumbPath } from '../services/jobs.js'
+import { MAX_JOB_NAME_LENGTH, afterJobEnds, ensureCover, ensureThumbs, frameOptions, getJob, parseTrainIters, thumbPath, queueBuild, refreshQueue } from '../services/jobs.js'
 import { listJobs } from '../adapters/jobSources/index.js'
 import { catalog } from '../catalog.js'
 
 const router = express.Router()
 const filesInDb = config.filesInDb
+
+// Builds use minutes of GPU time and hundreds of MB, and a model download
+// can be hundreds of MB: limited per user. Only a build the server accepted
+// (202) and a full download (a GET answered 200: not HEAD, a 206 range read
+// or a 304) count.
+const HOUR_MS = 60 * 60 * 1000
+const limitBuilds = limitPerUser(
+    [
+        createLimiter({ windowMs: HOUR_MS, max: config.rateLimitBuildsPerHour }),
+        createLimiter({ windowMs: 24 * HOUR_MS, max: config.rateLimitBuildsPerDay }),
+    ],
+    {
+        countWhen: (status) => status === 202,
+        message: (retryAfterSec) => `You've started too many builds. Try again in ${waitText(retryAfterSec)}.`,
+    },
+)
+const limitDownloads = limitPerUser(
+    [createLimiter({ windowMs: HOUR_MS, max: config.rateLimitDownloadsPerHour })],
+    {
+        countWhen: (status, req) => status === 200 && req.method === 'GET',
+        message: (retryAfterSec) => `You've downloaded too many models. Try again in ${waitText(retryAfterSec)}.`,
+    },
+)
 
 // ----- Start of Routes ------------------------------------------------------ //
 
@@ -54,11 +82,11 @@ const filesInDb = config.filesInDb
     polls for status. The job is owned by the logged-in user. requireUser
     runs before assignJobId so a logged-out request never creates a folder.
   \return
-    401 if not logged in, 400 if fewer than catalog.minPhotos (8) photos
-    given, 202 if successful
+    401 if not logged in, 429 if the user has started too many builds,
+    400 if fewer than catalog.minPhotos (8) photos given, 202 if successful
 */
 /************************************************************************/
-router.post('/upload', requireUser, assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => {
+router.post('/upload', requireUser, limitBuilds, assignJobId, upload.array('images', config.maxFiles), onlyImages, (req, res) => {
     const files = req.files || []
     if (files.length < catalog.minPhotos) {
         // Reject cleanly: remove the job folder assignJobId created up front so a
@@ -75,12 +103,16 @@ router.post('/upload', requireUser, assignJobId, upload.array('images', config.m
     // Optional multipart text field: mask out the background before COLMAP
     // (needed for turntable captures, see generateMasks in pipeline.js).
     job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
+    // Optional multipart text field: keep only the object the photos were
+    // taken around (see autoCropPly in pipeline.js).
+    job.autoCrop = ['true', '1', 'on'].includes(String(req.body?.autoCrop).toLowerCase())
     // Optional multipart text field: training iteration cap (Fast / Normal / Detailed).
     job.trainIters = parseTrainIters(req.body?.trainIters)
     saveJob(job) // gives upload-only jobs a status record from the start
-    // fire-and-forget; do not await. Settles once the job is done, failed
-    // or cancelled (never rejects), then its files are tidied up.
-    runPipeline(job).finally(() => afterJobEnds(job))
+    // fire-and-forget; do not await. Waits its turn if other builds are
+    // running (queueBuild), and settles once the job is done, failed or
+    // cancelled (never rejects), then its files are tidied up.
+    queueBuild(job).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id, imageCount: files.length })
 })
 
@@ -165,16 +197,17 @@ router.get(['/jobs/:id/images/:name', '/library/jobs/:id/images/:name'], require
     Create a reconstruction job from uploaded videos / GIFs. Frames are
     extracted server side (tools/extract_frames.py) into the job's images/
     folder, then the same COLMAP + Brush pipeline runs. Multipart body: media
-    (the files), and the optional text fields fps, maxFrames, trainIters and
-    removeBackground.
+    (the files), and the optional text fields fps, maxFrames, trainIters,
+    removeBackground and autoCrop.
     The job is owned by the logged-in user. requireUser runs before
     assignJobId so a logged-out request never creates a folder.
   \return
-    401 if not logged in, 400 if no usable files were sent, else 202 and
-    starts a job and runs the media pipeline
+    401 if not logged in, 429 if the user has started too many builds,
+    400 if no usable files were sent, else 202 and starts a job and runs
+    the media pipeline
 */
 /************************************************************************/
-router.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, mediaUpload.array('media', config.maxMediaFiles), onlyMedia, (req, res) => {
+router.post('/jobs/from-media', requireUser, limitBuilds, assignJobId, removeJobIfAborted, mediaUpload.array('media', config.maxMediaFiles), onlyMedia, (req, res) => {
     // The browser hung up after sending the files but before this reply
     // (closed tab, refresh, lost connection): it would never learn the job's
     // id, so don't start a job nobody can see or stop. Remove its folder here
@@ -196,11 +229,13 @@ router.post('/jobs/from-media', requireUser, assignJobId, removeJobIfAborted, me
     job.source = 'media'
     // Mask out the background before COLMAP, see generateMasks in pipeline.js.
     job.removeBackground = ['true', '1', 'on'].includes(String(req.body?.removeBackground).toLowerCase())
+    job.autoCrop = ['true', '1', 'on'].includes(String(req.body?.autoCrop).toLowerCase())
     job.trainIters = parseTrainIters(trainIters)
     saveJob(job)
 
     // fire-and-forget; the frontend polls /jobs/:id. Tidied up once it ends.
-    runMediaPipeline(job, frameOptions(fps, maxFrames)).finally(() => afterJobEnds(job))
+    // The frames are extracted now; the build after them waits its turn.
+    runMediaPipeline(job, frameOptions(fps, maxFrames), queueBuild).finally(() => afterJobEnds(job))
     res.status(202).json({ id: job.id })
 })
 
@@ -230,6 +265,7 @@ router.get(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, res
     updatedAt: job.updatedAt ?? null,
     imageCount: job.imageCount ?? null,
     removeBackground: !!job.removeBackground,
+    autoCrop: !!job.autoCrop,
     hasResult: job.status === 'done' && !!job.resultPath,
     logTail: job.log.slice(-40),
   })
@@ -254,10 +290,13 @@ router.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, 
   const job = await getJob(req.params.id)
   if (!job) return res.status(404).json({ error: 'job not found' })
   if (job.status === 'cancelled') return res.json({ id: job.id, status: job.status })
-  if (!cancelJob(job)) 
+  if (!cancelJob(job))
   {
     return res.status(409).json({ error: `job already ${job.status}` })
   }
+  // A job cancelled while waiting leaves the line now, so the jobs behind
+  // it see their new place.
+  refreshQueue()
   res.json({ id: job.id, status: job.status })
 })
 
@@ -268,10 +307,11 @@ router.delete(['/jobs/:id', '/library/jobs/:id'], requireJobAccess, async (req, 
     the VM with FILE_STORE=db, a model no longer on disk is served from
     the database (sendDbModel).
   \return
-    401 if not logged in, 404 if result is not ready or isn't theirs
+    401 if not logged in, 404 if result is not ready or isn't theirs,
+    429 if the user has downloaded too many models this hour
 */
 /************************************************************************/
-router.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobAccess, async (req, res) =>
+router.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobAccess, limitDownloads, async (req, res) =>
 {
   if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
   const job = await getJob(req.params.id)
@@ -409,6 +449,7 @@ router.delete(['/jobs/:id/files', '/library/jobs/:id/files'], requireJobAccess, 
     // Cancels it if still running, then removes its folders, samples copy and
     // database photos / model (the same as the VM's clean-up, cleanup.js).
     await deleteJobData(job)
+    refreshQueue()
     res.json({ id: job.id, deleted: true })
   }
   catch (err)

@@ -26,9 +26,11 @@ settings are owned by the parent (App) so the scene survives switching
 tabs; this screen edits them through onObjectsChange(updater,
 { mergeKey }) (see useUndoableState.js) and onSceneInfoChange. A whole
 field edit, slider drag, gizmo drag or held W/A/S/D key is one undo step.
-The 3D view is SceneViewport.jsx. Clean-up, render mode, reset view,
-screenshots and an exact drop to floor still wait on the engine (see
-SceneEngine.js), and saving goes through SceneStorage.js.
+The 3D view is SceneViewport.jsx, which also measures a model's base for
+"Drop to floor" and its size for "Fit to grid" (scale its footprint to one
+1 m grid square, done automatically when a model is added). Clean-up, render mode, reset view and screenshots still
+wait on the engine (see SceneEngine.js), and saving goes through
+SceneStorage.js.
 **************************************************************************/
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,8 +67,15 @@ const AXIS_LABELS = ['X', 'Y', 'Z'];
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 20;
 
+// Size of one sandbox grid cell in metres; Snap moves in whole cells.
+const GRID_CELL_SIZE = 0.25;
+
+// One strong grid square in metres (SceneViewport draws a strong line every
+// metre). New models are scaled so their footprint fills one square.
+const GRID_SQUARE_SIZE = 1;
+
 // Gizmo steps while Snap is on.
-const GIZMO_SNAP = { move: 0.25, rotateDegrees: 15, scale: 0.05 };
+const GIZMO_SNAP = { move: GRID_CELL_SIZE, rotateDegrees: 15, scale: 0.05 };
 
 // Splats are heavy on phone GPUs, so phone scenes are capped.
 const PHONE_MODEL_LIMIT = 4;
@@ -347,6 +356,7 @@ function SceneBuilderScreen({
     const [selectedObjectId, setSelectedObjectId] = useState(null);
     const [transformMode, setTransformMode] = useState('move');
     const [isSnapping, setIsSnapping] = useState(false);
+    const [isGridVisible, setIsGridVisible] = useState(true);
     const [isKeepingProportions, setIsKeepingProportions] = useState(true);
 
     const [models, setModels] = useState([]);
@@ -364,6 +374,12 @@ function SceneBuilderScreen({
     // drag, so the whole edit is one undo step. null outside an edit.
     const editKeyRef = useRef(null);
     const shortcutHandlersRef = useRef({});
+    // { measureLowestPoint(objectId), measureBounds(objectId) } from
+    // SceneViewport while it's mounted.
+    const viewportApiRef = useRef(null);
+    // Models added here that get fitted to a grid square once they load.
+    const pendingFitIdsRef = useRef(new Set());
+    const autoFitRef = useRef(null);
 
     const { background, renderMode } = sceneInfo;
     // Undo can remove the selected model; it then counts as unselected.
@@ -495,9 +511,60 @@ function SceneBuilderScreen({
         }
         playSound('tap');
         const sceneObject = createSceneObject(model, objects);
-        editObjects((current) => [...current, sceneObject]);
+        // The fit after loading shares this undo step (see autoFitRef).
+        editObjects((current) => [...current, sceneObject], `add:${sceneObject.objectId}`);
+        pendingFitIdsRef.current.add(sceneObject.objectId);
         setSelectedObjectId(sceneObject.objectId);
         setIsModelPickerOpen(false);
+    }
+
+    // Scales a loaded model so its footprint (its widest side seen from
+    // above) fills one grid square, centres it in the square it's over and
+    // stands it on the floor. Returns false if it isn't loaded yet.
+    function fitObjectToGrid(sceneObject, mergeKey) {
+        const bounds = viewportApiRef.current?.measureBounds(sceneObject.objectId);
+        if (!bounds) return false;
+        const [minX, minY, minZ] = bounds.min;
+        const [maxX, , maxZ] = bounds.max;
+        const footprint = Math.max(maxX - minX, maxZ - minZ);
+        if (!(footprint > 0)) return false;
+
+        const size = clamp(GRID_SQUARE_SIZE / footprint, MIN_SCALE, MAX_SCALE);
+        const [x, , z] = sceneObject.position;
+        const currentScale = sceneObject.scale[0];
+        const squareCentre = (value) => (Math.floor(value / GRID_SQUARE_SIZE) + 0.5) * GRID_SQUARE_SIZE;
+        const centreX = squareCentre(x + currentScale * (minX + maxX) / 2);
+        const centreZ = squareCentre(z + currentScale * (minZ + maxZ) / 2);
+        updateObject(sceneObject.objectId, {
+            scale: [size, size, size],
+            position: [
+                tidyNumber(centreX - size * (minX + maxX) / 2),
+                tidyNumber(-size * minY),
+                tidyNumber(centreZ - size * (minZ + maxZ) / 2),
+            ],
+        }, mergeKey);
+        return true;
+    }
+
+    // Moves the camera to frame a model and orbit around it (also selects it).
+    function focusObject(sceneObject) {
+        setSelectedObjectId(sceneObject.objectId);
+        if (!viewportApiRef.current?.focusObject(sceneObject.objectId)) {
+            const status = modelStatus[sceneObject.objectId];
+            setStatusMessage(status?.error ? "This model didn't load, so there's nothing to focus on." : 'The model is still loading.');
+        }
+    }
+
+    function focusSelected() {
+        if (selectedObject) focusObject(selectedObject);
+    }
+
+    function fitSelectedToGrid() {
+        if (!selectedObject) return;
+        playSound('tap');
+        if (!fitObjectToGrid(selectedObject)) {
+            setStatusMessage('The model is still loading. Fit it to the grid once it shows.');
+        }
     }
 
     function duplicateSelected() {
@@ -533,13 +600,15 @@ function SceneBuilderScreen({
     function dropSelectedToFloor() {
         if (!selectedObject) return;
         playSound('tap');
-        const lowestPoint = measureLowestPoint(selectedObject.objectId);
+        // The WebAssembly engine once it's wired up, else the splat viewer.
+        const lowestPoint = measureLowestPoint(selectedObject.objectId) ??
+            viewportApiRef.current?.measureLowestPoint(selectedObject.objectId) ?? null;
         const [x, y, z] = selectedObject.position;
 
         if (lowestPoint === null) {
-            // Placeholder until the engine can measure the model.
+            // Not loaded yet, so its shape is unknown.
             updateObject(selectedObject.objectId, { position: [x, 0, z] });
-            setStatusMessage('Placed at floor height. An exact fit comes with the engine update.');
+            setStatusMessage('The model is still loading, so it was placed at floor height.');
         } else {
             updateObject(selectedObject.objectId, { position: [x, y - lowestPoint, z] });
         }
@@ -588,10 +657,23 @@ function SceneBuilderScreen({
 
     const handleModelLoaded = useCallback((objectId, { splatCount }) => {
         setModelStatus((current) => ({ ...current, [objectId]: { splatCount } }));
+        autoFitRef.current?.(objectId);
     }, []);
+
+    // Fits a model added with "Add model" once it has loaded. Models from
+    // saved scenes, undo and duplicates keep their size. Refreshed every
+    // render so it sees the latest objects.
+    useEffect(() => {
+        autoFitRef.current = (objectId) => {
+            if (!pendingFitIdsRef.current.delete(objectId)) return;
+            const sceneObject = objects.find((item) => item.objectId === objectId);
+            if (sceneObject) fitObjectToGrid(sceneObject, `add:${objectId}`);
+        };
+    });
 
     const handleModelFailed = useCallback((objectId, message) => {
         setModelStatus((current) => ({ ...current, [objectId]: { error: message } }));
+        setStatusMessage(`A model couldn't load. ${message}`);
     }, []);
 
     function getStatusLabel(sceneObject) {
@@ -688,7 +770,7 @@ function SceneBuilderScreen({
     // undo, redo and deleteSelected read the latest state, so the ref is
     // refreshed every render; the keydown listener below is only added once.
     useEffect(() => {
-        shortcutHandlersRef.current = { undo, redo, deleteSelected };
+        shortcutHandlersRef.current = { undo, redo, deleteSelected, focusSelected };
     });
 
     useEffect(() => {
@@ -713,6 +795,8 @@ function SceneBuilderScreen({
                 handlers.deleteSelected();
             } else if (key === 'escape') {
                 setSelectedObjectId(null);
+            } else if (key === 'f' && !isCommand && !event.altKey) {
+                handlers.focusSelected();
             } else if (!isCommand && !event.altKey) {
                 const mode = TRANSFORM_MODES.find((transformOption) => transformOption.shortcut === key);
                 if (mode) setTransformMode(mode.id);
@@ -753,6 +837,8 @@ function SceneBuilderScreen({
                                 playSound('tap');
                                 setSelectedObjectId(sceneObject.objectId);
                             }}
+                            onDoubleClick={() => focusObject(sceneObject)}
+                            title={modelStatus[sceneObject.objectId]?.error ? undefined : 'Double-click to focus'}
                         >
                             <Icon name="cube" size={13} />
                             <span className={sceneObject.isHidden ? 'is-hidden' : ''}>{sceneObject.name}</span>
@@ -827,6 +913,10 @@ function SceneBuilderScreen({
                 selectedId={selectedObjectId}
                 transformMode={TRANSFORM_MODES.find((mode) => mode.id === transformMode).gizmoMode}
                 snap={isSnapping ? GIZMO_SNAP : null}
+                showGrid={isGridVisible}
+                gridCellSize={GRID_CELL_SIZE}
+                background={background}
+                ref={viewportApiRef}
                 onObjectTransform={handleObjectTransform}
                 onModelLoadStart={handleModelLoadStart}
                 onModelLoaded={handleModelLoaded}
@@ -879,6 +969,8 @@ function SceneBuilderScreen({
                         {objects.length === 0 ? <p className="scene-builder-note">No models yet.</p> : objectList}
                         {selectedObject && (
                             <div className="scene-builder-sheet-actions">
+                                <button className="forma-btn" onClick={focusSelected}>Focus</button>
+                                <button className="forma-btn" onClick={fitSelectedToGrid}>Fit to grid</button>
                                 <button className="forma-btn" onClick={duplicateSelected}>Duplicate</button>
                                 <button className="forma-btn" onClick={deleteSelected}>Delete</button>
                             </div>
@@ -917,6 +1009,17 @@ function SceneBuilderScreen({
                     <button className="scene-builder-tool" onClick={dropSelectedToFloor} disabled={!selectedObject}>
                         <Icon name="target" size={16} />
                         <span>Floor</span>
+                    </button>
+                    <button
+                        className={isGridVisible ? 'scene-builder-tool is-active' : 'scene-builder-tool'}
+                        onClick={() => {
+                            playSound('tap');
+                            setIsGridVisible(!isGridVisible);
+                        }}
+                        aria-pressed={isGridVisible}
+                    >
+                        <Icon name="grid" size={16} />
+                        <span>Grid</span>
                     </button>
                     <button
                         className={phoneSheet === 'cleanup' ? 'scene-builder-tool is-active' : 'scene-builder-tool'}
@@ -966,6 +1069,15 @@ function SceneBuilderScreen({
                     />
                     Snap
                 </label>
+                <label className="scene-builder-toggle">
+                    <input
+                        type="checkbox"
+                        className="photo-editor-switch"
+                        checked={isGridVisible}
+                        onChange={(event) => setIsGridVisible(event.target.checked)}
+                    />
+                    Grid
+                </label>
                 <div className="scene-builder-tool-group">
                     <button
                         className="scene-builder-tool"
@@ -1014,6 +1126,11 @@ function SceneBuilderScreen({
                                         : selectedStatus?.splatCount?.toLocaleString() ?? 'loading'}
                                 </b>
                             </p>
+                            {selectedStatus?.error && (
+                                <p className="scene-builder-note scene-builder-load-error" role="alert">
+                                    {selectedStatus.error}
+                                </p>
+                            )}
 
                             <AxisFields
                                 label="Position (m)"
@@ -1050,6 +1167,9 @@ function SceneBuilderScreen({
                             </label>
 
                             <div className="scene-builder-inspector-actions">
+                                <button className="forma-btn" onClick={fitSelectedToGrid} title="Scale to fill one 1 m grid square">
+                                    <Icon name="grid" size={14} /> Fit to grid
+                                </button>
                                 <button className="forma-btn" onClick={dropSelectedToFloor}>
                                     <Icon name="target" size={14} /> Drop to floor
                                 </button>
@@ -1121,10 +1241,12 @@ function SceneBuilderScreen({
                             <p className="scene-builder-note">
                                 Drag the gizmo's arrows, rings or boxes to move, rotate or scale the selected
                                 model, or press W / A / S / D to slide it along the ground (Shift for bigger
-                                steps). Drag anywhere else to orbit, right-drag to pan and scroll to zoom.
+                                steps). Drag anywhere else to orbit, right-drag to pan and scroll to zoom toward
+                                the mouse pointer. Click a model to orbit around that spot.
                             </p>
                             <p className="scene-builder-note">
-                                Shortcuts: 1 move, 2 rotate, 3 scale, Ctrl+Z undo, Ctrl+Y redo, Delete removes, Esc deselects.
+                                Shortcuts: 1 move, 2 rotate, 3 scale, F focus the selected model (or double-click it
+                                in the outliner), Ctrl+Z undo, Ctrl+Y redo, Delete removes, Esc deselects.
                             </p>
                         </>
                     )}

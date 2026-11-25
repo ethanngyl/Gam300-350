@@ -102,7 +102,9 @@ async function main()
   {
     addJobFolder(dir, `perf-job-${String(i).padStart(2, '0')}`, { status: 'done', error: null, name: `Perf job ${i}` })
   }
-  const server = await startServer(dir, { JOB_SOURCES: 'live,sample' })
+  // One user makes ~1,000 requests a minute here, by design: the general API
+  // and download rate limits would stop the measurement, so they are off.
+  const server = await startServer(dir, { JOB_SOURCES: 'live,sample', RATE_LIMIT_API_PER_MIN: '0', RATE_LIMIT_DOWNLOADS_PER_HOUR: '0' })
   if (server.exitCode !== null) throw new Error(`server did not start:\n${server.log()}`)
 
   try

@@ -42,7 +42,8 @@ Camera Capture
   photo from the batch.
 - Each photo is checked in the background for blur, bad exposure and
   near-duplicates, and problem photos are outlined.
-- "Remove background" option and the Model detail slider.
+- "Remove background" and "Keep only the main object" options and the Model
+  detail slider.
 - "Review photos first" opens the Photo Editor; "Use this batch" starts the
   build.
 
@@ -55,15 +56,16 @@ Photo Editor
 - Warns about strong settings, lost highlight or shadow detail, and large or
   mixed crops.
 - "Use original photos" ignores all edits; the originals are never changed.
-- Remove background and Model detail (Fast 5k / Normal 7k / Detailed 10k
-  iterations).
+- Remove background, Keep only the main object and Model detail (Fast 5k /
+  Normal 7k / Detailed 10k iterations).
 - "Back to camera" / "Go to camera" moves the photos to the capture page.
 
 Frame Extractor
 ---------------
 - Upload videos or animated GIFs by drag-and-drop or file picker (up to 10
-  files, 2 GB each), set the frame rate, Remove background (on by default)
-  and model detail, then "Process media".
+  files, 2 GB each), set the frame rate, Remove background (on by default),
+  Keep only the main object (off by default) and model detail, then
+  "Process media".
 - Upload progress bar, with Cancel.
 - Live progress card while it runs, with Cancel.
 - Result card with the extracted frames and a .ply download.
@@ -101,16 +103,28 @@ Scene Builder
 - Add models from the library; move, rotate and scale the selected one with
   a three.js gizmo (dragging elsewhere orbits the camera); W/A/S/D slide it
   along the ground relative to the camera (Shift for bigger steps); drop to
-  floor; duplicate; delete; undo/redo; save and reopen.
+  floor (sets the model's base, measured from its splats, on the ground);
+  duplicate; delete; undo/redo; save and reopen.
+- Sandbox grid on the ground: fine lines every 0.25 m, stronger ones every
+  metre, red X / green Y / blue Z axes, fading out towards the horizon;
+  Grid toggle; Snap moves in whole grid cells (W/A/S/D too).
+- New models are scaled so their footprint fills one 1 m grid square and
+  stand on the floor; "Fit to grid" does the same again later.
+- A model that can't load is marked "failed" with the reason (signed out,
+  deleted or another account's, server unreachable, not a gaussian splat
+  .ply, damaged download), and the other models keep loading.
+- Camera: the scroll wheel zooms toward the mouse pointer; F (or
+  double-clicking a model in the outliner, or Focus on phones) smoothly
+  frames the selected model and orbits around it; clicking a model orbits
+  around the clicked spot.
 - Desktop extras: outliner with hide, an inspector with exact values,
   snapping, render mode, background colour, screenshot and keyboard
   shortcuts.
 - Phone: a bottom toolbar and bottom sheets, with a limit on how many models
   a scene holds.
 - Not done yet:
-  - Clean-up, render mode, reset view, screenshot and an exact drop to floor
-    are waiting on scene functions in the WebAssembly engine
-    (SceneEngine.js).
+  - Clean-up, render mode, reset view and screenshot are waiting on scene
+    functions in the WebAssembly engine (SceneEngine.js).
   - Scenes are saved only in the browser (localStorage). The backend has
     /api/v1/scenes routes, but the web app doesn't use them yet
     (SCENES_API_READY in SceneStorage.js).
@@ -118,7 +132,15 @@ Scene Builder
 Backend
 -------
 - Upload -> optional background masks -> COLMAP -> Brush training ->
-  normalized .ply -> copy into the engine's samples folder.
+  optional auto-crop -> normalized .ply -> copy into the engine's samples
+  folder.
+- Auto-crop ("Keep only the main object", tools/auto_crop.py; the desktop
+  engine has a C++ port): finds the spot the cameras point at from COLMAP's
+  camera positions and keeps only the splats inside the path the photos
+  were taken from, cutting the height where COLMAP's points thin out above
+  the object (below a ceiling) and below the floor. Skipped, keeping the
+  whole model, when the photos don't surround one object (rooms, flat walls,
+  narrow arcs).
 - Frame extraction from uploaded media (needs at least 8 frames).
 - Jobs and their status survive a server restart.
 - Cancel kills the whole process tree; working files are cleaned up after a
