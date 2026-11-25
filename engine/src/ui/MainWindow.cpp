@@ -93,6 +93,7 @@ namespace {
     const QString kRecentFilesKey = QStringLiteral("files/recent");
     const QString kRenderModeKey = QStringLiteral("view/renderMode");
     const QString kStatsOverlayKey = QStringLiteral("view/statsOverlay");
+    const QString kGridKey = QStringLiteral("view/grid");
     const QString kTrimOnImportKey = QStringLiteral("files/trimOnImport");
     const QString kTrimAlphaKey = QStringLiteral("trim/minAlpha");
     const QString kTrimCropKey = QStringLiteral("trim/cropPct");
@@ -179,6 +180,7 @@ MainWindow::MainWindow() {
                           ? static_cast<int>(SplatRenderer::RenderMode::GaussianSplat)
                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
         m_viewport->setShowImGuiStats(m_statsOverlayAction->isChecked());
+        m_viewport->setShowGrid(m_gridAction->isChecked());
         refreshScenePanels();
         startNextImport(); // anything queued before the renderer existed
         qInfo("Renderer ready. Import a .ply to get started.");
@@ -395,6 +397,13 @@ void MainWindow::createActions() {
     m_statsOverlayAction->setStatusTip("Show the FPS / splat count overlay in the viewport");
     connect(m_statsOverlayAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowImGuiStats(on); });
 
+    m_gridAction = new QAction("Show &Grid", this);
+    m_gridAction->setCheckable(true);
+    m_gridAction->setChecked(true);
+    m_gridAction->setShortcut(QKeySequence("Ctrl+Shift+G"));
+    m_gridAction->setStatusTip("Show the ground grid, world axes and coordinate labels in the viewport");
+    connect(m_gridAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowGrid(on); });
+
     m_trimOnImportAction = new QAction("&Trim Splats on Import", this);
     m_trimOnImportAction->setCheckable(true);
     m_trimOnImportAction->setChecked(true);
@@ -468,6 +477,7 @@ void MainWindow::createMenus() {
     viewMenu->addSeparator();
     viewMenu->addAction(m_recenterCameraAction);
     viewMenu->addAction(m_statsOverlayAction);
+    viewMenu->addAction(m_gridAction);
 
     QMenu* accountMenu = menuBar()->addMenu("&Account");
     accountMenu->addAction(m_accountInfoAction);
@@ -505,6 +515,7 @@ void MainWindow::createToolBar() {
 
     m_toolBar->addAction(m_recenterCameraAction);
     m_toolBar->addAction(m_statsOverlayAction);
+    m_toolBar->addAction(m_gridAction);
     m_toolBar->addSeparator();
     m_toolBar->addAction(m_deleteAction);
 }
@@ -730,6 +741,7 @@ void MainWindow::restoreSettings() {
                           static_cast<int>(SplatRenderer::RenderMode::GaussianSplat);
     (gaussian ? m_gaussianAction : m_pointCloudAction)->setChecked(true);
     m_statsOverlayAction->setChecked(settings.value(kStatsOverlayKey, true).toBool());
+    m_gridAction->setChecked(settings.value(kGridKey, true).toBool());
     m_trimOnImportAction->setChecked(settings.value(kTrimOnImportKey, true).toBool());
     m_trimSettings.minAlpha = settings.value(kTrimAlphaKey, m_trimSettings.minAlpha).toFloat();
     m_trimSettings.cropPct = settings.value(kTrimCropKey, m_trimSettings.cropPct).toFloat();
@@ -751,6 +763,7 @@ void MainWindow::saveSettings() const {
                                           ? static_cast<int>(SplatRenderer::RenderMode::GaussianSplat)
                                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
     settings.setValue(kStatsOverlayKey, m_statsOverlayAction->isChecked());
+    settings.setValue(kGridKey, m_gridAction->isChecked());
     settings.setValue(kTrimOnImportKey, m_trimOnImportAction->isChecked());
     settings.setValue(kTrimAlphaKey, m_trimSettings.minAlpha);
     settings.setValue(kTrimCropKey, m_trimSettings.cropPct);
@@ -1739,6 +1752,7 @@ void MainWindow::showControls() {
         "<tr><td>Left mouse drag</td><td>Pan (when not grabbing a gizmo)</td></tr>"
         "<tr><td>Mouse wheel</td><td>Zoom</td></tr>"
         "<tr><td>Home</td><td>Recenter camera</td></tr>"
+        "<tr><td>Ctrl+Shift+G</td><td>Show / hide the grid (bright line every 1 unit; X red, Y green, Z blue)</td></tr>"
         "<tr><td colspan='2'><br><b>Selected model</b> (viewport focused)</td></tr>"
         "<tr><td>Q / W / E / R</td><td>Pan / Translate / Rotate / Scale tool</td></tr>"
         "<tr><td>Up / Down</td><td>Nudge along X</td></tr>"

@@ -60,6 +60,7 @@ Viewport::~Viewport() {
     makeCurrent();
     m_metrics.Shutdown(); // logs the open session and frees the GPU timer queries
     m_cropBoxRenderer.reset();
+    m_gridRenderer.reset();
     m_renderer.reset();
     ImGui_ImplOpenGL3_Shutdown();
     ImGuiQtBackend::Shutdown();
@@ -92,6 +93,7 @@ void Viewport::initializeGL() {
 
     m_renderer = std::make_unique<SplatRenderer>();
     m_cropBoxRenderer = std::make_unique<CropBoxRenderer>();
+    m_gridRenderer = std::make_unique<GridRenderer>();
     BindInputs();
 
     // ImGui setup -- foundation for the sandbox UI in later milestones.
@@ -247,6 +249,8 @@ void Viewport::paintGL() {
     //Draw Splat/Pointcloud models
     m_metrics.BeginSection(FrameMetrics::Section::Scene);
     m_metrics.BeginGpuScene();
+    //Grid first, so the models blend over it
+    if (m_showGrid) m_gridRenderer->Draw(proj * view);
     m_renderer->Draw(view, proj, static_cast<float>(fbWidth), static_cast<float>(fbHeight), m_camera.getPosition());
     if (m_cropBox.active) {
         //Green when the gizmo moves the contents, otherwise orange for removing the inside and blue when keeping it
@@ -262,6 +266,7 @@ void Viewport::paintGL() {
     ImGui_ImplOpenGL3_NewFrame();
     ImGuiQtBackend::NewFrame(*this, deltaTime);
     ImGui::NewFrame();
+    if (m_showGrid) DrawGridLabels(view, proj);
     DrawGizmo(view, proj); //Draw Gizmos (Movement arrows, etc.)
     DrawToolButtons();
     DrawImGui(fps);
@@ -456,6 +461,120 @@ void Viewport::DrawToolButtons() {
     ImGui::End();
 }
 
+void Viewport::DrawGridLabels(const glm::mat4& view, const glm::mat4& proj) {
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    const glm::mat4 viewProj = proj * view;
+    //Behind ImGui windows, so labels never cover the tool buttons or the stats overlay
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+
+    //World point -> widget pixels. False if it is behind the camera or off screen.
+    const auto project = [&](const glm::vec3& world, ImVec2& out) {
+        const glm::vec4 clip = viewProj * glm::vec4(world, 1.0f);
+        if (clip.w <= 1e-4f) return false;
+        const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+        if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f) return false;
+        out = ImVec2((ndc.x * 0.5f + 0.5f) * displaySize.x, (0.5f - ndc.y * 0.5f) * displaySize.y);
+        return true;
+    };
+
+    const ImU32 kXColor = IM_COL32(242, 90, 90, 230);
+    const ImU32 kYColor = IM_COL32(90, 230, 100, 230);
+    const ImU32 kZColor = IM_COL32(90, 145, 255, 230);
+
+    //Unit numbers along the X and Z axes, none in the grid's faded edge. Walking out from the origin,
+    //a number too close on screen to the last one drawn is skipped, so they never pile up near the
+    //horizon or when zoomed out.
+    constexpr float kMinLabelGap = 26.0f; //pixels
+    const int lastLabel = static_cast<int>(GridRenderer::kFadeStart);
+    char text[48];
+    ImVec2 screen;
+    ImVec2 origin;
+    const bool originVisible = project(glm::vec3(0.0f), origin);
+    if (originVisible) drawList->AddText(ImVec2(origin.x + 4.0f, origin.y + 2.0f), IM_COL32(220, 220, 220, 200), "0");
+    const glm::vec3 labelAxes[2] = { glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f) };
+    for (int a = 0; a < 2; ++a) {
+        const ImU32 color = a == 0 ? kXColor : kZColor;
+        for (int sign = -1; sign <= 1; sign += 2) {
+            bool haveLast = originVisible;
+            ImVec2 last = origin;
+            for (int n = 1; n <= lastLabel; ++n) {
+                const int value = sign * n;
+                if (!project(labelAxes[a] * static_cast<float>(value), screen)) continue;
+                const float dx = screen.x - last.x;
+                const float dy = screen.y - last.y;
+                if (haveLast && dx * dx + dy * dy < kMinLabelGap * kMinLabelGap) continue;
+                std::snprintf(text, sizeof(text), "%d", value);
+                drawList->AddText(ImVec2(screen.x + 3.0f, screen.y + 2.0f), color, text);
+                last = screen;
+                haveLast = true;
+            }
+        }
+    }
+
+    //XYZ direction marker in the bottom left corner, turning with the camera
+    {
+        const ImVec2 centre(42.0f, displaySize.y - 42.0f);
+        constexpr float kLength = 26.0f;
+        struct Axis { glm::vec3 dir; ImU32 color; const char* name; };
+        const Axis axes[3] = {
+            { glm::vec3(1.0f, 0.0f, 0.0f), kXColor, "X" },
+            { glm::vec3(0.0f, 1.0f, 0.0f), kYColor, "Y" },
+            { glm::vec3(0.0f, 0.0f, 1.0f), kZColor, "Z" },
+        };
+        drawList->AddCircleFilled(centre, kLength + 12.0f, IM_COL32(0, 0, 0, 90));
+        for (const Axis& axis : axes) {
+            const glm::vec3 d = glm::mat3(view) * axis.dir; //Camera space: x right, y up
+            const ImVec2 tip(centre.x + d.x * kLength, centre.y - d.y * kLength);
+            drawList->AddLine(centre, tip, axis.color, 2.0f);
+            drawList->AddText(ImVec2(tip.x - 3.0f, tip.y - 7.0f), axis.color, axis.name);
+        }
+    }
+
+    //Selected model: a line down to the grid and its coordinates, so its spot on the grid is easy to read
+    SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
+    if (model && !model->GetIsHidden()) {
+        const glm::vec3 pos = ModelCentre(*model);
+        const glm::vec3 foot(pos.x, 0.0f, pos.z);
+        ImVec2 top;
+        ImVec2 bottom;
+        const bool topVisible = project(pos, top);
+        const bool footVisible = project(foot, bottom);
+        const ImU32 kMarker = IM_COL32(255, 210, 80, 220);
+        if (topVisible && footVisible) drawList->AddLine(top, bottom, kMarker, 1.5f);
+        if (footVisible) drawList->AddCircle(bottom, 4.0f, kMarker, 0, 1.5f);
+        if (topVisible) {
+            std::snprintf(text, sizeof(text), "(%.2f, %.2f, %.2f)", pos.x, pos.y, pos.z);
+            drawList->AddText(ImVec2(top.x + 8.0f, top.y - 16.0f), kMarker, text);
+        }
+    }
+}
+
+glm::vec3 Viewport::ModelCentre(const SplatModel& model) {
+    const std::vector<SplatVertex>& splats = model.splats();
+    const glm::mat4& transform = model.GetTransform();
+    if (splats.empty()) return glm::vec3(transform[3]);
+
+    CentreCache& c = m_centreCache;
+    const bool stale = c.model != &model || c.data != splats.data() || c.count != splats.size() ||
+                       c.first != splats.front().position || c.last != splats.back().position;
+    if (stale) {
+        //Median per axis: unlike the bounds centre, a few stray splats far out don't move it
+        std::vector<float> values(splats.size());
+        const std::size_t mid = values.size() / 2;
+        for (int axis = 0; axis < 3; ++axis) {
+            for (std::size_t i = 0; i < splats.size(); ++i) values[i] = splats[i].position[axis];
+            std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(mid), values.end());
+            c.localCentre[axis] = values[mid];
+        }
+        c.model = &model;
+        c.data = splats.data();
+        c.count = splats.size();
+        c.first = splats.front().position;
+        c.last = splats.back().position;
+    }
+    return glm::vec3(transform * glm::vec4(c.localCentre, 1.0f));
+}
+
 void Viewport::DrawImGui(float fps) {
     if (!m_showImGuiStats) {
         return;
@@ -494,6 +613,10 @@ void Viewport::DrawImGui(float fps) {
     ImGui::Separator();
     ImGui::Text("Models: %zu / %d", m_renderer->ModelCount(), SplatRenderer::kMaxModels);
     ImGui::Text("Splats: %zu", m_renderer->TotalSplatCount());
+    if (const SplatModel* selected = m_renderer->GetModel(m_renderer->GetSelectedModel())) {
+        const glm::vec3 pos = ModelCentre(*selected);
+        ImGui::Text("Centre: %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
+    }
     static const char* const kToolNames[] = { "Pan", "Translate", "Rotate", "Scale" };
     ImGui::Text("Tool:   %s", kToolNames[m_input.GetToolMode()]);
     ImGui::Text("Mode:   %s", m_renderer->GetRenderMode() == SplatRenderer::RenderMode::GaussianSplat

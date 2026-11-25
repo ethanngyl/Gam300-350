@@ -192,6 +192,7 @@ private:
     QAction* m_gaussianAction = nullptr;
     QAction* m_recenterCameraAction = nullptr;
     QAction* m_statsOverlayAction = nullptr;
+    QAction* m_gridAction = nullptr;
     QAction* m_trimOnImportAction = nullptr;
     QAction* m_trimSettingsAction = nullptr;
     TrimData m_trimSettings;
