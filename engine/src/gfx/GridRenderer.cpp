@@ -76,8 +76,8 @@ std::vector<Vertex> BuildGrid() {
 
     std::vector<Vertex> vertices;
     const float e = GridRenderer::kExtent;
-    const int steps = static_cast<int>(std::lround(e / GridRenderer::kMinorStep));
-    const int perUnit = static_cast<int>(std::lround(GridRenderer::kMinorPerUnit));
+    const int steps = static_cast<int>(std::lround(e * static_cast<float>(GridRenderer::kMinorPerUnit)));
+    const int perUnit = GridRenderer::kMinorPerUnit;
 
     for (int i = -steps; i <= steps; ++i) {
         if (i == 0) continue; //The axes are drawn there instead

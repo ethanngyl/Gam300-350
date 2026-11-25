@@ -24,19 +24,15 @@ class GridRenderer
 public:
     //Half the width of the grid, in world units (it spans -kExtent..kExtent on X and Z)
     static constexpr float kExtent = 10.0f;
-    //Spacing of the thin lines; every 1 / kMinorStep-th line is a whole unit and drawn brighter
-    static constexpr float kMinorStep = 0.25f;
+    //Thin lines per world unit. Set as a whole number so every kMinorPerUnit-th line lands exactly
+    //on a whole unit (a step like 0.3 can't divide 1, and would put the "unit" lines every 0.9 units).
+    static constexpr int kMinorPerUnit = 4;
+    static_assert(kMinorPerUnit >= 1, "kMinorPerUnit must be at least 1");
+    //Spacing of the thin lines; every kMinorPerUnit-th line is a whole unit and drawn brighter
+    static constexpr float kMinorStep = 1.0f / static_cast<float>(kMinorPerUnit);
     //Lines start fading out this far from the centre and are gone at kExtent.
     //Grid labels stop before it so none float over faded lines.
     static constexpr float kFadeStart = kExtent * 0.6f;
-
-    //The whole unit lines are every 1 / kMinorStep minor lines, so that has to be a whole number
-    //(0.3 would round to 3 and put the "unit" lines every 0.9 units)
-    static constexpr float kMinorPerUnit = 1.0f / kMinorStep;
-    static_assert(kMinorStep > 0.0f && kMinorStep <= 1.0f, "kMinorStep must be in (0, 1]");
-    static_assert(kMinorPerUnit - static_cast<float>(static_cast<int>(kMinorPerUnit + 0.5f)) < 1e-4f &&
-                  static_cast<float>(static_cast<int>(kMinorPerUnit + 0.5f)) - kMinorPerUnit < 1e-4f,
-                  "kMinorStep must divide 1 evenly (0.5, 0.25, 0.2, 0.1, ...)");
 
     GridRenderer();
     ~GridRenderer();
