@@ -1,8 +1,11 @@
 #pragma once
 
+#include "splat/SplatData.h"
+
 #include <QString>
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
 class Viewport;
@@ -29,6 +32,12 @@ public:
 	//reading the file from disk, handing the splats to the renderer, and the first frame after
 	//(the renderer defers its GPU upload to the next draw, so that frame is where the real upload cost is).
 	std::vector<StressResult> TestLoad(size_t count);
+
+	//The same load test, but on a copy of the selected model instead of a generated sphere (for Test All on the current model)
+	//The model's splats are saved to a temporary .ply and loaded back as a new model, so the model's own file is never read
+	//The loaded copy is removed again afterwards, so the scene ends up as it started and the selection does not change
+	//Returns nothing if the renderer is not ready, no model is selected, the scene is full, or the file could not be saved or read back
+	std::vector<StressResult> TestLoadCopy();
 
 	//Selects every splat, every 2nd and every 10th splat of the selected model, timing each then times clearing the selection.
 	//The selection is cleared when it finishes
@@ -82,5 +91,9 @@ public:
 	std::vector<StressResult> TestUndoRedo();
 
 private:
+	//Saves splats to a temporary .ply, loads that file back and adds it to the scene as modelName, timing the load
+	//Takes the splats by value so the caller's copy can be moved in and freed as soon as the file is written
+	std::vector<StressResult> LoadThroughDisk(std::vector<SplatVertex> source, const std::string& modelName);
+
 	Viewport* m_viewport;
 };

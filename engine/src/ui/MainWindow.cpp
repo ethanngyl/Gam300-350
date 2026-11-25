@@ -603,7 +603,8 @@ void MainWindow::createDocks() {
     connect(m_stressTestPanel, &StressTestPanel::trimTestRequested, this, [runStressTest] {
         runStressTest("Trim test", [](StressTestRunner& runner) { return runner.TestTrim(); });
     });
-    connect(m_stressTestPanel, &StressTestPanel::testAllRequested, this, [this] { runAllStressTests(); });
+    connect(m_stressTestPanel, &StressTestPanel::testAllRequested, this, [this] { runAllStressTests(false); });
+    connect(m_stressTestPanel, &StressTestPanel::testAllCurrentRequested, this, [this] { runAllStressTests(true); });
     connect(m_stressTestPanel, &StressTestPanel::stopRequested, this, [this] { m_stopStressTests = true; });
     connect(m_stressTestPanel, &StressTestPanel::undoRedoTestRequested, this, [runStressTest] {
         runStressTest("Undo/redo test", [](StressTestRunner& runner) { return runner.TestUndoRedo(); });
@@ -975,15 +976,30 @@ void MainWindow::endStressRun() {
     m_stressTestPanel->SetRunning(false, false);
 }
 
-void MainWindow::runAllStressTests() {
+void MainWindow::runAllStressTests(bool onCurrent) {
+    const QString runName = onCurrent ? "Test All (Current)" : "Test All";
+
+    //Current mode tests the model that is selected now, so there has to be one
+    QString targetName;
+    if (onCurrent) {
+        SplatRenderer* renderer = m_viewport->renderer();
+        const int selected = renderer ? renderer->GetSelectedModel() : -1;
+        if (selected < 0 || !renderer->GetModel(selected)) {
+            statusBar()->showMessage("Test All (Current) needs a selected model. Select one in the Scene panel first.", kStatusMessageMs);
+            return;
+        }
+        targetName = QString::fromStdString(renderer->GetModelName(selected));
+    }
+
     struct Step {
         QString name;
         std::function<std::vector<StressResult>(StressTestRunner&)> run;
+        bool isLoad = false; //Adds the test sphere the other tests then run on, so it is selected afterwards and a failure ends the run
     };
     //Load goes first, it adds the sphere the others work on. Delete goes last, it adds and removes a model
     const size_t count = m_stressTestPanel->SplatCount(); //From the spin box in the panel
-    const std::vector<Step> steps = {
-        { "Load test", [count](StressTestRunner& runner) { return runner.TestLoad(count); } },
+    std::vector<Step> steps = {
+        { "Load test", [count](StressTestRunner& runner) { return runner.TestLoad(count); }, true },
         { "Select test", [](StressTestRunner& runner) { return runner.TestSelect(); } },
         { "Move test", [](StressTestRunner& runner) { return runner.TestMove(); } },
         { "Trim test", [](StressTestRunner& runner) { return runner.TestTrim(); } },
@@ -991,6 +1007,12 @@ void MainWindow::runAllStressTests() {
         { "Export test", [](StressTestRunner& runner) { return runner.TestExport(); } },
         { "Delete test", [](StressTestRunner& runner) { return runner.TestDelete(); } },
     };
+    if (onCurrent) {
+        //Load still runs, on a saved copy of the selected model instead of a new sphere
+        //The copy is removed again and the selected model stays selected, so a failed load does not stop the others
+        steps.front().run = [](StressTestRunner& runner) { return runner.TestLoadCopy(); };
+        steps.front().isLoad = false;
+    }
 
     beginStressRun(true);
     StressTestRunner runner(m_viewport);
@@ -1001,8 +1023,8 @@ void MainWindow::runAllStressTests() {
     bool failed = false;
 
     for (size_t i = 0; i < steps.size(); ++i) {
-        statusBar()->showMessage(QString("Test All: running %1 (%2 of %3)...")
-                                     .arg(steps[i].name).arg(i + 1).arg(steps.size()));
+        statusBar()->showMessage(QString("%1: running %2 (%3 of %4)...")
+                                     .arg(runName, steps[i].name).arg(i + 1).arg(steps.size()));
         //Repaint the status and let a click on Stop through, the tests themselves cannot be interrupted
         QCoreApplication::processEvents();
         if (m_stopStressTests) {
@@ -1012,8 +1034,8 @@ void MainWindow::runAllStressTests() {
 
         const std::vector<StressResult> results = steps[i].run(runner);
         if (results.empty()) {
-            qWarning("Test All: %s skipped.", qPrintable(steps[i].name));
-            if (i == 0) {
+            qWarning("%s: %s skipped.", qPrintable(runName), qPrintable(steps[i].name));
+            if (steps[i].isLoad) {
                 failed = true; //No sphere to run the others on, the renderer is not ready or the scene is full
                 break;
             }
@@ -1022,7 +1044,7 @@ void MainWindow::runAllStressTests() {
         grandTotalMs += m_stressTestPanel->AddResults(results, steps[i].name);
         ++ran;
 
-        if (i == 0) {
+        if (steps[i].isLoad) {
             //Same as an import, the new sphere becomes the selected model, which the other tests act on
             SplatRenderer* renderer = m_viewport->renderer();
             selectModel(static_cast<int>(renderer->ModelCount()) - 1);
@@ -1032,10 +1054,13 @@ void MainWindow::runAllStressTests() {
 
     const int failedSteps = m_stressTestPanel->FailedCount() - failedBefore; //Steps that failed during this run
     if (ran > 0) {
-        QString label = stopped ? QString("Test All: Total (stopped, %1 of %2 tests)").arg(ran).arg(steps.size())
-                                : QString("Test All: Total");
-        QString tip = "The totals of every test that ran added together. Setup and clean-up are not timed, so this is less "
-            "than how long Test All took to run.";
+        QString label = stopped ? QString("%1: Total (stopped, %2 of %3 tests)").arg(runName).arg(ran).arg(steps.size())
+                                : QString("%1: Total").arg(runName);
+        QString tip = QString("The totals of every test that ran added together. Setup and clean-up are not timed, so this is less "
+            "than how long %1 took to run.").arg(runName);
+        if (onCurrent) {
+            tip += QString(" Ran on the model '%1'.").arg(targetName);
+        }
         if (failedSteps > 0) {
             label += QString(" (%1 failed)").arg(failedSteps);
             tip += " Failed steps are not included, so this total is incomplete.";
@@ -1049,13 +1074,13 @@ void MainWindow::runAllStressTests() {
 
     QString message;
     if (failed) {
-        message = "Test All cancelled: the sphere could not be loaded (the renderer is not ready or the scene is full).";
+        message = QString("%1 cancelled: the sphere could not be loaded (the renderer is not ready or the scene is full).").arg(runName);
     }
     else if (stopped) {
-        message = QString("Test All stopped: %1 of %2 tests ran.").arg(ran).arg(steps.size());
+        message = QString("%1 stopped: %2 of %3 tests ran.").arg(runName).arg(ran).arg(steps.size());
     }
     else {
-        message = QString("Test All finished: %1 of %2 tests ran.").arg(ran).arg(steps.size());
+        message = QString("%1 finished: %2 of %3 tests ran.").arg(runName).arg(ran).arg(steps.size());
     }
     if (failedSteps > 0) {
         //Failures are easy to miss in a long run, so say it in the status bar and the Console as well as the red rows

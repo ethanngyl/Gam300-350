@@ -58,9 +58,13 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	//Layout manager
 	auto* layout = new QVBoxLayout(this);
 
-	auto* buttonRow = new QHBoxLayout();
-	auto* buttonRow2nd = new QHBoxLayout();
+	auto* buttonRow = new QHBoxLayout();     //Run everything, plus the splat count and the result controls
+	auto* buttonRow2nd = new QHBoxLayout();  //One button per test, each runs on the selected model
 	auto* testAllButton = new QPushButton("Test All", this);
+	testAllButton->setToolTip("Loads a new test sphere, then runs every test on it. Your own models are not touched.");
+	auto* testAllCurrentButton = new QPushButton("Test All (Current)", this);
+	testAllCurrentButton->setToolTip("Runs every test on the model that is selected now, whichever it is. Load saves a temporary "
+		"copy of it and loads that back. Each test puts the model back as it was. The Splats box is not used.");
 	auto* loadTestButton = new QPushButton("Load Test", this);
 	auto* selectTestButton = new QPushButton("Select Test", this);
 	auto* moveTestButton = new QPushButton("Move Test", this);
@@ -70,13 +74,18 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	auto* exportTestButton = new QPushButton("Export Test", this);
 	auto* clearButton = new QPushButton("Clear Results", this);
 	buttonRow->addWidget(testAllButton);
-	buttonRow->addWidget(loadTestButton);
-	buttonRow->addWidget(selectTestButton);
-	buttonRow->addWidget(moveTestButton);
-	buttonRow->addWidget(trimTestButton);
-	buttonRow->addWidget(deleteTestButton);
-	buttonRow->addWidget(undoRedoTestButton);
-	buttonRow->addWidget(exportTestButton);
+	buttonRow->addWidget(testAllCurrentButton);
+
+	//The single tests run on whichever model is selected, so a real model can be tested on purpose
+	buttonRow2nd->addWidget(loadTestButton);
+	buttonRow2nd->addWidget(selectTestButton);
+	buttonRow2nd->addWidget(moveTestButton);
+	buttonRow2nd->addWidget(trimTestButton);
+	buttonRow2nd->addWidget(deleteTestButton);
+	buttonRow2nd->addWidget(undoRedoTestButton);
+	buttonRow2nd->addWidget(exportTestButton);
+	buttonRow2nd->addStretch();
+
 	m_stopButton = new QPushButton("Stop", this);
 	m_stopButton->setToolTip("Stops Test All after the test that is running finishes");
 	m_stopButton->setEnabled(false); //Only usable during Test All
@@ -99,11 +108,11 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	collapseAllButton->setToolTip("Hides every test's rows and leaves its total. Failed rows stay visible.");
 	auto* expandAllButton = new QPushButton("Expand All", this);
 	expandAllButton->setToolTip("Shows every test's rows again. Double-click a total row to do one test.");
-	buttonRow2nd->addWidget(collapseAllButton);
-	buttonRow2nd->addWidget(expandAllButton);
+	buttonRow->addWidget(collapseAllButton);
+	buttonRow->addWidget(expandAllButton);
 	buttonRow->addWidget(clearButton);
-	m_runButtons = { testAllButton, loadTestButton, selectTestButton, moveTestButton, trimTestButton, deleteTestButton,
-		undoRedoTestButton, exportTestButton, clearButton };
+	m_runButtons = { testAllButton, testAllCurrentButton, loadTestButton, selectTestButton, moveTestButton, trimTestButton,
+		deleteTestButton, undoRedoTestButton, exportTestButton, clearButton };
 
 	layout->addLayout(buttonRow);
 	layout->addLayout(buttonRow2nd);
@@ -132,6 +141,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 
 	connect(m_results, &QTableWidget::itemSelectionChanged, this, [this] { ShowSelectedDescription(); });
 	connect(testAllButton, &QPushButton::clicked, this, &StressTestPanel::testAllRequested);
+	connect(testAllCurrentButton, &QPushButton::clicked, this, &StressTestPanel::testAllCurrentRequested);
 	connect(m_stopButton, &QPushButton::clicked, this, &StressTestPanel::stopRequested);
 	connect(loadTestButton, &QPushButton::clicked, this, &StressTestPanel::loadTestRequested);
 	connect(selectTestButton, &QPushButton::clicked, this, &StressTestPanel::selectTestRequested);

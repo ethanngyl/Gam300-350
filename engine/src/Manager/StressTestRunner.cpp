@@ -54,42 +54,71 @@ namespace {
 }
 
 std::vector<StressResult> StressTestRunner::TestLoad(size_t count) {
+	//The sphere is generated here and handed over, so it is freed as soon as it is saved
+	return LoadThroughDisk(splat_generate::GenerateSphereSplats(count), "StressTestSphere");
+}
+
+std::vector<StressResult> StressTestRunner::TestLoadCopy() {
 	SplatRenderer* renderer = m_viewport->renderer();
-	if (!renderer || renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
+	if (!renderer) {
+		return {};
+	}
+	SplatModel* model = renderer->GetModel(renderer->GetSelectedModel());
+	if (!model || model->splats().empty()) {
 		return {};
 	}
 
-	//Setup, not timed: generate the sphere and save it like a normal model, so the load below reads a real .ply
+	//A copy of the selected model's splats is saved and loaded back, the model itself and its file are not touched
+	const std::string copyName = model->GetName() + " (load test copy)";
+	std::vector<StressResult> results = LoadThroughDisk(model->splats(), copyName);
+	if (results.empty()) {
+		return results;
+	}
+
+	//The copy was only there to time the load. Take it back out (it is the last model), so the scene is as it was
+	//The selected model keeps its place, removing the last one does not shift any index
+	renderer->RemoveModel(static_cast<int>(renderer->ModelCount()) - 1);
+	m_viewport->RenderFrameBlocking();
+	return results;
+}
+
+std::vector<StressResult> StressTestRunner::LoadThroughDisk(std::vector<SplatVertex> source, const std::string& modelName) {
+	SplatRenderer* renderer = m_viewport->renderer();
+	if (!renderer || renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels) || source.empty()) {
+		return {};
+	}
+
+	//Setup, not timed: save the splats like a normal model, so the load below reads a real .ply
 	//The folder and the file in it are deleted when dir goes out of scope
 	QTemporaryDir dir;
 	if (!dir.isValid()) {
 		qWarning("Load test: could not create a temporary folder.");
 		return {};
 	}
-	const QString path = dir.filePath("StressTestSphere.ply");
+	const QString path = dir.filePath("LoadTest.ply");
 	{
-		const std::vector<SplatVertex> generated = splat_generate::GenerateSphereSplats(count);
 		ExportOptions options;
 		options.format = ExportFormat::GaussianPly; //The format the importer reads
-		const ExportResult saved = ExportSplats({ ExportSource{ &generated, glm::mat4(1.0f) } },
+		const ExportResult saved = ExportSplats({ ExportSource{ &source, glm::mat4(1.0f) } },
 			std::filesystem::path(path.toStdWString()), options);
 		if (!saved.ok) {
-			qWarning("Load test: could not save the test sphere: %s", saved.error.c_str());
+			qWarning("Load test: could not save the test file: %s", saved.error.c_str());
 			return {};
 		}
-	} //The generated splats are freed here, so they are not held in memory while the file is read back
+	}
+	std::vector<SplatVertex>().swap(source); //Freed, so the splats are not held in memory twice while the file is read back
 
 	//Same call an import makes
 	std::vector<SplatVertex> splats;
 	const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
 	const double readMs = MeasureMs([&] { splats = LoadSplatPly(nativePath); });
 	if (splats.empty()) {
-		qWarning("Load test: the saved test sphere could not be read back.");
+		qWarning("Load test: the saved test file could not be read back.");
 		return {};
 	}
 	const size_t loaded = splats.size();
 
-	const double setMs = MeasureMs([&] { renderer->SetSplats(splats, "StressTestSphere"); });
+	const double setMs = MeasureMs([&] { renderer->SetSplats(splats, modelName); });
 	const double frameMs = MeasureMs([&] { m_viewport->RenderFrameBlocking(); });
 
 	return {

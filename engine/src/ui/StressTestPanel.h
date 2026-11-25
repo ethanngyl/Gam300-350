@@ -51,7 +51,8 @@ signals:
 	void exportTestRequested();
 	void deleteTestRequested();
 	void undoRedoTestRequested();
-	void testAllRequested();
+	void testAllRequested();        //Loads its own test sphere first, then tests that
+	void testAllCurrentRequested(); //Skips Load and tests the model that is selected
 	void stopRequested();
 
 private:
