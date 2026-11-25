@@ -51,7 +51,7 @@ const ICON_PATHS = {
     wand: (<><path d="m4 20 11-11" /><path d="m14 6 4 4" /><path d="M6 3v3M4.5 4.5h3M19 14v3M17.5 15.5h3" /></>),
     moon: <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />,
     refresh: (<><path d="M20 11a8 8 0 0 0-14-4L4 9" /><path d="M4 4v5h5" /><path d="M4 13a8 8 0 0 0 14 4l2-2" /><path d="M20 20v-5h-5" /></>),
-    settings: (<><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></>),
+    settings: (<><circle cx="12" cy="12" r="6.5" /><circle cx="12" cy="12" r="2.5" /><path d="M18.5 12L21.3 12M16.6 16.6L18.6 18.6M12 18.5L12 21.3M7.4 16.6L5.4 18.6M5.5 12L2.7 12M7.4 7.4L5.4 5.4M12 5.5L12 2.7M16.6 7.4L18.6 5.4" strokeWidth="2.6" /></>),
     eye: (<><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>),
     triangle: <path d="M12 4 21 19H3z" />,
     target: (<><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></>),

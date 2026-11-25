@@ -1,0 +1,64 @@
+/* ============================================================
+   First-run tips (Tips.jsx): the welcome card and the tour's tips,
+   laid out like the Figma. Uses the --forma-* tokens from AppTheme.css.
+   ============================================================ */
+
+.tip-card {
+    position: fixed;
+    z-index: 88; /* above the build panel (85), under dialogs (90) */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(300px, calc(100vw - 32px));
+    box-sizing: border-box;
+    padding: 16px 18px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 12px;
+    background: var(--forma-panel);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+    font-family: var(--forma-font);
+}
+
+    .tip-card h2 {
+        margin: 0;
+        color: var(--forma-heading);
+        font-size: 0.98rem;
+        font-weight: 600;
+    }
+
+    .tip-card p {
+        margin: 0;
+        max-width: none;
+        color: var(--forma-text-muted);
+        font-size: 0.82rem;
+        line-height: 1.5;
+    }
+
+.tip-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+    .tip-card-actions .forma-btn {
+        padding: 7px 14px;
+    }
+
+.tip-card-step {
+    color: var(--forma-text-dim);
+    font-size: 0.76rem;
+}
+
+/* The welcome card sits in the bottom corner of Home. */
+.welcome-card {
+    right: 24px;
+    bottom: 24px;
+    width: min(320px, calc(100vw - 32px));
+}
+
+/* A build panel is already in that corner, sit beside it instead. */
+.build-panel ~ .welcome-card,
+.build-panel-pill ~ .welcome-card {
+    right: 360px;
+}

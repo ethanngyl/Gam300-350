@@ -8,12 +8,14 @@
 \brief
 Library tab with two sub-views: a searchable, sortable grid of generated
 3D models and a Photo Library that embeds ImageGallery in its compact
-variant. The 3D Models grid is built from GET /jobs: finished jobs show
-as Ready, jobs still running show as Processing, and failed or cancelled
-jobs are hidden. Each card shows the object cut out of one of its photos,
-or its first photo (see ModelCover.jsx).
-Clicking a Ready card (or Enter on it) opens it on the model page
-(onOpenModel); right-clicking a card renames or deletes it. The active sub-tab is controlled by the parent
+variant. The 3D Models grid is built from GET /jobs, laid out like the
+Figma: a finished model's card shows the object cut out of one of its
+photos, or its first photo (see ModelCover.jsx), with "Created <date>" and
+a menu button; a model still being built shows its current step and a
+progress bar instead (the list refreshes every few seconds while one is
+building). Failed or cancelled jobs are hidden.
+Clicking a finished card (or Enter on it) opens it on the model page
+(onOpenModel); the menu button or a right-click renames or deletes it. The active sub-tab is controlled by the parent
 so other pages (such as Home's "View all") can open either one directly.
 Both sub-views share the search box and the sort menu (SortMenu.jsx).
 **************************************************************************/
@@ -27,6 +29,7 @@ import ActionDialog from './ActionDialog.jsx';
 import ModelCover from './ModelCover.jsx';
 import SortMenu from './SortMenu.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
+import { BUILD_STEPS, buildStepIndex } from './useBackgroundBuilds.js';
 import { playSound } from '../audio/Audio.js';
 
 // Statuses where a job has stopped for good. 'done' is the only one that
@@ -40,6 +43,26 @@ const SORT_OPTIONS = [
     { id: 'lastEdited', label: 'Last edited' },
     { id: 'name', label: 'Name' },
 ];
+
+// How often the list refreshes while a model is building, in milliseconds.
+const BUILDING_REFRESH_MS = 5000;
+
+// "15 Sep" (or "15 Sep 2025" for an older year).
+function formatShortDate(timestamp) {
+    const date = new Date(timestamp);
+    const options = { day: 'numeric', month: 'short' };
+    if (date.getFullYear() !== new Date().getFullYear()) options.year = 'numeric';
+    return date.toLocaleDateString('en-SG', options);
+}
+
+// "Started 2 minutes ago" for a model still building.
+function startedText(timestamp) {
+    const minutesAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (minutesAgo < 1) return 'Started just now';
+    if (minutesAgo < 60) return `Started ${minutesAgo} minute${minutesAgo === 1 ? '' : 's'} ago`;
+    const hoursAgo = Math.floor(minutesAgo / 60);
+    return `Started ${hoursAgo} hour${hoursAgo === 1 ? '' : 's'} ago`;
+}
 
 // When a model was last changed, for the "Last edited" sort. Falls back to
 // when it was made if the server has no update time.
@@ -87,6 +110,22 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
         return () => { isCancelled = true; };
     }, [subTab]);
 
+    // While a model is building, refresh the list so its progress moves and
+    // it turns into a finished card when done.
+    const isAnyBuilding = jobs.some((job) => !FINISHED_STATUSES.includes(job.status));
+    useEffect(() => {
+        if (subTab !== 'models' || !isAnyBuilding) return undefined;
+        const timerId = setInterval(async () => {
+            try {
+                const res = await fetch('/api/v1/jobs');
+                if (res.ok) setJobs(await res.json());
+            } catch {
+                // Server unreachable for a moment: try again next time.
+            }
+        }, BUILDING_REFRESH_MS);
+        return () => clearInterval(timerId);
+    }, [subTab, isAnyBuilding]);
+
     // Only finished jobs (real models) and jobs still running are shown.
     const models = jobs
         .filter((job) => job.status === 'done' || !FINISHED_STATUSES.includes(job.status))
@@ -98,6 +137,9 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
             createdAt: job.createdAt,
             updatedAt: job.updatedAt,
             isReady: job.status === 'done',
+            isQueued: job.status === 'queued',
+            phase: job.phase,
+            progress: job.progress ?? 0,
             coverUrl: job.cover ?? null,
             photoUrl: job.images?.[0]?.url ?? null,
         }));
@@ -218,7 +260,7 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                                         ? 'forma-card library-item library-item-actionable'
                                         : 'forma-card library-item library-item-actionable is-processing'
                                 }
-                                title={model.isReady ? 'Click to open, right-click to rename or delete' : 'Right-click to rename or delete'}
+                                title={model.isReady ? 'Click to open' : undefined}
                                 onClick={() => {
                                     if (!model.isReady) return;
                                     playSound('tap');
@@ -230,25 +272,47 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                                 onContextMenu={(event) => openModelMenu(event, model)}
                             >
                                 <div className="library-thumb">
-                                    <span
-                                        className={
-                                            model.isReady
-                                                ? 'forma-badge forma-badge-ready'
-                                                : 'forma-badge forma-badge-processing'
-                                        }
-                                    >
-                                        {model.isReady ? 'Ready' : 'Processing'}
-                                    </span>
-                                    <ModelCover coverUrl={model.coverUrl} photoUrl={model.photoUrl} icon="layers" />
+                                    {model.isReady ? (
+                                        <ModelCover coverUrl={model.coverUrl} photoUrl={model.photoUrl} icon="layers" />
+                                    ) : (
+                                        <div className="library-building">
+                                            <strong>
+                                                {model.isQueued
+                                                    ? 'Waiting to start'
+                                                    : BUILD_STEPS[Math.min(buildStepIndex(model), BUILD_STEPS.length - 1)].label}
+                                            </strong>
+                                            <span className="library-building-row">
+                                                <span className="library-building-bar">
+                                                    <span style={{ width: `${Math.round(model.progress * 100)}%` }} />
+                                                </span>
+                                                <span>{Math.round(model.progress * 100)}%</span>
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="library-item-name">{model.name}</div>
-                                <div className="library-item-meta">
-                                    <span>{model.photoCount} photos</span>
-                                    <span>
-                                        {model.isReady
-                                            ? new Date(model.createdAt).toLocaleDateString()
-                                            : 'In progress'}
-                                    </span>
+                                <div className="library-item-footer">
+                                    <div className="library-item-copy">
+                                        <div className="library-item-name">{model.name}</div>
+                                        <div className="library-item-meta">
+                                            <span>
+                                                {model.isReady ? `Created ${formatShortDate(model.createdAt)}` : startedText(model.createdAt)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {model.isReady && (
+                                        <button
+                                            type="button"
+                                            className="library-item-more"
+                                            aria-label={`More for ${model.name}`}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                playSound('tap');
+                                                openModelMenu(event, model);
+                                            }}
+                                        >
+                                            <Icon name="more" size={16} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}

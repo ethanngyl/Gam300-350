@@ -359,7 +359,82 @@
     align-self: flex-start;
 }
 
-/* ---------- Bottom bar ---------- */
+/* ---------- Build settings and Generate (side panel on wider screens) ---------- */
+
+.photo-editor .photo-editor-build {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+}
+
+.photo-editor-build .photo-editor-footer-options {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.photo-editor-quality {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 14px;
+    border-top: 1px solid var(--forma-border);
+}
+
+.photo-editor-quality-help {
+    align-self: flex-end;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--forma-teal-text);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.photo-editor-panel .photo-editor-generate {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+    .photo-editor-panel .photo-editor-generate .forma-btn-primary {
+        justify-content: center;
+        min-height: 46px;
+        font-size: 0.92rem;
+    }
+
+/* Kept (light), flagged (red) and left out (dim) as one bar. */
+.photo-editor-count-bar {
+    display: flex;
+    gap: 3px;
+    width: min(240px, 100%);
+    height: 5px;
+    align-self: center;
+}
+
+    .photo-editor-count-bar span {
+        min-width: 0;
+        border-radius: 999px;
+    }
+
+    .photo-editor-count-bar .is-kept {
+        background: var(--forma-heading);
+    }
+
+    .photo-editor-count-bar .is-flagged {
+        background: var(--forma-red);
+    }
+
+    .photo-editor-count-bar .is-left-out {
+        background: var(--forma-panel-raised);
+    }
+
+/* ---------- Bottom bar (phones) ---------- */
 
 /* Sticks to the bottom of the scrolling page so Generate is always in reach.
    Negative side margins stretch it to the page edges. */
@@ -457,7 +532,7 @@
     .photo-editor-panel {
         position: sticky;
         top: 16px;
-        max-height: calc(100dvh - 84px - 32px - 76px);
+        max-height: calc(100dvh - 84px - 32px);
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;

@@ -20,6 +20,9 @@ Which files can be sent (same rules as the backend).
 POST /jobs/from-media with XMLHttpRequest (fetch can't report upload
 progress). onStart gets the request so it can be aborted. Resolves with
 the new job's id; rejects with a readable error, or { aborted: true }.
+- uploadPhotos(files, { removeBackground, autoCrop, trainIters }, onStart, onProgress)
+The same for a photo batch: POST /upload, used by the background builds
+(useBackgroundBuilds.js) so the progress panel can show the upload.
 **************************************************************************/
 
 import { catalog } from './catalog.js';
@@ -36,6 +39,50 @@ export const MEDIA_ACCEPT = 'video/*,image/gif,.mkv,.avi';
 const SERVER_UNREACHABLE =
     "Couldn't reach the reconstruction server. Make sure it's running " +
     '(cd packages/src/backend && node server.js) on port 5005.';
+
+// Sends a FormData with XMLHttpRequest (fetch can't report upload progress)
+// and turns the reply into the new job's id or a readable error.
+function sendUpload(url, body, onStart, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        onStart(xhr);
+        xhr.open('POST', url);
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) onProgress(e.loaded / e.total);
+        };
+        xhr.onload = () => {
+            let data = null;
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch {
+                // Not from our server, e.g. a tunnel or proxy refusing the upload.
+            }
+            if (xhr.status === 413 && !data) {
+                reject(new Error('This connection refused an upload that large. Try fewer or smaller files, or use the app on http://localhost:5005.'));
+            } else if (!data) {
+                reject(new Error(SERVER_UNREACHABLE));
+            } else if (xhr.status < 200 || xhr.status >= 300) {
+                reject(new Error(data.error || `Request failed (${xhr.status})`));
+            } else {
+                resolve(data.id);
+            }
+        };
+        xhr.onerror = () => reject(new Error(SERVER_UNREACHABLE));
+        xhr.onabort = () => reject({ aborted: true });
+        xhr.send(body);
+    });
+}
+
+// Uploads a photo batch to POST /upload and starts its build. Text fields go
+// before the files so the server has them as the upload streams in.
+export function uploadPhotos(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}, onStart, onProgress) {
+    const body = new FormData();
+    body.append('removeBackground', String(removeBackground));
+    body.append('autoCrop', String(autoCrop));
+    if (trainIters) body.append('trainIters', String(trainIters));
+    files.forEach((file) => body.append('images', file));
+    return sendUpload('/api/v1/upload', body, onStart, onProgress);
+}
 
 // Sends the files with XMLHttpRequest, because fetch can't report upload
 // progress and a video can take a while. onStart receives the request, so

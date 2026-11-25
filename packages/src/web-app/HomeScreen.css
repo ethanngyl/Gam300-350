@@ -1,6 +1,7 @@
 /* ============================================================
    Home (HomeScreen.jsx), laid out like the Genesis Figma: a banner
-   with three ways to start, then Recent as portrait cards. Selectors
+   with a short description, Quick tools (three ways to start), then
+   Recent as portrait cards. Selectors
    start with .home-screen so they win over the older Home rules in
    AppTheme.css. Colours come from the theme tokens.
    ============================================================ */
@@ -16,8 +17,10 @@
 .home-screen .home-hero {
     position: relative;
     overflow: hidden;
-    margin-bottom: 36px;
+    margin-bottom: 28px;
     padding: 30px 28px 28px;
+    min-height: 150px;
+    box-sizing: border-box;
     border: 1px solid rgba(var(--forma-accent-rgb), 0.35);
     border-radius: 14px;
     background: radial-gradient(ellipse at 85% 10%, rgba(var(--forma-accent-rgb), 0.28), transparent 60%), linear-gradient(120deg, rgba(var(--forma-accent-rgb), 0.22), rgba(var(--forma-accent-rgb), 0.08));
@@ -47,12 +50,34 @@
 
 .home-screen .home-hero-title {
     position: relative;
-    margin: 0 0 22px;
+    margin: 0 0 12px;
     color: var(--forma-heading);
     font-size: 1.85rem;
     font-weight: 700;
     letter-spacing: -0.01em;
 }
+
+/* The line under Get Started. */
+.home-screen .home-hero-text {
+    position: relative;
+    margin: 0;
+    max-width: 560px;
+    color: var(--forma-text-muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+/* Quick tools, under the banner. (App.css pads and borders every <section>; not here.) */
+.home-screen .home-tools {
+    margin-bottom: 32px;
+    padding: 0;
+    border: 0;
+}
+
+    .home-screen .home-tools .home-section-title {
+        margin: 0 0 14px !important;
+        font-size: 1.15rem;
+    }
 
 .home-screen .home-hero-actions {
     position: relative;
@@ -186,6 +211,7 @@
     }
 
 .home-screen .home-file-preview {
+    position: relative;
     aspect-ratio: 3 / 4;
     overflow: hidden;
     border: 1px solid var(--forma-border);
@@ -236,8 +262,29 @@
     }
 }
 
+/* No models yet: the line, then Upload photos and the sample model. */
+.home-screen .home-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 80px 16px;
+}
+
+    .home-screen .home-empty-state .home-empty-note {
+        padding: 0;
+    }
+
+.home-screen .home-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
 @media (max-width: 760px) {
-    .home-screen .home-hero {
+    .home-screen .home-hero,
+    .home-screen .home-tools {
         display: none;
     }
 

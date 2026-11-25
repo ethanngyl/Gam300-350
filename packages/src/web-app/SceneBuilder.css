@@ -301,6 +301,105 @@
         margin: 0;
     }
 
+/* Scene / Library tabs at the top of the left panel (Figma). */
+.scene-builder-left-tabs {
+    display: flex;
+    gap: 4px;
+}
+
+.scene-builder-left-tab {
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    font: 600 0.8rem var(--forma-font);
+    cursor: pointer;
+}
+
+    .scene-builder-left-tab:hover {
+        color: var(--forma-heading);
+    }
+
+    .scene-builder-left-tab.is-active {
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+    }
+
+/* The line at the bottom of the left panel. */
+.scene-builder-left-hint {
+    margin: auto 0 0;
+    max-width: none;
+    padding-top: 12px;
+    border-top: 1px solid var(--forma-border);
+    color: var(--forma-text-muted);
+    font-size: 0.74rem;
+    line-height: 1.45;
+}
+
+/* Library tab: the user's models, two to a row, to drag into the viewport. */
+.scene-builder-outliner .scene-builder-library-search {
+    flex: none;
+    width: 100%;
+    height: 36px;
+    box-sizing: border-box;
+}
+
+.scene-builder-library-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 8px;
+    overflow-y: auto;
+}
+
+.scene-builder-library-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 4px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: none;
+    color: var(--forma-text);
+    font: inherit;
+    cursor: grab;
+}
+
+    .scene-builder-library-card:hover,
+    .scene-builder-library-card:focus-visible {
+        border-color: var(--forma-border-strong);
+        background: var(--forma-hover-tint);
+    }
+
+    .scene-builder-library-card:active {
+        cursor: grabbing;
+    }
+
+.scene-builder-library-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 6px;
+}
+
+.scene-builder-library-name {
+    width: 100%;
+    overflow: hidden;
+    font-size: 0.74rem;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A Library card is being dragged over the viewport. */
+.scene-builder-viewport.is-drop-target {
+    border-color: var(--forma-blue);
+    box-shadow: inset 0 0 0 2px rgba(var(--forma-accent-rgb), 0.5);
+}
+
 .scene-builder-outliner-list {
     list-style: none;
     margin: 0;
@@ -354,14 +453,14 @@
     color: var(--forma-text-dim);
 }
 
-    /* Why the selected model failed to load (inspector). */
-    .scene-builder-load-error {
-        color: var(--forma-red-text);
-    }
+/* Why the selected model failed to load (inspector). */
+.scene-builder-load-error {
+    color: var(--forma-red-text);
+}
 
-    .scene-builder-outliner-status.is-error {
-        color: var(--forma-red);
-    }
+.scene-builder-outliner-status.is-error {
+    color: var(--forma-red);
+}
 
 .scene-builder-icon-button {
     display: inline-flex;

@@ -15,24 +15,31 @@ like the Genesis Figma: a top bar (TopNav.jsx) and a left sidebar
 phone tab bar (Dock.jsx) at 760px wide or less (phones show Capture full
 screen, without either). The pages: Home, Library, Photo Editor,
 Scene Builder, Model Viewer, Video Extractor (FrameExtractor.jsx),
-Feedback, Capture and Account. Capture opens from New > Capture with
-camera, or from Upload photos with the chosen photos already in the
-batch; its "Review photos first" hands the batch to the Photo Editor. The
-first time each account signs in on this browser, the walkthrough
-(Walkthrough.jsx) tours the sidebar (or the dock on phones); Learn in the
-sidebar and "Show walkthrough" on the account page replay it.
+Feedback, Capture and Account. Capture opens from the New model dialog's
+"Capture with camera" (or the tab bar on phones); its "Review photos
+first" hands the batch to the Photo Editor. The first time each account
+signs in on this browser, wider screens show the Figma's welcome card
+(Tips.jsx): "Take the tour" shows two tips, in the Photo Editor and then
+the Scene Builder's Library tab; the Video Extractor shows its own tip the
+first time it opens. Phones keep the walkthrough of the tab bar
+(Walkthrough.jsx). Learn in the sidebar and "Show walkthrough" on the
+account page replay them.
 Opening a model (from Home, the Media Library or the Model Viewer, a .ply
 from the user's computer, or a build that just finished, from photos or
 the Frame Extractor) shows the model page (ModelScreen.jsx) inside the
-dashboard; its back link returns to where it was opened from. Polling
-reconstruction progress and the legacy image gallery still replace the
-whole screen. Owns the active job id and uploads a finished photo batch
-to the backend to kick off reconstruction. Frame Extractor builds go
-through the same processing screen: App uploads the media (startMediaBuild)
-while that screen already shows the upload as its first step. Each page has its own
-address-bar hash (AppRoutes.js), so the browser's Back and Forward buttons
-move between pages and a refresh stays on the page; leaving a build in
-progress with Back asks first, since leaving cancels it.
+dashboard; its back link returns to where it was opened from.
+New (in the sidebar, or Home's Add photos and Upload photos) opens the New
+model dialog (AddPhotosDialog.jsx): upload photos or choose them from the
+Media Library, then Render now or Edit manually.
+Builds run in the background, as in the Figma (useBackgroundBuilds.js):
+photos (from that dialog, the Photo Editor or Capture) and videos (from
+the Video Extractor) are uploaded from here and the build panel
+(BuildPanel.jsx) in the corner follows them while the user carries on;
+leaving a page no longer cancels a build. The panel's Details opens the
+full processing screen (Processing.jsx), which, like the legacy image
+gallery, replaces the whole screen. Each page has its own address-bar
+hash (AppRoutes.js), so the browser's Back and Forward buttons move
+between pages and a refresh stays on the page.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -54,12 +61,15 @@ import FeedbackScreen from './FeedbackScreen.jsx';
 import ModelViewerScreen from './ModelViewerScreen.jsx';
 import ModelScreen from './ModelScreen.jsx';
 import Walkthrough from './Walkthrough.jsx';
+import AddPhotosDialog from './AddPhotosDialog.jsx';
+import { TipCard, WelcomeCard } from './Tips.jsx';
+import { TOUR_TIPS, VIDEO_TIP } from './TipsContent.js';
+import BuildPanel from './BuildPanel.jsx';
+import { useBackgroundBuilds } from './useBackgroundBuilds.js';
 import { useUndoableState } from './useUndoableState.js';
 import { NEW_SCENE_INFO, createSceneObject } from './SceneStorage.js';
 import { hashToView, viewToHash } from './AppRoutes.js';
-import { uploadMedia } from './mediaJobs.js';
 import { useMobileView } from './useMobileView.js';
-import { playSound } from '../audio/Audio.js';
 import './AppTheme.css';
 import './App.css';
 import './AppShell.css';
@@ -127,6 +137,25 @@ function hasSeenWalkthrough(email) {
 function markWalkthroughSeen(email) {
     try {
         window.localStorage.setItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`, 'true');
+    } catch {
+        // Storage unavailable: nothing to remember it in.
+    }
+}
+
+// The same for a page's first-open tip (only the Video Extractor's for now).
+const TIP_SEEN_KEY_PREFIX = 'genesis-tip-seen:';
+
+function hasSeenTip(tipId, email) {
+    try {
+        return window.localStorage.getItem(`${TIP_SEEN_KEY_PREFIX}${tipId}:${email}`) === 'true';
+    } catch {
+        return true;
+    }
+}
+
+function markTipSeen(tipId, email) {
+    try {
+        window.localStorage.setItem(`${TIP_SEEN_KEY_PREFIX}${tipId}:${email}`, 'true');
     } catch {
         // Storage unavailable: nothing to remember it in.
     }
@@ -209,6 +238,8 @@ function App() {
 
     // True while the walkthrough is replaying from the account page.
     const [isReplayingWalkthrough, setIsReplayingWalkthrough] = useState(false);
+    // Wider screens: which tour tip is showing (index into TOUR_TIPS), or null.
+    const [tourStep, setTourStep] = useState(null);
     // Bumped when the walkthrough closes, so the "seen" flag is read again.
     const [, setWalkthroughCloseCount] = useState(0);
 
@@ -233,6 +264,8 @@ function App() {
     // Wider screens: the page shown behind the account window, and where
     // closing it returns to.
     const [accountReturnTab, setAccountReturnTab] = useState('home');
+    // The account section to open first: 'account', or 'appearance' from the gear.
+    const [accountSection, setAccountSection] = useState('account');
     // Releases a local .ply's blob URL once another model replaces it.
     const localModelUrl = viewedModel?.localFile?.url;
     useEffect(() => () => {
@@ -242,43 +275,29 @@ function App() {
     const [librarySubTab, setLibrarySubTab] = useState(initialView.librarySubTab);
 
     // Full-page screens that replace the whole shell. null shows the shell;
-    // otherwise 'processing' | 'gallery'.
+    // otherwise 'processing' (a build's Details) | 'gallery'.
     const [screen, setScreen] = useState(initialView.screen);
     const [jobId, setJobId] = useState(initialView.jobId);
-    // A build from the Frame Extractor, for the processing screen (see
-    // Processing.jsx's mediaBuild), or null for photo builds.
-    const [mediaBuild, setMediaBuild] = useState(null);
-    // Stops the media upload in progress (null when nothing is uploading).
-    const abortMediaUploadRef = useRef(null);
-    // Counts media builds, so a cancelled build's late reply is ignored.
-    const mediaBuildCountRef = useRef(0);
-    // The files and settings of the last Frame Extractor build, so "Start
-    // over" or Cancel brings the form back filled in. Cleared once the model
-    // is ready or the user goes to another page.
+    // Builds running in the background, shown in the build panel.
+    const backgroundBuilds = useBackgroundBuilds(currentUser);
+    const { trackJob } = backgroundBuilds;
+    // A #/processing/<id> address (a refresh on a build's Details): follow that build too.
+    useEffect(() => {
+        if (currentUser && initialView.screen === 'processing' && initialView.jobId) trackJob(initialView.jobId);
+    }, [currentUser, initialView, trackJob]);
+    // The New model dialog (AddPhotosDialog.jsx) is open.
+    const [isNewModelOpen, setIsNewModelOpen] = useState(false);
+    // The files and settings of a Video Extractor build to bring back into
+    // its form (a failed build's "Back to Video Extractor"). Cleared on any
+    // other navigation.
     const [frameExtractorDraft, setFrameExtractorDraft] = useState(null);
     // Message for the Frame Extractor, e.g. after a reload stopped an upload.
     const [frameExtractorNotice, setFrameExtractorNotice] = useState(
         initialView.wasUploadInterrupted ? UPLOAD_INTERRUPTED_NOTICE : null);
-    const isMediaBuildActive = mediaBuild !== null;
-    const isUploadingMedia = isMediaBuildActive && !jobId && !mediaBuild.startError;
-    // Releases the processing screen's preview of the first file once the build ends.
-    const mediaPreviewUrl = mediaBuild?.previewUrl;
-    useEffect(() => () => {
-        if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
-    }, [mediaPreviewUrl]);
-    // While media is uploading, the browser asks before a refresh or closing
-    // the tab, which would stop the upload.
-    useEffect(() => {
-        if (!isUploadingMedia) return;
-        function askBeforeLeaving(event) {
-            event.preventDefault();
-        }
-        window.addEventListener('beforeunload', askBeforeLeaving);
-        return () => window.removeEventListener('beforeunload', askBeforeLeaving);
-    }, [isUploadingMedia]);
     // Job whose training just finished; the model page asks for its name.
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
+    // Build errors now show in the build panel; kept for the pages that show one.
     const [uploadError, setUploadError] = useState(null);
     // Batch sent from Camera Capture's "Review photos first" to the Photo
     // Editor: { files, removeBackground, autoCrop, trainIters }. Cleared on
@@ -288,44 +307,18 @@ function App() {
     // Capture reopens with those photos: { files, removeBackground, autoCrop, trainIters }.
     // Cleared on any other navigation.
     const [photosForCapture, setPhotosForCapture] = useState(null);
-    // Photos chosen with the dock's Add photos button, handed to the
-    // capture page when it opens. Cleared on any other navigation.
-    const [photosToAdd, setPhotosToAdd] = useState(null);
-    // While the capture page is open, its function for adding more photos
-    // to the batch (see CameraCapture's onRegisterAddFiles).
-    const addToCaptureBatchRef = useRef(null);
-    const registerCaptureAddFiles = useCallback((addFilesToBatch) => {
-        addToCaptureBatchRef.current = addFilesToBatch;
-    }, []);
     // Models placed in the Scene Builder, with their undo history, and the
     // scene's id, name and settings. Kept here so the scene survives
     // switching tabs (each page remounts when its tab opens).
     const scene = useUndoableState([]);
     const [sceneInfo, setSceneInfo] = useState(NEW_SCENE_INFO);
 
-    // Stops a media upload in progress and forgets the media build.
-    // (Only refs and state setters, so the Back / Forward listener can use it.)
-    const stopMediaBuild = useCallback(() => {
-        mediaBuildCountRef.current += 1;
-        abortMediaUploadRef.current?.();
-        abortMediaUploadRef.current = null;
-        setMediaBuild(null);
-    }, []);
-
     // Browser Back / Forward. Every page change gets its own history entry
     // with the page's hash (AppRoutes.js), so Back and Forward move between
     // pages instead of leaving the site. Set replaceNextRef before a change
     // whose page shouldn't come back with Back (a finished or cancelled
-    // build); the first sync only tidies the loaded URL.
+    // build's Details); the first sync only tidies the loaded URL.
     const replaceNextRef = useRef(true);
-    // The hash of the page on screen, for putting it back when leaving is refused.
-    const currentHashRef = useRef(window.location.hash);
-    // While a page would lose work by being left (a build in progress), its
-    // function that asks the user first; returns true if they may leave.
-    const leaveGuardRef = useRef(null);
-    const registerLeaveGuard = useCallback((guard) => {
-        leaveGuardRef.current = guard;
-    }, []);
     // The model page's model, for Back / Forward (the listener below is set up once).
     const viewedModelRef = useRef(viewedModel);
     useEffect(() => {
@@ -338,7 +331,6 @@ function App() {
         const hash = viewToHash(toRouteView({ activeTab, librarySubTab, screen, jobId, viewedModel }));
         const replace = replaceNextRef.current;
         replaceNextRef.current = false;
-        currentHashRef.current = hash;
         if (hash === window.location.hash) return;
         if (replace) window.history.replaceState(null, '', hash);
         else window.history.pushState(null, '', hash);
@@ -346,14 +338,7 @@ function App() {
 
     useEffect(() => {
         function handlePopState() {
-            if (leaveGuardRef.current && !leaveGuardRef.current()) {
-                // Stay: put this page back as the newest entry.
-                window.history.pushState(null, '', currentHashRef.current);
-                return;
-            }
             const view = fromRouteView(hashToView(window.location.hash));
-            // Leaving a media build mid-upload: stop sending the files.
-            if (view.screen !== 'processing') stopMediaBuild();
             if (view.isLocalModel) {
                 if (viewedModelRef.current?.localFile) view.activeTab = 'model';
                 // That file is gone (the page was reloaded): open the Model Viewer.
@@ -366,8 +351,7 @@ function App() {
             setUploadError(null);
             setPhotosForEditor(null);
             setPhotosForCapture(null);
-            setPhotosToAdd(null);
-            setFrameExtractorDraft(null);
+                setFrameExtractorDraft(null);
             setFrameExtractorNotice(view.wasUploadInterrupted ? UPLOAD_INTERRUPTED_NOTICE : null);
             setActiveTab(view.activeTab);
             if (view.activeTab === 'library') setLibrarySubTab(view.librarySubTab);
@@ -376,7 +360,7 @@ function App() {
         }
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
-    }, [stopMediaBuild]);
+    }, []);
 
     function handleLogin(user) {
         saveUser(user);
@@ -414,22 +398,10 @@ function App() {
         setUploadError(null);
         setPhotosForEditor(null);
         setPhotosForCapture(null);
-        setPhotosToAdd(null);
         setFrameExtractorDraft(null);
         setFrameExtractorNotice(null);
         setActiveTab(tab);
     }, []);
-
-    // Adds the photos chosen with the dock's Add photos button to the
-    // capture page's batch, opening the page first if needed.
-    function addPhotosToCapture(files) {
-        if (activeTab === 'capture' && addToCaptureBatchRef.current) {
-            addToCaptureBatchRef.current(files);
-            return;
-        }
-        goToTab('capture');
-        setPhotosToAdd(files);
-    }
 
     // Opens the Photo Editor with the photos from Camera Capture loaded.
     function reviewPhotosInEditor(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
@@ -450,130 +422,45 @@ function App() {
 
     // Opens account settings: a window over the current page on wider
     // screens (closing returns to that page), a page of its own on phones.
-    function openAccount() {
+    function openAccount(section = 'account') {
         if (activeTab !== 'account') setAccountReturnTab(activeTab);
+        setAccountSection(section);
         goToTab('account');
     }
 
-    // Uploads the real batch to the backend and starts reconstruction.
-    // trainIters is the training iteration cap (Fast / Normal / Detailed);
-    // left out, the server uses its default. autoCrop keeps only the object
-    // the photos were taken around.
-    async function handleBatchReady(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
-        setUploadError(null);
-        try {
-            const form = new FormData();
-            // Text fields go before the files so the server has them as the upload streams in.
-            form.append('removeBackground', String(removeBackground));
-            form.append('autoCrop', String(autoCrop));
-            if (trainIters) form.append('trainIters', String(trainIters));
-            for (const file of files) form.append('images', file);
-            const res = await fetch('/api/v1/upload', { method: 'POST', body: form });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Upload failed');
-            setMediaBuild(null);
-            setJobId(data.id);
-            // The capture page closes once processing starts, so returning
-            // from the result screen lands on Home instead of an empty capture.
-            setActiveTab('home');
-            setScreen('processing');
-        } catch (err) {
-            setUploadError(err.message);
-        }
+    // Starts a build from a photo batch in the background and returns to
+    // Home, where the build panel follows it. trainIters is the training
+    // iteration cap (Fast / Normal / Detailed); left out, the server uses its
+    // default. autoCrop keeps only the object the photos were taken around.
+    function handleBatchReady(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
+        backgroundBuilds.startPhotoBuild(files, { removeBackground, autoCrop, trainIters });
+        setIsNewModelOpen(false);
+        goToTab('home');
     }
+
+    // The New model dialog (New in the sidebar, Home's Add photos).
+    const openNewModel = useCallback(() => setIsNewModelOpen(true), []);
 
     function backToDashboard() {
         setScreen(null);
     }
 
-    // Processing's Cancel / Start over. A useCallback, like handleProcessingDone,
-    // so Processing's polling doesn't restart every time App re-renders.
-    const resetJob = useCallback(() => {
-        // The build or model screen being left can't be opened again with Back.
+    // Leaves a build's Details screen (Processing.jsx) for the dashboard;
+    // the build keeps going in the background. A useCallback, like
+    // handleProcessingDone, so Processing's polling doesn't restart every
+    // time App re-renders.
+    const leaveBuildDetails = useCallback(() => {
+        // The Details screen can't be opened again with Back.
         replaceNextRef.current = true;
-        // A cancelled media build returns to the Frame Extractor (with its
-        // files and settings still in frameExtractorDraft), photos to Home.
-        const returnTab = isMediaBuildActive ? 'extractor' : 'home';
-        stopMediaBuild();
         setJobId(null);
-        setUploadError(null);
         setScreen(null);
-        setActiveTab(returnTab);
-    }, [isMediaBuildActive, stopMediaBuild]);
+    }, []);
 
-    // Starts a Frame Extractor build and shows the processing screen at once,
-    // uploading the files from here (with progress). The job id arrives after.
-    async function startMediaBuild({ files, fps, trainIters, removeBackground, autoCrop = false }) {
-        mediaBuildCountRef.current += 1;
-        const buildNumber = mediaBuildCountRef.current;
-        const isStillCurrent = () => mediaBuildCountRef.current === buildNumber;
-        const firstFile = files[0];
-        // Upload progress last shown, in whole percent.
-        let lastUploadPercent = 0;
-        // Once every byte is sent the server is making the job, so the upload
-        // is no longer aborted (see abortMediaUploadRef below).
-        let hasSentAllBytes = false;
-
-        setFrameExtractorDraft({ files, fps, trainIters, removeBackground, autoCrop });
-        setFrameExtractorNotice(null);
-        // The upload's address (#/extractor/uploading) replaces the Frame
-        // Extractor's, as the build's own address replaces it later.
-        replaceNextRef.current = true;
-        setJobId(null);
-        setMediaBuild({
-            label: files.length === 1 ? firstFile.name : `${files.length} files`,
-            fileCount: files.length,
-            fps,
-            removeBackground,
-            autoCrop,
-            previewUrl: URL.createObjectURL(firstFile),
-            isGif: /\.gif$/i.test(firstFile.name),
-            uploadFraction: 0,
-            startError: null,
-        });
-        setScreen('processing');
-
-        try {
-            const newJobId = await uploadMedia(
-                files,
-                { fps, trainIters, removeBackground, autoCrop },
-                (xhr) => {
-                    xhr.upload.addEventListener('load', () => {
-                        hasSentAllBytes = true;
-                    });
-                    // Aborting after every byte is sent would lose the reply
-                    // with the new job's id, leaving that job running on the
-                    // GPU. So Cancel lets the request finish, and the late
-                    // reply below deletes the job.
-                    abortMediaUploadRef.current = () => {
-                        if (!hasSentAllBytes) xhr.abort();
-                    };
-                },
-                (fraction) => {
-                    // Only re-render when the shown percentage changes.
-                    const uploadPercent = Math.round(fraction * 100);
-                    if (uploadPercent === lastUploadPercent || !isStillCurrent()) return;
-                    lastUploadPercent = uploadPercent;
-                    setMediaBuild((build) => build && { ...build, uploadFraction: uploadPercent / 100 });
-                },
-            );
-            if (!isStillCurrent()) {
-                // Cancelled while the upload was finishing: free the job it made.
-                fetch(`/api/v1/jobs/${newJobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
-                return;
-            }
-            setMediaBuild((build) => build && { ...build, uploadFraction: null });
-            // The build's own address replaces the Frame Extractor's in the history.
-            replaceNextRef.current = true;
-            setJobId(newJobId);
-        } catch (err) {
-            // { aborted: true }: Cancel or Back already left the screen.
-            if (err?.aborted || !isStillCurrent()) return;
-            playSound('error');
-            setMediaBuild((build) => build && { ...build, startError: err.message });
-        } finally {
-            if (isStillCurrent()) abortMediaUploadRef.current = null;
-        }
+    // Starts a Video Extractor build in the background (its files upload
+    // from here, shown in the build panel) and returns to Home.
+    function startMediaBuild({ files, fps, trainIters, removeBackground, autoCrop = false }) {
+        backgroundBuilds.startMediaBuild(files, { fps, trainIters, removeBackground, autoCrop });
+        goToTab('home');
     }
 
     // Shows a model on the model page; its back link returns to returnTab.
@@ -583,18 +470,42 @@ function App() {
         goToTab('model');
     }, [goToTab]);
 
-    // The build finished: open its model page and ask for its name.
+    // The build on the Details screen finished: open its model page and ask for its name.
     const handleProcessingDone = useCallback(() => {
-        // A media build's model page links back to the Frame Extractor.
-        const returnTab = isMediaBuildActive ? 'extractor' : 'home';
-        stopMediaBuild();
         setNamePromptJobId(jobId);
         // The model replaces the build screen, so Back skips the finished build.
         replaceNextRef.current = true;
         setScreen(null);
-        // showModelPage -> goToTab also clears frameExtractorDraft.
-        showModelPage({ jobId }, returnTab);
-    }, [isMediaBuildActive, jobId, stopMediaBuild, showModelPage]);
+        showModelPage({ jobId }, 'library');
+    }, [jobId, showModelPage]);
+
+    // The build panel's buttons.
+    function openBuiltModel(build) {
+        backgroundBuilds.dismissBuild(build.key);
+        setNamePromptJobId(build.jobId);
+        showModelPage({ jobId: build.jobId }, 'library');
+    }
+
+    function showBuildInLibrary(build) {
+        backgroundBuilds.dismissBuild(build.key);
+        openLibrary('models');
+    }
+
+    // A failed build: back to the Photo Editor or the Video Extractor with its files.
+    function retryBuild(build) {
+        backgroundBuilds.dismissBuild(build.key);
+        if (build.source === 'media') {
+            goToTab('extractor');
+            setFrameExtractorDraft({ files: build.files, ...build.settings });
+        } else {
+            reviewPhotosInEditor(build.files, build.settings ?? {});
+        }
+    }
+
+    function showBuildDetails(build) {
+        setJobId(build.jobId);
+        setScreen('processing');
+    }
 
     // Opens a finished model from Home, the Media Library or the Model Viewer.
     function openModel(modelJobId) {
@@ -615,19 +526,52 @@ function App() {
         goToTab('scene');
     }
 
-    // Shown on the dashboard the first time an account signs in here, or on request.
-    const isWalkthroughOpen = Boolean(currentUser)
-        && (isReplayingWalkthrough || !hasSeenWalkthrough(currentUser.email));
+    // Phones: the walkthrough, shown the first time an account signs in here, or on request.
+    const isFirstVisit = Boolean(currentUser) && !hasSeenWalkthrough(currentUser.email);
+    const isWalkthroughOpen = Boolean(currentUser) && isMobile && (isReplayingWalkthrough || isFirstVisit);
+    // Wider screens: the welcome card on Home instead, until it is answered.
+    const isWelcomeOpen = !isMobile && isFirstVisit && tourStep === null && activeTab === 'home';
 
-    // Replays the walkthrough from step 1, which points at Home's Recent section.
+    // Learn and "Show walkthrough": the tour on wider screens, the walkthrough
+    // on phones (from step 1, which points at Home's Recent section).
     function showWalkthroughAgain() {
-        goToTab('home');
-        setIsReplayingWalkthrough(true);
+        if (isMobile) {
+            goToTab('home');
+            setIsReplayingWalkthrough(true);
+            return;
+        }
+        startTour();
     }
 
     function closeWalkthrough() {
         markWalkthroughSeen(currentUser.email);
         setIsReplayingWalkthrough(false);
+        setWalkthroughCloseCount((closeCount) => closeCount + 1);
+    }
+
+    function startTour() {
+        markWalkthroughSeen(currentUser.email);
+        setTourStep(0);
+        goToTab(TOUR_TIPS[0].page);
+    }
+
+    function nextTourStep() {
+        const nextStep = tourStep + 1;
+        if (nextStep >= TOUR_TIPS.length) {
+            setTourStep(null);
+            return;
+        }
+        setTourStep(nextStep);
+        goToTab(TOUR_TIPS[nextStep].page);
+    }
+
+    // "I'll explore": no tour; Learn still has it.
+    function skipWelcome() {
+        closeWalkthrough();
+    }
+
+    function closeVideoTip() {
+        markTipSeen(VIDEO_TIP.id, currentUser.email);
         setWalkthroughCloseCount((closeCount) => closeCount + 1);
     }
 
@@ -650,14 +594,13 @@ function App() {
         );
     }
 
-    if (screen === 'processing' && (jobId || mediaBuild)) {
+    if (screen === 'processing' && jobId) {
         return (
             <Processing
                 jobId={jobId}
-                mediaBuild={mediaBuild}
                 onDone={handleProcessingDone}
-                onCancel={resetJob}
-                onRegisterLeaveGuard={registerLeaveGuard}
+                onCancel={leaveBuildDetails}
+                onLeave={leaveBuildDetails}
             />
         );
     }
@@ -670,6 +613,10 @@ function App() {
     // opened from; phones show it as a page.
     const isAccountWindowOpen = !isMobile && activeTab === 'account';
     const pageTab = isAccountWindowOpen ? accountReturnTab : activeTab;
+    // The tour's tip for this page, if the tour is on it.
+    const tourTip = tourStep !== null && TOUR_TIPS[tourStep].page === pageTab ? TOUR_TIPS[tourStep] : null;
+    const isVideoTipOpen = !isMobile && pageTab === 'extractor' && tourStep === null
+        && !isAccountWindowOpen && !hasSeenTip(VIDEO_TIP.id, currentUser.email);
 
     return (
         <div className={isMobile ? 'forma-app genesis-shell has-mobile-topbar' : 'forma-app genesis-shell has-app-sidebar'}>
@@ -682,8 +629,9 @@ function App() {
                     onGoHome={() => goToTab('home')}
                     onOpenModel={openModel}
                     onOpenLibrary={openLibrary}
-                    onOpenHelp={() => goToTab('feedback')}
-                    onOpenAccount={openAccount}
+                    onOpenSettings={() => openAccount('appearance')}
+                    onOpenFeedback={() => goToTab('feedback')}
+                    onOpenAccount={() => openAccount('account')}
                     onShowWalkthrough={showWalkthroughAgain}
                     onSignOut={handleSignOutOrSignIn}
                 />
@@ -694,8 +642,7 @@ function App() {
                         // The model page belongs with the Model Viewer.
                         activeTab={activeTab === 'model' ? 'viewer' : activeTab}
                         onNavigate={goToTab}
-                        onNewModel={() => goToTab('capture')}
-                        onAddPhotos={addPhotosToCapture}
+                        onNewModel={openNewModel}
                         onLearn={showWalkthroughAgain}
                     />
                 </>
@@ -705,7 +652,7 @@ function App() {
                 <div className="genesis-main" key={pageTab}>
                     {pageTab === 'home' && (
                         <HomeScreen
-                            onEditPhotos={(files) => reviewPhotosInEditor(files)}
+                            onNewModel={openNewModel}
                             onNavigate={goToTab}
                             onOpenLibrary={openLibrary}
                             onOpenModel={openModel}
@@ -737,6 +684,7 @@ function App() {
                             canRedo={scene.canRedo}
                             sceneInfo={sceneInfo}
                             onSceneInfoChange={setSceneInfo}
+                            initialLeftTab={tourTip?.id === 'scene' ? 'library' : 'scene'}
                         />
                     )}
                     {pageTab === 'viewer' && (
@@ -758,13 +706,13 @@ function App() {
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
                             initialPhotos={photosForCapture}
-                            addedFiles={photosToAdd}
-                            onRegisterAddFiles={registerCaptureAddFiles}
                         />
                     )}
                     {pageTab === 'account' && (
                         <AccountScreen
+                            key={accountSection}
                             user={currentUser}
+                            initialSection={accountSection}
                             onOpenModel={openModel}
                             onOpenLibrary={openLibrary}
                             onSignOut={handleSignOutOrSignIn}
@@ -793,8 +741,10 @@ function App() {
 
             {isAccountWindowOpen && (
                 <AccountScreen
+                    key={accountSection}
                     user={currentUser}
                     isModal
+                    initialSection={accountSection}
                     onClose={() => goToTab(accountReturnTab)}
                     onOpenModel={openModel}
                     onOpenLibrary={openLibrary}
@@ -803,7 +753,45 @@ function App() {
                 />
             )}
 
+            {isNewModelOpen && (
+                <AddPhotosDialog
+                    onClose={() => setIsNewModelOpen(false)}
+                    onRenderNow={handleBatchReady}
+                    onEditManually={(files, settings) => {
+                        setIsNewModelOpen(false);
+                        reviewPhotosInEditor(files, settings);
+                    }}
+                    onOpenCamera={() => {
+                        setIsNewModelOpen(false);
+                        goToTab('capture');
+                    }}
+                />
+            )}
+
+            <BuildPanel
+                builds={backgroundBuilds.builds}
+                onOpenModel={openBuiltModel}
+                onShowLibrary={showBuildInLibrary}
+                onRetry={retryBuild}
+                onCancel={backgroundBuilds.cancelBuild}
+                onDismiss={backgroundBuilds.dismissBuild}
+                onShowDetails={showBuildDetails}
+            />
+
             {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
+            {isWelcomeOpen && <WelcomeCard onTakeTour={startTour} onExplore={skipWelcome} />}
+            {tourTip && (
+                <TipCard
+                    key={tourTip.id}
+                    tip={tourTip}
+                    stepText={`${tourStep + 1} of ${TOUR_TIPS.length}`}
+                    primaryLabel={tourStep + 1 < TOUR_TIPS.length ? 'Next' : 'Done'}
+                    onPrimary={nextTourStep}
+                    secondaryLabel={tourStep + 1 < TOUR_TIPS.length ? 'Skip tour' : null}
+                    onSecondary={() => setTourStep(null)}
+                />
+            )}
+            {isVideoTipOpen && <TipCard tip={VIDEO_TIP} primaryLabel="Got it" onPrimary={closeVideoTip} />}
 
             {isMobile && pageTab !== 'capture' && (
                 <Dock

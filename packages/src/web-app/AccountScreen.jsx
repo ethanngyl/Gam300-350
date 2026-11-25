@@ -182,8 +182,8 @@ function buildUsageStats(jobs) {
     ];
 }
 
-function AccountScreen({ user, isModal = false, onClose, onOpenModel, onOpenLibrary, onSignOut, onShowWalkthrough }) {
-    const [activeSection, setActiveSection] = useState('account');
+function AccountScreen({ user, isModal = false, initialSection = 'account', onClose, onOpenModel, onOpenLibrary, onSignOut, onShowWalkthrough }) {
+    const [activeSection, setActiveSection] = useState(initialSection);
     const [profileTab, setProfileTab] = useState('models');
     const [notificationPrefs, setNotificationPrefs] = useState(loadNotificationPrefs);
     const [jobs, setJobs] = useState([]);
