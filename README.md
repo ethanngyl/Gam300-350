@@ -196,7 +196,7 @@ How we test that the app stays up and correct with many users at the same time:
 
 ### Stress tests
 
-The stress tests (in packages; `stress-test.js`) push past normal use. Like the load test, each one starts the real backend on temporary data, set up like the VM: the real rate limits, `UV_THREADPOOL_SIZE=16`, and every simulated user is a new account from their own address. "Light routes" means every route of a visit except sign-up and sign-in, which are slow on purpose (password hashing). `STRESS_P95_MS` (default 1000 ms) is the point where the site feels broken. The 200 ms budget is for normal use.
+The stress tests (in packages; `stress-test.js`) push past normal use. Like the load test, each one starts the real backend on temporary data, with the real rate limits and `UV_THREADPOOL_SIZE=16` as on the VM. Every simulated user is a new account from its own made-up IP address (`TRUST_PROXY=true` plus an `X-Forwarded-For` header), so the per-IP limits on sign-up and sign-in are spread across those made-up addresses. On the VM, `TRUST_PROXY=loopback` takes each visitor's real address from Caddy. "Light routes" means every route of a visit except sign-up and sign-in, which are slow on purpose (password hashing). `STRESS_P95_MS` (default 1000 ms) is the point where the site feels broken. The 200 ms budget is for normal use.
 
 - **`npm run stress:ramp`: where does it break?**
   - **What it does:** more and more users at once, one visit each (`STRESS_STEPS`, default `50,100,200,400,800`). It stops at the first step with a failed request, a 5xx, or light routes' p95 over `STRESS_P95_MS`.
@@ -222,20 +222,24 @@ The stress tests (in packages; `stress-test.js`) push past normal use. Like the 
 
     Test machines have no COLMAP, so each build fails at its first step. This tests the upload path and the queue, not a real build's GPU load.
 - **`npm run stress:soak`: do memory or speed drift over time?**
-  - **What it does:** `STRESS_LANES` (default 10) users browse, with `STRESS_PAUSE_MS` (2000) between visits, for `STRESS_MINUTES` (30). Each minute it prints a row with the server's memory, requests, light p95 and failures.
+  - **What it does:** `STRESS_LANES` (default 10) users browse, with `STRESS_PAUSE_MS` (2000) between visits, for `STRESS_MINUTES` (30). Each minute it prints a row with:
+    - the server's **heap after a forced garbage collection**, which is what's judged;
+    - its process memory, for reference only;
+    - requests, light p95 and failures.
+  - **How the heap is measured:** the test server runs with `--inspect` on a random local port. Each minute the script forces a full garbage collection through it, then reads the heap still in use. This costs one short pause a minute.
   - **Pass:**
     - no failures;
-    - memory at the end (last 3 minutes) stays under `STRESS_MAX_GROWTH` (1.5) times its size after warm-up (minutes 3–5);
+    - the heap after GC at the end (last 3 minutes) stays under `STRESS_MAX_GROWTH` (1.5) times its size after warm-up (minutes 3–5);
     - light p95 over the last 3 minutes stays under `STRESS_P95_MS`.
-
-    Some memory growth is expected, because every visit adds an account. The per-minute table is the evidence.
+  - **Why the heap and not process memory:** process memory also holds garbage Node hasn't collected yet, so it climbs and drops by itself. An earlier version judged process memory, and its 30-minute run failed (86 → 146 MB) just before Node's first full cleanup. A 60-minute run then showed memory falling from 170 MB back to 89 MB at minute 37. Judging the heap after a forced collection removes that false fail, so 30 minutes is enough. Some growth is still expected: every visit is a new user from a new address, and the per-address and per-user limits (sign-up, feedback, account edits) keep a small record of each for up to an hour before clearing it.
 
 None of these are in `npm test`, because they take minutes. Run them on mains power with other programs closed: the load is generated on the same machine, so its numbers are lower than what a separate VM could handle.
 
 Latest stress results: 24/11/2026, ASUS Laptop NVIDIA GeForce RTX 4060 Laptop GPU (8 GB).
 - Ramp can have up to 100 users at once within a 200ms budget, up to 400 users under 1s, and up to 800 users on this laptop. 
 - Heavy browsing p95 went from 20 to 89ms while 20 fox models were downloaded, each download completed at 7s, sign in p95 is 337ms. 
-- Soak: memory 88 → 119 MB, a full cleanup back to 89 MB at minute 37, 0 failures.
+- Soak (30 minutes, 25/11/2026): heap after GC 17.0 MB after warm-up → 19.1 MB at the end, 1.12x (limit 1.5x). Process memory 74–113 MB. About 103,000 requests, 0 failed, light p95 2–3 ms throughout.
+- Earlier soak (60 minutes, process memory only, before the heap measurement): memory 88 → 119 MB, with a full cleanup back to 89 MB at minute 37, and 0 failures.
 
 Latest `npm run load` (2026-11-08, same laptop, 100 users at once x 3 rounds = 3,600 requests): **0 failed requests, 0 server errors**, about 690 requests/s, server answering in 1 ms afterwards. Under that load the light routes (catalog, jobs, scenes, feedback) stay at p95 45-240 ms.
 

@@ -14,7 +14,7 @@ so the tests never touch data/app.db, jobs/ or a developer's settings.
 A new empty folder under the system's temp folder.
 - isolatedEnv(dir, extra)
 Environment variables for a backend that only uses dir.
-- startServer(dir, env)
+- startServer(dir, env, { nodeArgs })
 The real backend in a child process; resolves once it answers (or exits),
 with its address, process id, log and stop().
 - call(base, method, path, options)
@@ -103,10 +103,12 @@ function freePort()
   })
 }
 
-export async function startServer(dir, env = {})
+// nodeArgs: extra Node flags for the server process (e.g. --inspect for
+// stress-test.js soak, which reads the server's memory through it).
+export async function startServer(dir, env = {}, { nodeArgs = [] } = {})
 {
   const port = await freePort()
-  const child = spawn(process.execPath, [path.join(BACKEND_DIR, 'server.js')], {
+  const child = spawn(process.execPath, [...nodeArgs, path.join(BACKEND_DIR, 'server.js')], {
     env: isolatedEnv(dir, { PORT: String(port), ...env }),
     stdio: ['ignore', 'pipe', 'pipe'],
   })

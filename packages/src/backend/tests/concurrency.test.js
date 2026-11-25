@@ -141,8 +141,9 @@ describe('many users at once', () =>
     assert.deepEqual(visits.flatMap((visit) => visit.errors), [], 'browsing still works')
     assert.equal(browseStatuses.filter((status) => status >= 500).length, 0, 'no 5xx replies')
 
-    // No COLMAP here, so each build fails at its first step; every one must
-    // still leave the queue (one at a time) rather than wait forever.
+    // No COLMAP here, so each build fails at its first step. Each upload is
+    // a different user's, so their builds run at the same time (the limit is
+    // per user); every one must still leave the queue rather than wait forever.
     const pending = new Map(uploads.map((reply, i) => [reply.body.id, accepted[i]]))
     while (pending.size > 0)
     {

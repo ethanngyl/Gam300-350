@@ -9,8 +9,11 @@
 Stress tests (in packages: npm run stress:ramp, stress:heavy, stress:soak).
 Like the load test (load-test.js) they start the real server.js on a
 temporary folder (tests/helpers.js), with the real rate limits and
-UV_THREADPOOL_SIZE=16 as on the VM, and every simulated user is a new
-account from their own address (tests/simulatedUser.js).
+UV_THREADPOOL_SIZE=16 as on the VM. Every simulated user is a new account
+from their own made-up address (tests/simulatedUser.js: TRUST_PROXY=true
+and X-Forwarded-For), so the per-address limits (sign-up, sign-in) are
+spread across those addresses; on the VM (TRUST_PROXY=loopback) the
+address is each visitor's real one, from Caddy.
 "Light routes" below means every route of a visit except sign-up and
 sign-in, which hash the password and are slow on purpose.
 - ramp: where does it break? More and more users at once
@@ -27,9 +30,13 @@ and that rejected uploads leave no folder. Exits with 1 on any problem or
 if light routes' p95 during the heavy work passes STRESS_P95_MS.
 - soak: does memory or speed drift? STRESS_LANES (10) users browse with
 STRESS_PAUSE_MS (2000) between visits for STRESS_MINUTES (30); one row
-per minute with the server's memory. Exits with 1 on any failure, memory
-growing past STRESS_MAX_GROWTH (1.5) times its size after warm-up, or
-light routes' p95 in the last minutes passing STRESS_P95_MS.
+per minute with the server's heap after a forced full garbage collection
+(through Node's inspector: the server runs with --inspect on a random
+local port) and its process memory for reference. Judging the heap after
+a collection means garbage not yet collected can't look like a leak.
+Exits with 1 on any failure, that heap growing past STRESS_MAX_GROWTH
+(1.5) times its size after warm-up, or light routes' p95 in the last
+minutes passing STRESS_P95_MS.
 **************************************************************************/
 
 // ----- Headers ------------------------------------------------------- //
@@ -102,19 +109,21 @@ function printHeader(scenario)
 /************************************************************************/
 /*!
   \brief
-    Starts the real backend on a new temporary folder, set up like the VM:
-    behind a proxy (each user's own address counts), real rate limits,
-    16 worker threads.
+    Starts the real backend on a new temporary folder: real rate limits
+    and 16 worker threads as on the VM, behind a "proxy" (TRUST_PROXY=true)
+    so each simulated user's made-up address counts as theirs.
   \param name
     string, part of the folder's name
+  \param nodeArgs
+    optional extra Node flags for the server
   \return
     { server, dir }
 */
 /************************************************************************/
-async function startStressServer(name)
+async function startStressServer(name, nodeArgs = [])
 {
   const dir = tempDir(`stress-${name}`)
-  const server = await startServer(dir, { TRUST_PROXY: 'true', JOB_SOURCES: 'live,sample', UV_THREADPOOL_SIZE: THREADS })
+  const server = await startServer(dir, { TRUST_PROXY: 'true', JOB_SOURCES: 'live,sample', UV_THREADPOOL_SIZE: THREADS }, { nodeArgs })
   if (server.exitCode !== null) throw new Error(`server did not start:\n${server.log()}`)
   return { server, dir }
 }
@@ -208,6 +217,82 @@ async function timed(work)
   catch (error)
   {
     return { ms: performance.now() - start, error }
+  }
+}
+
+// Rejects with "timed out" if promise hasn't settled within ms.
+function withTimeout(promise, ms)
+{
+  let timer
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timed out')), ms) })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+/************************************************************************/
+/*!
+  \brief
+    Connects to the inspector of a server started with
+    --inspect=127.0.0.1:0 (its log names the address), to read how much
+    of its heap is in use after a forced full garbage collection: garbage
+    not yet collected then can't look like a leak.
+  \param server
+    from startServer
+  \return
+    { heapAfterGcMB(): Promise of MB or null, close() }, or null if the
+    inspector can't be reached
+*/
+/************************************************************************/
+async function connectInspector(server)
+{
+  const TIMEOUT_MS = 5000
+  const url = server.log().match(/ws:\/\/127\.0\.0\.1:\d+\/[\w-]+/)?.[0]
+  if (!url || typeof WebSocket !== 'function') return null
+  const socket = new WebSocket(url)
+  try
+  {
+    await withTimeout(new Promise((resolve, reject) =>
+    {
+      socket.addEventListener('open', resolve, { once: true })
+      socket.addEventListener('error', () => reject(new Error('could not connect')), { once: true })
+    }), TIMEOUT_MS)
+  }
+  catch
+  {
+    socket.close()
+    return null
+  }
+
+  // Replies carry the id of the request they answer.
+  const waiting = new Map()
+  let nextId = 0
+  socket.addEventListener('message', (event) =>
+  {
+    const message = JSON.parse(String(event.data))
+    waiting.get(message.id)?.(message)
+    waiting.delete(message.id)
+  })
+  const send = (method) => withTimeout(new Promise((resolve) =>
+  {
+    const id = ++nextId
+    waiting.set(id, resolve)
+    socket.send(JSON.stringify({ id, method }))
+  }), TIMEOUT_MS)
+
+  return {
+    async heapAfterGcMB()
+    {
+      try
+      {
+        await send('HeapProfiler.collectGarbage')
+        const reply = await send('Runtime.getHeapUsage')
+        return reply.result ? reply.result.usedSize / (1024 * 1024) : null
+      }
+      catch
+      {
+        return null
+      }
+    },
+    close: () => socket.close(),
   }
 }
 
@@ -400,7 +485,8 @@ async function heavy()
     check('sign-in', signIns, (r) => r.status === 200)
 
     // The build queue empties: every accepted build ends (no COLMAP here,
-    // so each one fails at its first step, one after another).
+    // so each one fails at its first step). Each upload is a different
+    // user's, so their builds run at the same time (per-user limit).
     const queueStart = performance.now()
     const pending = new Map()
     uploads.forEach(({ result }, i) =>
@@ -479,7 +565,9 @@ async function heavy()
 /*!
   \brief
     soak: a steady, moderate load for STRESS_MINUTES; one row per minute
-    with the server's memory, requests, light routes' p95 and failures.
+    with the server's heap after a forced garbage collection (judged),
+    its process memory (for reference), requests, light routes' p95 and
+    failures.
 */
 /************************************************************************/
 async function soak()
@@ -489,7 +577,10 @@ async function soak()
   const pauseMs = process.env.STRESS_PAUSE_MS === '0' ? 0 : setting('STRESS_PAUSE_MS', 2000)
   const maxGrowth = setting('STRESS_MAX_GROWTH', 1.5)
 
-  const { server } = await startStressServer('soak')
+  // --inspect on a random local port: the script forces a full garbage
+  // collection through it each minute and reads the heap in use.
+  const { server } = await startStressServer('soak', ['--inspect=127.0.0.1:0'])
+  const inspector = await connectInspector(server)
   try
   {
     const newBucket = () => ({ light: [], requests: 0, failures: 0, serverErrors: 0 })
@@ -518,19 +609,23 @@ async function soak()
 
     printHeader('soak')
     console.log(`${lanes} users at a time, ${pauseMs} ms between visits, for ${minutes} minutes`)
+    if (!inspector) console.log('Could not reach the server\'s inspector: the heap can\'t be read, so memory is shown but not judged')
+    const mb = (value) => (value == null ? 'n/a' : value.toFixed(1))
     for (let minute = 1; minute <= minutes; minute++)
     {
       await sleep(started + minute * 60_000 - Date.now())
       const done = bucket
       bucket = newBucket()
+      const heapMB = inspector ? await inspector.heapAfterGcMB() : null
       const memoryMB = await serverMemoryMB(server.pid)
-      buckets.push({ ...done, memoryMB })
+      buckets.push({ ...done, heapMB, memoryMB })
       const row = {
-        minute, 'memory MB': memoryMB == null ? 'n/a' : memoryMB.toFixed(0), requests: done.requests,
+        minute, 'heap after GC MB': mb(heapMB), 'memory MB': mb(memoryMB), requests: done.requests,
         'light p95 ms': ms(stats(done.light)?.p95), failed: done.failures, '5xx / no reply': done.serverErrors,
       }
       rows.push(row)
-      console.log(`  minute ${minute}/${minutes}: memory ${row['memory MB']} MB, ${row.requests} requests, light p95 ${row['light p95 ms']} ms, ${row.failed} failed`)
+      console.log(`  minute ${minute}/${minutes}: heap after GC ${row['heap after GC MB']} MB, memory ${row['memory MB']} MB, ` +
+        `${row.requests} requests, light p95 ${row['light p95 ms']} ms, ${row.failed} failed`)
       if (server.exitCode !== null) break
     }
     stop = true
@@ -545,22 +640,26 @@ async function soak()
     if (serverErrors > 0) problems.push(`${serverErrors} requests got a 5xx or no reply`)
     if (!after.up) problems.push('the server stopped answering')
 
-    // Memory: the last 3 minutes against minutes 3-5 (after warm-up).
-    const memory = buckets.map((b) => b.memoryMB)
-    if (memory.length < 6)
+    // Heap after a forced collection: the last 3 minutes against minutes
+    // 3-5 (after warm-up). Process memory is only reported: it also holds
+    // garbage not yet collected, so it rises and falls on its own.
+    const heap = buckets.map((b) => b.heapMB)
+    const memory = buckets.map((b) => b.memoryMB).filter((value) => value != null)
+    if (memory.length > 0) console.log(`Process memory (for reference): ${Math.min(...memory).toFixed(0)}-${Math.max(...memory).toFixed(0)} MB during the run`)
+    if (heap.length < 6)
     {
-      console.log('Memory: too short to judge (needs at least 6 minutes)')
+      console.log('Heap: too short to judge (needs at least 6 minutes)')
     }
-    else if (memory.some((value) => value == null))
+    else if (heap.some((value) => value == null))
     {
-      console.log('Memory: could not be read on this machine, not checked')
+      console.log('Heap: could not be read every minute, not checked')
     }
     else
     {
-      const warm = average(memory.slice(2, 5))
-      const end = average(memory.slice(-3))
-      console.log(`Memory: ${warm.toFixed(0)} MB after warm-up (minutes 3-5) -> ${end.toFixed(0)} MB at the end (last 3 minutes), ${(end / warm).toFixed(2)}x (limit ${maxGrowth}x)`)
-      if (end > warm * maxGrowth) problems.push(`memory grew ${(end / warm).toFixed(2)}x, over ${maxGrowth}x`)
+      const warm = average(heap.slice(2, 5))
+      const end = average(heap.slice(-3))
+      console.log(`Heap after GC: ${warm.toFixed(1)} MB after warm-up (minutes 3-5) -> ${end.toFixed(1)} MB at the end (last 3 minutes), ${(end / warm).toFixed(2)}x (limit ${maxGrowth}x)`)
+      if (end > warm * maxGrowth) problems.push(`heap after GC grew ${(end / warm).toFixed(2)}x, over ${maxGrowth}x`)
     }
 
     // Speed: light routes over the last 3 minutes.
@@ -581,6 +680,7 @@ async function soak()
   }
   finally
   {
+    inspector?.close()
     await server.stop()
   }
 }
