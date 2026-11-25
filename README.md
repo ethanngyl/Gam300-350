@@ -144,7 +144,7 @@ Targets the product must meet, how each is measured, and the latest numbers.
 
 | Area | Target | How to measure |
 | --- | --- | --- |
-| Engine desktop editor (no backend needed) | **60 FPS** with the largest sample model (`fox.ply`, 304,526 splats), Gaussian mode | FPS readout in the status bar, or View > Stats Overlay (`engine/src/ui/Viewport.cpp`) |
+| Engine desktop editor (no backend needed) | **60 FPS** with the largest sample model (`fox.ply`, 304,526 splats), Gaussian mode | FPS readout in the status bar, or View > Stats Overlay (`engine/src/ui/Viewport.cpp`). For a measured average: View > Record Metrics (Ctrl+Shift+R), orbit, stop; the summary shows average / 1% low FPS and drops, and the metrics dashboard's Engine tab (`packages/start-metrics.bat`) charts it |
 | Web viewer, desktop browser (model already downloaded, so rendering doesn't wait on the backend) | **60 FPS** while orbiting the same model | Chrome DevTools (F12) > ⋮ > More tools > Rendering > tick "Frame Rendering Stats", on `#/model/sample-fox` |
 | Web viewer, phone browser | **30 FPS** while orbiting | Same, with remote debugging (chrome://inspect) |
 | API, JSON routes | **p95 ≤ 200 ms** | `npm run perf` (in packages); live: `GET /api/v1/metrics/performance` (admins) |

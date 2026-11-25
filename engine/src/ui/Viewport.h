@@ -78,6 +78,8 @@ public:
     // Moves the orbit camera's pan target back to where it started.
     void recenterCamera() { m_camera.ResetPosition(); }
 
+    // Frame metrics, for starting / stopping a recording from the editor.
+    FrameMetrics& metrics() { return m_metrics; }
     //Draws one frame now and waits for the GPU to finish it, instead of waiting for the next vsync.
     //Let the stress tests time work that the renderer defers to its next Draw (e.g. uploads).
     void RenderFrameBlocking();
@@ -100,6 +102,8 @@ protected:
 private:
     void BindInputs();
     void DrawImGui(float fps);
+    //Red "REC" timer with the running average fps and drops, top left, while a metrics recording runs
+    void DrawRecordingIndicator();
     //Grid overlay: unit numbers along the X and Z axes, an XYZ direction marker in the
     //bottom left corner, and a drop line + coordinates for the selected model
     void DrawGridLabels(const glm::mat4& view, const glm::mat4& proj);

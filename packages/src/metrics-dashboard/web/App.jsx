@@ -7,8 +7,9 @@
 \date 23-10-2026
 \brief
 Shell of the Pipeline Metrics dashboard: header with refresh controls and
-theme toggle, tab bar (Overview / Metrics / Hardware, routed through the
-URL hash), loading / error / empty states, and the run detail drawer.
+theme toggle, tab bar (Overview / Metrics / Hardware / Engine, routed
+through the URL hash), loading / error / empty states, and the run detail
+drawer. The Engine tab loads the desktop engine's recordings itself.
 **************************************************************************/
 
 import { useCallback, useEffect, useState } from 'react'
@@ -17,6 +18,7 @@ import { EmptyState } from './components/Kpi.jsx'
 import OverviewView from './views/OverviewView.jsx'
 import MetricsView from './views/MetricsView.jsx'
 import HardwareView from './views/HardwareView.jsx'
+import EngineView from './views/EngineView.jsx'
 import { useHashRoute, useMetrics } from './lib/hooks.js'
 import { fmtRelative } from './lib/format.js'
 
@@ -24,6 +26,7 @@ const TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'metrics', label: 'Metrics' },
   { key: 'hardware', label: 'Hardware' },
+  { key: 'engine', label: 'Engine' },
 ]
 const TAB_KEYS = TABS.map((t) => t.key)
 const REFRESH_MS = 30_000
@@ -42,7 +45,14 @@ export default function App() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [selectedId, setSelectedId] = useState(null)
   const [theme, setTheme] = useState(loadTheme)
-  const { data, error, loading, refresh } = useMetrics(autoRefresh ? REFRESH_MS : 0)
+  // Bumped by the Refresh button so the Engine tab, which loads its own data, refreshes too.
+  const [refreshKey, setRefreshKey] = useState(0)
+  const { data, error, loading, refresh: refreshPipeline } = useMetrics(autoRefresh ? REFRESH_MS : 0)
+  const refresh = useCallback(() => {
+    refreshPipeline()
+    setRefreshKey((k) => k + 1)
+  }, [refreshPipeline])
+  const isEngine = tab === 'engine'
 
   useEffect(() => {
     const root = document.documentElement
@@ -60,7 +70,9 @@ export default function App() {
   const selected = records.find((r) => r.jobId === selectedId)
 
   let body
-  if (!data && loading) body = <div className="skeleton" aria-busy="true">Loading metrics…</div>
+  // The Engine tab reads the engine's recordings, so it shows even with no pipeline runs.
+  if (isEngine) body = <EngineView refreshKey={refreshKey} autoRefresh={autoRefresh} />
+  else if (!data && loading) body = <div className="skeleton" aria-busy="true">Loading metrics…</div>
   else if (!data && error) {
     body = (
       <EmptyState title="Can't reach the metrics server">
@@ -85,8 +97,8 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
           <div>
-            <h1>Pipeline Metrics</h1>
-            <p className="muted">Gaussian splat generation · COLMAP + Brush</p>
+            <h1>{isEngine ? 'Engine Metrics' : 'Pipeline Metrics'}</h1>
+            <p className="muted">{isEngine ? 'Desktop editor frame rate recordings' : 'Gaussian splat generation · COLMAP + Brush'}</p>
           </div>
         </div>
         <div className="topbar-actions">

@@ -17,6 +17,14 @@ Both are merged by `jobId`. The per-job file wins, and the `.jsonl` keeps runs
 whose job folder was deleted. Both files are committed to git (see
 `.gitignore`), so teammates' runs show up after a pull.
 
+The **Engine** tab reads the desktop engine's metrics recordings instead (View >
+Record Metrics, or Ctrl+Shift+R, in the editor). `engine/src/metrics/FrameMetrics.cpp`
+writes each one to `%APPDATA%/CoDefine/Codefine Engine/metrics/recordings` as
+`rec_<time>.csv` (every frame: frame time, fps, drop, splats, models, activity,
+CPU / GPU scene time) and `rec_<time>.json` (average fps, 1% low, slowest second,
+frame time percentiles, drops, splat range, GPU, and one entry per second). The
+newest 50 are kept. They stay on the machine that recorded them (not in git).
+
 ## Tabs
 
 - **Overview**: KPIs (runs, median total / training time, iterations per
@@ -27,8 +35,14 @@ whose job folder was deleted. Both files are committed to git (see
   or JSON. Click a row to see the full record, including the raw JSON.
 - **Hardware**: training throughput and median times per host + GPU, with
   each machine's spec.
+- **Engine**: the selected engine recording's average frame rate, 1% low,
+  drops, frame time p95, splats and scene draw time; its frame rate (against
+  the display refresh rate), drops and splat count per second; every
+  recording in a table (click to view, Download CSV for the raw frames); and
+  average frame rate across recent recordings. Shown even with no pipeline runs.
 
-Tabs are linkable (`#/overview`, `#/metrics`, `#/hardware`). Data refreshes
+Tabs are linkable (`#/overview`, `#/metrics`, `#/hardware`, `#/engine`, or
+`#/engine/<recording id>`; the editor's "Open Dashboard" button uses that). Data refreshes
 every 30 s while the tab is visible. Light and dark themes follow the OS
 setting unless you override them.
 
@@ -48,6 +62,7 @@ On Windows you can also double-click `packages/start-metrics.bat`.
 | `METRICS_PORT` | `5010` | Port the dashboard server listens on |
 | `METRICS_HOST` | `127.0.0.1` | Bind address. Set `0.0.0.0` to expose it on the LAN |
 | `METRICS_JOBS_DIR` | `JOBS_DIR`, else `../backend/jobs` | Where to read metrics from |
+| `ENGINE_METRICS_DIR` | `%APPDATA%/CoDefine/Codefine Engine/metrics/recordings` | Where to read engine recordings from |
 
 The server binds to localhost by default because the records include host
 names and hardware details.
@@ -59,6 +74,9 @@ names and hardware details.
 | `GET /api/health` | `{ ok, uptimeSec }` |
 | `GET /api/metrics` | `{ generatedAt, count, sources: { files, log, invalid }, records[] }`, newest first |
 | `GET /api/metrics/:jobId` | One record, or 404 |
+| `GET /api/engine-recordings` | `{ generatedAt, dir, count, recordings[] }` engine recording summaries (no per-second series), newest first |
+| `GET /api/engine-recordings/:id` | One recording with its `seconds[]` series, or 404 |
+| `GET /api/engine-recordings/:id/csv` | That recording's per-frame CSV, as a download |
 
 ## Layout
 

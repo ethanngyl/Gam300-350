@@ -58,6 +58,8 @@ Viewport::~Viewport() {
     }
     // GL resources must be released with this widget's context current.
     makeCurrent();
+    // The editor is closing: a recording still running is saved, but nobody is left to tell.
+    m_metrics.onRecordingFinished = nullptr;
     m_metrics.Shutdown(); // logs the open session and frees the GPU timer queries
     m_cropBoxRenderer.reset();
     m_gridRenderer.reset();
@@ -270,6 +272,7 @@ void Viewport::paintGL() {
     DrawGizmo(view, proj); //Draw Gizmos (Movement arrows, etc.)
     DrawToolButtons();
     DrawImGui(fps);
+    DrawRecordingIndicator();
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     m_metrics.EndSection(FrameMetrics::Section::Overlay);
@@ -461,6 +464,29 @@ void Viewport::DrawToolButtons() {
     ImGui::End();
 }
 
+void Viewport::DrawRecordingIndicator() {
+    const FrameMetrics::RecordingLive rec = m_metrics.LiveRecording();
+    if (!rec.active) return;
+
+    ImGui::SetNextWindowPos(ImVec2(kOverlayPad, kOverlayPad), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.55f);
+    ImGui::Begin("Recording", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+    //Dot blinks once a second
+    const bool dotOn = static_cast<long long>(rec.elapsedSec * 2.0) % 2 == 0;
+    const auto total = static_cast<long long>(rec.elapsedSec);
+    const float lineHeight = ImGui::GetTextLineHeight();
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(cursor.x + lineHeight * 0.5f, cursor.y + lineHeight * 0.5f),
+                                                lineHeight * 0.35f, IM_COL32(255, 70, 70, dotOn ? 255 : 90));
+    ImGui::Dummy(ImVec2(lineHeight, lineHeight));
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "REC %02lld:%02lld", total / 60, total % 60);
+    ImGui::Text("Avg %.1f FPS | %llu drops", rec.avgFps, static_cast<unsigned long long>(rec.drops));
+    ImGui::TextDisabled("Ctrl+Shift+R to stop");
+    ImGui::End();
 void Viewport::DrawGridLabels(const glm::mat4& view, const glm::mat4& proj) {
     const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
     const glm::mat4 viewProj = proj * view;

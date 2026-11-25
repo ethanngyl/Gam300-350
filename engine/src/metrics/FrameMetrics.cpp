@@ -20,12 +20,16 @@ per run, the newest kKeepRuns runs are kept) under the user data folder.
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QString>
+#include <QSysInfo>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <utility>
 
 namespace {
     // A frame longer than this many refreshes missed at least one vsync.
@@ -42,6 +46,46 @@ namespace {
     constexpr std::size_t kMaxSessionSamples = 100000;
     // Log runs kept in the metrics folder.
     constexpr int kKeepRuns = 20;
+    // Recordings kept in metrics/recordings (each is a .csv + .json pair).
+    constexpr int kKeepRecordings = 50;
+    // Cap on per-recording frame intervals kept for percentiles (~1 h at 144 Hz).
+    constexpr std::size_t kMaxRecordingSamples = 600000;
+
+    // Sort key for a recording id rec_<yyyyMMdd_HHmmss>[_n]: the timestamp, then n (no suffix = 1),
+    // so rec_X_10 sorts after rec_X_2.
+    std::pair<QString, int> RecordingSortKey(const QString& id) {
+        constexpr int kStampLength = 19; // "rec_" + "yyyyMMdd_HHmmss"
+        const int n = id.size() > kStampLength + 1 ? id.mid(kStampLength + 1).toInt() : 1;
+        return { id.left(kStampLength), n };
+    }
+
+    // Deletes all but the newest `keep` recordings. Each one's .csv, .json and any leftover .json.tmp
+    // go together, so a crash mid-recording can't leave older recordings with half a pair.
+    void PruneRecordings(const QString& folder, int keep) {
+        const QDir dir(folder);
+        QStringList ids;
+        for (const QString& name : dir.entryList({ "rec_*.csv", "rec_*.json", "rec_*.json.tmp" }, QDir::Files)) {
+            const QString id = name.left(name.indexOf('.'));
+            if (!ids.contains(id)) ids.append(id);
+        }
+        std::sort(ids.begin(), ids.end(), [](const QString& a, const QString& b) {
+            return RecordingSortKey(a) > RecordingSortKey(b); // newest first
+        });
+        for (int i = keep; i < ids.size(); ++i) {
+            for (const char* ext : { ".csv", ".json", ".json.tmp" }) QFile::remove(dir.filePath(ids[i] + ext));
+        }
+    }
+
+    // Escapes a string for a JSON string literal.
+    std::string JsonString(const std::string& s) {
+        std::string out = "\"";
+        for (const char c : s) {
+            if (c == '"' || c == '\\') { out += '\\'; out += c; }
+            else if (static_cast<unsigned char>(c) < 0x20) out += ' ';
+            else out += c;
+        }
+        return out + "\"";
+    }
 
     std::string Format(const char* fmt, ...) {
         char buffer[1024];
@@ -114,6 +158,9 @@ void FrameMetrics::Init(const std::string& logDir) {
     else {
         LogWarning("[Metrics] GPU timer queries unavailable, GPU frame time will not be reported");
     }
+    if (const GLubyte* renderer = glGetString(GL_RENDERER)) {
+        m_gpuName = reinterpret_cast<const char*>(renderer);
+    }
 
     if (logDir.empty()) return;
 
@@ -144,6 +191,11 @@ void FrameMetrics::Init(const std::string& logDir) {
                       "cpu_scene_ms,cpu_overlay_ms,commit_ms,gpu_scene_ms,splats,models\n";
         m_frameCsv.flush();
     }
+    const QString recordingDir = dir.filePath("recordings");
+    if (QDir().mkpath(recordingDir)) {
+        m_recordingDir = recordingDir.toStdString();
+        PruneRecordings(recordingDir, kKeepRecordings);
+    }
     if (m_sessionCsv && m_frameCsv) {
         LogInfo("[Metrics] Logging interaction sessions to " + m_sessionLogPath);
     }
@@ -161,6 +213,8 @@ void FrameMetrics::Shutdown() {
     PollGpuQueries();
     ProcessReadyFrames(true);
     if (m_sessionOpen) CloseSession();
+    // The open frame never finishes, so a recording still running (or waiting on it) is closed here.
+    if (m_recording) FinishRecording();
 
     if (m_gpuTimingAvailable) {
         if (m_gpuQueryActive) glEndQuery(GL_TIME_ELAPSED);
@@ -371,6 +425,7 @@ void FrameMetrics::ProcessFrame(const FrameRecord& frame) {
     }
 
     if (frame.activity != Activity::Idle || frame.dropped) WriteFrameCsv(frame);
+    RecordFrame(frame);
 }
 
 void FrameMetrics::OpenSession(const FrameRecord& frame) {
@@ -513,6 +568,263 @@ void FrameMetrics::UpdateLive() {
     m_live.avgGpuSceneMs = gpuFrames ? static_cast<float>(gpuSum / gpuFrames) : -1.0f;
     m_live.expectedMs = newest.expectedMs;
     m_live.dropsLastSecond = drops;
+}
+
+FrameMetrics::StartResult FrameMetrics::StartRecording() {
+    if (IsRecording()) return StartResult::AlreadyRecording;
+    if (IsSavingRecording()) return StartResult::StillSaving;
+    if (m_recordingDir.empty()) return StartResult::NoOutput;
+
+    const QDir dir(QString::fromStdString(m_recordingDir));
+    const QDateTime now = QDateTime::currentDateTime();
+    // Two recordings in the same second get a suffix instead of overwriting each other.
+    QString id = "rec_" + now.toString("yyyyMMdd_HHmmss");
+    for (int n = 2; QFileInfo::exists(dir.filePath(id + ".csv")); ++n) {
+        id = "rec_" + now.toString("yyyyMMdd_HHmmss") + QString("_%1").arg(n);
+    }
+    m_recId = id.toStdString();
+    m_recCsvPath = dir.filePath(id + ".csv").toStdString();
+    m_recCsv.open(m_recCsvPath, std::ios::out | std::ios::trunc);
+    if (!m_recCsv) {
+        LogWarning("[Metrics] Could not create " + m_recCsvPath + ", recording not started");
+        return StartResult::FileError;
+    }
+    m_recCsv << "t_s,frame_ms,fps,dropped,missed_vsyncs,splats,models,activity,cpu_scene_ms,gpu_scene_ms\n";
+
+    m_recording = true;
+    m_recStartId = m_nextId; // the next frame to begin is the first one recorded
+    m_recEndId = kNoEnd;
+    m_recWallStart = Clock::now();
+    m_recStartedAt = now.toOffsetFromUtc(now.offsetFromUtc()).toString(Qt::ISODate).toStdString();
+    m_recHaveFirst = false;
+    m_recFirstSeconds = 0.0;
+    m_recLastEndSeconds = 0.0;
+    m_recIntervals.clear();
+    m_recFrames = 0;
+    m_recIntervalSum = 0.0;
+    m_recCpuSceneSum = 0.0;
+    m_recGpuSceneSum = 0.0;
+    m_recGpuSamples = 0;
+    m_recDrops = 0;
+    m_recMissedVsyncs = 0;
+    m_recPauses = 0;
+    m_recSplatFrames = 0;
+    m_recSplatSum = 0.0;
+    m_recMinSplats = 0;
+    m_recMaxSplats = 0;
+    m_recMaxModels = 0;
+    m_recExpectedMs = 0.0f;
+    m_recSeconds.clear();
+
+    LogInfo("[Metrics] Recording started: " + m_recCsvPath);
+    return StartResult::Started;
+}
+
+void FrameMetrics::StopRecording() {
+    if (!IsRecording()) return;
+    // Frames up to the last one begun are part of the recording. They are processed a few frames
+    // late (GPU timings), so the summary is written once processing gets past them.
+    m_recEndId = m_nextId;
+    if (m_nextToProcess >= m_recEndId) FinishRecording();
+}
+
+FrameMetrics::RecordingLive FrameMetrics::LiveRecording() const {
+    RecordingLive live;
+    live.active = IsRecording();
+    if (!m_recording) return live;
+    live.elapsedSec = std::chrono::duration<double>(Clock::now() - m_recWallStart).count();
+    live.frames = m_recFrames;
+    live.drops = m_recDrops;
+    live.avgFps = m_recIntervalSum > 0.0 ? static_cast<float>(static_cast<double>(m_recFrames) * 1000.0 / m_recIntervalSum) : 0.0f;
+    return live;
+}
+
+void FrameMetrics::RecordFrame(const FrameRecord& frame) {
+    if (!m_recording) return;
+
+    if (frame.id >= m_recStartId && frame.id < m_recEndId) {
+        if (!m_recHaveFirst) {
+            m_recHaveFirst = true;
+            m_recFirstSeconds = frame.startSeconds;
+        }
+        const double t = frame.startSeconds - m_recFirstSeconds;
+        m_recLastEndSeconds = frame.startSeconds + frame.intervalMs / 1000.0;
+        const float scene = frame.cpuMs[static_cast<std::size_t>(Section::Scene)];
+        // An idle frame over a second is the window being hidden or the app waiting for input:
+        // counted, but left out of the averages so it doesn't swamp them. A long frame during an
+        // interaction is a real hitch and stays in (the same rule FinalizePending uses).
+        const bool pause = frame.activity == Activity::Idle && frame.intervalMs > kIdleStallMs;
+
+        // One bucket per second for the dashboard's charts (capped at a day).
+        const auto second = static_cast<std::size_t>(std::max(t, 0.0));
+        if (second < 86400 && second >= m_recSeconds.size()) m_recSeconds.resize(second + 1);
+        RecordingSecond* bucket = second < m_recSeconds.size() ? &m_recSeconds[second] : nullptr;
+
+        if (pause) {
+            ++m_recPauses;
+        }
+        else {
+            ++m_recFrames;
+            if (m_recIntervals.size() < kMaxRecordingSamples) m_recIntervals.push_back(frame.intervalMs);
+            m_recIntervalSum += frame.intervalMs;
+            m_recCpuSceneSum += scene;
+            if (frame.gpuSceneMs >= 0.0f) {
+                m_recGpuSceneSum += frame.gpuSceneMs;
+                ++m_recGpuSamples;
+            }
+            if (frame.dropped) {
+                ++m_recDrops;
+                m_recMissedVsyncs += static_cast<std::uint64_t>(frame.missedVsyncs);
+            }
+            if (bucket) {
+                ++bucket->frames;
+                bucket->intervalSum += frame.intervalMs;
+                bucket->maxFrameMs = std::max(bucket->maxFrameMs, frame.intervalMs);
+                if (frame.dropped) ++bucket->drops;
+            }
+        }
+        if (bucket) {
+            bucket->splats = std::max(bucket->splats, frame.splatCount);
+            bucket->models = std::max(bucket->models, frame.modelCount);
+        }
+
+        if (m_recSplatFrames == 0) {
+            m_recMinSplats = frame.splatCount;
+            m_recMaxSplats = frame.splatCount;
+        }
+        m_recMinSplats = std::min(m_recMinSplats, frame.splatCount);
+        m_recMaxSplats = std::max(m_recMaxSplats, frame.splatCount);
+        m_recSplatSum += static_cast<double>(frame.splatCount);
+        ++m_recSplatFrames;
+        m_recMaxModels = std::max(m_recMaxModels, frame.modelCount);
+        m_recExpectedMs = frame.expectedMs;
+
+        if (m_recCsv) {
+            const float fps = frame.intervalMs > 0.0f ? 1000.0f / frame.intervalMs : 0.0f;
+            m_recCsv << Format("%.4f,%.3f,%.1f,%d,%d,%zu,%zu,%s,%.3f,", t, frame.intervalMs, fps,
+                               frame.dropped ? 1 : 0, frame.missedVsyncs, frame.splatCount, frame.modelCount,
+                               ActivityName(frame.activity), scene);
+            if (frame.gpuSceneMs >= 0.0f) m_recCsv << Format("%.3f", frame.gpuSceneMs);
+            m_recCsv << '\n';
+        }
+    }
+
+    if (m_recEndId != kNoEnd && frame.id + 1 >= m_recEndId) FinishRecording();
+}
+
+void FrameMetrics::FinishRecording() {
+    if (!m_recording) return;
+    m_recording = false;
+    m_recEndId = kNoEnd;
+    m_recCsv.close();
+
+    RecordingSummary s;
+    s.id = m_recId;
+    s.csvPath = m_recCsvPath;
+    s.jsonPath = QDir(QString::fromStdString(m_recordingDir)).filePath(QString::fromStdString(m_recId) + ".json").toStdString();
+    s.durationSec = m_recHaveFirst ? m_recLastEndSeconds - m_recFirstSeconds : 0.0;
+    s.frames = m_recFrames;
+    s.drops = m_recDrops;
+    s.missedVsyncs = m_recMissedVsyncs;
+    s.pauses = m_recPauses;
+    s.minSplats = m_recMinSplats;
+    s.maxSplats = m_recMaxSplats;
+    s.avgSplats = m_recSplatFrames ? m_recSplatSum / static_cast<double>(m_recSplatFrames) : 0.0;
+    s.maxModels = m_recMaxModels;
+    s.refreshHz = m_recExpectedMs > 0.0f ? 1000.0f / m_recExpectedMs : 0.0f;
+    s.avgGpuSceneMs = m_recGpuSamples ? static_cast<float>(m_recGpuSceneSum / static_cast<double>(m_recGpuSamples)) : -1.0f;
+
+    if (m_recFrames > 0 && m_recIntervalSum > 0.0) {
+        const auto frames = static_cast<double>(m_recFrames);
+        s.avgFps = static_cast<float>(frames * 1000.0 / m_recIntervalSum);
+        s.avgFrameMs = static_cast<float>(m_recIntervalSum / frames);
+        s.avgCpuSceneMs = static_cast<float>(m_recCpuSceneSum / frames);
+    }
+    std::vector<float> sorted = m_recIntervals;
+    std::sort(sorted.begin(), sorted.end());
+    if (!sorted.empty()) {
+        s.p50FrameMs = Percentile(sorted, 0.50f);
+        s.p95FrameMs = Percentile(sorted, 0.95f);
+        s.p99FrameMs = Percentile(sorted, 0.99f);
+        s.maxFrameMs = sorted.back();
+        // 1% low: the average frame time of the slowest 1% of frames, as fps
+        const std::size_t count = std::max<std::size_t>(1, sorted.size() / 100);
+        double worstSum = 0.0;
+        for (std::size_t i = sorted.size() - count; i < sorted.size(); ++i) worstSum += sorted[i];
+        const double worstMean = worstSum / static_cast<double>(count);
+        s.onePercentLowFps = worstMean > 0.0 ? static_cast<float>(1000.0 / worstMean) : 0.0f;
+    }
+    // Slowest second, ignoring seconds with under half a second of frames (the partial last one, pauses)
+    s.minSecondFps = s.avgFps;
+    for (const RecordingSecond& sec : m_recSeconds) {
+        if (sec.frames == 0 || sec.intervalSum < 500.0) continue;
+        s.minSecondFps = std::min(s.minSecondFps, static_cast<float>(sec.frames * 1000.0 / sec.intervalSum));
+    }
+
+    // Summary + per second series, read by the metrics dashboard. Written to a temp file first so
+    // the dashboard never reads half a file.
+    const std::string tmpPath = s.jsonPath + ".tmp";
+    bool jsonOk = false;
+    {
+        std::ofstream json(tmpPath, std::ios::out | std::ios::trunc);
+        json << "{\n";
+        json << "  \"version\": 1,\n";
+        json << "  \"id\": " << JsonString(s.id) << ",\n";
+        json << "  \"startedAt\": " << JsonString(m_recStartedAt) << ",\n";
+        json << "  \"host\": " << JsonString(QSysInfo::machineHostName().toStdString()) << ",\n";
+        json << "  \"gpu\": " << JsonString(m_gpuName) << ",\n";
+        json << "  \"csvFile\": " << JsonString(QFileInfo(QString::fromStdString(s.csvPath)).fileName().toStdString()) << ",\n";
+        json << Format("  \"durationSec\": %.3f,\n  \"frames\": %llu,\n", s.durationSec, static_cast<unsigned long long>(s.frames));
+        json << Format("  \"avgFps\": %.2f,\n  \"onePercentLowFps\": %.2f,\n  \"minSecondFps\": %.2f,\n",
+                       s.avgFps, s.onePercentLowFps, s.minSecondFps);
+        json << Format("  \"avgFrameMs\": %.3f,\n  \"p50FrameMs\": %.3f,\n  \"p95FrameMs\": %.3f,\n  \"p99FrameMs\": %.3f,\n  \"maxFrameMs\": %.3f,\n",
+                       s.avgFrameMs, s.p50FrameMs, s.p95FrameMs, s.p99FrameMs, s.maxFrameMs);
+        json << Format("  \"drops\": %llu,\n  \"missedVsyncs\": %llu,\n  \"pauses\": %llu,\n",
+                       static_cast<unsigned long long>(s.drops), static_cast<unsigned long long>(s.missedVsyncs),
+                       static_cast<unsigned long long>(s.pauses));
+        json << Format("  \"refreshHz\": %.2f,\n  \"avgCpuSceneMs\": %.3f,\n", s.refreshHz, s.avgCpuSceneMs);
+        if (s.avgGpuSceneMs >= 0.0f) json << Format("  \"avgGpuSceneMs\": %.3f,\n", s.avgGpuSceneMs);
+        else json << "  \"avgGpuSceneMs\": null,\n";
+        json << Format("  \"splats\": { \"min\": %zu, \"max\": %zu, \"avg\": %.1f },\n  \"maxModels\": %zu,\n",
+                       s.minSplats, s.maxSplats, s.avgSplats, s.maxModels);
+        json << "  \"seconds\": [";
+        for (std::size_t i = 0; i < m_recSeconds.size(); ++i) {
+            const RecordingSecond& sec = m_recSeconds[i];
+            json << (i ? ",\n    " : "\n    ");
+            if (sec.frames > 0 && sec.intervalSum > 0.0) {
+                json << Format("{ \"t\": %zu, \"fps\": %.2f, \"frames\": %u, \"maxFrameMs\": %.3f, \"drops\": %u, \"splats\": %zu, \"models\": %zu }",
+                               i, sec.frames * 1000.0 / sec.intervalSum, sec.frames, sec.maxFrameMs, sec.drops, sec.splats, sec.models);
+            }
+            else {
+                json << Format("{ \"t\": %zu, \"fps\": null, \"frames\": 0, \"maxFrameMs\": null, \"drops\": 0, \"splats\": %zu, \"models\": %zu }",
+                               i, sec.splats, sec.models);
+            }
+        }
+        json << (m_recSeconds.empty() ? "]\n" : "\n  ]\n");
+        json << "}\n";
+        json.flush();
+        jsonOk = json.good();
+    }
+    if (jsonOk) {
+        QFile::remove(QString::fromStdString(s.jsonPath));
+        jsonOk = QFile::rename(QString::fromStdString(tmpPath), QString::fromStdString(s.jsonPath));
+    }
+    if (!jsonOk) QFile::remove(QString::fromStdString(tmpPath));
+
+    LogInfo(Format("[Metrics] Recording %s: %.1f s, %llu frames, avg %.1f FPS (1%% low %.1f), p95 %.2f ms, "
+                   "%llu drops, splats %zu-%zu",
+                   s.id.c_str(), s.durationSec, static_cast<unsigned long long>(s.frames), s.avgFps,
+                   s.onePercentLowFps, s.p95FrameMs, static_cast<unsigned long long>(s.drops),
+                   s.minSplats, s.maxSplats));
+    if (jsonOk) LogInfo("[Metrics] Saved " + s.csvPath + " and " + s.jsonPath);
+    else LogWarning("[Metrics] Could not write the recording summary " + s.jsonPath + " (frames kept in " + s.csvPath + ")");
+
+    m_recIntervals.clear();
+    m_recIntervals.shrink_to_fit();
+    m_recSeconds.clear();
+    m_recSeconds.shrink_to_fit();
+
+    if (onRecordingFinished) onRecordingFinished(s);
 }
 
 void FrameMetrics::CopyIntervalHistory(std::vector<float>& out) const {
