@@ -34,7 +34,7 @@ section. Sections:
 - Appearance: the theme (dark, light or follow the device, see
   AppearanceSettings.js), saved in this browser.
 - Audio: sound effects on/off and overall volume, then each kind of
-  sound (buttons, camera shutter, notifications) on/off with its own
+  sound (build sounds, open and save, camera shutter) on/off with its own
   volume and a Play button to hear it (Audio.js), saved in this browser.
 On phones the three preference sections are one simpler Preferences tab:
 the theme, sounds on/off and volume, and one switch per notification.
@@ -114,9 +114,9 @@ const PHONE_SECTION_GROUPS = SECTION_GROUPS.map((group) => (
 // Account > Audio: each kind of sound (Audio.js SOUND_CATEGORY_IDS), with
 // the sound its Play button plays.
 const SOUND_CATEGORY_DETAILS = {
-    buttons: { title: 'Button sounds', hint: 'Taps, confirm and back.', sampleSound: 'tap' },
+    notifications: { title: 'Build sounds', hint: 'Each build step, model ready and build failed.', sampleSound: 'success' },
+    actions: { title: 'Open and save', hint: 'Opening a model, and saving a model, export or scene.', sampleSound: 'save' },
     camera: { title: 'Camera shutter', hint: 'When you take a photo.', sampleSound: 'camera' },
-    notifications: { title: 'Notification sounds', hint: 'Model ready, build failed and build steps.', sampleSound: 'success' },
 };
 
 // Account > Appearance theme choices, in order (AppearanceSettings.js).
@@ -273,7 +273,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     }, [isModal, isChangingPassword, onClose]);
 
     function setNotificationPref(id, channel, isOn) {
-        playSound('tap');
         setNotificationPrefs((prefs) => {
             const next = { ...prefs, [id]: { email: true, inApp: true, ...prefs[id], [channel]: isOn } };
             saveNotificationPrefs(next);
@@ -289,14 +288,12 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
         setPhotoError(null);
         try {
             await saveProfilePhoto(user.email, chosenFile);
-            playSound('confirm');
         } catch (err) {
             setPhotoError(err.message);
         }
     }
 
     function openSection(sectionId) {
-        playSound('tap');
         setPlanNotice(null);
         setActiveSection(sectionId);
     }
@@ -340,7 +337,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
             <button
                 className="forma-btn"
                 onClick={() => {
-                    playSound('back');
                     onSignOut();
                 }}
             >
@@ -395,7 +391,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                             <button
                                 className="forma-btn"
                                 onClick={() => {
-                                    playSound('tap');
                                     photoInputRef.current?.click();
                                 }}
                             >
@@ -405,7 +400,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                                 <button
                                     className="forma-btn acct-btn-quiet"
                                     onClick={() => {
-                                        playSound('back');
                                         removeProfilePhoto(user.email);
                                     }}
                                 >
@@ -446,7 +440,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                                 <button
                                     className="forma-btn acct-row-action"
                                     onClick={() => {
-                                        playSound('tap');
                                         setPasswordNotice(null);
                                         setIsChangingPassword(true);
                                     }}
@@ -495,7 +488,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                     <button
                         className="forma-btn"
                         onClick={() => {
-                            playSound('tap');
                             onShowWalkthrough();
                         }}
                     >
@@ -522,7 +514,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                             <button
                                 className="forma-btn acct-danger-button"
                                 onClick={() => {
-                                    playSound('tap');
                                     setIsDeletingAccount(true);
                                 }}
                             >
@@ -600,7 +591,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                                     className={plan.isFeatured ? 'forma-btn forma-btn-primary acct-plan-btn' : 'forma-btn acct-plan-btn'}
                                     disabled={isCurrent}
                                     onClick={() => {
-                                        playSound('tap');
                                         setPlanNotice(
                                             user.isGuest
                                                 ? 'Sign in to choose a plan.'
@@ -660,7 +650,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                             aria-selected={profileTab === id}
                             className={profileTab === id ? 'acct-tab is-active' : 'acct-tab'}
                             onClick={() => {
-                                playSound('tap');
                                 setProfileTab(id);
                             }}
                         >
@@ -680,7 +669,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                             type="button"
                             className="acct-profile-item"
                             onClick={() => {
-                                playSound('tap');
                                 if (profileTab === 'models') onOpenModel(job.id);
                                 else onOpenLibrary('photos');
                             }}
@@ -836,7 +824,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         aria-checked={theme === option.id}
                         className={theme === option.id ? 'acct-theme-option is-active' : 'acct-theme-option'}
                         onClick={() => {
-                            playSound('tap');
                             setTheme(option.id);
                         }}
                     >
@@ -859,7 +846,7 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         <Icon name={isMuted ? 'volumeOff' : 'volume'} size={18} />
                     </span>
                     <span className="account-sound-text">
-                        <span className="account-sound-title">UI sounds</span>
+                        <span className="account-sound-title">App sounds</span>
                         <span className="account-sound-hint">All of Genesis's sounds. Saved for this browser.</span>
                     </span>
                     <input
@@ -870,9 +857,9 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                             const isTurningOn = event.target.checked;
                             setSoundMuted(!isTurningOn);
                             // Play once when turning on, so the user hears it worked.
-                            if (isTurningOn) playSound('tap');
+                            if (isTurningOn) playSound('success');
                         }}
-                        aria-label="UI sounds"
+                        aria-label="App sounds"
                     />
                 </label>
 
@@ -887,8 +874,8 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         disabled={isMuted}
                         onChange={(event) => setSoundVolume(Number(event.target.value) / 100)}
                         // Preview the new level once the slider is let go.
-                        onPointerUp={() => playSound('tap')}
-                        onKeyUp={() => playSound('tap')}
+                        onPointerUp={() => playSound('success')}
+                        onKeyUp={() => playSound('success')}
                     />
                 </label>
             </div>
@@ -1039,7 +1026,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                     type="button"
                     className="acct-menu-item acct-menu-logout"
                     onClick={() => {
-                        playSound('back');
                         onSignOut();
                     }}
                 >
@@ -1055,7 +1041,6 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         className="acct-close"
                         aria-label="Close account settings"
                         onClick={() => {
-                            playSound('back');
                             onClose();
                         }}
                     >

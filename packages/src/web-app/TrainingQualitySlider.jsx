@@ -13,7 +13,6 @@ kept out of sight). The stop labels under the slider can also be clicked. iterat
 onChange gets the new one; see TrainingPresets.js for the values.
 **************************************************************************/
 
-import { playSound } from '../audio/Audio.js';
 import { TRAINING_PRESETS } from './TrainingPresets.js';
 
 // Index of the "Normal" stop, used if iterations matches no preset.
@@ -26,7 +25,6 @@ function TrainingQualitySlider({ iterations, onChange, disabled = false }) {
 
     function choosePreset(index) {
         if (index === selectedIndex) return;
-        playSound('tap');
         onChange(TRAINING_PRESETS[index].iterations);
     }
 

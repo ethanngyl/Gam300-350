@@ -21,7 +21,6 @@ React component. Renders nothing when there are no builds.
 import { useState } from 'react';
 import Icon from './Icons.jsx';
 import { BUILD_STEPS, buildStepIndex } from './useBackgroundBuilds.js';
-import { playSound } from '../audio/Audio.js';
 import './BuildPanel.css';
 
 const RUNNING_STATUSES = new Set(['uploading', 'queued', 'running']);
@@ -103,7 +102,6 @@ function RunningBuild({ build, onCancel, onShowDetails }) {
                             type="button"
                             className="build-panel-link is-danger"
                             onClick={() => {
-                                playSound('back');
                                 onCancel(build.key);
                             }}
                         >
@@ -113,7 +111,6 @@ function RunningBuild({ build, onCancel, onShowDetails }) {
                             type="button"
                             className="build-panel-link"
                             onClick={() => {
-                                playSound('tap');
                                 setIsConfirmingCancel(false);
                             }}
                         >
@@ -127,7 +124,6 @@ function RunningBuild({ build, onCancel, onShowDetails }) {
                                 type="button"
                                 className="build-panel-link"
                                 onClick={() => {
-                                    playSound('tap');
                                     onShowDetails(build);
                                 }}
                             >
@@ -138,7 +134,6 @@ function RunningBuild({ build, onCancel, onShowDetails }) {
                             type="button"
                             className="build-panel-link"
                             onClick={() => {
-                                playSound('tap');
                                 setIsConfirmingCancel(true);
                             }}
                         >
@@ -171,7 +166,6 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                 type="button"
                 className="build-panel-pill"
                 onClick={() => {
-                    playSound('tap');
                     setIsMinimised(false);
                 }}
             >
@@ -193,7 +187,6 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                             className="build-panel-close"
                             aria-label="Close"
                             onClick={() => {
-                                playSound('back');
                                 onDismiss(build.key);
                             }}
                         >
@@ -215,7 +208,6 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                                     type="button"
                                     className="forma-btn forma-btn-primary"
                                     onClick={() => {
-                                        playSound('confirm');
                                         onOpenModel(build);
                                     }}
                                 >
@@ -225,7 +217,6 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                                     type="button"
                                     className="forma-btn"
                                     onClick={() => {
-                                        playSound('tap');
                                         onShowLibrary(build);
                                     }}
                                 >
@@ -238,7 +229,6 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                                 type="button"
                                 className="forma-btn forma-btn-primary"
                                 onClick={() => {
-                                    playSound('tap');
                                     onRetry(build);
                                 }}
                             >
@@ -259,7 +249,6 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                             aria-label="Shrink"
                             title="Shrink (the build keeps going)"
                             onClick={() => {
-                                playSound('tap');
                                 setIsMinimised(true);
                             }}
                         >

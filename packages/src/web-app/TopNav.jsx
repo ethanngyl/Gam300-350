@@ -103,7 +103,6 @@ function SearchBox({ onOpenModel, onOpenLibrary, autoFocus = false, onResultOpen
         .slice(0, MAX_SEARCH_RESULTS);
 
     function openResult(result) {
-        playSound('tap');
         setIsOpen(false);
         setQuery('');
         if (result.isModel) onOpenModel(result.id);
@@ -201,7 +200,6 @@ function TopNav({
     useCloseOnOutsideClick(isSearchOpen, searchRowRef, () => setIsSearchOpen(false));
 
     function togglePopup(name) {
-        playSound('tap');
         setOpenPopup((current) => (current === name ? null : name));
     }
 
@@ -225,7 +223,6 @@ function TopNav({
                             aria-label="Search"
                             aria-expanded={isSearchOpen}
                             onClick={() => {
-                                playSound('tap');
                                 setIsSearchOpen((isOpen) => !isOpen);
                             }}
                         >
@@ -255,7 +252,6 @@ function TopNav({
                             aria-label="Settings"
                             title="Settings"
                             onClick={() => {
-                                playSound('tap');
                                 onOpenSettings();
                             }}
                         >
@@ -306,7 +302,6 @@ function TopNav({
                                     type="button"
                                     className="forma-btn app-profile-manage"
                                     onClick={() => {
-                                        playSound('tap');
                                         closePopup();
                                         onOpenAccount();
                                     }}
@@ -335,7 +330,6 @@ function TopNav({
                                         type="button"
                                         className="app-menu-item is-compact"
                                         onClick={() => {
-                                            playSound('tap');
                                             closePopup();
                                             onOpenFeedback();
                                         }}
@@ -350,7 +344,7 @@ function TopNav({
                                     onClick={() => {
                                         setSoundMuted(!isMuted);
                                         // Muting stays silent; unmuting plays once to confirm.
-                                        if (isMuted) playSound('tap');
+                                        if (isMuted) playSound('success');
                                     }}
                                 >
                                     <Icon name={isMuted ? 'volume' : 'volumeOff'} size={16} />
@@ -361,7 +355,6 @@ function TopNav({
                                         type="button"
                                         className="app-menu-item is-compact"
                                         onClick={() => {
-                                            playSound('tap');
                                             closePopup();
                                             onShowWalkthrough();
                                         }}
@@ -374,7 +367,6 @@ function TopNav({
                                     type="button"
                                     className="app-menu-item is-compact"
                                     onClick={() => {
-                                        playSound('back');
                                         closePopup();
                                         onSignOut();
                                     }}

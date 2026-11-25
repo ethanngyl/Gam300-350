@@ -32,7 +32,6 @@ import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { smallPhotoUrl } from './LibraryPhotos.js';
-import { playSound } from '../audio/Audio.js';
 import './ImageGallery.css';
 
 // Same badge wording and colours as the 3D Models cards.
@@ -143,7 +142,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         if (openJob) {
             return (
                 <div className="gallery gallery-compact">
-                    <button className="gallery-compact-back" onClick={() => { playSound('back'); setOpenJobId(null); }}>
+                    <button className="gallery-compact-back" onClick={() => { setOpenJobId(null); }}>
                         <Icon name="arrowLeft" size={15} /> Back
                     </button>
                     {renderJobSection(openJob)}
@@ -186,7 +185,6 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
                                 type="button"
                                 className="forma-card library-photo-card"
                                 onClick={() => {
-                                    playSound('tap');
                                     setOpenJobId(job.id);
                                 }}
                             >
@@ -221,7 +219,7 @@ function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = '
         <div className="gallery">
             <div className="gallery-head">
                 {onBack && (
-                    <button className="btn btn-ghost" onClick={() => { playSound('back'); onBack(); }}>Back</button>
+                    <button className="btn btn-ghost" onClick={() => { onBack(); }}>Back</button>
                 )}
                 <h2>Uploaded images</h2>
             </div>

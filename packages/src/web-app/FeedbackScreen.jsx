@@ -24,7 +24,6 @@ React component. onSignIn takes a guest back to the login screen.
 
 import { useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
 import { FEEDBACK_CATEGORIES, FEEDBACK_MESSAGE } from './FeedbackCategories.js';
 import FeedbackInbox from './FeedbackInbox.jsx';
 import './FeedbackScreen.css';
@@ -62,7 +61,6 @@ function FeedbackScreen({ user, onSignIn }) {
         event.preventDefault();
         if (!canSend) return;
 
-        playSound('confirm');
         setIsSending(true);
         setErrorMessage(null);
         try {
@@ -97,7 +95,6 @@ function FeedbackScreen({ user, onSignIn }) {
                 <button
                     className="forma-btn forma-btn-primary feedback-action"
                     onClick={() => {
-                        playSound('tap');
                         onSignIn();
                     }}
                 >
@@ -119,7 +116,6 @@ function FeedbackScreen({ user, onSignIn }) {
                 <button
                     className="forma-btn feedback-action"
                     onClick={() => {
-                        playSound('tap');
                         setIsSent(false);
                     }}
                 >
@@ -143,7 +139,6 @@ function FeedbackScreen({ user, onSignIn }) {
                                 aria-checked={category === option.id}
                                 className={category === option.id ? 'feedback-type is-active' : 'feedback-type'}
                                 onClick={() => {
-                                    playSound('tap');
                                     setCategory(option.id);
                                 }}
                             >
@@ -219,7 +214,6 @@ function FeedbackScreen({ user, onSignIn }) {
                             aria-selected={view === option.id}
                             className={view === option.id ? 'feedback-type is-active' : 'feedback-type'}
                             onClick={() => {
-                                playSound('tap');
                                 setView(option.id);
                             }}
                         >

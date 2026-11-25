@@ -18,7 +18,6 @@ onChange(id) when another is picked.
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
 
 function SortMenu({ options, value, onChange }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -45,7 +44,6 @@ function SortMenu({ options, value, onChange }) {
     }, [isOpen, options, chosenOption]);
 
     function choose(optionId) {
-        playSound('tap');
         setIsOpen(false);
         if (optionId !== value) onChange(optionId);
     }
@@ -67,7 +65,6 @@ function SortMenu({ options, value, onChange }) {
                 aria-expanded={isOpen}
                 aria-label={`Sort: ${chosenOption.label}`}
                 onClick={() => {
-                    playSound('tap');
                     setIsOpen((wasOpen) => !wasOpen);
                 }}
             >

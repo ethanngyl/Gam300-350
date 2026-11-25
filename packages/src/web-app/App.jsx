@@ -668,7 +668,6 @@ function App() {
                         <ModelViewerScreen onOpenModel={openModel} onOpenFile={openLocalModel} />
                     )}
                     {pageTab === 'extractor' && (
-                        // FrameExtractor plays the click sound itself, so none here.
                         <FrameExtractor
                             onStartBuild={startMediaBuild}
                             initialDraft={frameExtractorDraft}
@@ -676,7 +675,6 @@ function App() {
                         />
                     )}
                     {pageTab === 'capture' && (
-                        // CameraCapture plays the click sound itself, so none here.
                         <CameraCapture
                             onBatchReady={handleBatchReady}
                             onReviewPhotos={reviewPhotosInEditor}

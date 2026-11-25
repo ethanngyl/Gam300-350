@@ -20,7 +20,6 @@ React component. onChanged() runs after the password has changed.
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { playSound } from '../audio/Audio.js';
 
 const CHANGE_PASSWORD_URL = '/api/v1/auth/me/password';
 
@@ -45,7 +44,6 @@ function ChangePasswordDialog({ onChanged, onCancel }) {
 
     // Every way of closing without saving (button, Escape, backdrop).
     function cancelWithSound() {
-        playSound('back');
         onCancel();
     }
 
@@ -59,17 +57,14 @@ function ChangePasswordDialog({ onChanged, onCancel }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (!currentPassword || !newPassword || !confirmPassword) {
-            playSound('back');
             setError('Fill in all three fields.');
             return;
         }
         if (newPassword !== confirmPassword) {
-            playSound('back');
             setError('The new passwords don\'t match.');
             return;
         }
 
-        playSound('confirm');
         setIsBusy(true);
         setError(null);
         try {

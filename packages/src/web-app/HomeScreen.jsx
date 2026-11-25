@@ -27,7 +27,6 @@ import Icon from './Icons.jsx';
 import ModelCover from './ModelCover.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { smallPhotoUrl } from './LibraryPhotos.js';
-import { playSound } from '../audio/Audio.js';
 import './HomeScreen.css';
 
 // How many cards each Recent tab shows.
@@ -146,13 +145,11 @@ function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
     const hasModels = recentModels.length > 0;
 
     function openItem(item) {
-        playSound('tap');
         if (isShowingFiles) onOpenLibrary('photos');
         else onOpenModel(item.id);
     }
 
     function startAction(actionId) {
-        playSound('tap');
         if (actionId === 'photos') onNewModel();
         else onNavigate(actionId);
     }
@@ -196,7 +193,6 @@ function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
                                 aria-selected={recentTab === tab.id}
                                 className={recentTab === tab.id ? 'home-recent-tab is-active' : 'home-recent-tab'}
                                 onClick={() => {
-                                    playSound('tap');
                                     setRecentTab(tab.id);
                                 }}
                             >
@@ -208,7 +204,6 @@ function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
                 <button
                     className="home-view-all-link"
                     onClick={() => {
-                        playSound('tap');
                         onOpenLibrary(isShowingFiles ? 'photos' : 'models');
                     }}
                 >
@@ -227,7 +222,6 @@ function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
                             type="button"
                             className="forma-btn forma-btn-primary"
                             onClick={() => {
-                                playSound('tap');
                                 onNewModel();
                             }}
                         >
@@ -238,7 +232,6 @@ function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
                                 type="button"
                                 className="forma-btn"
                                 onClick={() => {
-                                    playSound('tap');
                                     onOpenModel(SAMPLE_MODEL_JOB_ID);
                                 }}
                             >

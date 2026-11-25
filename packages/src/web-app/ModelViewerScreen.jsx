@@ -20,7 +20,6 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import ModelCover from './ModelCover.jsx';
 import { jobDisplayName } from './mediaApi.js';
-import { playSound } from '../audio/Audio.js';
 
 function ModelViewerScreen({ onOpenModel, onOpenFile }) {
     const [search, setSearch] = useState('');
@@ -94,7 +93,6 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                 <button
                     className="forma-btn forma-btn-primary"
                     onClick={() => {
-                        playSound('tap');
                         fileInputRef.current?.click();
                     }}
                 >
@@ -128,7 +126,6 @@ function ModelViewerScreen({ onOpenModel, onOpenFile }) {
                         type="button"
                         className="forma-card library-item library-item-button"
                         onClick={() => {
-                            playSound('tap');
                             onOpenModel(model.id);
                         }}
                     >

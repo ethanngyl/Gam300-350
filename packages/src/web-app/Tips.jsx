@@ -16,7 +16,6 @@ First-run help on wider screens, as in the Figma:
 **************************************************************************/
 
 import { useLayoutEffect, useState } from 'react';
-import { playSound } from '../audio/Audio.js';
 import './Tips.css';
 
 // Gap between a tip and what it sits beside, in pixels.
@@ -61,7 +60,6 @@ export function TipCard({ tip, stepText, primaryLabel, onPrimary, secondaryLabel
                     type="button"
                     className="forma-btn forma-btn-primary"
                     onClick={() => {
-                        playSound('confirm');
                         onPrimary();
                     }}
                 >
@@ -72,7 +70,6 @@ export function TipCard({ tip, stepText, primaryLabel, onPrimary, secondaryLabel
                         type="button"
                         className="forma-btn"
                         onClick={() => {
-                            playSound('back');
                             onSecondary();
                         }}
                     >
@@ -95,7 +92,6 @@ export function WelcomeCard({ onTakeTour, onExplore }) {
                     type="button"
                     className="forma-btn forma-btn-primary"
                     onClick={() => {
-                        playSound('confirm');
                         onTakeTour();
                     }}
                 >
@@ -105,7 +101,6 @@ export function WelcomeCard({ onTakeTour, onExplore }) {
                     type="button"
                     className="forma-btn"
                     onClick={() => {
-                        playSound('tap');
                         onExplore();
                     }}
                 >

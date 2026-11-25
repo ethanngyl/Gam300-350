@@ -27,7 +27,6 @@ shown in the form's error line, e.g. after a reload stopped an upload.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
-import { playSound } from '../audio/Audio.js';
 import Icon from './Icons.jsx';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
@@ -132,7 +131,6 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
     }
 
     function handleBrowseClick() {
-        playSound('tap');
         fileInputRef.current?.click();
     }
 
@@ -140,7 +138,6 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
     function handleSubmit(e) {
         e.preventDefault();
         if (mediaItems.length === 0) return;
-        playSound('confirm');
         setError(null);
         onStartBuild({
             files: mediaItems.map((item) => item.file),
@@ -211,7 +208,6 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
                                         className="fx-media-remove"
                                         aria-label={`Remove ${item.file.name}`}
                                         onClick={() => {
-                                            playSound('tap');
                                             removeMediaItem(item.id);
                                         }}
                                     >
@@ -245,7 +241,6 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
                             type="checkbox"
                             checked={removeBackground}
                             onChange={(e) => {
-                                playSound('tap');
                                 setRemoveBackground(e.target.checked);
                             }}
                         />
@@ -260,7 +255,6 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
                             type="checkbox"
                             checked={autoCrop}
                             onChange={(e) => {
-                                playSound('tap');
                                 setAutoCrop(e.target.checked);
                             }}
                         />

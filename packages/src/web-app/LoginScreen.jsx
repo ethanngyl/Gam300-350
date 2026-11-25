@@ -26,7 +26,6 @@ password (/auth/reset-password), after which the card goes back to Sign in.
 import { useEffect, useState } from 'react';
 import genesisLogo from './GenesisLogo.svg';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
 import './LoginScreen.css';
 
 // TODO(backend): set to true once GET /auth/google starts the Google sign-in
@@ -98,14 +97,12 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
     }, [isReset, canResend]);
 
     function switchMode() {
-        playSound('tap');
         setMode(isSignUp ? 'signin' : 'signup');
         setErrorMessage(null);
         setNotice(null);
     }
 
     function backToSignIn() {
-        playSound('back');
         setMode('signin');
         setErrorMessage(null);
         setNotice(null);
@@ -117,7 +114,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
     // Leaves the page for Google's sign-in. The backend sends the browser back
     // to the site afterwards, where App's GET /auth/me picks up the session.
     function continueWithGoogle() {
-        playSound('confirm');
         if (!GOOGLE_SIGN_IN_READY) {
             setErrorMessage('Google sign-in is coming soon. Please use your email for now.');
             return;
@@ -127,7 +123,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
 
     // Step 1 of "Forgot password?": ask for the email (kept if already typed).
     function handleForgotPassword() {
-        playSound('tap');
         setMode('forgot');
         setErrorMessage(null);
         setNotice(null);
@@ -202,7 +197,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
     // Temporary bypass: skips the backend and signs in as a local-only guest.
     // The backend does not check the session, so every feature still works.
     function continueAsGuest() {
-        playSound('tap');
         onLogin({
             name: 'Guest',
             email: 'Not signed in',
@@ -214,7 +208,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
     async function handleSubmit(event) {
         event.preventDefault();
         if (isForgot || isReset) {
-            playSound('confirm');
             if (isForgot) await requestResetCode();
             else await submitNewPassword();
             return;
@@ -234,7 +227,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
             return;
         }
 
-        playSound('confirm');
         setErrorMessage(null);
         setNotice(null);
         setIsSubmitting(true);
@@ -269,7 +261,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
             type="button"
             className="auth-logo"
             onClick={() => {
-                playSound('back');
                 onBackToLanding();
             }}
             aria-label="Back to the GENESIS home page"
@@ -442,7 +433,7 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                                 <button
                                     type="button"
                                     className="auth-link"
-                                    onClick={() => { playSound('tap'); requestResetCode(); }}
+                                    onClick={() => { requestResetCode(); }}
                                     disabled={!canResend || isSubmitting}
                                     title={canResend ? 'Email a new code' : 'You can ask for a new code a minute after the last one'}
                                 >

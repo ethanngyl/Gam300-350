@@ -19,7 +19,6 @@ Pass initialValue (a string) to show the text field.
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { playSound } from '../audio/Audio.js';
 
 function ActionDialog({
     title, message, initialValue, placeholder, confirmLabel, cancelLabel = 'Cancel', danger, onConfirm, onCancel,
@@ -44,7 +43,6 @@ function ActionDialog({
 
     // Every way of closing without confirming (button, Escape, backdrop).
     function cancelWithSound() {
-        playSound('back');
         onCancel();
     }
 
@@ -58,7 +56,6 @@ function ActionDialog({
     async function handleSubmit(event) {
         event.preventDefault();
         // Destructive actions (delete) get the "back" sound, others "confirm".
-        playSound(danger ? 'back' : 'confirm');
         setIsBusy(true);
         setError(null);
         try {

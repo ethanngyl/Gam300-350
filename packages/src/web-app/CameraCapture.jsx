@@ -226,7 +226,6 @@ function CameraCapture({
     }, [cameraRequestCount]);
 
     function retryCamera() {
-        playSound('tap');
         setError(null);
         setCameraRequestCount((count) => count + 1);
     }
@@ -257,7 +256,6 @@ function CameraCapture({
         }
 
         const { frame, ring } = clickToFramePoint(event, video);
-        playSound('tap', 0.5);
         setFocusRing({ ...ring, id: Date.now() });
         clearTimeout(focusRingTimerRef.current);
         focusRingTimerRef.current = setTimeout(() => setFocusRing(null), 1200);
@@ -275,7 +273,6 @@ function CameraCapture({
     function handleAutoFocus() {
         const track = streamRef.current?.getVideoTracks()[0];
         if (!track || !focusSupport?.autoMode) return;
-        playSound('tap');
         track.applyConstraints({ advanced: [{ focusMode: focusSupport.autoMode }] })
             .then(() => setFocusMode('auto'))
             .catch(() => showFocusNote("Couldn't switch to autofocus"));
@@ -429,7 +426,6 @@ function CameraCapture({
             if (captureMode === 'manual') {
                 capturePhoto(true);
             } else {
-                playSound('tap');
                 setIsAutoCapturing((wasCapturing) => !wasCapturing);
             }
         }
@@ -555,7 +551,6 @@ function CameraCapture({
                             type="button"
                             className="forma-btn"
                             onClick={() => {
-                                playSound('tap');
                                 handleBrowseClick();
                             }}
                         >
@@ -577,7 +572,6 @@ function CameraCapture({
                         className="capture-phone-round"
                         aria-label="Close camera"
                         onClick={() => {
-                            playSound('back');
                             onBack();
                         }}
                     >
@@ -589,7 +583,6 @@ function CameraCapture({
                         className="capture-phone-round"
                         aria-label="Upload photos"
                         onClick={() => {
-                            playSound('tap');
                             handleBrowseClick();
                         }}
                     >
@@ -606,7 +599,6 @@ function CameraCapture({
                             type="button"
                             className={captureMode === 'manual' ? 'is-active' : ''}
                             onClick={() => {
-                                playSound('tap');
                                 handleModeChange('manual');
                             }}
                         >
@@ -616,7 +608,6 @@ function CameraCapture({
                             type="button"
                             className={captureMode === 'auto' ? 'is-active' : ''}
                             onClick={() => {
-                                playSound('tap');
                                 handleModeChange('auto');
                             }}
                         >
@@ -631,7 +622,6 @@ function CameraCapture({
                             aria-label="Review photos"
                             disabled={!lastPhoto}
                             onClick={() => {
-                                playSound('confirm');
                                 handleReview();
                             }}
                         >
@@ -646,7 +636,6 @@ function CameraCapture({
                                 if (captureMode === 'manual') {
                                     capturePhoto(true);
                                 } else {
-                                    playSound('tap');
                                     setIsAutoCapturing((wasCapturing) => !wasCapturing);
                                 }
                             }}
@@ -658,7 +647,6 @@ function CameraCapture({
                             className="capture-phone-done"
                             disabled={photos.length === 0}
                             onClick={() => {
-                                playSound('confirm');
                                 handleReview();
                             }}
                         >
@@ -686,7 +674,6 @@ function CameraCapture({
                 <button
                     className="forma-btn capture-back"
                     onClick={() => {
-                        playSound('back');
                         onBack();
                     }}
                 >
@@ -749,7 +736,6 @@ function CameraCapture({
                             <button
                                 className={captureMode === 'manual' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
                                 onClick={() => {
-                                    playSound('tap');
                                     handleModeChange('manual');
                                 }}
                             >
@@ -758,7 +744,6 @@ function CameraCapture({
                             <button
                                 className={captureMode === 'auto' ? 'capture-mode-btn is-active' : 'capture-mode-btn'}
                                 onClick={() => {
-                                    playSound('tap');
                                     handleModeChange('auto');
                                 }}
                             >
@@ -782,7 +767,6 @@ function CameraCapture({
                                 <button
                                     className={isAutoCapturing ? 'forma-btn capture-btn is-capturing' : 'forma-btn capture-btn'}
                                     onClick={() => {
-                                        playSound('tap');
                                         setIsAutoCapturing((prev) => !prev);
                                     }}
                                     disabled={!stream}
@@ -872,7 +856,6 @@ function CameraCapture({
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         onClick={() => {
-                            playSound('tap');
                             handleBrowseClick();
                         }}
                         role="button"
@@ -886,7 +869,6 @@ function CameraCapture({
                             className="forma-btn"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                playSound('tap');
                                 handleBrowseClick();
                             }}
                         >
@@ -901,7 +883,6 @@ function CameraCapture({
                         type="button"
                         className="forma-btn capture-library-btn"
                         onClick={() => {
-                            playSound('tap');
                             setIsLibraryPickerOpen(true);
                         }}
                     >
@@ -934,7 +915,6 @@ function CameraCapture({
                                     <button
                                         className="capture-thumb-remove"
                                         onClick={() => {
-                                            playSound('tap');
                                             removePhoto(photo.id);
                                         }}
                                         aria-label="Remove photo"
@@ -951,7 +931,6 @@ function CameraCapture({
                             type="checkbox"
                             checked={removeBackground}
                             onChange={(e) => {
-                                playSound('tap');
                                 setRemoveBackground(e.target.checked);
                             }}
                         />
@@ -966,7 +945,6 @@ function CameraCapture({
                             type="checkbox"
                             checked={autoCrop}
                             onChange={(e) => {
-                                playSound('tap');
                                 setAutoCrop(e.target.checked);
                             }}
                         />
@@ -995,7 +973,6 @@ function CameraCapture({
                         className={issueSummary ? 'forma-btn batch-review-btn is-suggested' : 'forma-btn batch-review-btn'}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('confirm');
                             handleReview();
                         }}
                     >
@@ -1006,7 +983,6 @@ function CameraCapture({
                         className={`forma-btn forma-btn-primary batch-btn ${isBatchSent ? 'is-sent' : ''}`}
                         disabled={photos.length === 0}
                         onClick={() => {
-                            playSound('confirm');
                             handleTrain();
                         }}
                     >

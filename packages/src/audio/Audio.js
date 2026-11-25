@@ -16,62 +16,58 @@ useSoundSettings() gives components the current values and re-renders
 them on any change, so the Account page and the account menu stay in step.
 Each sound also has its own volume in SOUND_VOLUMES, so the mix is set
 in code and the original files stay untouched.
-The sounds are also grouped (SOUND_CATEGORIES): button sounds, the camera
-shutter and notification sounds. Each group can be switched off or turned
+The sounds are also grouped (SOUND_CATEGORIES): build notifications, open
+and save, and the camera shutter. Each group can be switched off or turned
 down on its own (setSoundCategory, Account > Audio), on top of the overall
 volume.
 - SOUND_CATEGORY_IDS
 The groups, in the order Account > Audio lists them.
-Sounds: tap (buttons), confirm (start a build), back (leave / cancel),
-camera (shutter), success (model ready), error (build failed), tick (a
-build step finished).
+Sounds, as agreed in the audio consult (buttons and sign-in stay silent):
+tick (a build moved on to its next step, UI_Dull_04), success (model ready,
+UI_Dull_08), error (a build failed or a model couldn't open, UI_Dull_01),
+open (a model opened, UI_Dull_02), save (a model, export or scene saved,
+UI_Dull_05), camera (shutter).
 **************************************************************************/
 
 import { useSyncExternalStore } from 'react';
-import tapSound from './Tap.wav';
-import confirmSound from './Confirm.wav';
-import backSound from './Back.wav';
+import tickSound from './UI_Dull_04.wav';
+import successSound from './UI_Dull_08.wav';
+import errorSound from './UI_Dull_01.wav';
+import openSound from './UI_Dull_02.wav';
+import saveSound from './UI_Dull_05.wav';
 import cameraSound from './Camera.wav';
-import successSound from './Success.wav';
-import errorSound from './Error.wav';
-import tickSound from './Tick.wav';
 
 const SOUND_SOURCES = {
-    tap: tapSound,
-    confirm: confirmSound,
-    back: backSound,
-    camera: cameraSound,
+    tick: tickSound,
     success: successSound,
     error: errorSound,
-    tick: tickSound,
+    open: openSound,
+    save: saveSound,
+    camera: cameraSound,
 };
 
-// Per-sound volume (0-1), so every sound plays at about Tap's loudness.
+// Per-sound volume (0-1), so the sounds play at about the same loudness
+// (measured over each file's loudest 100 ms).
 const SOUND_VOLUMES = {
-    tap: 1.0,
-    confirm: 0.45,
-    back: 0.4,
-    camera: 0.2,
-    // Close to Tap's loudness already.
+    tick: 0.7,
     success: 1.0,
-    // About 7 dB louder than Tap, so turned well down.
-    error: 0.4,
-    // Already much quieter than Tap; it repeats every step, so it stays soft.
-    tick: 1.0,
+    error: 0.45,
+    open: 0.35,
+    save: 0.7,
+    camera: 0.2,
 };
 
 // Which group each sound belongs to.
 const SOUND_CATEGORIES = {
-    tap: 'buttons',
-    confirm: 'buttons',
-    back: 'buttons',
-    camera: 'camera',
+    tick: 'notifications',
     success: 'notifications',
     error: 'notifications',
-    tick: 'notifications',
+    open: 'actions',
+    save: 'actions',
+    camera: 'camera',
 };
 
-export const SOUND_CATEGORY_IDS = ['buttons', 'camera', 'notifications'];
+export const SOUND_CATEGORY_IDS = ['notifications', 'actions', 'camera'];
 
 const DEFAULT_VOLUME = 1.0;
 const SETTINGS_STORAGE_KEY = 'genesis-sound-settings';

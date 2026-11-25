@@ -98,6 +98,9 @@ function ModelScreen({
     const [reloadCount, setReloadCount] = useState(0);
     // Phones: whether the header's menu (Rename, Delete) is open.
     const [isPhoneMenuOpen, setIsPhoneMenuOpen] = useState(false);
+    // The model (job id or local file) the open sound last played for, so it
+    // plays once per model, not again after a rename reloads it.
+    const soundedModelRef = useRef(null);
     const viewerCardRef = useRef(null);
     const phoneMenuRef = useRef(null);
     const isPhone = useMobileView();
@@ -146,8 +149,14 @@ function ModelScreen({
                 if (isCancelled) return;
                 setModel({ ...thisJob, removeBackground: detail.removeBackground ?? null });
                 setLoadError(null);
+                if (soundedModelRef.current !== jobId) {
+                    soundedModelRef.current = jobId;
+                    playSound('open');
+                }
             } catch (err) {
-                if (!isCancelled) setLoadError(err.message);
+                if (isCancelled) return;
+                setLoadError(err.message);
+                playSound('error');
             }
         }
 
@@ -156,6 +165,13 @@ function ModelScreen({
             isCancelled = true;
         };
     }, [jobId, reloadCount]);
+
+    // A file from the user's computer: the open sound once it is shown.
+    useEffect(() => {
+        if (jobId || !localFile || soundedModelRef.current === localFile) return;
+        soundedModelRef.current = localFile;
+        playSound('open');
+    }, [jobId, localFile]);
 
     // Splat count and file size, read from the .ply's first 4 KB.
     useEffect(() => {
@@ -170,7 +186,6 @@ function ModelScreen({
     }, [plyUrl]);
 
     function openRenameDialog() {
-        playSound('tap');
         setDialog({
             title: 'Rename model',
             message: 'Also renames its .ply in the engine samples folder (spaces become _). '
@@ -186,7 +201,6 @@ function ModelScreen({
     }
 
     function openDeleteDialog() {
-        playSound('tap');
         const photoCount = model?.imageCount ?? model?.images?.length ?? 0;
         setDialog({
             title: `Delete ${modelName}?`,
@@ -202,7 +216,6 @@ function ModelScreen({
     }
 
     function toggleFullScreen() {
-        playSound('tap');
         if (document.fullscreenElement) document.exitFullscreen?.();
         else viewerCardRef.current?.requestFullscreen?.();
     }
@@ -218,7 +231,7 @@ function ModelScreen({
     if (jobId && loadError) {
         return (
             <div className="model-screen">
-                <button className="model-back" onClick={() => { playSound('back'); onBack(); }}>
+                <button className="model-back" onClick={() => { onBack(); }}>
                     <Icon name="arrowLeft" size={15} /> {backLabel}
                 </button>
                 <div className="forma-card model-missing">
@@ -238,7 +251,6 @@ function ModelScreen({
                         className="model-round-btn"
                         aria-label={`Back to ${backLabel}`}
                         onClick={() => {
-                            playSound('back');
                             onBack();
                         }}
                     >
@@ -252,7 +264,6 @@ function ModelScreen({
                                 aria-label="More options"
                                 aria-expanded={isPhoneMenuOpen}
                                 onClick={() => {
-                                    playSound('tap');
                                     setIsPhoneMenuOpen((isOpen) => !isOpen);
                                 }}
                             >
@@ -294,7 +305,6 @@ function ModelScreen({
             <button
                 className="model-back"
                 onClick={() => {
-                    playSound('back');
                     onBack();
                 }}
             >
@@ -331,14 +341,13 @@ function ModelScreen({
                             className="forma-btn forma-btn-primary model-download"
                             href={plyUrl}
                             download={`${(model?.name || 'model').replace(/[^\w.-]+/g, '_')}.ply`}
-                            onClick={() => playSound('tap')}
+                            onClick={() => playSound('save')}
                         >
                             <Icon name="download" size={15} /> Download .ply
                         </a>
                         <button
                             className="forma-btn"
                             onClick={() => {
-                                playSound('tap');
                                 setIsExportOpen(true);
                             }}
                         >
@@ -348,7 +357,6 @@ function ModelScreen({
                             className="forma-btn"
                             disabled={!model}
                             onClick={() => {
-                                playSound('confirm');
                                 onAddToScene({ id: jobId, name: modelName });
                             }}
                         >
@@ -361,7 +369,6 @@ function ModelScreen({
                         <button
                             className="forma-btn forma-btn-primary"
                             onClick={() => {
-                                playSound('tap');
                                 setIsExportOpen(true);
                             }}
                         >
@@ -398,7 +405,6 @@ function ModelScreen({
                                         <button
                                             className="model-link"
                                             onClick={() => {
-                                                playSound('tap');
                                                 onOpenPhotos();
                                             }}
                                         >
@@ -434,7 +440,6 @@ function ModelScreen({
                                     className="forma-btn forma-btn-primary"
                                     disabled={!model}
                                     onClick={() => {
-                                        playSound('confirm');
                                         onAddToScene({ id: jobId, name: modelName });
                                     }}
                                 >
@@ -444,7 +449,6 @@ function ModelScreen({
                                     <button
                                         className="forma-btn"
                                         onClick={() => {
-                                            playSound('tap');
                                             setIsExportOpen(true);
                                         }}
                                     >
@@ -454,7 +458,7 @@ function ModelScreen({
                                         className="forma-btn"
                                         href={plyUrl}
                                         download={`${(model?.name || 'model').replace(/[^\w.-]+/g, '_')}.ply`}
-                                        onClick={() => playSound('tap')}
+                                        onClick={() => playSound('save')}
                                     >
                                         Download .ply
                                     </a>
@@ -511,7 +515,6 @@ function ModelScreen({
                                 <button
                                     className="model-link"
                                     onClick={() => {
-                                        playSound('tap');
                                         onOpenPhotos();
                                     }}
                                 >

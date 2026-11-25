@@ -16,7 +16,6 @@ photo with its file name, then Cancel and "Add selected photos".
 
 import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
 import { downloadLibraryPhoto, fetchLibraryBatches, smallPhotoUrl } from './LibraryPhotos.js';
 import './LibraryPhotoPicker.css';
 
@@ -75,7 +74,6 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     }
 
     function toggleBatch(job) {
-        playSound('tap');
         const batchKeys = job.images.map((image) => photoKey(job.id, image.name));
         const isWholeBatchSelected = batchKeys.every((key) => selectedKeys.has(key));
         setSelectedKeys((currentKeys) => {
@@ -92,7 +90,6 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     }
 
     async function handleAdd() {
-        playSound('confirm');
 
         const chosenPhotos = [];
         batches.forEach((job) => {
@@ -152,7 +149,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                         type="button"
                         className="library-picker-close"
                         aria-label="Close"
-                        onClick={() => { playSound('back'); onClose(); }}
+                        onClick={() => { onClose(); }}
                     >
                         <Icon name="close" size={16} />
                     </button>
@@ -230,7 +227,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                             `${selectedCount} selected`
                         )}
                     </span>
-                    <button type="button" className="forma-btn" onClick={() => { playSound('back'); onClose(); }}>
+                    <button type="button" className="forma-btn" onClick={() => { onClose(); }}>
                         Cancel
                     </button>
                     <button

@@ -31,7 +31,6 @@ import { useState } from 'react';
 import Icon from './Icons.jsx';
 import genesisLogo from './GenesisLogo.svg';
 import { PLANS } from './plans.js';
-import { playSound } from '../audio/Audio.js';
 import mediaLibraryScreenshot from './landing/app-media-library.webp';
 import homeScreenshot from './landing/app-home.webp';
 import catFrontImage from './landing/cat-front.webp';
@@ -88,7 +87,6 @@ const STEPS = [
 const PLAN_IMAGES = { free: catTurnedImage, pro: catFrontImage, max: catSideImage };
 
 function scrollToSection(sectionId) {
-    playSound('tap');
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -116,12 +114,10 @@ function LandingScreen({ onLogIn, onGetStarted }) {
     const [billing, setBilling] = useState('monthly');
 
     function logIn() {
-        playSound('tap');
         onLogIn();
     }
 
     function getStarted() {
-        playSound('confirm');
         onGetStarted();
     }
 
@@ -283,7 +279,6 @@ function LandingScreen({ onLogIn, onGetStarted }) {
                                     type="button"
                                     aria-pressed={billing === option}
                                     onClick={() => {
-                                        playSound('tap');
                                         setBilling(option);
                                     }}
                                 >

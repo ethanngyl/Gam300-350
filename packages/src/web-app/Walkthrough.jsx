@@ -33,7 +33,6 @@ React component. Calls onClose() when the user skips or finishes.
 **************************************************************************/
 
 import { useCallback, useEffect, useState } from 'react';
-import { playSound } from '../audio/Audio.js';
 import './Walkthrough.css';
 
 // One step per page in the sidebar (or tab bar), then the profile.
@@ -159,7 +158,6 @@ function Walkthrough({ isGuest = false, onClose }) {
     useEffect(() => {
         function skipOnEscape(event) {
             if (event.key === 'Escape') {
-                playSound('back');
                 finish();
             }
         }
@@ -169,17 +167,14 @@ function Walkthrough({ isGuest = false, onClose }) {
 
     function goToNextStep() {
         if (isLastStep) {
-            playSound('confirm');
             finish();
             return;
         }
-        playSound('tap');
         setStepIndex((index) => index + 1);
     }
 
     function goToPreviousStep() {
         if (stepIndex === 0) return;
-        playSound('back');
         setStepIndex((index) => index - 1);
     }
 
@@ -239,7 +234,6 @@ function Walkthrough({ isGuest = false, onClose }) {
                             type="button"
                             className="walkthrough-skip"
                             onClick={() => {
-                                playSound('back');
                                 finish();
                             }}
                         >

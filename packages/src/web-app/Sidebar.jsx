@@ -20,7 +20,6 @@ React component. activeTab is highlighted.
 **************************************************************************/
 
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
 
 const SIDEBAR_PAGES = [
     { id: 'home', label: 'Home', icon: 'home' },
@@ -41,7 +40,6 @@ function Sidebar({ activeTab, onNavigate, onNewModel, onLearn }) {
                     aria-label="New"
                     aria-haspopup="dialog"
                     onClick={() => {
-                        playSound('tap');
                         onNewModel();
                     }}
                 >
@@ -59,7 +57,6 @@ function Sidebar({ activeTab, onNavigate, onNewModel, onLearn }) {
                         aria-label={page.label}
                         aria-current={activeTab === page.id ? 'page' : undefined}
                         onClick={() => {
-                            playSound('tap');
                             onNavigate(page.id);
                         }}
                     >
@@ -74,7 +71,6 @@ function Sidebar({ activeTab, onNavigate, onNewModel, onLearn }) {
                 className="app-sidebar-item app-sidebar-learn"
                 aria-label="Learn"
                 onClick={() => {
-                    playSound('tap');
                     onLearn();
                 }}
             >
