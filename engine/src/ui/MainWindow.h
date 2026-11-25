@@ -127,7 +127,8 @@ private:
     void beginStressRun(bool stoppable);
     void endStressRun();
     //Runs every stress test in order, stopping early if Stop is pressed (checked between tests)
-    void runAllStressTests();
+    //onCurrent leaves out Load and tests the selected model instead of a new sphere
+    void runAllStressTests(bool onCurrent);
     // ---- generating a model (on this PC, no server) ----
     // Asks what to build (GenerateModelDialog) and starts LocalReconstruction.
     void showGenerateDialog();
