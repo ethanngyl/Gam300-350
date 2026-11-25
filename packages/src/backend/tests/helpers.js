@@ -15,7 +15,8 @@ A new empty folder under the system's temp folder.
 - isolatedEnv(dir, extra)
 Environment variables for a backend that only uses dir.
 - startServer(dir, env)
-The real backend in a child process; resolves once it answers (or exits).
+The real backend in a child process; resolves once it answers (or exits),
+with its address, process id, log and stop().
 - call(base, method, path, options)
 One HTTP request; the reply's status, headers and body (JSON when it is).
 - signUp(base, user) / sessionCookie(reply)
@@ -130,6 +131,7 @@ export async function startServer(dir, env = {})
   return {
     base,
     exited,
+    pid: child.pid, // for reading the server's memory (stress-test.js soak)
     get exitCode() { return exitCode },
     log: () => log,
     stop: async () =>
