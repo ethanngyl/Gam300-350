@@ -46,6 +46,36 @@
     transition: left 0.3s ease, top 0.3s ease, bottom 0.3s ease;
 }
 
+    /* The arrow pointing at the item, on the side facing it. --walkthrough-arrow
+   (set inline) is how far along that side it sits. */
+    .walkthrough-tooltip::before {
+        content: '';
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        background: inherit;
+        transform: translate(-50%, -50%) rotate(45deg);
+        display: none;
+    }
+
+    .walkthrough-tooltip.is-right::before {
+        display: block;
+        left: 0;
+        top: var(--walkthrough-arrow, 36px);
+    }
+
+    .walkthrough-tooltip.is-below::before {
+        display: block;
+        top: 0;
+        left: var(--walkthrough-arrow, 50%);
+    }
+
+    .walkthrough-tooltip.is-above::before {
+        display: block;
+        top: 100%;
+        left: var(--walkthrough-arrow, 50%);
+    }
+
 .walkthrough-head {
     display: flex;
     align-items: center;

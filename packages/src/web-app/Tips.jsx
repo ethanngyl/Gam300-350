@@ -6,15 +6,13 @@
 \par Software Engineering Project 5
 \date 25-11-2026
 \brief
-First-run help on wider screens, as in the Figma, which replaces the
-sidebar walkthrough there (phones keep Walkthrough.jsx):
+First-run help on wider screens, as in the Figma:
 - WelcomeCard: "Welcome to Genesis" in the bottom corner of Home, the
-  first time an account signs in on this browser: Take the tour, or I'll
-  explore.
+  first time an account signs in on this browser: Take the tour (the
+  walkthrough, Walkthrough.jsx), or I'll explore.
 - TipCard: one short tip beside the part of the page it is about. The
-  tour is two of them (the Photo Editor, then the Scene Builder's Library
-  tab), and the Video Extractor shows one the first time it opens.
-The tips' words and places are in TipsContent.js.
+  Video Extractor shows one the first time it opens; its words and place
+  are in TipsContent.js.
 **************************************************************************/
 
 import { useLayoutEffect, useState } from 'react';
@@ -91,7 +89,7 @@ export function WelcomeCard({ onTakeTour, onExplore }) {
     return (
         <div className="tip-card welcome-card" role="dialog" aria-label="Welcome to Genesis">
             <h2>Welcome to Genesis</h2>
-            <p>Take a short tour of making your first model, or look around on your own. The tour stays in Learn.</p>
+            <p>Take a short tour of each page, or look around on your own. The tour stays in Learn.</p>
             <div className="tip-card-actions">
                 <button
                     type="button"

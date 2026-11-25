@@ -7,12 +7,12 @@
 \date 02-11-2026
 \brief
 First-run walkthrough of the dashboard (Genesis design). The page is
-dimmed and a glowing spotlight is drawn around one item at a time (Home's
-Recent section, then each sidebar item from top to bottom, or each dock
-item from left to right on phones), with a tooltip beside it, styled like
-the Genesis Figma: "Step 2 of 10" and "Skip tour", a bar with a segment per
-step, the title, a short line of text, and Back / Next (Finish on the last
-step).
+dimmed and a glowing spotlight is drawn around one item at a time (each
+page in the sidebar from top to bottom, or in the dock on phones, then the
+profile), with a tooltip beside it, styled like the Genesis Figma: "Step 2
+of 7" and "Skip tour", a bar with a segment per step, the title, a short
+line of text, Back / Next (Finish on the last step), and an arrow pointing
+at the item.
 The tooltip goes to the right of sidebar items, under the top bar's and
 above the dock's. Escape skips. If a step's item is not on the screen,
 its tooltip is shown in the middle of the page instead; steps marked
@@ -20,9 +20,9 @@ optional are left out when their item isn't there (e.g. Learn on phones).
 In the mobile view the dock shows four tabs at a time, so each step slides
 the tabs to the four that hold its item, and finishing slides back to the
 four that hold the current page.
-App.jsx shows it the first time each account signs in on a browser, and
-again when the user presses "Show walkthrough" (account page or account
-menu). Guests can't save work, so their last step suggests signing in.
+App.jsx shows it from the welcome card's "Take the tour" (straight away
+on phones, the first time each account signs in on a browser), and again
+from Learn or "Show walkthrough". Guests can't save work, so their last step suggests signing in.
 - WALKTHROUGH_STEPS
 The steps: CSS selectors for the item to highlight (the first one on the
 page is used: the sidebar's, else the dock's), title, text (and
@@ -36,53 +36,25 @@ import { useCallback, useEffect, useState } from 'react';
 import { playSound } from '../audio/Audio.js';
 import './Walkthrough.css';
 
+// One step per page in the sidebar (or tab bar), then the profile.
 const WALKTHROUGH_STEPS = [
-    {
-        targets: ['.home-recent-v2-header'],
-        title: 'Recent',
-        text: 'Your recent work will appear here.',
-        padding: 14,
-    },
-    {
-        targets: ['.app-sidebar [aria-label="New"]', '.genesis-dock [aria-label="Capture"]'],
-        title: 'New model',
-        text: 'Start a model with your camera, or upload photos you already have.',
-        mobileText: 'Quickly get started with your camera.',
-    },
-    {
-        targets: ['.genesis-dock [aria-label="Add photos"]'],
-        title: 'Add photos',
-        text: 'Already have your photos? Upload them here.',
-        optional: true,
-    },
     ...[
-        ['Home', 'Your personal workspace.'],
-        ['Media Library', 'Your models and uploaded photos are stored here.'],
-        ['Photo Editor', 'Edit your photos to get the best model quality.'],
-        ['Scene Builder', 'Arrange your models into a scene that matches your vision.'],
-        ['Video Extractor', 'Turn videos or animated GIFs of an object into a 3D model.'],
-        ['Model Viewer', 'Open and inspect your finished models, or a .ply file from your computer.'],
-    ].map(([label, text]) => ({
+        ['Home', 'Home is your workspace', 'A customised space for you, with quick starts and your recent files.'],
+        ['Media Library', 'Media Library keeps your work', 'Your 3D models and the photos they were built from, in one place.'],
+        ['Photo Editor', 'Photo Editor checks your shots', 'Tidy up your photos and see which ones are blurry or repeated before you build.'],
+        ['Scene Builder', 'Scene Builder stages your models', 'Arrange your models in a scene and set the light and the camera.'],
+        ['Video Extractor', 'Video Extractor works from video', 'Upload a walkaround video and it pulls out sharp frames to build a model from.'],
+        ['Model Viewer', 'Model Viewer shows the result', 'Open and inspect your finished models, or a .ply file from your computer.'],
+    ].map(([label, title, text]) => ({
         targets: [`.app-sidebar [aria-label="${label}"]`, `.genesis-dock [aria-label="${label}"]`],
-        title: label,
+        title,
         text,
     })),
     {
-        targets: ['.app-sidebar [aria-label="Feedback"]', '.genesis-dock [aria-label="Feedback"]'],
-        title: 'Feedback',
-        text: 'Found a bug or have an idea? Tell us here.',
-    },
-    {
-        targets: ['.app-sidebar [aria-label="Learn"]'],
-        title: 'Learn',
-        text: 'Replay this walkthrough any time from here.',
-        optional: true,
-    },
-    {
         targets: ['.app-topbar .app-avatar'],
-        title: 'Your account',
-        text: 'Your profile, plan and sound settings.',
-        mobileText: 'Your profile, plan and sound settings. You can replay this walkthrough from here.',
+        title: 'Your profile',
+        text: 'Your account, plan, storage and sounds. You can replay this tour from Learn.',
+        mobileText: 'Your account, plan, storage and sounds. You can replay this tour from here.',
         guestText: 'Sign in here to save your work, choose a plan and send feedback.',
     },
 ];
@@ -91,7 +63,9 @@ const WALKTHROUGH_STEPS = [
 const DEFAULT_PADDING = 6;
 // Space between the spotlight and the tooltip.
 const TOOLTIP_GAP = 14;
-const TOOLTIP_WIDTH = 276;
+const TOOLTIP_WIDTH = 300;
+// How far the arrow sits from the tooltip's top corner, as a rule.
+const ARROW_INSET = 36;
 // Closest the tooltip may come to the sides of the screen.
 const SCREEN_MARGIN = 12;
 // The mobile dock's tabs (Dock.jsx), four to a page.
@@ -224,16 +198,23 @@ function Walkthrough({ isGuest = false, onClose }) {
         };
 
         if (target.placement === 'right') {
-            // Beside the item, its top level with the item's (kept on screen).
-            const top = Math.max(SCREEN_MARGIN, Math.min(window.innerHeight - 180, target.top - padding));
-            tooltipStyle = { left: target.left + target.width + padding + TOOLTIP_GAP, width: tooltipWidth, top };
+            // Beside the item, its top a little above the item's (kept on screen).
+            const top = Math.max(SCREEN_MARGIN, Math.min(window.innerHeight - 220, target.top + target.height / 2 - ARROW_INSET));
+            tooltipStyle = {
+                left: target.left + target.width + padding + TOOLTIP_GAP,
+                width: tooltipWidth,
+                top,
+                // The arrow points at the item's middle.
+                '--walkthrough-arrow': `${target.top + target.height / 2 - top}px`,
+            };
         } else {
             // Centred on the item, but kept inside the screen.
             const centredLeft = target.left + target.width / 2 - tooltipWidth / 2;
             const left = Math.max(SCREEN_MARGIN, Math.min(window.innerWidth - tooltipWidth - SCREEN_MARGIN, centredLeft));
+            const arrow = `${Math.max(ARROW_INSET / 2, Math.min(tooltipWidth - ARROW_INSET / 2, target.left + target.width / 2 - left))}px`;
             tooltipStyle = target.placement === 'above'
-                ? { left, width: tooltipWidth, bottom: window.innerHeight - (target.top - padding - TOOLTIP_GAP) }
-                : { left, width: tooltipWidth, top: target.top + target.height + padding + TOOLTIP_GAP };
+                ? { left, width: tooltipWidth, bottom: window.innerHeight - (target.top - padding - TOOLTIP_GAP), '--walkthrough-arrow': arrow }
+                : { left, width: tooltipWidth, top: target.top + target.height + padding + TOOLTIP_GAP, '--walkthrough-arrow': arrow };
         }
     } else {
         // Item not on screen: tooltip in the middle of the page.
@@ -246,7 +227,11 @@ function Walkthrough({ isGuest = false, onClose }) {
             <div className={spotlightStyle ? 'walkthrough-blocker' : 'walkthrough-blocker is-dimmed'} />
             {spotlightStyle && <div className="walkthrough-spotlight" style={spotlightStyle} />}
 
-            <div className="walkthrough-tooltip" style={tooltipStyle} aria-live="polite">
+            <div
+                className={target ? `walkthrough-tooltip is-${target.placement}` : 'walkthrough-tooltip'}
+                style={tooltipStyle}
+                aria-live="polite"
+            >
                 <div className="walkthrough-head">
                     <span className="walkthrough-progress">Step {stepIndex + 1} of {steps.length}</span>
                     {!isLastStep && (

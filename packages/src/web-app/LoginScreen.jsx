@@ -286,8 +286,8 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                 <div className="auth-hero-copy">
                     <h2>Build 3D models from photos.</h2>
                     <p>
-                        Turn source photos and video frames into polished 3D assets. Refine
-                        and arrange them in one connected workspace.
+                        Upload photos or a walkaround video of an object. Genesis rebuilds it
+                        as a 3D model you can edit and share.
                     </p>
                 </div>
             </aside>
@@ -299,7 +299,7 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                     {mode === 'signin' && (
                         <div className="auth-card-intro" aria-hidden="true">
                             <p className="auth-card-intro-title">Build 3D models from photos.</p>
-                            <p>Turn photos and video frames into polished 3D assets.</p>
+                            <p>Upload photos or a walkaround video of an object. Genesis rebuilds it as a 3D model you can edit and share.</p>
                         </div>
                     )}
                     <p className="auth-eyebrow">

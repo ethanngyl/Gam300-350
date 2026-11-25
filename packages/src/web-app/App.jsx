@@ -19,11 +19,11 @@ Feedback, Capture and Account. Capture opens from the New model dialog's
 "Capture with camera" (or the tab bar on phones); its "Review photos
 first" hands the batch to the Photo Editor. The first time each account
 signs in on this browser, wider screens show the Figma's welcome card
-(Tips.jsx): "Take the tour" shows two tips, in the Photo Editor and then
-the Scene Builder's Library tab; the Video Extractor shows its own tip the
-first time it opens. Phones keep the walkthrough of the tab bar
-(Walkthrough.jsx). Learn in the sidebar and "Show walkthrough" on the
-account page replay them.
+(Tips.jsx), whose "Take the tour" starts the walkthrough (Walkthrough.jsx)
+of each page in the sidebar and the profile; phones go straight to the
+walkthrough, over the tab bar. The Video Extractor shows its own tip the
+first time it opens. Learn in the sidebar and "Show walkthrough" replay
+the walkthrough.
 Opening a model (from Home, the Media Library or the Model Viewer, a .ply
 from the user's computer, or a build that just finished, from photos or
 the Frame Extractor) shows the model page (ModelScreen.jsx) inside the
@@ -63,7 +63,7 @@ import ModelScreen from './ModelScreen.jsx';
 import Walkthrough from './Walkthrough.jsx';
 import AddPhotosDialog from './AddPhotosDialog.jsx';
 import { TipCard, WelcomeCard } from './Tips.jsx';
-import { TOUR_TIPS, VIDEO_TIP } from './TipsContent.js';
+import { VIDEO_TIP } from './TipsContent.js';
 import BuildPanel from './BuildPanel.jsx';
 import { useBackgroundBuilds } from './useBackgroundBuilds.js';
 import { useUndoableState } from './useUndoableState.js';
@@ -236,10 +236,9 @@ function App() {
         return () => { cancelled = true; };
     }, []);
 
-    // True while the walkthrough is replaying from the account page.
+    // True while the walkthrough is open on request (Take the tour, Learn,
+    // Show walkthrough).
     const [isReplayingWalkthrough, setIsReplayingWalkthrough] = useState(false);
-    // Wider screens: which tour tip is showing (index into TOUR_TIPS), or null.
-    const [tourStep, setTourStep] = useState(null);
     // Bumped when the walkthrough closes, so the "seen" flag is read again.
     const [, setWalkthroughCloseCount] = useState(0);
 
@@ -351,7 +350,7 @@ function App() {
             setUploadError(null);
             setPhotosForEditor(null);
             setPhotosForCapture(null);
-                setFrameExtractorDraft(null);
+            setFrameExtractorDraft(null);
             setFrameExtractorNotice(view.wasUploadInterrupted ? UPLOAD_INTERRUPTED_NOTICE : null);
             setActiveTab(view.activeTab);
             if (view.activeTab === 'library') setLibrarySubTab(view.librarySubTab);
@@ -526,43 +525,24 @@ function App() {
         goToTab('scene');
     }
 
-    // Phones: the walkthrough, shown the first time an account signs in here, or on request.
+    // The walkthrough: on request, or on phones the first time an account
+    // signs in here.
     const isFirstVisit = Boolean(currentUser) && !hasSeenWalkthrough(currentUser.email);
-    const isWalkthroughOpen = Boolean(currentUser) && isMobile && (isReplayingWalkthrough || isFirstVisit);
-    // Wider screens: the welcome card on Home instead, until it is answered.
-    const isWelcomeOpen = !isMobile && isFirstVisit && tourStep === null && activeTab === 'home';
+    const isWalkthroughOpen = Boolean(currentUser) && (isReplayingWalkthrough || (isMobile && isFirstVisit));
+    // Wider screens: the welcome card on Home the first time, until it is answered.
+    const isWelcomeOpen = !isMobile && isFirstVisit && !isReplayingWalkthrough && activeTab === 'home';
 
-    // Learn and "Show walkthrough": the tour on wider screens, the walkthrough
-    // on phones (from step 1, which points at Home's Recent section).
+    // Take the tour, Learn and "Show walkthrough": the walkthrough from step
+    // 1, on Home.
     function showWalkthroughAgain() {
-        if (isMobile) {
-            goToTab('home');
-            setIsReplayingWalkthrough(true);
-            return;
-        }
-        startTour();
+        goToTab('home');
+        setIsReplayingWalkthrough(true);
     }
 
     function closeWalkthrough() {
         markWalkthroughSeen(currentUser.email);
         setIsReplayingWalkthrough(false);
         setWalkthroughCloseCount((closeCount) => closeCount + 1);
-    }
-
-    function startTour() {
-        markWalkthroughSeen(currentUser.email);
-        setTourStep(0);
-        goToTab(TOUR_TIPS[0].page);
-    }
-
-    function nextTourStep() {
-        const nextStep = tourStep + 1;
-        if (nextStep >= TOUR_TIPS.length) {
-            setTourStep(null);
-            return;
-        }
-        setTourStep(nextStep);
-        goToTab(TOUR_TIPS[nextStep].page);
     }
 
     // "I'll explore": no tour; Learn still has it.
@@ -613,9 +593,7 @@ function App() {
     // opened from; phones show it as a page.
     const isAccountWindowOpen = !isMobile && activeTab === 'account';
     const pageTab = isAccountWindowOpen ? accountReturnTab : activeTab;
-    // The tour's tip for this page, if the tour is on it.
-    const tourTip = tourStep !== null && TOUR_TIPS[tourStep].page === pageTab ? TOUR_TIPS[tourStep] : null;
-    const isVideoTipOpen = !isMobile && pageTab === 'extractor' && tourStep === null
+    const isVideoTipOpen = !isMobile && pageTab === 'extractor' && !isWalkthroughOpen
         && !isAccountWindowOpen && !hasSeenTip(VIDEO_TIP.id, currentUser.email);
 
     return (
@@ -629,7 +607,7 @@ function App() {
                     onGoHome={() => goToTab('home')}
                     onOpenModel={openModel}
                     onOpenLibrary={openLibrary}
-                    onOpenSettings={() => openAccount('appearance')}
+                    onOpenSettings={() => openAccount('notifications')}
                     onOpenFeedback={() => goToTab('feedback')}
                     onOpenAccount={() => openAccount('account')}
                     onShowWalkthrough={showWalkthroughAgain}
@@ -684,7 +662,6 @@ function App() {
                             canRedo={scene.canRedo}
                             sceneInfo={sceneInfo}
                             onSceneInfoChange={setSceneInfo}
-                            initialLeftTab={tourTip?.id === 'scene' ? 'library' : 'scene'}
                         />
                     )}
                     {pageTab === 'viewer' && (
@@ -779,18 +756,7 @@ function App() {
             />
 
             {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
-            {isWelcomeOpen && <WelcomeCard onTakeTour={startTour} onExplore={skipWelcome} />}
-            {tourTip && (
-                <TipCard
-                    key={tourTip.id}
-                    tip={tourTip}
-                    stepText={`${tourStep + 1} of ${TOUR_TIPS.length}`}
-                    primaryLabel={tourStep + 1 < TOUR_TIPS.length ? 'Next' : 'Done'}
-                    onPrimary={nextTourStep}
-                    secondaryLabel={tourStep + 1 < TOUR_TIPS.length ? 'Skip tour' : null}
-                    onSecondary={() => setTourStep(null)}
-                />
-            )}
+            {isWelcomeOpen && <WelcomeCard onTakeTour={showWalkthroughAgain} onExplore={skipWelcome} />}
             {isVideoTipOpen && <TipCard tip={VIDEO_TIP} primaryLabel="Got it" onPrimary={closeVideoTip} />}
 
             {isMobile && pageTab !== 'capture' && (

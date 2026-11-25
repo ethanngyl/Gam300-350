@@ -1,45 +1,62 @@
 /* ============================================================
-   Landing page (LandingScreen.jsx), laid out like the Genesis landing
-   page design. Colours come from the theme tokens. As in the Figma,
-   headings and the logo use IBM Plex Sans and are white; the rest of the
-   text stays in the app's font (Raleway).
+   Landing page (LandingScreen.jsx), laid out like the Figma's
+   "Landing page - Glass". The page is black with rounded light and dark
+   panels down it; these keep their own colours in both themes, as in the
+   design. Headings and the logo use IBM Plex Sans; the rest of the text
+   stays in the app's font (Raleway).
    Sizes and spacing use clamp(), so the page scales smoothly as the
    window resizes: clamp(smallest, scales with width, largest).
    ============================================================ */
 
 .landing-page {
+    --landing-pink: #e0479e;
+    --landing-pink-hover: #ea5fae;
+    --landing-ink: #111110;
+    --landing-cream: #efeeea;
+    --landing-text: #e8e6e1;
+    --landing-muted: #8a8a86;
+    --landing-dark-panel: #1a1a19;
     min-height: 100vh;
-    background: radial-gradient(ellipse at 100% 100%, rgba(var(--forma-accent-rgb), 0.08), transparent 55%), var(--forma-bg);
-    color: var(--forma-text);
+    background: #000000;
+    color: var(--landing-text);
     font-family: var(--forma-font);
-    /* White headings on the dark page */
-    --forma-heading: #ffffff;
-}
-
-:root[data-theme="light"] .landing-page {
-    --forma-heading: #000000;
+    overflow-x: clip;
 }
 
 .landing-container {
     width: 100%;
-    /* 1248px on a laptop, growing to 1600px on a wide monitor. */
-    max-width: clamp(1248px, 82vw, 1600px);
+    /* 1166px content on a laptop, as in the design, growing on a wide monitor. */
+    max-width: clamp(1214px, 84vw, 1560px);
     margin: 0 auto;
-    padding: 0 clamp(16px, 3vw, 48px);
+    padding: 0 clamp(16px, 2vw, 24px);
+    box-sizing: border-box;
 }
 
-.landing-page h1,
-.landing-page h2,
-.landing-page h3,
-.landing-page p,
-.landing-page figure {
+.landing-page :is(h1, h2, h3, p, ul, ol, figure) {
     margin: 0;
+    max-width: none;
+}
+
+.landing-page :is(ul, ol) {
+    padding: 0;
+    list-style: none;
 }
 
 /* Headings and the logo in IBM Plex Sans */
 .landing-page :is(h1, h2, h3),
 .landing-page .landing-logo {
     font-family: 'IBM Plex Sans', var(--forma-font);
+    color: inherit;
+}
+
+.landing-page :is(h1, h2) {
+    font-weight: 500;
+    letter-spacing: -0.02em;
+}
+
+.landing-page h2 {
+    font-size: clamp(2.3rem, 3.7vw, 3.6rem);
+    line-height: 1.12;
 }
 
 /* App.css gives every <section> a top border and padding; not here. */
@@ -49,551 +66,842 @@
     border-top: 0;
 }
 
-.landing-page h1,
-.landing-page h2 {
-    color: var(--forma-heading);
+/* ---------- Buttons ---------- */
+
+/* A pill with a round arrow badge on its right. */
+.landing-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    height: clamp(52px, 3.9vw, 60px);
+    padding: 0 6px 0 24px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-family: var(--forma-font);
+    font-size: clamp(0.92rem, 1.05vw, 1.05rem);
     font-weight: 600;
-    letter-spacing: -0.02em;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
-/* ---------- Top bar ---------- */
+.landing-pill-badge {
+    display: inline-grid;
+    place-items: center;
+    width: clamp(38px, 2.9vw, 44px);
+    height: clamp(38px, 2.9vw, 44px);
+    border-radius: 50%;
+}
+
+.landing-pill.is-pink {
+    background: var(--landing-pink);
+    color: var(--landing-ink);
+}
+
+    .landing-pill.is-pink:hover {
+        background: var(--landing-pink-hover);
+    }
+
+    .landing-pill.is-pink .landing-pill-badge {
+        background: var(--landing-ink);
+        color: var(--landing-pink);
+    }
+
+.landing-pill.is-dark {
+    background: #000000;
+    color: #ffffff;
+}
+
+    .landing-pill.is-dark:hover {
+        background: #222221;
+    }
+
+    .landing-pill.is-dark .landing-pill-badge {
+        background: #2a2a28;
+        color: #ffffff;
+    }
+
+/* Log in beside Get started free: no badge. */
+.landing-pill.is-outline {
+    padding: 0 24px;
+    border-color: #2a2a28;
+    background: #0e0e0e;
+    color: var(--landing-text);
+}
+
+    .landing-pill.is-outline:hover {
+        border-color: #4a4a47;
+    }
+
+.landing-pill.is-wide {
+    width: 100%;
+}
+
+.landing-pill:focus-visible,
+.landing-nav-links button:focus-visible,
+.landing-billing button:focus-visible {
+    outline: 2px solid var(--landing-pink);
+    outline-offset: 3px;
+}
+
+/* ---------- Floating glass bar ---------- */
 
 .landing-nav {
     position: sticky;
-    top: 0;
+    top: clamp(16px, 2.5vw, 36px);
     z-index: 20;
-    background: rgba(var(--forma-bg-rgb), 0.82);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    gap: clamp(20px, 2.8vw, 40px);
+    width: fit-content;
+    max-width: calc(100% - 32px);
+    box-sizing: border-box;
+    margin: clamp(16px, 2.5vw, 36px) auto 0;
+    padding: 6px 8px 6px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(12, 12, 12, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 }
 
-.landing-nav-inner {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    height: clamp(64px, 6vw, 96px);
-}
+    .landing-nav .landing-pill {
+        height: 48px;
+        padding-left: 18px;
+        font-size: 0.92rem;
+    }
+
+    .landing-nav .landing-pill-badge {
+        width: 38px;
+        height: 38px;
+    }
 
 .landing-logo {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    color: var(--forma-heading);
-    font-weight: 600;
+    color: #ffffff;
     font-size: 1rem;
+    font-weight: 600;
     letter-spacing: 0.12em;
 }
 
     .landing-logo img {
-        width: 24px;
-        height: 24px;
+        width: 20px;
+        height: 20px;
     }
 
 .landing-nav-links {
     display: flex;
-    gap: 12px;
+    align-items: center;
+    gap: clamp(20px, 2.8vw, 40px);
 }
 
-    .landing-nav-links button,
-    .landing-text-button {
-        padding: 8px 12px;
+    .landing-nav-links button {
+        padding: 0;
         border: 0;
         background: none;
-        color: var(--forma-text-muted);
-        font: inherit;
-        font-size: 0.92rem;
+        color: #c9c7c2;
+        font-family: var(--forma-font);
+        font-size: 0.94rem;
         cursor: pointer;
     }
 
         .landing-nav-links button:hover {
-            color: var(--forma-text);
+            color: #ffffff;
         }
 
-.landing-text-button {
-    color: var(--forma-heading);
-}
+/* ---------- Hero ---------- */
 
-.landing-nav-actions {
-    display: flex;
+.landing-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
     align-items: center;
-    justify-content: flex-end;
-    gap: 16px;
+    gap: 40px;
+    min-height: clamp(680px, 52vw, 860px);
+    padding-top: clamp(40px, 5vw, 80px) !important;
+    padding-bottom: clamp(48px, 5vw, 80px) !important;
 }
 
-/* .landing-page in front so these beat .forma-btn, whose CSS loads later. */
-.landing-page .landing-big-button {
-    gap: 8px;
-    height: 44px;
-    padding: 0 22px;
-    font-size: 0.92rem;
-}
-
-/* Top bar's Get started: a little bigger than the app's buttons. */
-.landing-page .landing-nav-button {
-    height: 44px;
-    padding: 0 22px;
-    font-size: 0.92rem;
-}
-
-/* Log in next to Get started free: an outline, no fill. */
-.landing-page .landing-outline-button {
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    background: transparent;
-    color: var(--forma-heading);
-}
-
-    .landing-page .landing-outline-button:hover {
-        border-color: var(--forma-heading);
-        background: rgba(255, 255, 255, 0.06);
+    .landing-hero h1 {
+        font-size: clamp(3.4rem, 6.6vw, 6.6rem);
+        line-height: 1.14;
+        white-space: nowrap;
+        color: var(--landing-text);
     }
 
-:root[data-theme="light"] .landing-page .landing-outline-button {
-    border-color: var(--forma-border-strong);
+.landing-hero-copy > p {
+    max-width: 30em;
+    margin-top: clamp(24px, 2.6vw, 40px);
+    color: #a8a6a1;
+    font-size: clamp(1.02rem, 1.3vw, 1.25rem);
+    line-height: 1.6;
 }
-
-    :root[data-theme="light"] .landing-page .landing-outline-button:hover {
-        border-color: var(--forma-heading);
-        background: rgba(0, 0, 0, 0.04);
-    }
-
-/* ---------- Headline ---------- */
-
-.landing-page .landing-hero {
-    padding-top: clamp(48px, 7vw, 128px);
-}
-
-.landing-headline-row {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 32px;
-}
-
-.landing-hero h1 {
-    font-size: clamp(2.6rem, 6.4vw, 7rem);
-    line-height: 1.02;
-}
-
-/* Intro text above the two buttons, beside the headline. */
-.landing-hero-intro {
-    max-width: 420px;
-    padding-bottom: 14px;
-}
-
-    .landing-hero-intro p {
-        margin-bottom: 24px;
-        color: var(--forma-text-muted);
-        font-size: clamp(0.98rem, 0.88rem + 0.3vw, 1.15rem);
-        line-height: 1.6;
-    }
 
 .landing-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+    margin-top: clamp(32px, 3.5vw, 52px);
 }
 
-/* Photos on the left, dots, the finished model on the right. */
 .landing-hero-visual {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
-    align-items: center;
-    gap: clamp(16px, 2vw, 40px);
-    margin-top: clamp(48px, 6.5vw, 128px);
-}
-
-.landing-photo-stack {
     position: relative;
-    width: 100%;
-    max-width: 560px;
-    /* Height follows the width, so the photos keep their places as it shrinks. */
-    aspect-ratio: 10 / 9;
+    align-self: stretch;
+    min-height: 560px;
 }
 
-.landing-stack-photo {
+/* The big, soft render behind the cards. */
+.landing-hero-render {
     position: absolute;
-    width: 48%;
-    aspect-ratio: 3 / 4;
-    object-fit: cover;
-    border: 4px solid #f4f1ea;
-    border-radius: 8px;
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+    top: 0;
+    left: 50%;
+    height: 78%;
+    transform: translateX(-40%);
+    filter: blur(2px) saturate(0.85) brightness(0.8);
+    mix-blend-mode: lighten;
+    opacity: 0.75;
+    -webkit-mask-image: radial-gradient(closest-side, #000 60%, transparent);
+    mask-image: radial-gradient(closest-side, #000 60%, transparent);
 }
 
-    .landing-stack-photo.is-photo-1 {
-        left: 4%;
-        top: 8%;
-        transform: rotate(-12deg);
-    }
+.landing-hero-cards {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(360px, 100%);
+}
 
-    .landing-stack-photo.is-photo-2 {
-        left: 22%;
-        top: 0;
-        transform: rotate(-4deg);
-    }
+/* A frosted card over the pictures. */
+.landing-glass {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(18, 18, 18, 0.62);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
 
-    .landing-stack-photo.is-photo-3 {
-        left: 42%;
-        top: 5%;
-        transform: rotate(6deg);
-    }
-
-    .landing-stack-photo.is-photo-4 {
-        left: 16%;
-        top: 28%;
-        transform: rotate(-3deg);
-    }
-
-    .landing-stack-photo.is-photo-5 {
-        left: 48%;
-        top: 18%;
-        transform: rotate(8deg);
-    }
-
-.landing-hero-dots {
+.landing-hero-card {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 16px;
+    padding: 12px;
 }
 
-    .landing-hero-dots span {
-        width: calc(3px + var(--dot-step) * 6px);
-        height: calc(3px + var(--dot-step) * 6px);
-        border-radius: 50%;
-        background: var(--forma-text-muted);
-        opacity: calc(0.25 + var(--dot-step) * 0.75);
+    .landing-hero-card img {
+        width: 64px;
+        height: 64px;
+        flex: none;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #0a0c10;
     }
 
-.landing-model-card {
-    position: relative;
+    .landing-hero-card > span {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        padding-right: 12px;
+    }
+
+    .landing-hero-card strong {
+        color: #ffffff;
+        font-size: 0.98rem;
+        font-weight: 600;
+    }
+
+    .landing-hero-card small {
+        color: var(--landing-muted);
+        font-size: 0.82rem;
+    }
+
+/* A thin progress bar. */
+.landing-bar {
+    display: block;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
     overflow: hidden;
-    aspect-ratio: 1 / 1;
-    border: 1px solid var(--forma-border-strong);
-    border-radius: 18px;
-    /* Dark in both themes, the same colour as the render's background so
-       its edges don't show. Faint stripes, like behind the app's covers. */
-    background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 12px), #0a0c10;
 }
 
-    .landing-model-card img {
-        width: 100%;
+    .landing-bar > span {
+        display: block;
         height: 100%;
-        object-fit: contain;
-        /* The render's dark background lets the stripes behind show
-           through; the model itself is brighter, so it stays as it is. */
-        mix-blend-mode: lighten;
+        border-radius: inherit;
+        background: var(--landing-pink);
     }
 
-    .landing-model-card figcaption {
-        position: absolute;
-        left: 16px;
-        bottom: 16px;
-        padding: 6px 12px;
-        border-radius: 6px;
-        background: rgba(11, 12, 16, 0.8);
-        color: #a7acb8;
-        font-size: 0.8rem;
+/* ---------- Panels ---------- */
+
+.landing-panel {
+    margin: 0 12px 12px;
+    border-radius: clamp(24px, 2.8vw, 40px);
+    padding-top: clamp(64px, 7vw, 104px) !important;
+    padding-bottom: clamp(64px, 7vw, 104px) !important;
+    scroll-margin-top: 100px;
+}
+
+    .landing-panel.is-light {
+        background: var(--landing-cream);
+        color: var(--landing-ink);
     }
 
-        .landing-model-card figcaption strong,
-        .landing-gallery-item figcaption strong {
-            margin-right: 6px;
-            color: var(--forma-heading);
-            font-weight: 500;
-        }
+    .landing-panel.is-dark {
+        background: var(--landing-dark-panel);
+        color: var(--landing-text);
+    }
 
-        .landing-model-card figcaption strong {
-            color: #f4f5f8;
-        }
+    /* Faint grid lines, as behind the steps in the design. */
+    .landing-panel.is-grid {
+        background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 48px 48px;
+    }
 
-/* The three steps, under a rule. */
-.landing-steps {
+    /* Film grain, as behind the closing call to action. */
+    .landing-panel.is-grain {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), radial-gradient(ellipse at 75% 50%, #1e1c1a, #0d0d0d 70%);
+    }
+
+/* Copy on the left, a picture on the right. */
+.landing-split {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(24px, 4vw, 72px);
-    margin-top: clamp(48px, 6vw, 112px);
-    padding-top: clamp(24px, 2.2vw, 40px);
-    border-top: 1px solid var(--forma-border);
+    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(40px, 5vw, 80px);
 }
 
-.landing-step h3,
-.landing-feature h3,
-.landing-plan h3 {
-    color: var(--forma-heading);
-    font-weight: 600;
-}
-
-.landing-step h3 {
-    font-size: clamp(1.35rem, 0.9rem + 1vw, 1.9rem);
-    letter-spacing: -0.01em;
-}
-
-.landing-step p {
-    max-width: 36ch;
-    margin-top: 12px;
-    color: var(--forma-text-muted);
-    font-size: clamp(0.92rem, 0.82rem + 0.3vw, 1.08rem);
+.landing-lead {
+    margin-top: clamp(20px, 2.2vw, 32px) !important;
+    font-size: clamp(1rem, 1.25vw, 1.2rem);
     line-height: 1.6;
 }
 
-/* ---------- Sections ---------- */
-
-.landing-page .landing-section {
-    padding-top: clamp(96px, 11vw, 200px);
+.is-light .landing-lead {
+    color: #4a4a47;
 }
 
-.landing-section-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 32px;
+.is-dark .landing-lead {
+    color: #a8a6a1;
 }
 
-    .landing-section-head h2 {
-        font-size: clamp(2rem, 4vw, 4.4rem);
-    }
+/* ---------- Workspace (light panel) ---------- */
 
-    .landing-section-head p {
-        max-width: 420px;
-        color: var(--forma-text-muted);
-        font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.12rem);
-        line-height: 1.6;
-    }
-
-/* Inside Genesis: copy beside a screenshot, swapping sides each row. */
 .landing-features {
-    display: flex;
-    flex-direction: column;
-    gap: clamp(56px, 7vw, 136px);
-    margin-top: clamp(48px, 6.5vw, 128px);
-}
-
-.landing-feature {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-    align-items: center;
-    gap: clamp(32px, 4.5vw, 88px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
+    margin-top: clamp(40px, 4.5vw, 60px) !important;
 }
 
-    .landing-feature.is-flipped {
-        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    .landing-features li {
+        padding: 24px 0 30px;
+        border-top: 1px solid #d5d3ce;
     }
 
-        .landing-feature.is-flipped .landing-feature-copy {
-            order: 2;
-        }
-
-    .landing-feature h3 {
-        font-size: clamp(1.5rem, 1rem + 1.2vw, 2.5rem);
+    .landing-features h3 {
+        font-size: 1.06rem;
+        font-weight: 500;
     }
 
-    .landing-feature p {
-        margin-top: 16px;
-        color: var(--forma-text-muted);
-        font-size: clamp(0.98rem, 0.85rem + 0.35vw, 1.2rem);
-        line-height: 1.7;
+    .landing-features p {
+        margin-top: 6px;
+        color: #5c5c58;
+        font-size: 0.95rem;
+        line-height: 1.5;
     }
 
-.landing-feature-shot {
-    display: block;
-    width: 100%;
-    border: 1px solid var(--forma-border-strong);
+.landing-shot-frame {
+    position: relative;
     border-radius: 14px;
-    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+    background: #000000;
+    overflow: hidden;
+    aspect-ratio: 643 / 707;
 }
 
-.landing-extractor-note {
+    .landing-shot-frame > img {
+        display: block;
+        width: 160%;
+        max-width: none;
+    }
+
+.landing-build-card {
+    position: absolute;
+    left: 4%;
+    right: 4%;
+    bottom: 4%;
+    padding: clamp(18px, 2vw, 28px) clamp(20px, 2.2vw, 26px);
+    background: rgba(26, 26, 25, 0.78);
+    color: var(--landing-text);
+}
+
+.landing-build-card-head {
     display: flex;
-    align-items: center;
+    align-items: baseline;
+    justify-content: space-between;
     gap: 12px;
-    max-width: none;
-    margin-top: clamp(48px, 5vw, 96px) !important;
-    color: var(--forma-text-soft);
+    margin-bottom: 14px;
+}
+
+    .landing-build-card-head strong {
+        color: #ffffff;
+        font-family: 'IBM Plex Sans', var(--forma-font);
+        font-size: clamp(1.1rem, 1.4vw, 1.3rem);
+        font-weight: 500;
+    }
+
+    .landing-build-card-head small {
+        color: var(--landing-muted);
+        font-size: 0.85rem;
+    }
+
+.landing-build-card li {
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    align-items: center;
+    column-gap: 12px;
+    padding: 6px 0;
     font-size: 0.95rem;
 }
 
-    .landing-extractor-note svg {
-        flex: none;
-        color: var(--forma-text-muted);
+    .landing-build-card li .landing-bar {
+        grid-column: 1 / -1;
+        margin-top: 10px;
     }
 
-/* Made with Genesis: four cards, alternately tall and short. */
-.landing-gallery {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    align-items: end;
-    gap: clamp(12px, 1.2vw, 24px);
-    margin-top: clamp(32px, 3.5vw, 64px);
+    .landing-build-card li.is-pending {
+        color: var(--landing-muted);
+    }
+
+.landing-build-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ffffff;
 }
 
-.landing-gallery-item img {
-    display: block;
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    object-fit: cover;
-    border-radius: 12px;
-    background: var(--forma-panel);
+.is-active .landing-build-dot {
+    background: var(--landing-pink);
 }
 
-.landing-gallery-item.is-tall img {
-    aspect-ratio: 4 / 5;
+.is-pending .landing-build-dot {
+    box-sizing: border-box;
+    border: 1px solid var(--landing-muted);
+    background: transparent;
 }
 
-.landing-gallery-item figcaption {
-    margin-top: 16px;
-    color: var(--forma-text-dim);
+.landing-build-value {
+    color: #a8a6a1;
+    font-family: var(--forma-mono, 'JetBrains Mono', monospace);
     font-size: 0.82rem;
 }
 
-/* Plans: three columns under a rule. */
+/* ---------- How it works (dark panel) ---------- */
+
+.landing-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: clamp(40px, 4.5vw, 52px) !important;
+}
+
+    .landing-steps li {
+        display: flex;
+        gap: 26px;
+        padding: 26px 24px 28px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.015);
+    }
+
+    .landing-steps h3 {
+        color: #ffffff;
+        font-size: clamp(1.1rem, 1.35vw, 1.25rem);
+        font-weight: 500;
+    }
+
+    .landing-steps p {
+        margin-top: 8px;
+        color: #a8a6a1;
+        font-size: 0.98rem;
+        line-height: 1.6;
+    }
+
+.landing-step-number {
+    padding-top: 3px;
+    color: var(--landing-muted);
+    font-family: var(--forma-mono, 'JetBrains Mono', monospace);
+    font-size: 0.86rem;
+}
+
+.landing-video-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-top: 30px !important;
+    padding-left: 2px;
+    color: #a8a6a1;
+    font-size: 0.95rem;
+    line-height: 1.55;
+}
+
+    .landing-video-note svg {
+        flex: none;
+        margin-top: 2px;
+    }
+
+/* The Home screenshot, tilted back as in the design. */
+.landing-tilted {
+    position: relative;
+    perspective: 1600px;
+    padding-bottom: 40px;
+}
+
+.landing-tilted-window {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    background: #0a0a0a;
+    overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+    transform: rotateY(-14deg) rotateX(6deg) rotateZ(1deg);
+    transform-origin: 30% 50%;
+}
+
+    .landing-tilted-window img {
+        display: block;
+        width: 100%;
+    }
+
+.landing-tilted-bar {
+    display: flex;
+    gap: 7px;
+    padding: 12px 14px;
+    background: #141413;
+}
+
+    .landing-tilted-bar span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #3a3a38;
+    }
+
+.landing-toast {
+    position: absolute;
+    right: 0;
+    bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 18px 12px 12px;
+    background: rgba(22, 22, 21, 0.82);
+}
+
+    .landing-toast img {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: #0a0c10;
+    }
+
+    .landing-toast span {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .landing-toast strong {
+        color: #ffffff;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+
+    .landing-toast small {
+        color: #a8a6a1;
+        font-size: 0.86rem;
+    }
+
+/* ---------- Plans (light panel) ---------- */
+
+.landing-plans-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+    .landing-plans-head p {
+        color: #5c5c58;
+        font-size: 0.95rem;
+    }
+
+.landing-billing {
+    display: flex;
+    width: fit-content;
+    margin: clamp(36px, 4vw, 52px) auto clamp(28px, 2.4vw, 34px);
+    padding: 4px;
+    border-radius: 999px;
+    background: #000000;
+}
+
+    .landing-billing button {
+        min-width: 118px;
+        height: 42px;
+        padding: 0 24px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: #c9c7c2;
+        font-family: var(--forma-font);
+        font-size: 0.95rem;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+        .landing-billing button[aria-pressed="true"] {
+            background: var(--landing-pink);
+            color: var(--landing-ink);
+        }
+
 .landing-plans {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(24px, 4vw, 72px);
-    margin-top: clamp(32px, 3vw, 56px);
-    padding-top: clamp(24px, 2.5vw, 44px);
-    border-top: 1px solid var(--forma-border);
+    gap: 18px;
 }
 
-.landing-plan h3 {
+.landing-plan {
     display: flex;
-    align-items: baseline;
-    gap: 12px;
-    font-size: clamp(1.4rem, 1rem + 0.8vw, 2rem);
+    flex-direction: column;
+    border: 1px solid #e0ded9;
+    border-radius: 12px;
+    background: #ffffff;
+    overflow: hidden;
 }
 
-    .landing-plan h3 small {
-        color: var(--forma-text-dim);
-        font-size: 0.9rem;
-        font-weight: 400;
+.landing-plan-image {
+    position: relative;
+    height: clamp(150px, 11.7vw, 190px);
+    background: radial-gradient(ellipse at 50% 30%, #1d1d1c, #0a0a0a 75%);
+    overflow: hidden;
+}
+
+    .landing-plan-image img {
+        position: absolute;
+        left: 50%;
+        top: 4%;
+        height: 140%;
+        transform: translateX(-50%);
+        mix-blend-mode: lighten;
+        opacity: 0.85;
     }
 
+    /* Fades the picture into the bottom edge, under the plan's name. */
+    .landing-plan-image::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to bottom, transparent 45%, rgba(0, 0, 0, 0.75));
+    }
+
+    .landing-plan-image h3 {
+        position: absolute;
+        left: 24px;
+        bottom: 18px;
+        z-index: 1;
+        color: #ffffff;
+        font-size: clamp(1.5rem, 1.9vw, 1.8rem);
+        font-weight: 500;
+    }
+
+.landing-plan-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    padding: 28px 24px 24px;
+}
+
+.landing-plan-price {
+    color: #5c5c58;
+    font-size: 0.92rem;
+}
+
+    .landing-plan-price strong {
+        margin-right: 6px;
+        color: var(--landing-ink);
+        font-family: 'IBM Plex Sans', var(--forma-font);
+        font-size: 1.5rem;
+        font-weight: 500;
+    }
+
+.landing-plan-billed {
+    color: #6b6b67;
+    font-size: 0.86rem;
+}
+
 .landing-plan-audience {
-    margin-top: 12px !important;
-    color: var(--forma-text-muted);
-    font-size: 0.95rem;
+    margin-top: 22px !important;
+    color: var(--landing-ink);
+    font-size: 0.98rem;
+    font-weight: 600;
 }
 
 .landing-plan ul {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    margin: 24px 0 0;
-    padding: 0;
-    list-style: none;
-    color: var(--forma-text-soft);
+    margin: 16px 0 40px !important;
+    flex: 1;
+}
+
+.landing-plan li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #4a4a47;
     font-size: 0.95rem;
 }
 
-/* Closing call to action. */
-.landing-cta {
+    .landing-plan li svg {
+        flex: none;
+        color: #6b6b67;
+    }
+
+/* ---------- Closing call to action (dark panel) ---------- */
+
+.landing-cta-inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 32px;
-}
-
-.landing-page .landing-cta {
-    padding-top: clamp(96px, 11vw, 200px);
-    padding-bottom: clamp(72px, 8vw, 160px);
+    gap: 40px;
 }
 
 .landing-cta h2 {
-    font-size: clamp(2.2rem, 5vw, 5rem);
-    line-height: 1.05;
+    margin-bottom: clamp(28px, 3vw, 40px);
+    font-size: clamp(3.2rem, 5.6vw, 5.4rem);
+    line-height: 1.1;
+    color: var(--landing-text);
+}
+
+.landing-cta-render {
+    width: clamp(200px, 22vw, 340px);
+    margin-right: 4%;
+    filter: blur(1.5px) sepia(0.6) saturate(0.9);
+    mix-blend-mode: lighten;
+    opacity: 0.75;
+    -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent);
+    mask-image: radial-gradient(closest-side, #000 55%, transparent);
 }
 
 /* ---------- Footer ---------- */
 
 .landing-footer {
-    padding: 36px 0;
-    border-top: 1px solid var(--forma-border);
-}
-
-.landing-footer-inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
+    gap: 16px;
+    padding-top: 44px;
+    padding-bottom: 52px;
+    /* App.css gives every <footer> a border, padding and a background; not here. */
+    border-top: 0;
+    background: none;
 }
 
-    .landing-footer-inner .landing-logo {
+    .landing-footer p {
+        color: var(--landing-muted);
         font-size: 0.85rem;
     }
 
-    .landing-footer-inner p {
-        color: var(--forma-text-dim);
-        font-size: 0.82rem;
-    }
-
-/* ---------- Smaller screens ---------- */
+/* ---------- Narrower screens ---------- */
 
 @media (max-width: 960px) {
-    .landing-nav-links {
+    .landing-nav-links button:not(:last-child) {
         display: none;
     }
 
-    .landing-nav-inner {
-        grid-template-columns: 1fr auto;
+    .landing-hero,
+    .landing-split {
+        grid-template-columns: 1fr;
     }
 
-    .landing-headline-row,
-    .landing-section-head,
-    .landing-cta {
-        flex-direction: column;
-        align-items: flex-start;
+    .landing-hero {
+        min-height: 0;
     }
 
     .landing-hero-visual {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        min-height: 480px;
     }
 
-    .landing-hero-dots {
-        display: none;
+    .landing-hero-render {
+        left: 0;
+        transform: none;
     }
 
-    .landing-feature,
-    .landing-feature.is-flipped {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 28px;
-    }
-
-        .landing-feature.is-flipped .landing-feature-copy {
-            order: 0;
-        }
-
-    .landing-gallery {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .landing-steps,
     .landing-plans {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 32px;
+        grid-template-columns: 1fr;
+        max-width: 480px;
+        margin: 0 auto;
+    }
+
+    .landing-tilted {
+        margin-top: 24px;
     }
 }
 
 @media (max-width: 560px) {
-    .landing-nav-actions {
-        gap: 8px;
+    .landing-nav {
+        gap: 14px;
+        padding-left: 14px;
     }
 
-        .landing-nav-actions .forma-btn {
-            height: auto;
-            padding: 8px 12px;
-        }
+    .landing-nav-links {
+        display: none;
+    }
+
+    .landing-hero h1 {
+        font-size: 3rem;
+        white-space: normal;
+    }
 
     .landing-hero-visual {
-        grid-template-columns: minmax(0, 1fr);
+        min-height: 420px;
     }
 
-    .landing-photo-stack {
-        max-width: 340px;
-        margin: 0 auto;
+    .landing-panel {
+        margin: 0 6px 6px;
     }
 
-    .landing-footer-inner {
+    .landing-features {
+        grid-template-columns: 1fr;
+    }
+
+    .landing-plans-head {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .landing-cta-inner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .landing-cta-render {
+        align-self: center;
+    }
+
+    .landing-footer {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-pill {
+        transition: none;
     }
 }
