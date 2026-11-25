@@ -475,7 +475,7 @@ void Viewport::DrawGridLabels(const glm::mat4& view, const glm::mat4& proj) {
     //a number too close on screen to the last one drawn is skipped, so they never pile up near the
     //horizon or when zoomed out.
     constexpr float kMinLabelGap = 26.0f; //pixels
-    const int lastLabel = static_cast<int>(GridRenderer::kExtent * 0.8f);
+    const int lastLabel = static_cast<int>(GridRenderer::kFadeStart);
     char text[48];
     ImVec2 screen;
     ImVec2 origin;
@@ -523,7 +523,7 @@ void Viewport::DrawGridLabels(const glm::mat4& view, const glm::mat4& proj) {
     //Selected model: a line down to the grid and its coordinates, so its spot on the grid is easy to read
     SplatModel* model = m_renderer->GetModel(m_renderer->GetSelectedModel());
     if (model && !model->GetIsHidden()) {
-        const glm::vec3 pos(model->GetTransform()[3]);
+        const glm::vec3 pos = ModelCentre(*model);
         const glm::vec3 foot(pos.x, 0.0f, pos.z);
         ImVec2 top;
         ImVec2 bottom;
@@ -537,6 +537,32 @@ void Viewport::DrawGridLabels(const glm::mat4& view, const glm::mat4& proj) {
             drawList->AddText(ImVec2(top.x + 8.0f, top.y - 16.0f), kMarker, text);
         }
     }
+}
+
+glm::vec3 Viewport::ModelCentre(const SplatModel& model) {
+    const std::vector<SplatVertex>& splats = model.splats();
+    const glm::mat4& transform = model.GetTransform();
+    if (splats.empty()) return glm::vec3(transform[3]);
+
+    CentreCache& c = m_centreCache;
+    const bool stale = c.model != &model || c.data != splats.data() || c.count != splats.size() ||
+                       c.first != splats.front().position || c.last != splats.back().position;
+    if (stale) {
+        //Median per axis: unlike the bounds centre, a few stray splats far out don't move it
+        std::vector<float> values(splats.size());
+        const std::size_t mid = values.size() / 2;
+        for (int axis = 0; axis < 3; ++axis) {
+            for (std::size_t i = 0; i < splats.size(); ++i) values[i] = splats[i].position[axis];
+            std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(mid), values.end());
+            c.localCentre[axis] = values[mid];
+        }
+        c.model = &model;
+        c.data = splats.data();
+        c.count = splats.size();
+        c.first = splats.front().position;
+        c.last = splats.back().position;
+    }
+    return glm::vec3(transform * glm::vec4(c.localCentre, 1.0f));
 }
 
 void Viewport::DrawImGui(float fps) {
@@ -578,8 +604,8 @@ void Viewport::DrawImGui(float fps) {
     ImGui::Text("Models: %zu / %d", m_renderer->ModelCount(), SplatRenderer::kMaxModels);
     ImGui::Text("Splats: %zu", m_renderer->TotalSplatCount());
     if (const SplatModel* selected = m_renderer->GetModel(m_renderer->GetSelectedModel())) {
-        const glm::vec3 pos(selected->GetTransform()[3]);
-        ImGui::Text("Pos:    %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
+        const glm::vec3 pos = ModelCentre(*selected);
+        ImGui::Text("Centre: %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
     }
     static const char* const kToolNames[] = { "Pan", "Translate", "Rotate", "Scale" };
     ImGui::Text("Tool:   %s", kToolNames[m_input.GetToolMode()]);

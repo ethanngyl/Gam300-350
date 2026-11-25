@@ -99,6 +99,10 @@ private:
     //Grid overlay: unit numbers along the X and Z axes, an XYZ direction marker in the
     //bottom left corner, and a drop line + coordinates for the selected model
     void DrawGridLabels(const glm::mat4& view, const glm::mat4& proj);
+    //World position of the middle of a model's splats (per-axis median, the same point the local
+    //build pipeline centres models on), so a raw .ply with an identity transform is still marked
+    //where it draws. Cached for one model; recomputed when its splat data changes.
+    glm::vec3 ModelCentre(const SplatModel& model);
     //Top right row of tool buttons, active tool is highlighted
     void DrawToolButtons();
     //Draws the gizmo on the crop box if it is active, otherwise on the selected model, and writes drags back to it.
@@ -159,4 +163,15 @@ private:
 
     std::unique_ptr<GridRenderer> m_gridRenderer; // created once the GL context exists
     bool m_showGrid = true;
+
+    //ModelCentre cache. The data pointer, count and end points catch a re-trim or reload.
+    struct CentreCache {
+        const SplatModel* model = nullptr;
+        const void* data = nullptr;
+        std::size_t count = 0;
+        glm::vec3 first = glm::vec3(0.0f);
+        glm::vec3 last = glm::vec3(0.0f);
+        glm::vec3 localCentre = glm::vec3(0.0f);
+    };
+    CentreCache m_centreCache;
 };

@@ -38,11 +38,12 @@ const char* kFragmentSrc = R"(
 in vec4 vColor;
 in vec3 vWorld;
 uniform float uExtent;
+uniform float uFadeStart;
 out vec4 FragColor;
 void main() {
     //Fade towards the edge of the grid so it has no hard border
     float edge = max(abs(vWorld.x), abs(vWorld.z));
-    float fade = 1.0 - smoothstep(uExtent * 0.6, uExtent, edge);
+    float fade = 1.0 - smoothstep(uFadeStart, uExtent, edge);
     FragColor = vec4(vColor.rgb, vColor.a * fade);
 }
 )";
@@ -76,7 +77,7 @@ std::vector<Vertex> BuildGrid() {
     std::vector<Vertex> vertices;
     const float e = GridRenderer::kExtent;
     const int steps = static_cast<int>(std::lround(e / GridRenderer::kMinorStep));
-    const int perUnit = static_cast<int>(std::lround(1.0f / GridRenderer::kMinorStep));
+    const int perUnit = static_cast<int>(std::lround(GridRenderer::kMinorPerUnit));
 
     for (int i = -steps; i <= steps; ++i) {
         if (i == 0) continue; //The axes are drawn there instead
@@ -127,8 +128,12 @@ void GridRenderer::Draw(const glm::mat4& viewProj)
     m_shader->use();
     m_shader->setMat4("uViewProj", viewProj);
     m_shader->setFloat("uExtent", kExtent);
+    m_shader->setFloat("uFadeStart", kFadeStart);
 
-    glEnable(GL_DEPTH_TEST);
+    //Always behind the models: nothing has written depth yet and the splats draw without depth
+    //testing, so a depth test here would do nothing. Depth writes stay off so the grid never
+    //hides anything drawn after it (crop box, gizmos).
+    glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glBindVertexArray(m_vao);
     glDrawArrays(GL_LINES, 0, m_vertexCount);
