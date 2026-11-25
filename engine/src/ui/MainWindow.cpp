@@ -554,6 +554,13 @@ void MainWindow::createDocks() {
         beginStressRun(false);
 
         StressTestRunner runner(m_viewport);
+        //Shows the exact step that is running, not only the test. repaint() draws the status bar right now,
+        //the test keeps the GUI thread busy so a normal update would only show once the test is over
+        //Events are not processed here, that could draw viewport frames in the middle of a test and disturb its timings
+        runner.onStep = [this, name](const QString& step) {
+            statusBar()->showMessage(QString("%1: %2...").arg(name, step));
+            statusBar()->repaint();
+        };
         const std::vector<StressResult> results = test(runner);
         if (results.empty())
         {
@@ -570,6 +577,11 @@ void MainWindow::createDocks() {
                 const QString warning = QString("%1: %2 step(s) failed. See the red rows in the Stress Test panel.").arg(name).arg(failedNow);
                 qWarning("%s", qPrintable(warning));
                 statusBar()->showMessage(warning, kStatusMessageMs);
+            }
+            else
+            {
+                //Replaces the last step message, which would otherwise stay on screen
+                statusBar()->showMessage(QString("%1 finished.").arg(name), kStatusMessageMs);
             }
         }
 
@@ -1015,7 +1027,14 @@ void MainWindow::runAllStressTests(bool onCurrent) {
     }
 
     beginStressRun(true);
+    //Which test the run is on, e.g. "Test All: running Move test (3 of 7)". The runner adds the exact step after it
+    //progress is declared before the runner, the runner's callback uses it
+    QString progress;
     StressTestRunner runner(m_viewport);
+    runner.onStep = [this, &progress](const QString& step) {
+        statusBar()->showMessage(QString("%1 - %2...").arg(progress, step));
+        statusBar()->repaint(); //Draws it now, the test keeps the GUI thread busy until it ends
+    };
     const int failedBefore = m_stressTestPanel->FailedCount(); //To tell this run's failures from earlier ones
     int ran = 0;
     double grandTotalMs = 0.0; //Every test's total added together
@@ -1023,8 +1042,9 @@ void MainWindow::runAllStressTests(bool onCurrent) {
     bool failed = false;
 
     for (size_t i = 0; i < steps.size(); ++i) {
-        statusBar()->showMessage(QString("%1: running %2 (%3 of %4)...")
-                                     .arg(runName, steps[i].name).arg(i + 1).arg(steps.size()));
+        progress = QString("%1: running %2 (%3 of %4)")
+                       .arg(runName, steps[i].name).arg(i + 1).arg(steps.size());
+        statusBar()->showMessage(progress + "...");
         //Repaint the status and let a click on Stop through, the tests themselves cannot be interrupted
         QCoreApplication::processEvents();
         if (m_stopStressTests) {

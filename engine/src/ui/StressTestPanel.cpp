@@ -44,6 +44,11 @@ namespace {
 		return QString(QChar(collapsed ? 0x25B8 : 0x25BE)) + QLatin1Char(' ') + baseName;
 	}
 
+	//Added to the tooltips of the buttons that run tests, the tests run on the GUI thread
+	const QString kBusyNote = "While a test runs, the window is busy and may stop responding, and Windows can show "
+		"\"Not Responding\". This is most likely at several million splats. It recovers when the test ends. "
+		"The status bar shows the step that is running.";
+
 	//A splat is 64 bytes and the tests copy the splats several times
 	//Min limits of the splat count box
 	constexpr int kMinSplatCount = 1000;
@@ -61,10 +66,10 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	auto* buttonRow = new QHBoxLayout();     //Run everything, plus the splat count and the result controls
 	auto* buttonRow2nd = new QHBoxLayout();  //One button per test, each runs on the selected model
 	auto* testAllButton = new QPushButton("Test All", this);
-	testAllButton->setToolTip("Loads a new test sphere, then runs every test on it. Your own models are not touched.");
+	testAllButton->setToolTip("Loads a new test sphere, then runs every test on it. Your own models are not touched.\n\n" + kBusyNote);
 	auto* testAllCurrentButton = new QPushButton("Test All (Current)", this);
 	testAllCurrentButton->setToolTip("Runs every test on the model that is selected now, whichever it is. Load saves a temporary "
-		"copy of it and loads that back. Each test puts the model back as it was. The Splats box is not used.");
+		"copy of it and loads that back. Each test puts the model back as it was. The Splats box is not used.\n\n" + kBusyNote);
 	auto* loadTestButton = new QPushButton("Load Test", this);
 	auto* selectTestButton = new QPushButton("Select Test", this);
 	auto* moveTestButton = new QPushButton("Move Test", this);
@@ -100,7 +105,7 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	m_splatCount->setValue(static_cast<int>(splat_generate::kStressTestSplatCount));
 	m_splatCount->setGroupSeparatorShown(true); //1,000,000 instead of 1000000
 	m_splatCount->setToolTip("How many splats the test sphere has. Large values use a lot of memory, "
-		"the move, delete and undo tests make several copies of the splats.");
+		"the move, delete and undo tests make several copies of the splats.\n\n" + kBusyNote);
 	buttonRow->addWidget(m_splatCount);
 
 	//Not in m_runButtons, they do not start a test so they stay usable while one runs
@@ -113,6 +118,12 @@ StressTestPanel::StressTestPanel(QWidget* parent)
 	buttonRow->addWidget(clearButton);
 	m_runButtons = { testAllButton, testAllCurrentButton, loadTestButton, selectTestButton, moveTestButton, trimTestButton,
 		deleteTestButton, undoRedoTestButton, exportTestButton, clearButton };
+
+	//The single test buttons run on the selected model and can be just as long, so they get the same warning
+	for (QPushButton* button : { loadTestButton, selectTestButton, moveTestButton, trimTestButton, deleteTestButton,
+		undoRedoTestButton, exportTestButton }) {
+		button->setToolTip(kBusyNote);
+	}
 
 	layout->addLayout(buttonRow);
 	layout->addLayout(buttonRow2nd);

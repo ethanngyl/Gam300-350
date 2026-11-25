@@ -5,6 +5,7 @@
 #include <QString>
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,10 @@ struct StressResult {
 class StressTestRunner {
 public:
 	explicit StressTestRunner(Viewport* viewport) : m_viewport(viewport) {}
+
+	//Called with the exact step that is about to run, e.g. "Move half of splats", before the step starts
+	//The UI uses it to show progress. It is called outside the timed parts, so it does not affect the results
+	std::function<void(const QString&)> onStep;
 
 	//Generates a sphere, saves it to a temporary .ply like a normal model, then loads that file and adds it to the scene
 	//Returns nothing if the renderer is not ready, the scene is full, or the file could not be saved or read back
@@ -91,6 +96,12 @@ public:
 	std::vector<StressResult> TestUndoRedo();
 
 private:
+	void Report(const QString& step) const {
+		if (onStep) {
+			onStep(step);
+		}
+	}
+
 	//Saves splats to a temporary .ply, loads that file back and adds it to the scene as modelName, timing the load
 	//Takes the splats by value so the caller's copy can be moved in and freed as soon as the file is written
 	std::vector<StressResult> LoadThroughDisk(std::vector<SplatVertex> source, const std::string& modelName);
