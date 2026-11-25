@@ -288,7 +288,10 @@ const server = app.listen(config.port, () =>
   console.log(`[backend] Brush:  ${config.brushBin}`)
   console.log(`[backend] Python: ${config.pythonBin}`)
   console.log(`[backend] jobs:   ${config.jobsDir}`)
-  console.log(`[backend] builds: ${config.maxRunningJobs} at a time (MAX_RUNNING_JOBS), the rest wait in line`)
+  console.log(`[backend] builds: ${config.maxRunningJobsPerUser} at a time per user (MAX_RUNNING_JOBS_PER_USER), ` +
+    `${config.maxRunningJobs > 0 ? `${config.maxRunningJobs} at a time` : 'no limit'} per machine (MAX_RUNNING_JOBS); the rest wait in line`)
+  if (config.maxRunningJobs === 0)
+    console.warn('[backend] builds: different users\' builds share the GPU at the same time (each slower, and they can run out of GPU memory); set MAX_RUNNING_JOBS to cap them')
   // Rate limits (middleware/limits.js); 0 = off.
   const limitText = (n, unit) => (n > 0 ? `${n}/${unit}` : 'off')
   console.log(`[backend] rate limits: API ${limitText(config.rateLimitApiPerMin, 'min')}, ` +

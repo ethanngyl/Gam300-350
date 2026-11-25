@@ -33,7 +33,7 @@ with tips if the reconstruction fails. onRegisterLeaveGuard(guard) hands
 App a function the browser's Back / Forward buttons call first: while the
 build runs it asks whether to leave and cancel it.
 mediaBuild (Frame Extractor builds only): { label, fileCount, fps,
-removeBackground, previewUrl, isGif, uploadFraction (0-1 while uploading,
+removeBackground, autoCrop, previewUrl, isGif, uploadFraction (0-1 while uploading,
 else null), startError }.
 - killJob()
 Inner helper. Sends DELETE /jobs/:id (keepalive) on pagehide or unmount,
@@ -56,6 +56,7 @@ const PHASE_LABELS = {
     'colmap-matching': 'Matching photos',
     'colmap-mapping': 'Recovering camera positions',
     training: 'Training 3D model',
+    crop: 'Keeping the main object',
     normalize: 'Finalizing model',
     done: 'Done',
 }
@@ -69,6 +70,7 @@ const PHASE_ORDER = [
     'colmap-matching',
     'colmap-mapping',
     'training',
+    'crop',
     'normalize',
 ]
 
@@ -89,6 +91,7 @@ const MEDIA_PHASE_ORDER = [
     'colmap-matching',
     'colmap-mapping',
     'training',
+    'crop',
     'normalize',
 ]
 
@@ -188,11 +191,14 @@ export default function Processing({ jobId, mediaBuild = null, onDone, onCancel,
     }, [onRegisterLeaveGuard, failed, mediaStartError])
 
     // Phases this build moves through (display only, does not affect the job).
-    // The masking step only runs for jobs sent with "Remove background" on.
+    // The masking step only runs for jobs sent with "Remove background" on,
+    // and the crop step for jobs sent with "Keep only the main object" on.
     const isRemovingBackground = job?.removeBackground ?? mediaBuild?.removeBackground ?? false
+    const isAutoCropping = job?.autoCrop ?? mediaBuild?.autoCrop ?? false
     const phaseLabels = isMediaBuild ? MEDIA_PHASE_LABELS : PHASE_LABELS
     const phases = (isMediaBuild ? MEDIA_PHASE_ORDER : PHASE_ORDER)
         .filter((p) => p !== 'masking' || isRemovingBackground)
+        .filter((p) => p !== 'crop' || isAutoCropping)
     // Before the job exists, the media is still uploading.
     const currentPhase = jobId ? job?.phase : (isMediaBuild ? 'upload' : null)
     // The job exists but hasn't started (queued behind another build, or not

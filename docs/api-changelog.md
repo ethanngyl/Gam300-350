@@ -31,6 +31,19 @@ to the API is recorded here, newest first.
 - **Database changes** are numbered migrations (`packages/src/backend/migrations/`),
   listed below. Never edit a committed migration; add a new one.
 
+## Build limit per user: 2026-11-24 (no API change)
+
+- **The build limit is now per user by default.** Each user runs
+  `MAX_RUNNING_JOBS_PER_USER` builds at once (default 1), and different
+  users' builds run at the same time.
+- **`MAX_RUNNING_JOBS` is now an optional cap for the whole machine,** unset
+  by default (no cap). A machine whose `.env` sets `MAX_RUNNING_JOBS=1`
+  keeps the old behaviour: one build at a time for everyone.
+- **A waiting job's `detail`** in `GET /jobs/:id` can now also read "Waiting
+  for your earlier build to finish" (or "...your N earlier builds..."). It
+  still reads "Waiting for N builds ahead of yours" when the machine cap is
+  full. The status is still `queued`.
+
 ## Builds wait in line: 2026-11-17 (no API change)
 
 - A machine runs `MAX_RUNNING_JOBS` builds at once (default 1). `POST /upload`

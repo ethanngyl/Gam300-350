@@ -362,6 +362,31 @@ const colmapStrictMapperArgs = colmapStrict
     ]
     : []
 
+// Leave redundant 3D points out of the mapper's full-model bundle
+// adjustments, the slow part of recovering camera positions. Tested on the
+// Panther photos: 311 photos mapped in 18.8 min instead of 29.9, 105 photos in
+// 127 s instead of 170, with every photo still placed and the reprojection
+// error up only 0.01-0.02 px. The flag is new in COLMAP 4 and older builds
+// exit on an unknown option, so it is only passed when the mapper lists it.
+// COLMAP_SKIP_REDUNDANT_POINTS=0 turns it off.
+function colmapMapperHasFlag(exe, flag) {
+    try {
+        const r = spawnSync(exe, ['mapper', '--help'], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            windowsHide: true,
+        })
+        return `${r.stdout ?? ''}${r.stderr ?? ''}`.includes(flag)
+    } catch {
+        return false
+    }
+}
+const redundantPointsFlag = '--Mapper.ba_global_ignore_redundant_points3D'
+const colmapFastMapperArgs =
+    process.env.COLMAP_SKIP_REDUNDANT_POINTS !== '0' && colmapMapperHasFlag(colmapBin, redundantPointsFlag)
+        ? [redundantPointsFlag, '1']
+        : []
+
 /**
  * Central config for the reconstruction backend.
  *
@@ -436,10 +461,14 @@ export const config = {
     colmapBin,
     brushBin,
 
-    // Builds (masks + COLMAP + Brush) running at once on this machine; more
-    // wait in line (jobQueue.js). They share one GPU, so 1 unless it has the
-    // memory for more.
-    maxRunningJobs: Math.max(1, Math.floor(Number(process.env.MAX_RUNNING_JOBS)) || 1),
+    // Builds (masks + COLMAP + Brush) one user can have running at once; their
+    // next ones wait in line (jobQueue.js). Different users' builds run at the
+    // same time.
+    maxRunningJobsPerUser: Math.max(1, Math.floor(Number(process.env.MAX_RUNNING_JOBS_PER_USER)) || 1),
+    // Builds running at once on this machine, whoever started them; 0 or unset
+    // = no limit. They share one GPU, so builds at once are each slower and can
+    // run out of GPU memory: 1 gives one build at a time for everyone.
+    maxRunningJobs: Math.max(0, Math.floor(Number(process.env.MAX_RUNNING_JOBS)) || 0),
 
     // Training knobs. Fewer iterations = faster demo, lower quality.
     trainIters: Number(process.env.TRAIN_ITERS) || 10000,
@@ -462,6 +491,9 @@ export const config = {
     // when COLMAP_STRICT=0.
     colmapStrictMatcherArgs,
     colmapStrictMapperArgs,
+    // Faster mapper bundle adjustment (see above); empty when
+    // COLMAP_SKIP_REDUNDANT_POINTS=0 or the COLMAP build lacks the flag.
+    colmapFastMapperArgs,
 
     // Reference data (feedback categories, training presets, the photo
     // minimum): see catalog.js.
@@ -475,7 +507,7 @@ export const config = {
     maxJsonBodyMB: 2,
 
     // Upload limits.
-    maxFiles: 300,
+    maxFiles: 400,
     maxFileSizeMB: 30,
     // Videos / GIFs per Frame Extractor job, and the size of each. Their frames
     // still count towards frameMaxFrames. FrameExtractor.jsx checks the same limits.
@@ -500,6 +532,9 @@ export const config = {
     // Recenters/rescales the trained splat into the viewer's frame.
     normalizeScript:
         process.env.NORMALIZE_SCRIPT || path.join(toolsDir, 'normalize_ply.py'),
+    // Optional auto-crop: keeps only the object the photos were taken around,
+    // worked out from COLMAP's camera positions (jobs with autoCrop set).
+    autoCropScript: process.env.AUTO_CROP_SCRIPT || path.join(toolsDir, 'auto_crop.py'),
     // Optional background removal: writes per-photo foreground masks that
     // COLMAP and Brush use to ignore the background (turntable captures).
     maskScript: process.env.MASK_SCRIPT || path.join(toolsDir, 'make_masks.py'),

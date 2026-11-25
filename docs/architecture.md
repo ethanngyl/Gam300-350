@@ -153,8 +153,8 @@ needs the shared key.
 
 | Method | Path | Who | Reply |
 |---|---|---|---|
-| POST | `/upload` | user | 202 `{ id, imageCount }`. Multipart `images` (8+ JPEG / PNG), optional `trainIters`, `removeBackground` |
-| POST | `/jobs/from-media` | user | 202 `{ id }`. Multipart `media` (videos / GIFs), optional `fps`, `maxFrames`, `trainIters`, `removeBackground` |
+| POST | `/upload` | user | 202 `{ id, imageCount }`. Multipart `images` (8+ JPEG / PNG), optional `trainIters`, `removeBackground`, `autoCrop` |
+| POST | `/jobs/from-media` | user | 202 `{ id }`. Multipart `media` (videos / GIFs), optional `fps`, `maxFrames`, `trainIters`, `removeBackground`, `autoCrop` |
 | GET | `/jobs` | user | 200 JobSummary list of the user's jobs (admins: all), from the sources in `JOB_SOURCES` |
 | GET | `/jobs/:id` | owner | 200 status, phase, progress, log tail |
 | PATCH | `/jobs/:id` | owner | 200 `{ id, name, sampleFile }` (rename) |
@@ -165,13 +165,25 @@ needs the shared key.
 | GET | `/jobs/:id/cover.webp` | owner | the card cover (binary); 404 if none |
 | PUT | `/library/jobs/:id` | team machines (shared key) | 201 `{ id, bytes }`. Stores a finished job on the VM |
 
-**Build queue.** Each machine runs `MAX_RUNNING_JOBS` builds at once (default
-1). A build is background masking, then COLMAP, then Brush, all sharing one
-GPU. More builds wait in line, first come first served (`jobQueue.js`,
-`queueBuild` in `services/jobs.js`).
-- **While a job waits:** it reads `status: 'queued'`, with
-  `detail: "Waiting for N builds ahead of yours"`. The website shows
-  "Waiting to start".
+**Build queue.** A build is background masking, then COLMAP, then Brush, all
+on the machine's one GPU (`jobQueue.js`, `queueBuild` in `services/jobs.js`).
+- **Per user (default):** each user runs `MAX_RUNNING_JOBS_PER_USER` builds
+  at once (default 1). Their next builds wait for their own earlier ones.
+  Different users' builds run at the same time.
+- **Per machine (optional):** `MAX_RUNNING_JOBS` caps how many builds the
+  machine runs at once, whoever started them. It's unset by default, meaning
+  no cap. Builds running together share the GPU, so each one is slower, and
+  they can run out of GPU memory. `MAX_RUNNING_JOBS=1` gives one build at a
+  time for everyone. The startup log shows both settings, and warns when
+  there's no machine cap.
+- **Order:** first come, first served among the builds allowed to start. A
+  user whose own earlier build is still running doesn't hold up other users.
+- **While a job waits:** it reads `status: 'queued'`, with `detail` saying
+  what it waits for. The website shows "Waiting to start".
+  - its owner's builds: "Waiting for your earlier build to finish", or "Waiting for your N earlier builds to finish";
+  - a full machine: "Waiting for N builds ahead of yours".
+- **Who owns a build:** the user who started it (`jobs.owner_id`). Jobs with
+  no recorded owner share one allowance.
 - **Cancelling or deleting a waiting job** takes it out of the line.
 - **Videos and GIFs:** frame extraction runs straight away (it uses the CPU),
   and only the build after it waits.

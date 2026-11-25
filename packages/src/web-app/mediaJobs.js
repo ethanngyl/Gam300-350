@@ -16,7 +16,7 @@ screen). Moved out of FrameExtractor.jsx unchanged.
 Which files can be sent (same rules as the backend).
 - formatFileSize(bytes)
 "12.4 MB" / "1.2 GB".
-- uploadMedia(files, { fps, trainIters, removeBackground }, onStart, onProgress)
+- uploadMedia(files, { fps, trainIters, removeBackground, autoCrop }, onStart, onProgress)
 POST /jobs/from-media with XMLHttpRequest (fetch can't report upload
 progress). onStart gets the request so it can be aborted. Resolves with
 the new job's id; rejects with a readable error, or { aborted: true }.
@@ -41,12 +41,13 @@ const SERVER_UNREACHABLE =
 // progress and a video can take a while. onStart receives the request, so
 // Cancel can abort it. Resolves with the new job's id; rejects with a readable
 // error, or with { aborted: true } when it was cancelled.
-export function uploadMedia(files, { fps, trainIters, removeBackground }, onStart, onProgress) {
+export function uploadMedia(files, { fps, trainIters, removeBackground, autoCrop = false }, onStart, onProgress) {
     return new Promise((resolve, reject) => {
         const body = new FormData();
         body.append('fps', String(fps));
         body.append('trainIters', String(trainIters));
         body.append('removeBackground', String(removeBackground));
+        body.append('autoCrop', String(autoCrop));
         files.forEach((file) => body.append('media', file, file.name));
 
         const xhr = new XMLHttpRequest();

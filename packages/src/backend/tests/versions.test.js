@@ -121,7 +121,7 @@ describe('v1 and the legacy paths', () =>
     assert.equal(reply.status, 200)
     const { limits, ...rest } = reply.body
     assert.deepEqual(rest, CATALOG)
-    assert.equal(limits.maxPhotos, 300)
+    assert.equal(limits.maxPhotos, 400)
     assert.equal(limits.maxMediaFiles, 10)
   })
 

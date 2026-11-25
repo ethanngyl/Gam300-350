@@ -198,12 +198,20 @@ through GET /api/v1/catalog.
 The server accepts 1,000 to 30,000 iterations and clamps anything outside that range. When no value is sent (requests not made from
 the website), the server uses TRAIN_ITERS from packages/src/backend/.env, which defaults to 10,000.
 
-Builds run one at a time on each machine. Start a second build while one is running, and it shows "Waiting to start" with how
-many builds are ahead of it, then starts by itself when its turn comes. Cancelling it while it waits takes it out of the line.
+Each user runs one build at a time; different users' builds run at the same time on the machine's GPU. Start a second build of
+your own while one is running, and it shows "Waiting to start" ("Waiting for your earlier build to finish"), then starts by
+itself when your first one ends. Cancelling it while it waits takes it out of the line.
 If the backend restarts, waiting builds start again in their original order; a build that was running is marked interrupted.
-To run two builds at once on a GPU with plenty of memory, set MAX_RUNNING_JOBS=2 in packages/src/backend/.env.
+Settings, in packages/src/backend/.env:
+- MAX_RUNNING_JOBS=1 caps the whole machine at one build at a time for everyone (unset = no cap). Builds at once share the GPU,
+  so each is slower and they can run out of GPU memory; set this on a machine with a small GPU.
+- MAX_RUNNING_JOBS_PER_USER=2 lets one user run two builds at once (default 1).
+To show how much slower builds at once are: start a build from two accounts at the same time (or set MAX_RUNNING_JOBS_PER_USER=2
+and start two from one), then compare the timings in jobs/metrics.jsonl with the same builds run one after the other.
 
 "Remove background" (capture screen, Photo Editor, Frame Extractor) cuts the object out of each photo before reconstruction.
+"Keep only the main object" (same screens, off by default) removes everything outside the path the photos were taken from, such
+as neighbouring objects, walls and the ceiling, after training. It is skipped when the photos don't surround one object.
 
 23. With no photos in the batch, confirm "Use this batch" and "Review photos first" are disabled.
 24. Add photos taken all the way around the object, then click "Use this batch (N photos)".
@@ -259,7 +267,7 @@ Sounds:
 Known limitations to note while testing (not bugs):
 - "Continue with Google" only shows a message.
 - "Forgot password?" answers that it isn't set up until the VM has the Gmail settings (SMTP_*) in its .env.
-- Scene Builder: clean-up, render mode, reset view, screenshot and an exact drop to floor are waiting on scene functions in the
+- Scene Builder: clean-up, render mode, reset view and screenshot are waiting on scene functions in the
   WebAssembly engine. Scenes are saved only in this browser (localStorage): the backend has scene routes (/api/v1/scenes),
   but the web app doesn't use them yet (SCENES_API_READY in SceneStorage.js).
 - COLMAP can fail on photo sets with poor overlap or low quality; this is an expected pipeline limitation, not a website bug.
