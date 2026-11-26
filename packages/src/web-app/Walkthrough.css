@@ -26,12 +26,12 @@
 .walkthrough-spotlight {
     position: absolute;
     pointer-events: none;
-    border: 1px solid rgba(174, 195, 176, 0.8);
-    box-shadow: 0 0 0 1px rgba(174, 195, 176, 0.3), 0 0 24px 4px rgba(89, 131, 146, 0.45), 0 0 52px 12px rgba(18, 69, 89, 0.3), 0 0 0 9999px rgba(0, 0, 0, 0.72);
+    border: 1px solid rgba(224, 71, 158, 0.85);
+    box-shadow: 0 0 0 1px rgba(224, 71, 158, 0.3), 0 0 24px 4px rgba(224, 71, 158, 0.35), 0 0 0 9999px rgba(0, 0, 0, 0.72);
     transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
 }
 
-/* The tooltip is a mint card in both themes, as in the Figma. */
+/* The tooltip is a light grey card in both themes, as in the Figma. */
 .walkthrough-tooltip {
     position: absolute;
     box-sizing: border-box;
@@ -40,11 +40,41 @@
     gap: 6px;
     padding: 18px 20px 18px;
     border-radius: 14px;
-    background: #eff6e0;
-    color: #124559;
+    background: #e8e6e1;
+    color: #1c1c1b;
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
     transition: left 0.3s ease, top 0.3s ease, bottom 0.3s ease;
 }
+
+    /* The arrow pointing at the item, on the side facing it. --walkthrough-arrow
+   (set inline) is how far along that side it sits. */
+    .walkthrough-tooltip::before {
+        content: '';
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        background: inherit;
+        transform: translate(-50%, -50%) rotate(45deg);
+        display: none;
+    }
+
+    .walkthrough-tooltip.is-right::before {
+        display: block;
+        left: 0;
+        top: var(--walkthrough-arrow, 36px);
+    }
+
+    .walkthrough-tooltip.is-below::before {
+        display: block;
+        top: 0;
+        left: var(--walkthrough-arrow, 50%);
+    }
+
+    .walkthrough-tooltip.is-above::before {
+        display: block;
+        top: 100%;
+        left: var(--walkthrough-arrow, 50%);
+    }
 
 .walkthrough-head {
     display: flex;
@@ -54,7 +84,7 @@
 }
 
 .walkthrough-progress {
-    color: #598392;
+    color: #60605a;
     font-size: 0.84rem;
 }
 
@@ -62,7 +92,7 @@
     padding: 0;
     border: 0;
     background: none;
-    color: #124559;
+    color: #1c1c1b;
     font: inherit;
     font-size: 0.84rem;
     font-weight: 600;
@@ -84,17 +114,17 @@
         flex: 1;
         height: 3px;
         border-radius: 999px;
-        background: #c5d3c7;
+        background: #cfcdc8;
     }
 
         .walkthrough-segments span.is-done {
-            background: #598392;
+            background: #e0479e;
         }
 
 .walkthrough-title {
     font-size: 1.05rem;
     font-weight: 600;
-    color: #124559;
+    color: #1c1c1b;
 }
 
 .walkthrough .walkthrough-text {
@@ -103,7 +133,7 @@
     font-family: inherit;
     font-size: 0.86rem;
     line-height: 1.55;
-    color: #124559;
+    color: #1c1c1b;
 }
 
 .walkthrough-actions {
@@ -126,30 +156,30 @@
 }
 
 .walkthrough-back {
-    border: 1px solid #aec3b0;
+    border: 1px solid #8a8a86;
     background: transparent;
-    color: #124559;
+    color: #1c1c1b;
 }
 
     .walkthrough-back:disabled {
-        color: #aec3b0;
+        color: #8a8a86;
         cursor: default;
     }
 
 .walkthrough-next {
-    border: 1px solid #124559;
-    background: #124559;
-    color: #eff6e0;
+    border: 1px solid #1c1c1b;
+    background: #1c1c1b;
+    color: #ffffff;
 }
 
     .walkthrough-next:hover {
-        background: #0d3747;
+        background: #000000;
     }
 
     .walkthrough-skip:focus-visible,
     .walkthrough-back:focus-visible,
     .walkthrough-next:focus-visible {
-        outline: 2px solid #598392;
+        outline: 2px solid #e0479e;
         outline-offset: 2px;
     }
 

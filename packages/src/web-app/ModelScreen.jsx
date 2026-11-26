@@ -8,15 +8,16 @@
 \brief
 Page for one 3D model, shown inside the dashboard (the dock stays) when a
 model is opened from Home, the Media Library or the Model Viewer, and when
-a build finishes. Top: a back link to where it was opened from, the
-model's name (pencil to rename), a Ready badge, when it was made and how
-many photos it used, then Download .ply, Export .obj (ExportObjDialog, the
-engine's OBJ export in the browser) and Add to scene. Below, the 3D
-viewer fills a large card (SplatViewer, embedded, with its renderer and
-view controls, plus a full-screen button); beside it on wider screens, and
-under it on phones: Details (photos, background removal, splat count, file
-size, file format), Source photos (with "Open in Media Library") and Manage (Rename,
-Delete). Rename and delete use the Library's dialog and calls (mediaApi).
+a build finishes. On wider screens it follows the Figma's model detail
+page: a link back to where it was opened from (e.g. "Media Library") above
+the model's name (pencil to rename) and when it was made, then the 3D
+viewer in a large card (SplatViewer, embedded, with its renderer and view
+controls, plus a full-screen button) and, beside it, one panel: "Built
+from N photos" with a few of them and View all, the details (background,
+splats, file size, format, created), then Open in Scene builder, Export
+.obj (ExportObjDialog, the engine's OBJ export in the browser), Download
+.ply and Delete model. Rename and delete use the Library's dialog and
+calls (mediaApi).
 A .ply opened from the user's computer uses the same page with only the
 viewer, its file details and Export .obj. A .obj opened from the user's
 computer is shown with ObjViewer, with its vertex and triangle counts.
@@ -45,8 +46,10 @@ import { useMobileView } from './useMobileView.js';
 import { playSound } from '../audio/Audio.js';
 import './ModelScreen.css';
 
-// How many source photos the side card shows before "+N".
+// How many source photos the side card shows before "+N" (phones), and the
+// wider screens' "Built from" grid shows.
 const PHOTO_PREVIEW_COUNT = 7;
+const BUILT_FROM_PHOTO_COUNT = 8;
 
 // "2 Nov 2026, 9:41 pm"
 function formatCreatedDate(timestamp) {
@@ -55,6 +58,13 @@ function formatCreatedDate(timestamp) {
     return date.toLocaleString('en-SG', {
         day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
     });
+}
+
+// "15 Sep 2026"
+function formatShortDate(timestamp) {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // "71.9 MB"
@@ -300,7 +310,7 @@ function ModelScreen({
                                 <Icon name="edit" size={16} />
                             </button>
                         )}
-                        <span className={jobId ? 'model-badge' : 'model-badge is-local'}>{jobId ? 'Ready' : 'Local file'}</span>
+                        {!jobId && <span className="model-badge is-local">Local file</span>}
                     </div>
                     <p className="model-meta">{metaParts.filter(Boolean).join(' \u00B7 ')}</p>
                 </div>
@@ -315,7 +325,7 @@ function ModelScreen({
                     </dl>
                 )}
 
-                {jobId && (
+                {jobId && isPhone && (
                     <div className="model-actions">
                         <a
                             className="forma-btn forma-btn-primary model-download"
@@ -378,72 +388,153 @@ function ModelScreen({
                     </span>
                 </div>
 
-                <aside className="model-side">
-                    <div className="forma-card model-card model-card-details">
-                        <h2 className="model-card-title">Details</h2>
-                        <dl className="model-details">
-                            {jobId && photoCount != null && (
-                                <><dt>Source photos</dt><dd>{photoCount}</dd></>
+                {jobId && !isPhone ? (
+                    <aside className="model-side">
+                        <div className="forma-card model-card model-panel">
+                            {photos.length > 0 && (
+                                <div className="model-built-from">
+                                    <div className="model-built-from-head">
+                                        <h2 className="model-card-title">Built from {photoCount} photos</h2>
+                                        <button
+                                            className="model-link"
+                                            onClick={() => {
+                                                playSound('tap');
+                                                onOpenPhotos();
+                                            }}
+                                        >
+                                            View all
+                                        </button>
+                                    </div>
+                                    <div className="model-built-from-grid">
+                                        {photos.slice(0, BUILT_FROM_PHOTO_COUNT).map((photo) => (
+                                            <img key={photo.name} src={smallPhotoUrl(photo.url)} alt="" loading="lazy" />
+                                        ))}
+                                    </div>
+                                </div>
                             )}
-                            {jobId && model?.removeBackground != null && (
-                                <><dt>Background removed</dt><dd>{model.removeBackground ? 'Yes' : 'No'}</dd></>
-                            )}
-                            {!isObj && plyInfo?.splatCount != null && (
-                                <><dt>Splats</dt><dd>{plyInfo.splatCount.toLocaleString()}</dd></>
-                            )}
-                            {isObj && objInfo && (
-                                <><dt>Vertices</dt><dd>{objInfo.vertexCount.toLocaleString()}</dd></>
-                            )}
-                            {isObj && objInfo?.triangleCount > 0 && (
-                                <><dt>Triangles</dt><dd>{objInfo.triangleCount.toLocaleString()}</dd></>
-                            )}
-                            {fileSizeText && (
-                                <><dt>File size</dt><dd>{fileSizeText}</dd></>
-                            )}
-                            <dt>File format</dt><dd>{isObj ? '.obj' : '.ply'}</dd>
-                            {!jobId && (
-                                <><dt>File</dt><dd className="model-file-name">{localFile?.name}</dd></>
-                            )}
-                        </dl>
-                    </div>
 
-                    {jobId && photos.length > 0 && (
-                        <div className="forma-card model-card">
-                            <h2 className="model-card-title">Source photos</h2>
-                            <div className="model-photos">
-                                {photos.slice(0, PHOTO_PREVIEW_COUNT).map((photo) => (
-                                    <img key={photo.name} src={smallPhotoUrl(photo.url)} alt="" loading="lazy" />
-                                ))}
-                                {photos.length > PHOTO_PREVIEW_COUNT && (
-                                    <span className="model-photos-more">+{photos.length - PHOTO_PREVIEW_COUNT}</span>
+                            <dl className="model-details">
+                                {model?.removeBackground != null && (
+                                    <><dt>Background</dt><dd>{model.removeBackground ? 'Removed' : 'Kept'}</dd></>
+                                )}
+                                {plyInfo?.splatCount != null && (
+                                    <><dt>Splats</dt><dd>{plyInfo.splatCount.toLocaleString()}</dd></>
+                                )}
+                                {fileSizeText && (
+                                    <><dt>File size</dt><dd>{fileSizeText}</dd></>
+                                )}
+                                <dt>Format</dt><dd>PLY</dd>
+                                {model && formatShortDate(model.createdAt) && (
+                                    <><dt>Created</dt><dd>{formatShortDate(model.createdAt)}</dd></>
+                                )}
+                            </dl>
+
+                            <div className="model-panel-actions">
+                                <button
+                                    className="forma-btn forma-btn-primary"
+                                    disabled={!model}
+                                    onClick={() => {
+                                        playSound('confirm');
+                                        onAddToScene({ id: jobId, name: modelName });
+                                    }}
+                                >
+                                    Open in Scene builder
+                                </button>
+                                <div className="model-panel-row">
+                                    <button
+                                        className="forma-btn"
+                                        onClick={() => {
+                                            playSound('tap');
+                                            setIsExportOpen(true);
+                                        }}
+                                    >
+                                        Export .obj
+                                    </button>
+                                    <a
+                                        className="forma-btn"
+                                        href={plyUrl}
+                                        download={`${(model?.name || 'model').replace(/[^\w.-]+/g, '_')}.ply`}
+                                        onClick={() => playSound('tap')}
+                                    >
+                                        Download .ply
+                                    </a>
+                                </div>
+                                {model && (
+                                    <button className="model-link model-delete-link" onClick={openDeleteDialog}>
+                                        Delete model
+                                    </button>
                                 )}
                             </div>
-                            <button
-                                className="model-link"
-                                onClick={() => {
-                                    playSound('tap');
-                                    onOpenPhotos();
-                                }}
-                            >
-                                Open in Media Library
-                            </button>
                         </div>
-                    )}
+                    </aside>
+                ) : (
+                    <aside className="model-side">
+                        <div className="forma-card model-card model-card-details">
+                            <h2 className="model-card-title">Details</h2>
+                            <dl className="model-details">
+                                {jobId && photoCount != null && (
+                                    <><dt>Source photos</dt><dd>{photoCount}</dd></>
+                                )}
+                                {jobId && model?.removeBackground != null && (
+                                    <><dt>Background removed</dt><dd>{model.removeBackground ? 'Yes' : 'No'}</dd></>
+                                )}
+                                {!isObj && plyInfo?.splatCount != null && (
+                                    <><dt>Splats</dt><dd>{plyInfo.splatCount.toLocaleString()}</dd></>
+                                )}
+                                {isObj && objInfo && (
+                                    <><dt>Vertices</dt><dd>{objInfo.vertexCount.toLocaleString()}</dd></>
+                                )}
+                                {isObj && objInfo?.triangleCount > 0 && (
+                                    <><dt>Triangles</dt><dd>{objInfo.triangleCount.toLocaleString()}</dd></>
+                                )}
+                                {fileSizeText && (
+                                    <><dt>File size</dt><dd>{fileSizeText}</dd></>
+                                )}
+                                <dt>File format</dt><dd>{isObj ? '.obj' : '.ply'}</dd>
+                                {!jobId && (
+                                    <><dt>File</dt><dd className="model-file-name">{localFile?.name}</dd></>
+                                )}
+                            </dl>
+                        </div>
 
-                    {jobId && model && (
-                        <div className="forma-card model-card model-card-manage">
-                            <h2 className="model-card-title">Manage</h2>
-                            <div className="model-manage">
-                                <button className="forma-btn" onClick={openRenameDialog}>
-                                    <Icon name="edit" size={14} /> Rename
-                                </button>
-                                <button className="forma-btn model-delete" onClick={openDeleteDialog}>
-                                    <Icon name="trash" size={14} /> Delete model
+                        {jobId && photos.length > 0 && (
+                            <div className="forma-card model-card">
+                                <h2 className="model-card-title">Source photos</h2>
+                                <div className="model-photos">
+                                    {photos.slice(0, PHOTO_PREVIEW_COUNT).map((photo) => (
+                                        <img key={photo.name} src={smallPhotoUrl(photo.url)} alt="" loading="lazy" />
+                                    ))}
+                                    {photos.length > PHOTO_PREVIEW_COUNT && (
+                                        <span className="model-photos-more">+{photos.length - PHOTO_PREVIEW_COUNT}</span>
+                                    )}
+                                </div>
+                                <button
+                                    className="model-link"
+                                    onClick={() => {
+                                        playSound('tap');
+                                        onOpenPhotos();
+                                    }}
+                                >
+                                    Open in Media Library
                                 </button>
                             </div>
-                        </div>
-                    )}
-                </aside>
+                        )}
+
+                        {jobId && model && (
+                            <div className="forma-card model-card model-card-manage">
+                                <h2 className="model-card-title">Manage</h2>
+                                <div className="model-manage">
+                                    <button className="forma-btn" onClick={openRenameDialog}>
+                                        <Icon name="edit" size={14} /> Rename
+                                    </button>
+                                    <button className="forma-btn model-delete" onClick={openDeleteDialog}>
+                                        <Icon name="trash" size={14} /> Delete model
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </aside>
+                )}
             </div>
 
             {dialog && <ActionDialog {...dialog} onCancel={() => setDialog(null)} />}

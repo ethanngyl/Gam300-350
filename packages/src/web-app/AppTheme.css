@@ -1,11 +1,11 @@
 /* ============================================================
-   GENESIS theme - deep teal and mint on black
+   GENESIS theme - charcoal and pink on black
    ============================================================ */
 
-/* Colours: the team's Palette C "Deep teal & mint" (Palette 4, 16 Nov 2026):
-   black #000000 with a #01161E glow, surface #124559, accent #598392, sage
-   #AEC3B0 (secondary text), mint #EFF6E0 (highlights), alert #CC1236.
-   Font: Raleway, as in the Figma. */
+/* Colours: the team's Figma (Home Redesign Concepts, 25 Nov 2026): black
+   #000000 with charcoal surfaces (#1C1C1B, #2A2A28), pink accent #E0479E
+   (buttons, active states, links, toggles), light grey text #E8E6E1 and
+   alert #CC1236. Font: Raleway, as in the Figma. */
 :root {
     color-scheme: dark;
     /* ----- Fonts (loaded in index.html) ----- */
@@ -14,88 +14,89 @@
     /* ----- Surfaces, darkest to lightest ----- */
     --forma-bg: #000000;
     --forma-sidebar: #000000;
-    --forma-panel: #061e27;
-    --forma-panel-alt: #082a36;
-    --forma-panel-raised: #0f3a4a;
-    --forma-border: #0c2833;
-    --forma-border-strong: #174456;
+    --forma-panel: #1c1c1b;
+    --forma-panel-alt: #161616;
+    --forma-panel-raised: #2a2a28;
+    --forma-border: #2a2a28;
+    --forma-border-strong: #3c3c3b;
     /* ----- Text ----- */
-    --forma-text: #e9f0df;
-    --forma-text-soft: #cbd8c8;
-    --forma-heading: #eff6e0;
-    --forma-text-muted: #aec3b0;
-    --forma-text-dim: #86a09f;
+    --forma-text: #e8e6e1;
+    --forma-text-soft: #cfcdc8;
+    --forma-heading: #ffffff;
+    --forma-text-muted: #8a8a86;
+    --forma-text-dim: #60605a;
     /* Text on top of an accent or coral fill */
-    --forma-on-accent: #01161e;
+    --forma-on-accent: #ffffff;
     --forma-on-coral: #1a1204;
-    /* ----- Accents ----- */
-    --forma-blue: #598392;
-    --forma-blue-hover: #6b95a3;
-    --forma-teal-text: #8db1bd;
+    /* ----- Accents (the "blue" names are the main accent, now pink) ----- */
+    --forma-blue: #e0479e;
+    --forma-blue-hover: #e862ad;
+    --forma-teal-text: #ec6fb5;
     --forma-coral: #f59e0b;
-    --forma-green: #7cc4a4;
+    --forma-green: #62d396;
     --forma-red: #cc1236;
     --forma-red-text: #f2637a;
     --forma-purple: #a78bfa;
     --forma-orange: #f97316;
     /* ----- Same colours as R, G, B for see-through tints:
              rgba(var(--forma-accent-rgb), 0.16) ----- */
-    --forma-accent-rgb: 89, 131, 146;
-    --forma-accent-light-rgb: 141, 177, 189;
+    --forma-accent-rgb: 224, 71, 158;
+    --forma-accent-light-rgb: 236, 111, 181;
     --forma-coral-rgb: 245, 158, 11;
     --forma-red-rgb: 204, 18, 54;
-    --forma-green-rgb: 124, 196, 164;
+    --forma-green-rgb: 98, 211, 150;
     --forma-purple-rgb: 167, 139, 250;
     --forma-orange-rgb: 249, 115, 22;
     --forma-bg-rgb: 0, 0, 0;
-    --forma-backdrop-rgb: 0, 6, 9;
+    --forma-backdrop-rgb: 0, 0, 0;
     /* ----- Floating glass panels (the dock, the tab labels switch) ----- */
-    --forma-glass: rgba(1, 22, 30, 0.86);
-    --forma-glass-shadow: 0 18px 42px rgba(0, 0, 0, 0.6), inset 0 1px rgba(239, 246, 224, 0.05);
+    --forma-glass: rgba(28, 28, 27, 0.88);
+    --forma-glass-shadow: 0 18px 42px rgba(0, 0, 0, 0.6), inset 0 1px rgba(255, 255, 255, 0.05);
     /* Hover tint on dark-on-light rows */
-    --forma-hover-tint: rgba(239, 246, 224, 0.05);
+    --forma-hover-tint: rgba(255, 255, 255, 0.05);
 }
 
     /* ----- Light theme (Account > Appearance or the top bar's sun / moon
          button; AppearanceSettings.js sets data-theme on <html>). Same
-         names, light values from the same palette. ----- */
+         names: warm off-white and white, with a deeper pink so text and
+         links stay readable on white. ----- */
     :root[data-theme="light"] {
         color-scheme: light;
-        --forma-bg: #f4f8ec;
-        --forma-sidebar: #eff6e0;
+        --forma-bg: #f4f3f0;
+        --forma-sidebar: #edebe6;
         --forma-panel: #ffffff;
-        --forma-panel-alt: #e8f0dd;
-        --forma-panel-raised: #dce7d3;
-        --forma-border: #d5dfcc;
-        --forma-border-strong: #aec3b0;
-        --forma-text: #01161e;
-        --forma-text-soft: #0f3342;
-        --forma-heading: #01161e;
-        --forma-text-muted: #3f5f68;
-        --forma-text-dim: #5c7a80;
-        --forma-on-accent: #eff6e0;
+        --forma-panel-alt: #f0eeea;
+        --forma-panel-raised: #e8e6e1;
+        --forma-border: #e2e0db;
+        --forma-border-strong: #cfcdc8;
+        --forma-text: #1c1c1b;
+        --forma-text-soft: #2a2a28;
+        --forma-heading: #000000;
+        --forma-text-muted: #5a5a55;
+        --forma-text-dim: #7a7a77;
+        --forma-on-accent: #ffffff;
         --forma-on-coral: #1a1204;
-        --forma-blue: #124559;
-        --forma-blue-hover: #0d3747;
-        --forma-teal-text: #124559;
+        --forma-blue: #c8337f;
+        --forma-blue-hover: #b02a6f;
+        --forma-teal-text: #b02a6f;
         --forma-coral: #b45309;
-        --forma-green: #1f7a5a;
+        --forma-green: #177147;
         --forma-red: #cc1236;
         --forma-red-text: #b0102f;
         --forma-purple: #7c3aed;
         --forma-orange: #c2410c;
-        --forma-accent-rgb: 18, 69, 89;
-        --forma-accent-light-rgb: 89, 131, 146;
+        --forma-accent-rgb: 200, 51, 127;
+        --forma-accent-light-rgb: 224, 71, 158;
         --forma-coral-rgb: 217, 119, 6;
         --forma-red-rgb: 204, 18, 54;
-        --forma-green-rgb: 31, 122, 90;
+        --forma-green-rgb: 23, 113, 71;
         --forma-purple-rgb: 124, 58, 237;
         --forma-orange-rgb: 194, 65, 12;
-        --forma-bg-rgb: 244, 248, 236;
-        --forma-backdrop-rgb: 1, 22, 30;
-        --forma-glass: rgba(255, 255, 255, 0.88);
-        --forma-glass-shadow: 0 14px 36px rgba(1, 22, 30, 0.14), inset 0 1px rgba(255, 255, 255, 0.7);
-        --forma-hover-tint: rgba(1, 22, 30, 0.05);
+        --forma-bg-rgb: 244, 243, 240;
+        --forma-backdrop-rgb: 0, 0, 0;
+        --forma-glass: rgba(255, 255, 255, 0.9);
+        --forma-glass-shadow: 0 14px 36px rgba(0, 0, 0, 0.12), inset 0 1px rgba(255, 255, 255, 0.7);
+        --forma-hover-tint: rgba(0, 0, 0, 0.04);
     }
 
 html {
@@ -895,6 +896,97 @@ html {
     color: var(--forma-text-dim);
 }
 
+/* Name and date on the left, the menu button on the right (Figma). */
+.library-item-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 12px;
+}
+
+.library-item-copy {
+    flex: 1;
+    min-width: 0;
+}
+
+    .library-item-copy .library-item-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .library-item-copy .library-item-meta {
+        font-family: var(--forma-font);
+        font-size: 0.76rem;
+        color: var(--forma-text-muted);
+    }
+
+/* The menu button: three dots standing up. */
+.library-item-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    padding: 0;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--forma-text);
+    cursor: pointer;
+}
+
+    .library-item-more svg {
+        transform: rotate(90deg);
+    }
+
+    .library-item-more:hover,
+    .library-item-more:focus-visible {
+        border-color: var(--forma-text-muted);
+        background: var(--forma-hover-tint);
+    }
+
+/* A model still building: its step and a progress bar instead of a picture. */
+.library-building {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 70%;
+    color: var(--forma-text);
+}
+
+    .library-building strong {
+        font-size: 0.86rem;
+        font-weight: 600;
+    }
+
+.library-building-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    color: var(--forma-text-muted);
+    font-size: 0.72rem;
+}
+
+.library-building-bar {
+    flex: 1;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+}
+
+    .library-building-bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--forma-heading);
+        transition: width 0.4s ease;
+    }
+
 /* Real model cards (3D Models sub-tab) */
 
 .library-item-button {
@@ -925,7 +1017,7 @@ html {
     }
 
     .library-item-actionable.is-processing {
-        opacity: 0.75;
+        cursor: default;
     }
 
 /* ---------- Right-click menu (ContextMenu.jsx) ---------- */

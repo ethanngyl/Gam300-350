@@ -487,6 +487,8 @@ void Viewport::DrawRecordingIndicator() {
     ImGui::Text("Avg %.1f FPS | %llu drops", rec.avgFps, static_cast<unsigned long long>(rec.drops));
     ImGui::TextDisabled("Ctrl+Shift+R to stop");
     ImGui::End();
+}
+
 void Viewport::DrawGridLabels(const glm::mat4& view, const glm::mat4& proj) {
     const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
     const glm::mat4 viewProj = proj * view;

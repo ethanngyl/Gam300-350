@@ -9,7 +9,9 @@
 Pop-up for choosing photos from the library (past jobs). Lists each batch
 with its photos; the user ticks single photos or whole batches, then the
 chosen photos are downloaded and handed to onAddFiles as File objects.
-Used by both the Photo Editor and Camera Capture.
+Used by the Photo Editor, Camera Capture and the New model dialog. Laid
+out like the Figma's "Add photos from library": a title with an X, each
+photo with its file name, then Cancel and "Add selected photos".
 **************************************************************************/
 
 import { useEffect, useState } from 'react';
@@ -145,12 +147,14 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
 
             <div className="library-picker-dialog" role="dialog" aria-modal="true" aria-label="Choose photos from library">
                 <div className="library-picker-header">
-                    <div>
-                        <div className="eyebrow eyebrow-accent">Photo library</div>
-                        <h2 className="library-picker-title">Choose photos</h2>
-                    </div>
-                    <button className="forma-btn" onClick={() => { playSound('back'); onClose(); }}>
-                        Close
+                    <h2 className="library-picker-title">Add photos from library</h2>
+                    <button
+                        type="button"
+                        className="library-picker-close"
+                        aria-label="Close"
+                        onClick={() => { playSound('back'); onClose(); }}
+                    >
+                        <Icon name="close" size={16} />
                     </button>
                 </div>
 
@@ -200,10 +204,13 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                                                 aria-pressed={isSelected}
                                                 aria-label={image.name}
                                             >
-                                                <img src={smallPhotoUrl(image.url)} alt="" loading="lazy" decoding="async" />
-                                                <span className="library-picker-tick">
-                                                    {isSelected && <Icon name="check" size={13} />}
+                                                <span className="library-picker-photo-frame">
+                                                    <img src={smallPhotoUrl(image.url)} alt="" loading="lazy" decoding="async" />
+                                                    <span className="library-picker-tick">
+                                                        {isSelected && <Icon name="check" size={13} />}
+                                                    </span>
                                                 </span>
+                                                <span className="library-picker-photo-name">{image.name}</span>
                                             </button>
                                         );
                                     })}
@@ -223,12 +230,16 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                             `${selectedCount} selected`
                         )}
                     </span>
+                    <button type="button" className="forma-btn" onClick={() => { playSound('back'); onClose(); }}>
+                        Cancel
+                    </button>
                     <button
+                        type="button"
                         className="forma-btn forma-btn-primary"
                         onClick={handleAdd}
                         disabled={selectedCount === 0 || isDownloading}
                     >
-                        <Icon name="plus" size={14} /> Add {selectedCount > 0 ? selectedCount : ''} photo{selectedCount === 1 ? '' : 's'}
+                        <Icon name="plus" size={14} /> Add selected photos
                     </button>
                 </div>
             </div>

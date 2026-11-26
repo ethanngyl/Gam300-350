@@ -28,6 +28,13 @@ on its own, the same button reads "Go to camera" and takes any photos
 added here to the capture page, so more can be taken. The grid shows small
 copies of the photos (PhotoThumbnails.js), so large batches scroll
 smoothly; checks, edits and uploads use the original files.
+On wider screens it follows the Figma: the heading's buttons sit under
+the description, a bar shows kept against flagged photos, and the side
+panel holds, top to bottom, the preview (or a hint), the build settings
+(Use original photos, Remove background, Keep only the main object, Model
+detail with "How does this work?"), Adjust all photos, then Generate.
+Generate starts the build in the background (App.jsx), so the editor can
+be left while it runs.
 **************************************************************************/
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -261,6 +268,8 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? false);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
+    // Whether "How does this work?" under Model detail is open.
+    const [isQualityHelpOpen, setIsQualityHelpOpen] = useState(false);
     // Opened from Camera Capture, so it can send the photos back there.
     // Fixed when the editor opens, so re-clicking the tab doesn't hide it.
     const [isFromCapture] = useState(() => initialPhotos !== null && Boolean(onBackToCapture));
@@ -314,6 +323,8 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
 
     const keptPhotos = photos.filter((photo) => !photo.isExcluded);
     const flaggedCount = photos.filter((photo) => issuesById[photo.id]?.length > 0).length;
+    // Flagged photos still being kept, for the kept / flagged bar.
+    const flaggedKeptCount = keptPhotos.filter((photo) => issuesById[photo.id]?.length > 0).length;
     const pendingCount = photos.filter((photo) => photo.analysisStatus === 'pending').length;
     const separatelyEditedCount = photos.filter((photo) => photo.customEdits).length;
     const selectedPhoto = photos.find((photo) => photo.id === selectedPhotoId) ?? null;
@@ -722,6 +733,84 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
         />
     );
 
+    // The build settings and Generate. Wider screens show them in the side
+    // panel, as in the Figma; phones keep them in the bar along the bottom.
+    const buildOptions = (
+        <div className="photo-editor-footer-options">
+            <label className="photo-editor-originals">
+                <input
+                    type="checkbox"
+                    className="photo-editor-switch"
+                    checked={useOriginals}
+                    onChange={handleUseOriginalsChange}
+                />
+                Use original photos
+            </label>
+            <label
+                className="photo-editor-originals"
+                title="Turn on for turntable captures (object spins, camera stays still)."
+            >
+                <input
+                    type="checkbox"
+                    className="photo-editor-switch"
+                    checked={removeBackground}
+                    onChange={handleRemoveBackgroundChange}
+                />
+                Remove background
+            </label>
+            <label
+                className="photo-editor-originals"
+                title="When you walk around an object, removes everything outside the path you took. Turn off for rooms and scenery."
+            >
+                <input
+                    type="checkbox"
+                    className="photo-editor-switch"
+                    checked={autoCrop}
+                    onChange={handleAutoCropChange}
+                />
+                Keep only the main object
+            </label>
+        </div>
+    );
+    const qualitySlider = (
+        <div className="photo-editor-quality">
+            <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} disabled={isPreparing} />
+            {!isPhone && (
+                <>
+                    <button
+                        type="button"
+                        className="photo-editor-quality-help"
+                        aria-expanded={isQualityHelpOpen}
+                        onClick={() => {
+                            playSound('tap');
+                            setIsQualityHelpOpen((isOpen) => !isOpen);
+                        }}
+                    >
+                        How does this work?
+                    </button>
+                    {isQualityHelpOpen && (
+                        <p className="photo-editor-hint">
+                            More detail trains the model for longer. Fast is quickest to try things out;
+                            Detailed gives the sharpest model but takes the longest to build.
+                        </p>
+                    )}
+                </>
+            )}
+        </div>
+    );
+    const generateArea = (
+        <div className="photo-editor-generate">
+            <div className="photo-editor-footer-text">{renderFooterMessage()}</div>
+            <button
+                className="forma-btn forma-btn-primary"
+                onClick={handleGenerate}
+                disabled={keptPhotos.length < MIN_PHOTOS || isPreparing}
+            >
+                <Icon name="sparkle" size={14} /> {renderGenerateLabel()}
+            </button>
+        </div>
+    );
+
     return (
         <div
             className="photo-editor"
@@ -813,6 +902,12 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                     Checking {photos.length - pendingCount}/{photos.length}...
                                 </span>
                             )}
+                            {/* Kept (light) and flagged (red) as one bar, as in the Figma. */}
+                            <span className="photo-editor-count-bar" aria-hidden="true">
+                                <span className="is-kept" style={{ flexGrow: Math.max(0, keptPhotos.length - flaggedKeptCount) }} />
+                                <span className="is-flagged" style={{ flexGrow: flaggedKeptCount }} />
+                                <span className="is-left-out" style={{ flexGrow: photos.length - keptPhotos.length }} />
+                            </span>
                         </div>
                         <div className="photo-editor-summary-actions">
                             <button className="forma-btn" onClick={leaveOutFlagged} disabled={flaggedCount === 0}>
@@ -969,6 +1064,13 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                             Click a photo to see it larger, crop it, or find out why it was flagged.
                                         </p>
                                     )}
+                                </div>
+                            )}
+
+                            {!isPhone && (
+                                <div className="forma-card photo-editor-build">
+                                    {buildOptions}
+                                    {qualitySlider}
                                 </div>
                             )}
 
@@ -1144,55 +1246,18 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                     </div>
                                 </fieldset>
                             </div>
+
+                            {!isPhone && generateArea}
                         </aside>
                     </div>
 
-                    <div className="photo-editor-footer">
-                        <div className="photo-editor-footer-options">
-                            <label className="photo-editor-originals">
-                                <input
-                                    type="checkbox"
-                                    className="photo-editor-switch"
-                                    checked={useOriginals}
-                                    onChange={handleUseOriginalsChange}
-                                />
-                                Use original photos
-                            </label>
-                            <label
-                                className="photo-editor-originals"
-                                title="Turn on for turntable captures (object spins, camera stays still)."
-                            >
-                                <input
-                                    type="checkbox"
-                                    className="photo-editor-switch"
-                                    checked={removeBackground}
-                                    onChange={handleRemoveBackgroundChange}
-                                />
-                                Remove background
-                            </label>
-                            <label
-                                className="photo-editor-originals"
-                                title="When you walk around an object, removes everything outside the path you took. Turn off for rooms and scenery."
-                            >
-                                <input
-                                    type="checkbox"
-                                    className="photo-editor-switch"
-                                    checked={autoCrop}
-                                    onChange={handleAutoCropChange}
-                                />
-                                Keep only the main object
-                            </label>
+                    {isPhone && (
+                        <div className="photo-editor-footer">
+                            {buildOptions}
+                            {qualitySlider}
+                            {generateArea}
                         </div>
-                        <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} disabled={isPreparing} />
-                        <div className="photo-editor-footer-text">{renderFooterMessage()}</div>
-                        <button
-                            className="forma-btn forma-btn-primary"
-                            onClick={handleGenerate}
-                            disabled={keptPhotos.length < MIN_PHOTOS || isPreparing}
-                        >
-                            <Icon name="sparkle" size={14} /> {renderGenerateLabel()}
-                        </button>
-                    </div>
+                    )}
                 </>
             )}
 

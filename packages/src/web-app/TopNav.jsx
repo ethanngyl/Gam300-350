@@ -14,20 +14,20 @@ Top bar of the app, laid out like the Genesis Figma. Left to right:
   batch opens the Photo Library;
 - the storage meter, showing the current plan's storage. Display only for
   now: the backend doesn't report storage used yet;
-- help, which opens the Feedback page;
-- a sun / moon button that switches between the light and dark themes
-  (the same setting as Account > Appearance, AppearanceSettings.js);
+- settings (a gear, as in the Figma), which opens account settings at
+  Notifications. The theme is changed in Account > Appearance;
 - notifications: a panel that says there are none yet (placeholder);
 - the user's avatar, whose menu shows their name and email, "Manage
-  account", their plan and storage, sound on/off, and Log out (or Sign in
-  for guests).
+  account", their plan and storage, Send feedback (the Feedback page,
+  moved here from the sidebar as in the Figma), sound on/off, and Log out
+  (or Sign in for guests).
 On phones (isCompact) it is the mobile Figma's top bar: the logo, then a
-search button that opens the search box in a row under the bar, the
-theme button, notifications and the avatar. The storage meter and help are left out
-(Feedback is in the tab bar), and the avatar menu also has "Show
-walkthrough", since phones have no Learn button.
+search button that opens the search box in a row under the bar,
+notifications and the avatar. The storage meter and the
+gear are left out, and the avatar menu also has "Show walkthrough", since
+phones have no Learn button.
 - TopNav({ user, isCompact, onGoHome, onOpenModel, onOpenLibrary,
-  onOpenHelp, onOpenAccount, onShowWalkthrough, onSignOut })
+  onOpenSettings, onOpenFeedback, onOpenAccount, onShowWalkthrough, onSignOut })
 React component.
 **************************************************************************/
 
@@ -38,7 +38,6 @@ import { jobDisplayName } from './mediaApi.js';
 import { currentPlan } from './plans.js';
 import { useProfilePhoto } from './ProfilePhoto.js';
 import { playSound, setSoundMuted, useSoundSettings } from '../audio/Audio.js';
-import { setTheme, useAppearanceSettings } from './AppearanceSettings.js';
 
 // Most results the search shows at once.
 const MAX_SEARCH_RESULTS = 8;
@@ -181,7 +180,8 @@ function TopNav({
     onGoHome,
     onOpenModel,
     onOpenLibrary,
-    onOpenHelp,
+    onOpenSettings,
+    onOpenFeedback,
     onOpenAccount,
     onShowWalkthrough,
     onSignOut,
@@ -194,10 +194,6 @@ function TopNav({
     const profileRef = useRef(null);
     const profilePhoto = useProfilePhoto(user.email);
     const { isMuted } = useSoundSettings();
-    const { theme } = useAppearanceSettings();
-    // 'system' shows whichever theme the device picked.
-    const isLightTheme = theme === 'light'
-        || (theme === 'system' && document.documentElement.dataset.theme === 'light');
     const plan = currentPlan();
     const closePopup = () => setOpenPopup(null);
     useCloseOnOutsideClick(openPopup === 'notifications', notificationsRef, closePopup);
@@ -256,30 +252,17 @@ function TopNav({
                         <button
                             type="button"
                             className="app-icon-button"
-                            aria-label="Help and feedback"
-                            title="Help and feedback"
+                            aria-label="Settings"
+                            title="Settings"
                             onClick={() => {
                                 playSound('tap');
-                                onOpenHelp();
+                                onOpenSettings();
                             }}
                         >
-                            <Icon name="help" size={18} />
+                            <Icon name="settings" size={18} />
                         </button>
                     </>
                 )}
-
-                <button
-                    type="button"
-                    className="app-icon-button"
-                    aria-label={isLightTheme ? 'Switch to dark theme' : 'Switch to light theme'}
-                    title={isLightTheme ? 'Dark theme' : 'Light theme'}
-                    onClick={() => {
-                        playSound('tap');
-                        setTheme(isLightTheme ? 'dark' : 'light');
-                    }}
-                >
-                    <Icon name={isLightTheme ? 'moon' : 'sun'} size={18} />
-                </button>
 
                 <div className="app-popup-anchor" ref={notificationsRef}>
                     <button
@@ -347,6 +330,20 @@ function TopNav({
                             </div>
 
                             <div className="app-profile-section">
+                                {!user.isGuest && (
+                                    <button
+                                        type="button"
+                                        className="app-menu-item is-compact"
+                                        onClick={() => {
+                                            playSound('tap');
+                                            closePopup();
+                                            onOpenFeedback();
+                                        }}
+                                    >
+                                        <Icon name="message" size={16} />
+                                        Send feedback
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     className="app-menu-item is-compact"

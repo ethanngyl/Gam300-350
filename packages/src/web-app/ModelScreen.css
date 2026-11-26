@@ -360,6 +360,97 @@
     }
 }
 
+/* ---------- Wider screens: the Figma's model detail panel ---------- */
+
+@media (min-width: 761px) {
+    /* The way back as a small pink link above the name, like a breadcrumb. */
+    .model-back {
+        margin-bottom: -10px;
+        color: var(--forma-teal-text);
+        font-weight: 600;
+    }
+
+        .model-back svg {
+            display: none;
+        }
+
+        .model-back:hover {
+            color: var(--forma-blue-hover);
+            text-decoration: underline;
+        }
+}
+
+/* One panel: the photos it was built from, its details, then the buttons. */
+.model-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+.model-built-from {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.model-built-from-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+    .model-built-from-head .model-link {
+        font-size: 0.8rem;
+    }
+
+.model-built-from-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+}
+
+    .model-built-from-grid img {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 6px;
+        object-fit: cover;
+        background: var(--forma-panel-alt);
+    }
+
+.model-panel .model-details {
+    padding-top: 16px;
+    border-top: 1px solid var(--forma-border);
+}
+
+.model-panel-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+}
+
+    .model-panel-actions .forma-btn {
+        justify-content: center;
+        min-height: 40px;
+        text-decoration: none;
+    }
+
+.model-panel-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.model-screen .model-delete-link {
+    align-self: center;
+    margin-top: 4px;
+    color: var(--forma-red-text);
+    font-size: 0.8rem;
+}
+
 /* ---------- Wide screens: cards beside the viewer ---------- */
 
 @media (min-width: 981px) {
@@ -376,7 +467,12 @@
     /* As tall as the screen allows (minus header, page padding and dock). */
     .model-viewer {
         aspect-ratio: auto;
-        height: max(420px, calc(100dvh - 260px));
+        height: max(420px, calc(100dvh - 220px));
+    }
+
+    /* The detail panel is as tall as the viewer, buttons at the bottom. */
+    .model-body:not(.is-local) {
+        align-items: stretch;
     }
 }
 

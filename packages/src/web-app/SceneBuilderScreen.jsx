@@ -9,8 +9,11 @@
 Scene Builder: arrange finished models (Gaussian splats from GET /jobs)
 into a scene, then save it.
 
-Both web and phone: add a model from the library (a dialog with search:
-pick a card, then "Add selected model"), select it, move /
+Web: the left panel has two tabs, as in the Figma: Scene (the outliner)
+and Library (the user's finished models, with search); drag a model from
+Library into the viewport, or click it, to add it. Phone: add a model
+from the library with a dialog (search, pick a card, then "Add selected
+model"). Both web and phone: select a model, move /
 rotate / scale it with the viewport gizmo, drop it to the floor, clean up
 stray splats with one slider, duplicate, delete, undo / redo, save and
 reopen. Web only (advanced): outliner with hide and load status,
@@ -63,6 +66,9 @@ const TRANSFORM_MODES = [
 ];
 
 const AXIS_LABELS = ['X', 'Y', 'Z'];
+
+// What a model card dragged from the Library tab carries: the model's job id.
+const MODEL_DRAG_TYPE = 'application/x-genesis-model';
 
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 20;
@@ -350,6 +356,8 @@ function SceneBuilderScreen({
     canRedo,
     sceneInfo,
     onSceneInfoChange,
+    // Web: the left panel's first tab ('library' while the tour's tip points at it).
+    initialLeftTab = 'scene',
 }) {
     const isPhone = useIsPhone();
 
@@ -366,6 +374,11 @@ function SceneBuilderScreen({
     const [modelStatus, setModelStatus] = useState({});
 
     const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+    // Web: which tab the left panel shows, 'scene' (the outliner) or 'library'.
+    const [leftTab, setLeftTab] = useState(initialLeftTab);
+    const [librarySearch, setLibrarySearch] = useState('');
+    // True while a Library card is dragged over the viewport.
+    const [isDropTarget, setIsDropTarget] = useState(false);
     const [isSceneListOpen, setIsSceneListOpen] = useState(false);
     const [phoneSheet, setPhoneSheet] = useState(null); // null | 'models' | 'cleanup'
     const [statusMessage, setStatusMessage] = useState(null);
@@ -902,11 +915,31 @@ function SceneBuilderScreen({
         </div>
     );
 
+    // A model card from the Library tab dropped on the viewport adds it.
+    function handleViewportDragOver(event) {
+        if (!event.dataTransfer.types.includes(MODEL_DRAG_TYPE)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        setIsDropTarget(true);
+    }
+
+    function handleViewportDrop(event) {
+        const modelId = event.dataTransfer.getData(MODEL_DRAG_TYPE);
+        setIsDropTarget(false);
+        if (!modelId) return;
+        event.preventDefault();
+        const model = models.find((entry) => entry.id === modelId);
+        if (model) addModel(model);
+    }
+
     const viewport = (
         <div
-            className="scene-builder-viewport"
+            className={isDropTarget ? 'scene-builder-viewport is-drop-target' : 'scene-builder-viewport'}
             style={{ background }}
             onContextMenu={(event) => event.preventDefault()}
+            onDragOver={handleViewportDragOver}
+            onDragLeave={() => setIsDropTarget(false)}
+            onDrop={handleViewportDrop}
         >
             <SceneViewport
                 objects={viewportObjects}
@@ -923,7 +956,9 @@ function SceneBuilderScreen({
                 onModelFailed={handleModelFailed}
             />
             {objects.length === 0 && (
-                <p className="scene-builder-empty">Add a model to start building your scene.</p>
+                <p className="scene-builder-empty">
+                    {isPhone ? 'Add a model to start building your scene.' : 'Drag a model in from the Library tab to start building your scene.'}
+                </p>
             )}
         </div>
     );
@@ -1046,9 +1081,6 @@ function SceneBuilderScreen({
             {sceneHeading}
 
             <div className="scene-builder-toolbar">
-                <button className="forma-btn forma-btn-primary" onClick={openModelPicker}>
-                    <Icon name="plus" size={14} /> Add model
-                </button>
                 <div className="scene-builder-tool-group">{transformButtons}</div>
                 <div className="scene-builder-tool-group">
                     <button className="scene-builder-tool" onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
@@ -1100,8 +1132,70 @@ function SceneBuilderScreen({
 
             <div className="scene-builder-body">
                 <aside className="forma-card scene-builder-outliner">
-                    <span className="eyebrow">Outliner</span>
-                    {objects.length === 0 ? <p className="scene-builder-note">No models yet.</p> : objectList}
+                    <div className="scene-builder-left-tabs" role="tablist">
+                        {[{ id: 'scene', label: 'Scene' }, { id: 'library', label: 'Library' }].map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={leftTab === tab.id}
+                                className={leftTab === tab.id ? 'scene-builder-left-tab is-active' : 'scene-builder-left-tab'}
+                                onClick={() => {
+                                    playSound('tap');
+                                    setLeftTab(tab.id);
+                                }}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {leftTab === 'scene' ? (
+                        <>
+                            {objects.length === 0 ? <p className="scene-builder-note">No models yet.</p> : objectList}
+                            <p className="scene-builder-left-hint">Open the Library tab to drag models in.</p>
+                        </>
+                    ) : (
+                        <>
+                            <label className="scene-builder-picker-search scene-builder-library-search">
+                                <Icon name="search" size={14} />
+                                <input
+                                    placeholder="Search your models"
+                                    value={librarySearch}
+                                    onChange={(event) => setLibrarySearch(event.target.value)}
+                                />
+                            </label>
+                            {modelsStatus === 'loading' && <p className="scene-builder-note">Loading your models...</p>}
+                            {modelsStatus === 'error' && <p className="scene-builder-note">Could not load your models.</p>}
+                            {modelsStatus === 'ready' && models.length === 0 && (
+                                <p className="scene-builder-note">No finished models yet. Build one from your photos first.</p>
+                            )}
+                            <div className="scene-builder-library-grid">
+                                {models
+                                    .filter((model) => model.name.toLowerCase().includes(librarySearch.trim().toLowerCase()))
+                                    .map((model) => (
+                                        <button
+                                            key={model.id}
+                                            type="button"
+                                            className="scene-builder-library-card"
+                                            draggable
+                                            title="Drag into the viewport, or click to add"
+                                            onDragStart={(event) => {
+                                                event.dataTransfer.setData(MODEL_DRAG_TYPE, model.id);
+                                                event.dataTransfer.effectAllowed = 'copy';
+                                            }}
+                                            onClick={() => addModel(model)}
+                                        >
+                                            <span className="scene-builder-library-thumb">
+                                                <ModelCover coverUrl={model.coverUrl} photoUrl={model.thumbnailUrl} icon="cube" />
+                                            </span>
+                                            <span className="scene-builder-library-name">{model.name}</span>
+                                        </button>
+                                    ))}
+                            </div>
+                            <p className="scene-builder-left-hint">Drag a model into the viewport to add it.</p>
+                        </>
+                    )}
                 </aside>
 
                 {viewport}

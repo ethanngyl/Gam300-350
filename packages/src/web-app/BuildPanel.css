@@ -1,0 +1,310 @@
+/* ============================================================
+   Build panel (BuildPanel.jsx): background builds in the bottom
+   corner, laid out like the Figma's "Rendering 1 model" and
+   "Model ready" cards. Uses the --forma-* tokens from AppTheme.css.
+   ============================================================ */
+
+.build-panel {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 85; /* above the dock (70), under dialogs (90) */
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(320px, calc(100vw - 32px));
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    font-family: var(--forma-font);
+}
+
+.build-panel-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 14px;
+    background: var(--forma-panel);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+
+.build-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+    .build-panel-head h2 {
+        margin: 0;
+        color: var(--forma-heading);
+        font-size: 0.98rem;
+        font-weight: 600;
+    }
+
+.build-panel-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .build-panel-close:hover {
+        border-color: var(--forma-text-muted);
+        color: var(--forma-heading);
+    }
+
+/* Picture, name and settings of one build. */
+.build-panel-model {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.build-panel-thumb {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--forma-panel-raised);
+}
+
+    .build-panel-thumb.is-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--forma-text-muted);
+    }
+
+.build-panel-model-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+    .build-panel-model-copy strong {
+        overflow: hidden;
+        color: var(--forma-heading);
+        font-size: 0.88rem;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .build-panel-model-copy small {
+        color: var(--forma-text-muted);
+        font-size: 0.76rem;
+    }
+
+/* A running build, under the card's title (several stack). */
+.build-panel-build {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+    .build-panel-build + .build-panel-build {
+        padding-top: 14px;
+        border-top: 1px solid var(--forma-border);
+    }
+
+/* The three steps. */
+.build-panel-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.build-panel-step {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 7px;
+    color: var(--forma-text);
+    font-size: 0.8rem;
+}
+
+.build-panel-step-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--forma-text-dim);
+    border-radius: 50%;
+    color: var(--forma-on-accent);
+}
+
+.build-panel-step.is-done .build-panel-step-mark {
+    border-color: var(--forma-blue);
+    background: var(--forma-blue);
+}
+
+.build-panel-step.is-active .build-panel-step-mark {
+    border-color: var(--forma-blue);
+}
+
+.build-panel-step.is-pending {
+    color: var(--forma-text-dim);
+}
+
+    .build-panel-step.is-pending .build-panel-step-mark {
+        border-style: dashed;
+    }
+
+.build-panel-step-status {
+    color: var(--forma-text-muted);
+    font-size: 0.74rem;
+}
+
+.build-panel-step.is-active .build-panel-step-status {
+    color: var(--forma-text);
+}
+
+.build-panel-step-bar {
+    grid-column: 1 / -1;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+}
+
+    .build-panel-step-bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--forma-blue);
+        transition: width 0.4s ease;
+    }
+
+.build-panel-note,
+.build-panel-error {
+    margin: 0;
+    max-width: none;
+    color: var(--forma-text-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.build-panel-error {
+    color: var(--forma-red-text);
+}
+
+/* Details / Cancel build, and the "Stop this build?" check. */
+.build-panel-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px 14px;
+    color: var(--forma-text-muted);
+    font-size: 0.76rem;
+}
+
+.build-panel-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--forma-text-muted);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+    .build-panel-link:hover {
+        color: var(--forma-heading);
+        text-decoration: underline;
+    }
+
+    .build-panel-link.is-danger {
+        color: var(--forma-red-text);
+    }
+
+.build-panel-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    gap: 8px;
+}
+
+    .build-panel-actions:empty {
+        display: none;
+    }
+
+    .build-panel-actions .forma-btn {
+        justify-content: center;
+    }
+
+/* Shrunk to a pill: "Rendering 1 model  67%". */
+.build-panel-pill {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 85;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 999px;
+    background: var(--forma-panel);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.4);
+    color: var(--forma-heading);
+    font: 600 0.82rem var(--forma-font);
+    cursor: pointer;
+}
+
+.build-panel-pill-percent {
+    color: var(--forma-text-muted);
+    font-weight: 500;
+}
+
+.build-panel-pill-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--forma-panel-raised);
+    border-top-color: var(--forma-blue);
+    border-radius: 50%;
+    animation: build-panel-spin 0.9s linear infinite;
+}
+
+@keyframes build-panel-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .build-panel-pill-spinner {
+        animation: none;
+    }
+}
+
+/* Phones: full width, above the tab bar. */
+@media (max-width: 760px) {
+    .build-panel,
+    .build-panel-pill {
+        right: 12px;
+        bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .build-panel {
+        left: 12px;
+        width: auto;
+        max-height: 60vh;
+    }
+}
