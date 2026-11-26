@@ -20,96 +20,166 @@
 
     /* No spotlight (item not on screen): dim the page here instead. */
     .walkthrough-blocker.is-dimmed {
-        background: rgba(9, 9, 11, 0.74);
+        background: rgba(0, 0, 0, 0.72);
     }
 
 .walkthrough-spotlight {
     position: absolute;
     pointer-events: none;
-    border: 1px solid rgba(147, 197, 253, 0.78);
-    box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.32), 0 0 24px 4px rgba(96, 165, 250, 0.42), 0 0 52px 12px rgba(59, 130, 246, 0.2), 0 0 0 9999px rgba(9, 9, 11, 0.74);
+    border: 1px solid rgba(224, 71, 158, 0.85);
+    box-shadow: 0 0 0 1px rgba(224, 71, 158, 0.3), 0 0 24px 4px rgba(224, 71, 158, 0.35), 0 0 0 9999px rgba(0, 0, 0, 0.72);
     transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
 }
 
+/* The tooltip is a light grey card in both themes, as in the Figma. */
 .walkthrough-tooltip {
     position: absolute;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 15px 16px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--forma-border-strong);
-    background: var(--forma-panel);
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58);
+    gap: 6px;
+    padding: 18px 20px 18px;
+    border-radius: 14px;
+    background: #e8e6e1;
+    color: #1c1c1b;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
     transition: left 0.3s ease, top 0.3s ease, bottom 0.3s ease;
 }
 
-.walkthrough-progress {
-    font-family: var(--forma-font-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.14em;
-    color: var(--forma-text-dim);
+    /* The arrow pointing at the item, on the side facing it. --walkthrough-arrow
+   (set inline) is how far along that side it sits. */
+    .walkthrough-tooltip::before {
+        content: '';
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        background: inherit;
+        transform: translate(-50%, -50%) rotate(45deg);
+        display: none;
+    }
+
+    .walkthrough-tooltip.is-right::before {
+        display: block;
+        left: 0;
+        top: var(--walkthrough-arrow, 36px);
+    }
+
+    .walkthrough-tooltip.is-below::before {
+        display: block;
+        top: 0;
+        left: var(--walkthrough-arrow, 50%);
+    }
+
+    .walkthrough-tooltip.is-above::before {
+        display: block;
+        top: 100%;
+        left: var(--walkthrough-arrow, 50%);
+    }
+
+.walkthrough-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 
-.walkthrough-title {
-    font-size: 1rem;
+.walkthrough-progress {
+    color: #60605a;
+    font-size: 0.84rem;
+}
+
+.walkthrough-skip {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #1c1c1b;
+    font: inherit;
+    font-size: 0.84rem;
     font-weight: 600;
-    color: var(--forma-heading);
+    cursor: pointer;
+}
+
+    .walkthrough-skip:hover {
+        text-decoration: underline;
+    }
+
+/* One segment per step. */
+.walkthrough-segments {
+    display: flex;
+    gap: 5px;
+    margin: 8px 0 10px;
+}
+
+    .walkthrough-segments span {
+        flex: 1;
+        height: 3px;
+        border-radius: 999px;
+        background: #cfcdc8;
+    }
+
+        .walkthrough-segments span.is-done {
+            background: #e0479e;
+        }
+
+.walkthrough-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1c1c1b;
 }
 
 .walkthrough .walkthrough-text {
     margin: 0;
     max-width: none;
     font-family: inherit;
-    font-size: 0.84rem;
+    font-size: 0.86rem;
     line-height: 1.55;
-    color: var(--forma-text-muted);
+    color: #1c1c1b;
 }
 
 .walkthrough-actions {
     display: flex;
+    justify-content: flex-end;
     gap: 8px;
-    margin-top: 12px;
+    margin-top: 14px;
 }
 
-.walkthrough-skip,
+.walkthrough-back,
 .walkthrough-next {
     min-height: 36px;
+    padding: 0 18px;
     border-radius: 8px;
     font-family: inherit;
-    font-size: 0.8rem;
+    font-size: 0.86rem;
     font-weight: 600;
     cursor: pointer;
     transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
-.walkthrough-skip {
-    flex: 1;
-    border: 1px solid var(--forma-border-strong);
+.walkthrough-back {
+    border: 1px solid #8a8a86;
     background: transparent;
-    color: var(--forma-text-soft);
+    color: #1c1c1b;
 }
 
-    .walkthrough-skip:hover {
-        border-color: var(--forma-text-dim);
-        color: var(--forma-heading);
+    .walkthrough-back:disabled {
+        color: #8a8a86;
+        cursor: default;
     }
 
 .walkthrough-next {
-    flex: 1.35;
-    border: 1px solid rgba(var(--forma-accent-rgb), 0.45);
-    background: var(--forma-blue);
-    color: var(--forma-on-accent);
+    border: 1px solid #1c1c1b;
+    background: #1c1c1b;
+    color: #ffffff;
 }
 
     .walkthrough-next:hover {
-        background: var(--forma-blue-hover);
+        background: #000000;
     }
 
     .walkthrough-skip:focus-visible,
+    .walkthrough-back:focus-visible,
     .walkthrough-next:focus-visible {
-        outline: 2px solid var(--forma-teal-text);
+        outline: 2px solid #e0479e;
         outline-offset: 2px;
     }
 

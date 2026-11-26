@@ -7,22 +7,24 @@
 \date 26-10-2026
 \brief
 Dashboard landing screen, laid out like the Genesis Figma: a "Get
-Started" banner with three ways to start (Add photos opens the Add source
-photos dialog, AddPhotosDialog.jsx, which hands the photos to the Photo
-Editor; Frames from video opens the Video Extractor; Build a scene opens
-the Scene Builder), then "Recent" with two tabs and a "View all" link.
-Phones show only Recent, as in the mobile Figma (Capture is in the tab
-bar). "Your files" shows the
-latest photo batches (tagged with their build's status: source photos,
-processing, failed or cancelled) and opens the Photo Library; "Generated
-models" shows the latest finished models and opens one in the full-page
-viewer. Both come from GET /jobs. With nothing made yet,
-it shows a single "Create your first 3D model" card instead.
+Started" banner with a line on what Genesis does, "Quick tools" with three
+ways to start (Add photos opens the New model dialog, AddPhotosDialog.jsx,
+through onNewModel; Frames from videos opens the Video Extractor; Build a
+scene opens the Scene Builder), then "Recent" with two tabs and a "View
+all" link. Phones show only Recent, as in the mobile Figma (Capture is in
+the tab bar). "Your models" (shown first) has the latest finished models,
+shown by their cut-out covers (ModelCover.jsx), and opens one on the model
+page; "Your photos" has the latest photo batches (tagged with their
+build's status: source photos, processing, failed or cancelled) and opens
+the Photo Library. Both come from GET /jobs. With no models yet, it says
+"No models yet. Click New to start one from photos or a video." with
+Upload photos and, when the server has it, Open the sample model (the
+cat statue sample job), as in the Figma.
 **************************************************************************/
 
 import { useEffect, useState } from 'react';
-import AddPhotosDialog from './AddPhotosDialog.jsx';
 import Icon from './Icons.jsx';
+import ModelCover from './ModelCover.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
@@ -31,17 +33,20 @@ import './HomeScreen.css';
 // How many cards each Recent tab shows.
 const RECENT_ITEM_COUNT = 10;
 
-// The banner's ways to start. 'photos' opens the Add source photos
-// dialog; the others open that page.
+// The Quick tools. 'photos' opens the New model dialog; the others open that page.
 const START_ACTIONS = [
-    { id: 'photos', title: 'Add photos', hint: '40\u201380 overlapping shots', icon: 'upload' },
-    { id: 'extractor', title: 'Frames from video', hint: 'Pick frames from a walkaround video', icon: 'play' },
-    { id: 'scene', title: 'Build a scene', hint: 'Arrange models in a space', icon: 'cube' },
+    { id: 'photos', title: 'Add photos', hint: 'Upload 40 to 80 overlapping photos', icon: 'upload' },
+    { id: 'extractor', title: 'Frames from videos', hint: 'Pull sharp frames out of a walkaround video', icon: 'play' },
+    { id: 'scene', title: 'Build a scene', hint: 'Place your models together in one scene', icon: 'cube' },
 ];
 
+// The sample model "Open the sample model" opens (a sample job on the
+// server, see the backend's sample-data/jobs.json).
+const SAMPLE_MODEL_JOB_ID = 'sample-cat-statue';
+
 const RECENT_TABS = [
-    { id: 'files', label: 'Your files' },
-    { id: 'models', label: 'Generated models' },
+    { id: 'models', label: 'Your models' },
+    { id: 'files', label: 'Your photos' },
 ];
 
 // The tag under a photo batch's name, from its job's status. Failed and
@@ -68,12 +73,13 @@ function formatTimeAgo(timestamp) {
     return new Date(timestamp).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
 }
 
-function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, onOpenModel }) {
-    const [isAddPhotosOpen, setIsAddPhotosOpen] = useState(false);
+function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
     const [jobs, setJobs] = useState([]);
+    // Whether the server has the sample model (sample jobs can be switched off).
+    const [hasSampleModel, setHasSampleModel] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
-    const [recentTab, setRecentTab] = useState('files');
+    const [recentTab, setRecentTab] = useState('models');
 
     useEffect(() => {
         let isCancelled = false;
@@ -94,8 +100,20 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
             }
         }
 
+        async function checkSampleModel() {
+            try {
+                const res = await fetch(`/api/v1/jobs/${SAMPLE_MODEL_JOB_ID}`);
+                if (!res.ok) return;
+                const sample = await res.json();
+                if (!isCancelled) setHasSampleModel(Boolean(sample.hasResult));
+            } catch {
+                // No sample: the button stays hidden.
+            }
+        }
+
         loadJobs();
-        // Ignore the response if the user leaves Home before it arrives.
+        checkSampleModel();
+        // Ignore the responses if the user leaves Home before they arrive.
         return () => { isCancelled = true; };
     }, []);
 
@@ -118,13 +136,14 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
             id: job.id,
             name: jobDisplayName(job, 'Model'),
             kind: '3D model',
-            coverUrl: smallPhotoUrl(job.images?.[0]?.url),
+            modelCoverUrl: job.cover ?? null,
+            coverUrl: job.images?.[0]?.url ?? null,
             createdAt: job.createdAt,
         }));
 
     const isShowingFiles = recentTab === 'files';
     const recentItems = isShowingFiles ? recentFiles : recentModels;
-    const hasAnything = jobs.length > 0;
+    const hasModels = recentModels.length > 0;
 
     function openItem(item) {
         playSound('tap');
@@ -132,14 +151,9 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
         else onOpenModel(item.id);
     }
 
-    function startNewModel() {
-        playSound('confirm');
-        onNewGeneration();
-    }
-
     function startAction(actionId) {
         playSound('tap');
-        if (actionId === 'photos') setIsAddPhotosOpen(true);
+        if (actionId === 'photos') onNewModel();
         else onNavigate(actionId);
     }
 
@@ -148,6 +162,13 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
             <section className="home-hero" aria-labelledby="home-hero-title">
                 <span className="home-hero-art" aria-hidden="true" />
                 <h1 id="home-hero-title" className="home-hero-title">Get Started</h1>
+                <p className="home-hero-text">
+                    Start a model from photos or a video, or open a scene to arrange the models you have made.
+                </p>
+            </section>
+
+            <section className="home-tools" aria-labelledby="home-tools-title">
+                <h2 id="home-tools-title" className="home-section-title">Quick tools</h2>
                 <div className="home-hero-actions">
                     {START_ACTIONS.map((action) => (
                         <button
@@ -191,28 +212,45 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
                         onOpenLibrary(isShowingFiles ? 'photos' : 'models');
                     }}
                 >
-                    View all {isShowingFiles ? 'files' : 'models'} <Icon name="chevronRight" size={14} />
+                    View all {isShowingFiles ? 'photos' : 'models'} <Icon name="chevronRight" size={14} />
                 </button>
             </div>
 
             {isLoading && <p className="home-recent-note">Loading...</p>}
             {loadError && <p className="home-recent-note">Couldn't load your work: {loadError}</p>}
 
-            {!isLoading && !loadError && !hasAnything && (
-                <div className="forma-card home-empty">
-                    <Icon name="camera" size={26} />
-                    <h3>Create your first 3D model</h3>
-                    <p>Take or upload photos of an object from every angle, and GENESIS builds the model for you.</p>
-                    <button className="forma-btn forma-btn-primary" onClick={startNewModel}>
-                        <Icon name="cubePlus" size={14} /> New model
-                    </button>
+            {!isLoading && !loadError && !isShowingFiles && !hasModels && (
+                <div className="home-empty-state">
+                    <p className="home-empty-note">No models yet. Click New to start one from photos or a video.</p>
+                    <div className="home-empty-actions">
+                        <button
+                            type="button"
+                            className="forma-btn forma-btn-primary"
+                            onClick={() => {
+                                playSound('tap');
+                                onNewModel();
+                            }}
+                        >
+                            Upload photos
+                        </button>
+                        {hasSampleModel && (
+                            <button
+                                type="button"
+                                className="forma-btn"
+                                onClick={() => {
+                                    playSound('tap');
+                                    onOpenModel(SAMPLE_MODEL_JOB_ID);
+                                }}
+                            >
+                                Open the sample model
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
 
-            {!isLoading && !loadError && hasAnything && recentItems.length === 0 && (
-                <p className="home-recent-note">
-                    {isShowingFiles ? 'No photos yet.' : 'No finished models yet. Models still processing appear here when done.'}
-                </p>
+            {!isLoading && !loadError && isShowingFiles && recentItems.length === 0 && (
+                <p className="home-recent-note">No photos yet.</p>
             )}
 
             {recentItems.length > 0 && (
@@ -225,10 +263,10 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
                             onClick={() => openItem(item)}
                         >
                             <span className="home-file-preview">
-                                {item.coverUrl ? (
-                                    <img src={item.coverUrl} alt="" loading="lazy" />
+                                {isShowingFiles ? (
+                                    item.coverUrl ? <img src={item.coverUrl} alt="" loading="lazy" /> : <Icon name="image" size={26} />
                                 ) : (
-                                    <Icon name="layers" size={26} />
+                                    <ModelCover coverUrl={item.modelCoverUrl} photoUrl={item.coverUrl} icon="layers" />
                                 )}
                                 <span className="home-file-type">
                                     <Icon name={isShowingFiles ? 'image' : 'layers'} size={13} />
@@ -244,16 +282,6 @@ function HomeScreen({ onNewGeneration, onEditPhotos, onNavigate, onOpenLibrary, 
                         </button>
                     ))}
                 </div>
-            )}
-
-            {isAddPhotosOpen && (
-                <AddPhotosDialog
-                    onClose={() => setIsAddPhotosOpen(false)}
-                    onContinue={(files) => {
-                        setIsAddPhotosOpen(false);
-                        onEditPhotos(files);
-                    }}
-                />
             )}
         </div>
     );

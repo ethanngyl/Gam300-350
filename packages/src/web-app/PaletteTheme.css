@@ -1,0 +1,266 @@
+/* ============================================================
+   Charcoal & pink: the parts of the Figma that the colour tokens in
+   AppTheme.css can't do on their own, such as Home's charcoal banner and
+   cards, the white buttons in the account window and dialogs, and the
+   faint stripes behind model covers.
+   Imported last in App.jsx, so these rules win. Light theme versions
+   are under :root[data-theme="light"].
+   ============================================================ */
+
+/* ---------- Page: plain black ---------- */
+
+.genesis-shell .genesis-main,
+.landing-page,
+.auth-page {
+    background: var(--forma-bg);
+}
+
+/* Top bar and sidebar: black, split from the page by a thin charcoal line. */
+.app-topbar,
+.app-sidebar {
+    background: var(--forma-sidebar);
+    border-color: #1c1c1b;
+}
+
+:root[data-theme="light"] .app-topbar,
+:root[data-theme="light"] .app-sidebar {
+    border-color: var(--forma-border);
+}
+
+/* Search: a dark pill with a thin border. */
+.app-search {
+    border-color: var(--forma-border);
+    background: #0a0a0a;
+}
+
+:root[data-theme="light"] .app-search {
+    background: var(--forma-panel);
+}
+
+/* Avatars (top bar, account menu): grey with white initials, as in the Figma. */
+.app-avatar {
+    border-color: var(--forma-border-strong);
+    background: var(--forma-panel-raised);
+    color: var(--forma-heading);
+}
+
+/* The Figma's page titles have no small label above them. */
+.has-app-sidebar .eyebrow-accent {
+    display: none;
+}
+
+/* ---------- Home: charcoal banner with grey cards ---------- */
+
+.home-screen .home-hero {
+    border: 1px solid var(--forma-border);
+    background: var(--forma-panel);
+}
+
+.home-screen .home-hero-title {
+    color: var(--forma-heading);
+}
+
+.home-screen .home-hero-art {
+    background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0 10px, transparent 10px 22px);
+}
+
+.home-screen .home-hero-action {
+    border: 1px solid transparent;
+    background: var(--forma-panel-raised);
+    color: var(--forma-text);
+}
+
+    .home-screen .home-hero-action:hover {
+        border-color: var(--forma-border-strong);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+    }
+
+.home-screen .home-hero-action-icon {
+    background: var(--forma-panel);
+    color: var(--forma-heading);
+}
+
+.home-screen .home-hero-action-title {
+    color: var(--forma-heading);
+}
+
+.home-screen .home-hero-action-hint {
+    color: var(--forma-text-muted);
+}
+
+:root[data-theme="light"] .home-screen .home-hero-art {
+    background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0 10px, transparent 10px 22px);
+}
+
+:root[data-theme="light"] .home-screen .home-hero-action {
+    background: var(--forma-panel-alt);
+}
+
+    :root[data-theme="light"] .home-screen .home-hero-action:hover {
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    }
+
+/* Nothing made yet: one quiet line in the middle of the Recent area. */
+.home-screen .home-empty-note {
+    margin: 0;
+    padding: 120px 16px;
+    max-width: none;
+    color: var(--forma-text-muted);
+    font-size: 1.05rem;
+    text-align: center;
+}
+
+/* ---------- Model and photo covers: near-black with faint stripes ---------- */
+
+.home-screen .home-file-preview,
+.library-thumb,
+.library-photo-cover,
+.scene-builder-picker .scene-builder-model-thumb,
+.acct-profile-cover {
+    border-color: var(--forma-border);
+    background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 12px), #0d0d0d;
+}
+
+:root[data-theme="light"] .home-screen .home-file-preview,
+:root[data-theme="light"] .library-thumb,
+:root[data-theme="light"] .library-photo-cover,
+:root[data-theme="light"] .scene-builder-picker .scene-builder-model-thumb,
+:root[data-theme="light"] .acct-profile-cover {
+    border-color: var(--forma-border);
+    background: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.04) 0 1px, transparent 1px 12px), #e8e6e1;
+}
+
+/* Library cards: the name and details on a charcoal strip. */
+.library-item,
+.library-photo-card {
+    border-color: var(--forma-border);
+    background: var(--forma-panel);
+}
+
+:root[data-theme="light"] .library-item,
+:root[data-theme="light"] .library-photo-card {
+    background: #ffffff;
+}
+
+/* ---------- Account window and dialogs: charcoal surfaces ---------- */
+
+.acct-modal,
+.add-photos-dialog,
+.scene-builder-dialog.scene-builder-picker {
+    border-color: var(--forma-border-strong);
+    background: var(--forma-panel);
+}
+
+.acct-screen.is-modal .acct-menu {
+    background: #181816;
+}
+
+/* The open section in the account menu: a grey pill, not a pink one. */
+.acct-menu-item.is-active {
+    border-color: transparent;
+    background: #2f2f2d;
+    color: var(--forma-heading);
+}
+
+:root[data-theme="light"] .acct-menu-item.is-active {
+    background: var(--forma-panel-raised);
+}
+
+/* Plans: the featured plan picked out by a lighter border, as in the Figma. */
+.acct-plan.is-featured {
+    border-color: var(--forma-text-muted);
+    background: var(--forma-panel);
+}
+
+/* Secondary buttons in the account window and dialogs are white with dark
+   text in the Figma; the main (pink) button stays as it is. */
+.acct-modal .forma-btn:not(.forma-btn-primary),
+.add-photos-dialog .forma-btn:not(.forma-btn-primary),
+.scene-builder-picker .forma-btn:not(.forma-btn-primary),
+.library-picker .forma-btn:not(.forma-btn-primary),
+.build-panel .forma-btn:not(.forma-btn-primary) {
+    border-color: #ffffff;
+    background: #ffffff;
+    color: #1c1c1b;
+}
+
+    .acct-modal .forma-btn:not(.forma-btn-primary):hover,
+    .add-photos-dialog .forma-btn:not(.forma-btn-primary):hover,
+    .scene-builder-picker .forma-btn:not(.forma-btn-primary):hover,
+    .library-picker .forma-btn:not(.forma-btn-primary):hover,
+    .build-panel .forma-btn:not(.forma-btn-primary):hover {
+        border-color: #e8e6e1;
+        background: #e8e6e1;
+        color: #000000;
+    }
+
+:root[data-theme="light"] .acct-modal,
+:root[data-theme="light"] .add-photos-dialog,
+:root[data-theme="light"] .scene-builder-dialog.scene-builder-picker {
+    border-color: var(--forma-border-strong);
+    background: #ffffff;
+}
+
+:root[data-theme="light"] .acct-screen.is-modal .acct-menu {
+    background: var(--forma-sidebar);
+}
+
+:root[data-theme="light"] .acct-plan.is-featured {
+    border-color: var(--forma-text-muted);
+    background: #ffffff;
+}
+
+/* On white, the white buttons become dark outlines. */
+:root[data-theme="light"] .acct-modal .forma-btn:not(.forma-btn-primary),
+:root[data-theme="light"] .add-photos-dialog .forma-btn:not(.forma-btn-primary),
+:root[data-theme="light"] .scene-builder-picker .forma-btn:not(.forma-btn-primary),
+:root[data-theme="light"] .library-picker .forma-btn:not(.forma-btn-primary),
+:root[data-theme="light"] .build-panel .forma-btn:not(.forma-btn-primary) {
+    border-color: var(--forma-border-strong);
+    background: #ffffff;
+    color: var(--forma-text);
+}
+
+    :root[data-theme="light"] .acct-modal .forma-btn:not(.forma-btn-primary):hover,
+    :root[data-theme="light"] .add-photos-dialog .forma-btn:not(.forma-btn-primary):hover,
+    :root[data-theme="light"] .scene-builder-picker .forma-btn:not(.forma-btn-primary):hover,
+    :root[data-theme="light"] .library-picker .forma-btn:not(.forma-btn-primary):hover,
+    :root[data-theme="light"] .build-panel .forma-btn:not(.forma-btn-primary):hover {
+        border-color: var(--forma-text-muted);
+        background: var(--forma-panel-alt);
+    }
+
+/* ---------- Alert colour (#CC1236): red text on white, as in the Figma ---------- */
+
+.acct-leave .forma-btn.acct-danger-button {
+    border-color: #ffffff;
+    background: #ffffff;
+    color: #cc1236;
+}
+
+    .acct-leave .forma-btn.acct-danger-button:hover {
+        border-color: #cc1236;
+        background: #cc1236;
+        color: #ffffff;
+    }
+
+:root[data-theme="light"] .acct-leave .forma-btn.acct-danger-button {
+    border-color: #cc1236;
+}
+
+/* "Photos added": Auto-fix and Edit manually are dark, as in the Figma. */
+.add-photos-dialog .add-photos-review-side .forma-btn:not(.forma-btn-primary) {
+    border-color: var(--forma-border-strong);
+    background: var(--forma-panel-raised);
+    color: var(--forma-heading);
+}
+
+    .add-photos-dialog .add-photos-review-side .forma-btn:not(.forma-btn-primary):hover:not(:disabled) {
+        border-color: var(--forma-text-muted);
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+    }
+
+:root[data-theme="light"] .add-photos-dialog .add-photos-review-side .forma-btn:not(.forma-btn-primary) {
+    background: var(--forma-panel-alt);
+}

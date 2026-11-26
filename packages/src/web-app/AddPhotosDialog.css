@@ -111,52 +111,142 @@
     color: var(--forma-text);
 }
 
-.add-photos-chosen {
+/* "Or start from": the Media Library and the camera. */
+.add-photos-other {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px 12px;
-    color: var(--forma-text-soft);
+    justify-content: center;
+    gap: 10px;
+    color: var(--forma-text-muted);
     font-size: 0.84rem;
 }
 
-.add-photos-previews {
-    display: flex;
-    gap: 6px;
+/* ---------- Step 2: "Photos added" ---------- */
+
+.add-photos-dialog.is-review {
+    width: min(640px, 100%);
 }
 
-    .add-photos-previews img,
-    .add-photos-more {
-        width: 36px;
-        height: 36px;
-        border-radius: 6px;
+.add-photos-review {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 176px;
+    gap: 18px;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.add-photos-review-main {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+}
+
+/* The first photo, with the count in the corner. */
+.add-photos-preview {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border: 3px solid var(--forma-panel-raised);
+    border-radius: 12px;
+    background: var(--forma-panel-alt);
+}
+
+    .add-photos-preview img {
+        width: 100%;
+        height: 100%;
         object-fit: cover;
     }
 
-.add-photos-more {
+.add-photos-count {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    background: var(--forma-panel-raised);
-    color: var(--forma-text-muted);
-    font-size: 0.72rem;
+    gap: 6px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #ffffff;
+    font-size: 0.74rem;
+    font-weight: 600;
 }
 
-.add-photos-clear {
-    margin-left: auto;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--forma-text-muted);
-    font: inherit;
-    font-size: 0.82rem;
+/* "No issues found..." / "4 photos found with issues". */
+.add-photos-status {
+    margin: 0;
+    max-width: none;
+    padding: 10px 12px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    color: var(--forma-text);
+    font-size: 0.84rem;
+}
+
+.add-photos-issue-count {
+    color: var(--forma-red-text);
+    font-weight: 700;
+}
+
+.add-photos-review-side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+    .add-photos-review-side .forma-btn {
+        justify-content: center;
+        width: 100%;
+    }
+
+.add-photos-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--forma-text);
+    font-size: 0.84rem;
     cursor: pointer;
 }
 
-.add-photos-footer {
+    .add-photos-check input {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: var(--forma-blue);
+    }
+
+.add-photos-tip {
     display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    padding: 14px 20px;
-    border-top: 1px solid var(--forma-border);
+    gap: 6px;
+    margin: -4px 0 0;
+    max-width: none;
+    color: var(--forma-text-muted);
+    font-size: 0.74rem;
+    line-height: 1.45;
+}
+
+    .add-photos-tip svg {
+        flex: none;
+        margin-top: 2px;
+    }
+
+/* Edit manually and Render now, at the bottom of the side column. */
+.add-photos-review-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+}
+
+    .add-photos-review-actions .forma-btn {
+        min-height: 40px;
+    }
+
+/* Phones: one column, the buttons under the photo. */
+@media (max-width: 560px) {
+    .add-photos-review {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }

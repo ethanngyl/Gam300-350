@@ -106,9 +106,6 @@ function createBatchPhoto(file) {
     };
 }
 
-// addedFiles: photos chosen with the dock's Add photos button before
-// this page opened; they start in the batch. While the page is open,
-// onRegisterAddFiles(handler) hands App a function that adds more.
 // initialPhotos: { files, removeBackground, autoCrop, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
 function CameraCapture({
@@ -117,8 +114,6 @@ function CameraCapture({
     onBack,
     uploadError,
     initialPhotos = null,
-    addedFiles = null,
-    onRegisterAddFiles = null,
 }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -137,7 +132,7 @@ function CameraCapture({
     const [cameraRequestCount, setCameraRequestCount] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [photos, setPhotos] = useState(() =>
-        [...(initialPhotos?.files ?? []), ...(addedFiles ?? [])]
+        (initialPhotos?.files ?? [])
             .filter((file) => file.type.startsWith('image/'))
             .map(createBatchPhoto)
     );
@@ -354,20 +349,6 @@ function CameraCapture({
 
         return newPhotos.length;
     }, []);
-
-    // While this page is open, the dock's Add photos button adds to
-    // this batch through the handler registered here.
-    useEffect(() => {
-        if (!onRegisterAddFiles) return;
-        onRegisterAddFiles((files) => {
-            const addedCount = addFiles(files);
-            if (addedCount > 0) {
-                setUploadFeedback(`${addedCount} photo${addedCount === 1 ? '' : 's'} uploaded`);
-                setTimeout(() => setUploadFeedback(null), 2000);
-            }
-        });
-        return () => onRegisterAddFiles(null);
-    }, [onRegisterAddFiles, addFiles]);
 
     const capturePhoto = useCallback((showFeedback = true) => {
         const video = videoRef.current;
