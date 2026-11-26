@@ -448,9 +448,7 @@
     gap: 10px;
     background: var(--forma-sidebar);
     border-top: 1px solid var(--forma-border);
-    /* Fills the strip kept free for the dock below it, so the page doesn't
-       show through between the footer and the bottom of the screen. */
-    box-shadow: 0 84px 0 var(--forma-sidebar);
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
     z-index: 5;
 }
 
@@ -847,3 +845,135 @@
         min-width: 160px;
     }
 }
+
+/* ---------- Phones: the mobile Figma's Photo Editor ----------
+   "Adjust all photos" above the grid, More options opening the Batch
+   settings sheet, and only Model detail and Generate in the bottom bar. */
+@media (max-width: 760px) {
+    .photo-editor-phone-tools {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .photo-editor .photo-editor-phone-adjust {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+    }
+
+    .photo-editor-phone-adjust .eyebrow {
+        margin: 0;
+        color: rgb(var(--forma-accent-rgb));
+    }
+
+    /* Compact buttons, as in the Figma, so the photos stay in view. */
+    .photo-editor .photo-editor-phone-adjust .forma-btn,
+    .photo-editor .photo-editor-more-options {
+        justify-content: center;
+        min-height: 0;
+        padding: 7px 10px;
+        font-size: 0.8rem;
+    }
+
+    .photo-editor-phone-adjust .eyebrow {
+        font-size: 0.62rem;
+    }
+
+    .photo-editor-phone-adjust-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .photo-editor-footer .photo-editor-quality {
+        gap: 6px;
+    }
+
+    .photo-editor .photo-editor-footer .photo-editor-generate .forma-btn-primary {
+        width: 100%;
+    }
+}
+
+/* The Batch settings sheet (phones). */
+.photo-editor-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.photo-editor-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-height: 85vh;
+    box-sizing: border-box;
+    padding: 10px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    border-top: 1px solid var(--forma-border-strong);
+    border-radius: 18px 18px 0 0;
+    background: var(--forma-panel);
+}
+
+.photo-editor-sheet-handle {
+    align-self: center;
+    flex: none;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--forma-border-strong);
+}
+
+.photo-editor-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+    .photo-editor-sheet-head h2 {
+        margin: 0;
+        color: var(--forma-heading);
+        font-size: 1.05rem;
+        font-weight: 600;
+    }
+
+.photo-editor-sheet .photo-editor-sheet-close {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    background: none;
+    color: var(--forma-text-soft);
+    cursor: pointer;
+}
+
+.photo-editor-sheet-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+    .photo-editor-sheet-row .forma-btn {
+        justify-content: center;
+    }
+
+/* In the sheet the adjust card is plain, and Auto fix / Auto colour are
+   already in the card above the grid. */
+.photo-editor-sheet .photo-editor-adjust {
+    padding: 0;
+    border: 0;
+    background: none;
+}
+
+    .photo-editor-sheet .photo-editor-adjust > .eyebrow,
+    .photo-editor-sheet .photo-editor-auto-actions {
+        display: none;
+    }

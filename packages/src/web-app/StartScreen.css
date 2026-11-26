@@ -1,0 +1,144 @@
+/* ============================================================
+   "How do you want to start?" (StartScreen.jsx), laid out like the
+   Figma's mobile start screen: the logo, a big heading, three option
+   cards and "Skip for now". On wider screens the same column sits in the
+   middle of the page. Uses the --forma-* tokens from AppTheme.css.
+   ============================================================ */
+
+.start-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 95; /* above the app and its dialogs */
+    display: flex;
+    justify-content: center;
+    overflow-y: auto;
+    background: var(--forma-bg);
+    font-family: var(--forma-font);
+}
+
+.start-screen-inner {
+    display: flex;
+    flex-direction: column;
+    width: min(560px, 100%);
+    box-sizing: border-box;
+    padding: 40px 20px 28px;
+}
+
+@media (min-width: 761px) {
+    .start-screen-inner {
+        justify-content: center;
+        min-height: 100%;
+        padding-top: 32px;
+    }
+}
+
+.start-screen-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--forma-heading);
+    font-family: 'IBM Plex Sans', var(--forma-font);
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+}
+
+    .start-screen-logo img {
+        width: 20px;
+        height: 20px;
+    }
+
+.start-screen .start-screen-inner h1 {
+    margin: 44px 0 0;
+    color: var(--forma-heading);
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.start-screen .start-screen-lead {
+    margin: 14px 0 0;
+    max-width: none;
+    color: var(--forma-text-muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.start-screen-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.start-screen .start-screen-option {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+    padding: 16px 18px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 10px;
+    background: var(--forma-panel);
+    color: var(--forma-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+    .start-screen .start-screen-option:hover,
+    .start-screen .start-screen-option:focus-visible {
+        border-color: rgb(var(--forma-accent-rgb));
+        background: var(--forma-panel-raised);
+    }
+
+    .start-screen .start-screen-option:focus-visible {
+        outline: 2px solid rgb(var(--forma-accent-rgb));
+        outline-offset: 2px;
+    }
+
+.start-screen-option-icon {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    color: var(--forma-text);
+}
+
+.start-screen-option-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+    .start-screen-option-copy strong {
+        color: var(--forma-heading);
+        font-size: 0.98rem;
+        font-weight: 600;
+    }
+
+    .start-screen-option-copy small {
+        color: var(--forma-text-muted);
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
+.start-screen .start-screen-skip {
+    align-self: flex-start;
+    margin-top: 22px;
+    padding: 4px 0;
+    border: 0;
+    background: none;
+    color: rgb(var(--forma-accent-rgb));
+    font-family: inherit;
+    font-size: 0.92rem;
+    cursor: pointer;
+}
+
+    .start-screen .start-screen-skip:hover {
+        text-decoration: underline;
+    }

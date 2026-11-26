@@ -250,3 +250,34 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+/* Phones: a sheet up from the bottom with a handle, as in the mobile Figma. */
+@media (max-width: 760px) {
+    .add-photos-backdrop {
+        align-items: flex-end;
+        padding: 24px 0 0;
+    }
+
+    .add-photos-dialog {
+        width: 100%;
+        border-bottom: 0;
+        border-radius: 18px 18px 0 0;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+        .add-photos-dialog::before {
+            content: '';
+            align-self: center;
+            flex: none;
+            width: 36px;
+            height: 4px;
+            margin-top: 10px;
+            border-radius: 999px;
+            background: var(--forma-border-strong);
+        }
+
+    .add-photos-head {
+        padding: 10px 16px 12px;
+        border-bottom: 0;
+    }
+}

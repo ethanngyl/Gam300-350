@@ -19,9 +19,11 @@ and uploaded batches) masks out the background when the model is
 built, and the "Model detail" slider (Fast / Normal / Detailed) sets how
 many training iterations the build runs. Edits are only
 settings until upload, so the originals are never changed. Phones get a
-simpler, batch-only set of tools, laid out like the mobile Figma: the
-heading's buttons are hidden, Add photos sits beside Leave out flagged,
-and Generate stays pinned above the tab bar. "Review photos first" in Camera Capture
+simpler, batch-only set of tools, laid out like the mobile Figma: an
+"Adjust all photos" card (Leave out flagged, Auto fix, Auto colour) above
+the grid, More options opening a Batch settings sheet (From library, Add
+photos, the sliders, Use original photos, Remove background, Keep only
+the main object), and Model detail with Generate pinned above the tab bar. "Review photos first" in Camera Capture
 opens the editor with that batch already loaded (initialPhotos); its
 "Back to camera" button returns the photos to the capture page. Opened
 on its own, the same button reads "Go to camera" and takes any photos
@@ -288,6 +290,16 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // Share of the preview that is pure white or black after edits.
     const [previewClippedShare, setPreviewClippedShare] = useState(null);
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
+    // Phones: the Batch settings sheet (More options), as in the mobile Figma.
+    const [isBatchSheetOpen, setIsBatchSheetOpen] = useState(false);
+    useEffect(() => {
+        if (!isBatchSheetOpen) return undefined;
+        function closeOnEscape(event) {
+            if (event.key === 'Escape') setIsBatchSheetOpen(false);
+        }
+        document.addEventListener('keydown', closeOnEscape);
+        return () => document.removeEventListener('keydown', closeOnEscape);
+    }, [isBatchSheetOpen]);
     const [isDragging, setIsDragging] = useState(false);
     // How many photos have been prepared for upload; null when not uploading.
     const [preparedCount, setPreparedCount] = useState(null);
@@ -753,26 +765,194 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     const qualitySlider = (
         <div className="photo-editor-quality">
             <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} disabled={isPreparing} />
-            {!isPhone && (
-                <>
+            <button
+                type="button"
+                className="photo-editor-quality-help"
+                aria-expanded={isQualityHelpOpen}
+                onClick={() => {
+                    setIsQualityHelpOpen((isOpen) => !isOpen);
+                }}
+            >
+                How does this work?
+            </button>
+            {isQualityHelpOpen && (
+                <p className="photo-editor-hint">
+                    More detail trains the model for longer. Fast is quickest to try things out;
+                    Detailed gives the sharpest model but takes the longest to build.
+                </p>
+            )}
+        </div>
+    );
+    // "Adjust all photos": the side panel on wider screens; on phones it is in
+    // the Batch settings sheet (More options), as in the mobile Figma.
+    const adjustCard = (
+        <div className="forma-card photo-editor-adjust">
+            {!isPhone && selectedPhoto ? (
+                <div className="photo-editor-target">
+                    <button
+                        className={isEditingSinglePhoto ? '' : 'is-active'}
+                        onClick={() => changeEditTarget('all')}
+                        disabled={useOriginals}
+                    >
+                        All photos
+                    </button>
+                    <button
+                        className={isEditingSinglePhoto ? 'is-active' : ''}
+                        onClick={() => changeEditTarget('photo')}
+                        disabled={useOriginals}
+                    >
+                        This photo
+                    </button>
+                </div>
+            ) : (
+                <div className="eyebrow">Adjust all photos</div>
+            )}
+
+            {useOriginals && (
+                <p className="photo-editor-hint">
+                    Edits are switched off. Turn off "Use original photos" to apply them again.
+                </p>
+            )}
+
+            {/* Disabling the fieldset disables every control inside it. */}
+            <fieldset className="photo-editor-adjust-fields" disabled={useOriginals}>
+                <div className="photo-editor-auto-actions">
                     <button
                         type="button"
-                        className="photo-editor-quality-help"
-                        aria-expanded={isQualityHelpOpen}
-                        onClick={() => {
-                            setIsQualityHelpOpen((isOpen) => !isOpen);
-                        }}
+                        className="forma-btn"
+                        onClick={handleAutoFix}
+                        disabled={autoSourceAnalyses.length === 0}
                     >
-                        How does this work?
+                        <Icon name="wand" size={16} /> Auto fix
                     </button>
-                    {isQualityHelpOpen && (
-                        <p className="photo-editor-hint">
-                            More detail trains the model for longer. Fast is quickest to try things out;
-                            Detailed gives the sharpest model but takes the longest to build.
-                        </p>
+                    <button
+                        type="button"
+                        className="forma-btn"
+                        onClick={handleAutoColor}
+                        disabled={autoSourceAnalyses.length === 0}
+                    >
+                        <Icon name="sun" size={16} /> Auto colour
+                    </button>
+                    {!isPhone && (
+                        <button
+                            type="button"
+                            className={isPickToolActive ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                            onClick={togglePickNeutral}
+                            disabled={!selectedPhoto || isCropToolActive}
+                        >
+                            <Icon name="target" size={16} /> {isPickToolActive ? 'Cancel picking' : 'Pick neutral spot'}
+                        </button>
                     )}
-                </>
-            )}
+                </div>
+
+                {colorMessage && <p className="photo-editor-warning">{colorMessage}</p>}
+
+                <EditSlider
+                    label="Brightness"
+                    settingName="brightness"
+                    value={currentEdits.brightness}
+                    min={-50}
+                    max={50}
+                    onChange={(value) => updateEdits({ brightness: value })}
+                />
+                <EditSlider
+                    label="Contrast"
+                    settingName="contrast"
+                    value={currentEdits.contrast}
+                    min={-50}
+                    max={50}
+                    onChange={(value) => updateEdits({ contrast: value })}
+                />
+                <EditSlider
+                    label="Warmth"
+                    settingName="warmth"
+                    value={currentEdits.warmth}
+                    min={-50}
+                    max={50}
+                    onChange={(value) => updateEdits({ warmth: value })}
+                />
+                <EditSlider
+                    label="Tint"
+                    settingName="tint"
+                    value={currentEdits.tint}
+                    min={-50}
+                    max={50}
+                    onChange={(value) => updateEdits({ tint: value })}
+                />
+                <EditSlider
+                    label="Sharpen"
+                    settingName="sharpen"
+                    value={currentEdits.sharpen}
+                    min={0}
+                    max={100}
+                    isSigned={false}
+                    onChange={(value) => updateEdits({ sharpen: value })}
+                />
+
+                {isPhone && (
+                    <label className="photo-editor-slider">
+                        <span>Trim edges <b>{Math.round(batchEdits.crop.left * 100)}%</b></span>
+                        <input
+                            type="range"
+                            min="0"
+                            max={MAX_TRIM_PERCENT}
+                            value={Math.round(batchEdits.crop.left * 100)}
+                            onChange={(event) => handleTrimChange(Number(event.target.value))}
+                        />
+                    </label>
+                )}
+
+                {hasLargeCrop && (
+                    <p className="photo-editor-warning">
+                        Large crop: check the object stays fully inside it in every photo, not just this one.
+                    </p>
+                )}
+                {hasMixedCrops && (
+                    <p className="photo-editor-warning">
+                        Some photos are cropped differently from the others. This can lower the
+                        quality of the 3D model, so keep crops the same where you can.
+                    </p>
+                )}
+
+                {isEditingSinglePhoto ? (
+                    <p className="photo-editor-hint">
+                        These edits apply to this photo only. For the best 3D result, keep your
+                        photos looking consistent with each other.
+                    </p>
+                ) : (
+                    <p className="photo-editor-hint">
+                        Changes apply to every photo equally, so they still line up for the 3D
+                        model. Edited photos lose camera details that help reconstruction, so
+                        only change what you need to.
+                    </p>
+                )}
+                {!isPhone && !selectedPhoto && (
+                    <p className="photo-editor-hint">
+                        Select a photo to crop it, pick a neutral spot, or edit it on its own.
+                    </p>
+                )}
+                {isPhone && (
+                    <p className="photo-editor-hint">
+                        Cropping by hand and editing single photos are available on a larger screen.
+                    </p>
+                )}
+
+                <div className="photo-editor-adjust-actions">
+                    <button
+                        type="button"
+                        className="forma-btn"
+                        onClick={resetCurrentEdits}
+                        disabled={!hasEdits(currentEdits)}
+                    >
+                        <Icon name="refresh" size={16} /> Reset
+                    </button>
+                    {isEditingSinglePhoto && selectedPhoto.customEdits && (
+                        <button type="button" className="forma-btn" onClick={matchAllPhotos}>
+                            Match all photos
+                        </button>
+                    )}
+                </div>
+            </fieldset>
         </div>
     );
     const generateArea = (
@@ -893,12 +1073,39 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                             <button className="forma-btn photo-editor-keep-all" onClick={keepAll}>
                                 <Icon name="refresh" size={14} /> Keep all
                             </button>
-                            {/* Phones: the heading's buttons are hidden, so Add photos is here. */}
-                            <button className="forma-btn photo-editor-phone-add" onClick={openFilePicker}>
-                                <Icon name="plus" size={14} /> Add photos
-                            </button>
                         </div>
                     </div>
+
+                    {isPhone && (
+                        <div className="photo-editor-phone-tools">
+                            <div className="forma-card photo-editor-phone-adjust">
+                                <div className="eyebrow">Adjust all photos</div>
+                                <button className="forma-btn" onClick={leaveOutFlagged} disabled={flaggedCount === 0}>
+                                    <Icon name="eye" size={14} /> Leave out flagged
+                                </button>
+                                <div className="photo-editor-phone-adjust-row">
+                                    <button
+                                        className="forma-btn"
+                                        onClick={handleAutoFix}
+                                        disabled={useOriginals || autoSourceAnalyses.length === 0}
+                                    >
+                                        <Icon name="wand" size={14} /> Auto fix
+                                    </button>
+                                    <button
+                                        className="forma-btn"
+                                        onClick={handleAutoColor}
+                                        disabled={useOriginals || autoSourceAnalyses.length === 0}
+                                    >
+                                        <Icon name="sun" size={14} /> Auto colour
+                                    </button>
+                                </div>
+                                {colorMessage && <p className="photo-editor-warning">{colorMessage}</p>}
+                            </div>
+                            <button className="forma-btn photo-editor-more-options" onClick={() => setIsBatchSheetOpen(true)}>
+                                <Icon name="settings" size={14} /> More options
+                            </button>
+                        </div>
+                    )}
 
                     <div className={isDragging ? 'photo-editor-body is-dragging' : 'photo-editor-body'}>
                         <div className="photo-editor-grid">
@@ -1051,178 +1258,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                 </div>
                             )}
 
-                            <div className="forma-card photo-editor-adjust">
-                                {!isPhone && selectedPhoto ? (
-                                    <div className="photo-editor-target">
-                                        <button
-                                            className={isEditingSinglePhoto ? '' : 'is-active'}
-                                            onClick={() => changeEditTarget('all')}
-                                            disabled={useOriginals}
-                                        >
-                                            All photos
-                                        </button>
-                                        <button
-                                            className={isEditingSinglePhoto ? 'is-active' : ''}
-                                            onClick={() => changeEditTarget('photo')}
-                                            disabled={useOriginals}
-                                        >
-                                            This photo
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="eyebrow">Adjust all photos</div>
-                                )}
-
-                                {useOriginals && (
-                                    <p className="photo-editor-hint">
-                                        Edits are switched off. Turn off "Use original photos" to apply them again.
-                                    </p>
-                                )}
-
-                                {/* Disabling the fieldset disables every control inside it. */}
-                                <fieldset className="photo-editor-adjust-fields" disabled={useOriginals}>
-                                    <div className="photo-editor-auto-actions">
-                                        <button
-                                            type="button"
-                                            className="forma-btn"
-                                            onClick={handleAutoFix}
-                                            disabled={autoSourceAnalyses.length === 0}
-                                        >
-                                            <Icon name="wand" size={16} /> Auto fix
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="forma-btn"
-                                            onClick={handleAutoColor}
-                                            disabled={autoSourceAnalyses.length === 0}
-                                        >
-                                            <Icon name="sun" size={16} /> Auto colour
-                                        </button>
-                                        {!isPhone && (
-                                            <button
-                                                type="button"
-                                                className={isPickToolActive ? 'forma-btn forma-btn-primary' : 'forma-btn'}
-                                                onClick={togglePickNeutral}
-                                                disabled={!selectedPhoto || isCropToolActive}
-                                            >
-                                                <Icon name="target" size={16} /> {isPickToolActive ? 'Cancel picking' : 'Pick neutral spot'}
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {colorMessage && <p className="photo-editor-warning">{colorMessage}</p>}
-
-                                    <EditSlider
-                                        label="Brightness"
-                                        settingName="brightness"
-                                        value={currentEdits.brightness}
-                                        min={-50}
-                                        max={50}
-                                        onChange={(value) => updateEdits({ brightness: value })}
-                                    />
-                                    {!isPhone && (
-                                        <EditSlider
-                                            label="Contrast"
-                                            settingName="contrast"
-                                            value={currentEdits.contrast}
-                                            min={-50}
-                                            max={50}
-                                            onChange={(value) => updateEdits({ contrast: value })}
-                                        />
-                                    )}
-                                    <EditSlider
-                                        label="Warmth"
-                                        settingName="warmth"
-                                        value={currentEdits.warmth}
-                                        min={-50}
-                                        max={50}
-                                        onChange={(value) => updateEdits({ warmth: value })}
-                                    />
-                                    {!isPhone && (
-                                        <EditSlider
-                                            label="Tint"
-                                            settingName="tint"
-                                            value={currentEdits.tint}
-                                            min={-50}
-                                            max={50}
-                                            onChange={(value) => updateEdits({ tint: value })}
-                                        />
-                                    )}
-                                    <EditSlider
-                                        label="Sharpen"
-                                        settingName="sharpen"
-                                        value={currentEdits.sharpen}
-                                        min={0}
-                                        max={100}
-                                        isSigned={false}
-                                        onChange={(value) => updateEdits({ sharpen: value })}
-                                    />
-
-                                    {isPhone && (
-                                        <label className="photo-editor-slider">
-                                            <span>Trim edges <b>{Math.round(batchEdits.crop.left * 100)}%</b></span>
-                                            <input
-                                                type="range"
-                                                min="0"
-                                                max={MAX_TRIM_PERCENT}
-                                                value={Math.round(batchEdits.crop.left * 100)}
-                                                onChange={(event) => handleTrimChange(Number(event.target.value))}
-                                            />
-                                        </label>
-                                    )}
-
-                                    {hasLargeCrop && (
-                                        <p className="photo-editor-warning">
-                                            Large crop: check the object stays fully inside it in every photo, not just this one.
-                                        </p>
-                                    )}
-                                    {hasMixedCrops && (
-                                        <p className="photo-editor-warning">
-                                            Some photos are cropped differently from the others. This can lower the
-                                            quality of the 3D model, so keep crops the same where you can.
-                                        </p>
-                                    )}
-
-                                    {isEditingSinglePhoto ? (
-                                        <p className="photo-editor-hint">
-                                            These edits apply to this photo only. For the best 3D result, keep your
-                                            photos looking consistent with each other.
-                                        </p>
-                                    ) : (
-                                        <p className="photo-editor-hint">
-                                            Changes apply to every photo equally, so they still line up for the 3D
-                                            model. Edited photos lose camera details that help reconstruction, so
-                                            only change what you need to.
-                                        </p>
-                                    )}
-                                    {!isPhone && !selectedPhoto && (
-                                        <p className="photo-editor-hint">
-                                            Select a photo to crop it, pick a neutral spot, or edit it on its own.
-                                        </p>
-                                    )}
-                                    {isPhone && (
-                                        <p className="photo-editor-hint">
-                                            Cropping by hand, contrast, tint and editing single photos are available on a larger screen.
-                                        </p>
-                                    )}
-
-                                    <div className="photo-editor-adjust-actions">
-                                        <button
-                                            type="button"
-                                            className="forma-btn"
-                                            onClick={resetCurrentEdits}
-                                            disabled={!hasEdits(currentEdits)}
-                                        >
-                                            <Icon name="refresh" size={16} /> Reset
-                                        </button>
-                                        {isEditingSinglePhoto && selectedPhoto.customEdits && (
-                                            <button type="button" className="forma-btn" onClick={matchAllPhotos}>
-                                                Match all photos
-                                            </button>
-                                        )}
-                                    </div>
-                                </fieldset>
-                            </div>
+                            {!isPhone && adjustCard}
 
                             {!isPhone && generateArea}
                         </aside>
@@ -1230,9 +1266,54 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
 
                     {isPhone && (
                         <div className="photo-editor-footer">
-                            {buildOptions}
                             {qualitySlider}
                             {generateArea}
+                        </div>
+                    )}
+
+                    {isPhone && isBatchSheetOpen && (
+                        <div
+                            className="photo-editor-sheet-backdrop"
+                            onPointerDown={(event) => {
+                                if (event.target === event.currentTarget) setIsBatchSheetOpen(false);
+                            }}
+                        >
+                            <div className="photo-editor-sheet" role="dialog" aria-modal="true" aria-labelledby="batch-settings-title">
+                                <span className="photo-editor-sheet-handle" aria-hidden="true" />
+                                <div className="photo-editor-sheet-head">
+                                    <h2 id="batch-settings-title">Batch settings</h2>
+                                    <button
+                                        type="button"
+                                        className="photo-editor-sheet-close"
+                                        aria-label="Close"
+                                        onClick={() => setIsBatchSheetOpen(false)}
+                                    >
+                                        <Icon name="close" size={14} />
+                                    </button>
+                                </div>
+                                <div className="photo-editor-sheet-row">
+                                    <button
+                                        className="forma-btn"
+                                        onClick={() => {
+                                            setIsBatchSheetOpen(false);
+                                            openLibraryPicker();
+                                        }}
+                                    >
+                                        <Icon name="image" size={14} /> From library
+                                    </button>
+                                    <button
+                                        className="forma-btn"
+                                        onClick={() => {
+                                            setIsBatchSheetOpen(false);
+                                            openFilePicker();
+                                        }}
+                                    >
+                                        <Icon name="plus" size={14} /> Add photos
+                                    </button>
+                                </div>
+                                {adjustCard}
+                                {buildOptions}
+                            </div>
                         </div>
                     )}
                 </>

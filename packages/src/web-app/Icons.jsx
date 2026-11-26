@@ -36,6 +36,8 @@ const ICON_PATHS = {
     monitor: (<><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></>),
     palette: (<><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.3-1.7-.4-1 .3-2.3 1.5-2.3H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10z" /><circle cx="7.5" cy="11" r="1" /><circle cx="10.5" cy="7" r="1" /><circle cx="15" cy="7.5" r="1" /></>),
     folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
+    // A lightning bolt: the camera's flash.
+    flash: (<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />),
     image: (<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="m21 16-5-5-8 9" /></>),
     search: (<><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>),
     filter: <path d="M3 5h18l-7 8v6l-4 2v-8z" />,

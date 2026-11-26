@@ -7,8 +7,8 @@
 \date 17-11-2026
 \brief
 Whether the window is in the mobile view (760px wide or less). The app
-shows the sidebar and top bar above that width, and the phone dock
-(Dock.jsx) at or below it.
+shows the sidebar and top bar above that width, and at or below it the
+phone layout (the top bar and a camera button, App.jsx).
 - MOBILE_QUERY
 The media query for the mobile view (the CSS uses the same 760px).
 - useMobileView()

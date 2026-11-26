@@ -264,3 +264,55 @@
 :root[data-theme="light"] .add-photos-dialog .add-photos-review-side .forma-btn:not(.forma-btn-primary) {
     background: var(--forma-panel-alt);
 }
+
+/* ---------- Phones: the Figma's mobile screens ----------
+   Two-way switches (Home's Your models / Your photos, the Media Library's
+   3D Models / Photos) and the account tabs fill the width, with the open
+   one in pink. */
+@media (max-width: 760px) {
+    .home-screen .home-recent-tabs,
+    .library-subtabs {
+        display: flex;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 3px;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 8px;
+        background: var(--forma-panel);
+    }
+
+    .home-screen .home-recent-tab,
+    .library-subtab {
+        flex: 1;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 6px;
+        font-size: 0.82rem;
+        text-align: center;
+    }
+
+        .home-screen .home-recent-tab.is-active,
+        .library-subtab.is-active,
+        .acct-menu-item.is-active {
+            background: rgb(var(--forma-accent-rgb));
+            color: #ffffff;
+        }
+
+            .acct-menu-item.is-active svg {
+                color: #ffffff;
+            }
+
+    /* Home's "View all models" link in pink. */
+    .home-screen .home-view-all-link {
+        color: rgb(var(--forma-accent-rgb));
+    }
+
+    /* The Media Library's title, as on the Photo Editor. */
+    .library-screen > .page-title {
+        display: block;
+        margin: 4px 0 14px;
+        color: var(--forma-heading);
+        font-size: 1.6rem;
+        font-weight: 700;
+    }
+}

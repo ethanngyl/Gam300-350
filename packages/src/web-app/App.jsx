@@ -11,17 +11,22 @@ Top-level app shell. Signed out, it shows the landing page
 in (#/login) or get started (#/signup); the session is kept in
 localStorage. Once signed in it renders the GENESIS dashboard, laid out
 like the Genesis Figma: a top bar (TopNav.jsx) and a left sidebar
-(Sidebar.jsx) around the page on wider screens, or the top bar and the
-phone tab bar (Dock.jsx) at 760px wide or less (phones show Capture full
-screen, without either). The pages: Home, Library, Photo Editor,
-Scene Builder, Model Viewer, Video Extractor (FrameExtractor.jsx),
-Feedback, Capture and Account. Capture opens from the New model dialog's
-"Capture with camera" (or the tab bar on phones); its "Review photos
+(Sidebar.jsx) around the page on wider screens. At 760px wide or less it
+follows JM's mobile Figma: the top bar and, on Home, the Library and the
+model page, a pink camera button that opens Capture (shown full screen).
+Phones reach the Library from Home's "View all", models by tapping them,
+the Photo Editor after Capture or by picking photos from Capture's gallery
+button, and the Video Extractor by picking a video there; Scene Builder
+shows a note that it needs a larger screen. The pages: Home, Library,
+Photo Editor, Scene Builder, Model Viewer, Video Extractor
+(FrameExtractor.jsx), Feedback, Capture and Account. Capture also opens
+from the New model dialog's "Capture with camera"; its "Review photos
 first" hands the batch to the Photo Editor. The first time each account
-signs in on this browser, wider screens show the Figma's welcome card
-(Tips.jsx), whose "Take the tour" starts the walkthrough (Walkthrough.jsx)
-of each page in the sidebar and the profile; phones go straight to the
-walkthrough, over the tab bar. The Video Extractor shows its own tip the
+signs in on this browser it is asked "How do you want to start?"
+(StartScreen.jsx: upload photos, use a video or take pictures), then Home
+shows the Figma's welcome card (Tips.jsx), whose "Take the tour" starts
+the walkthrough (Walkthrough.jsx) of each page in the sidebar (on phones:
+the camera button, View all and the profile) and the profile. The Video Extractor shows its own tip the
 first time it opens. Learn in the sidebar and "Show walkthrough" replay
 the walkthrough.
 Opening a model (from Home, the Media Library or the Model Viewer, a .ply
@@ -47,9 +52,9 @@ import CameraCapture from './CameraCapture.jsx';
 import Processing from './Processing.jsx';
 import FrameExtractor from './FrameExtractor.jsx';
 import ImageGallery from './ImageGallery.jsx';
-import Dock from './Dock.jsx';
 import Sidebar from './Sidebar.jsx';
 import TopNav from './TopNav.jsx';
+import Icon from './Icons.jsx';
 import LandingScreen from './LandingScreen.jsx';
 import HomeScreen from './HomeScreen.jsx';
 import LibraryScreen from './LibraryScreen.jsx';
@@ -64,6 +69,7 @@ import Walkthrough from './Walkthrough.jsx';
 import AddPhotosDialog from './AddPhotosDialog.jsx';
 import { TipCard, WelcomeCard } from './Tips.jsx';
 import { VIDEO_TIP } from './TipsContent.js';
+import StartScreen from './StartScreen.jsx';
 import BuildPanel from './BuildPanel.jsx';
 import { useBackgroundBuilds } from './useBackgroundBuilds.js';
 import { useUndoableState } from './useUndoableState.js';
@@ -132,6 +138,29 @@ function hasSeenWalkthrough(email) {
 function markWalkthroughSeen(email) {
     try {
         window.localStorage.setItem(`${WALKTHROUGH_SEEN_KEY_PREFIX}${email}`, 'true');
+    } catch {
+        // Storage unavailable: nothing to remember it in.
+    }
+}
+
+// Phones: the pages that show the camera button (JM's mobile Figma).
+const CAMERA_BUTTON_PAGES = ['home', 'library', 'model'];
+
+// The same for "How do you want to start?" (StartScreen.jsx), answered once
+// per account on this browser.
+const START_SEEN_KEY_PREFIX = 'genesis-start-seen:';
+
+function hasSeenStart(email) {
+    try {
+        return window.localStorage.getItem(`${START_SEEN_KEY_PREFIX}${email}`) === 'true';
+    } catch {
+        return true;
+    }
+}
+
+function markStartSeen(email) {
+    try {
+        window.localStorage.setItem(`${START_SEEN_KEY_PREFIX}${email}`, 'true');
     } catch {
         // Storage unavailable: nothing to remember it in.
     }
@@ -488,6 +517,13 @@ function App() {
         openLibrary('models');
     }
 
+    // Phones: a video picked with Capture's gallery button opens the Video
+    // Extractor with it.
+    function openVideosInExtractor(files) {
+        goToTab('extractor');
+        setFrameExtractorDraft({ files });
+    }
+
     // A failed build: back to the Photo Editor or the Video Extractor with its files.
     function retryBuild(build) {
         backgroundBuilds.dismissBuild(build.key);
@@ -523,12 +559,20 @@ function App() {
         goToTab('scene');
     }
 
-    // The walkthrough: on request, or on phones the first time an account
-    // signs in here.
+    // The first time an account signs in here: "How do you want to start?",
+    // then the welcome card on Home (phones too), which offers the tour.
     const isFirstVisit = Boolean(currentUser) && !hasSeenWalkthrough(currentUser.email);
-    const isWalkthroughOpen = Boolean(currentUser) && (isReplayingWalkthrough || (isMobile && isFirstVisit));
-    // Wider screens: the welcome card on Home the first time, until it is answered.
-    const isWelcomeOpen = !isMobile && isFirstVisit && !isReplayingWalkthrough && activeTab === 'home';
+    const isStartOpen = isFirstVisit && !hasSeenStart(currentUser.email);
+    // The walkthrough: on request (Take the tour, Learn, Show walkthrough).
+    const isWalkthroughOpen = Boolean(currentUser) && isReplayingWalkthrough;
+    const isWelcomeOpen = isFirstVisit && !isStartOpen && !isReplayingWalkthrough && !isNewModelOpen && activeTab === 'home';
+
+    // A choice on "How do you want to start?". Each opens the page it names.
+    function answerStart(tab) {
+        markStartSeen(currentUser.email);
+        setWalkthroughCloseCount((closeCount) => closeCount + 1);
+        goToTab(tab);
+    }
 
     // Take the tour, Learn and "Show walkthrough": the walkthrough from step
     // 1, on Home.
@@ -595,17 +639,24 @@ function App() {
     // opened from; phones show it as a page.
     const isAccountWindowOpen = !isMobile && activeTab === 'account';
     const pageTab = isAccountWindowOpen ? accountReturnTab : activeTab;
+    // Phones: the pink camera button in the middle of the bottom, on the pages
+    // JM's mobile Figma shows it on (the others have their own bottom bar).
+    const hasCameraButton = isMobile && CAMERA_BUTTON_PAGES.includes(pageTab);
     const isVideoTipOpen = !isMobile && pageTab === 'extractor' && !isWalkthroughOpen
         && !isAccountWindowOpen && !hasSeenTip(VIDEO_TIP.id, currentUser.email);
 
     return (
-        <div className={isMobile ? 'forma-app genesis-shell has-mobile-topbar' : 'forma-app genesis-shell has-app-sidebar'}>
+        <div className={isMobile
+            ? `forma-app genesis-shell has-mobile-topbar${hasCameraButton ? ' has-camera-button' : ''}`
+            : 'forma-app genesis-shell has-app-sidebar'}>
             {/* Phones: the full-screen camera has no top bar, and the model
                 page has its own header with a back button instead. */}
             {!(isMobile && (pageTab === 'capture' || pageTab === 'model')) && (
                 <TopNav
                     user={currentUser}
                     isCompact={isMobile}
+                    // Phones: "Back to home" in place of the logo on other pages, as in the Figma.
+                    isBackToHome={isMobile && pageTab !== 'home'}
                     onGoHome={() => goToTab('home')}
                     onOpenModel={openModel}
                     onOpenLibrary={openLibrary}
@@ -653,7 +704,17 @@ function App() {
                             onBackToCapture={returnPhotosToCapture}
                         />
                     )}
-                    {pageTab === 'scene' && (
+                    {pageTab === 'scene' && isMobile && (
+                        // Phones: the controls don't fit a small touch screen (JM's mobile Figma has no Scene Builder).
+                        <section className="phone-only-note">
+                            <h1 className="page-title">Scene Builder</h1>
+                            <p>Scene Builder works best on a larger screen. Open Genesis on a computer or tablet to arrange your models.</p>
+                            <button type="button" className="forma-btn forma-btn-primary" onClick={() => goToTab('home')}>
+                                Back to home
+                            </button>
+                        </section>
+                    )}
+                    {pageTab === 'scene' && !isMobile && (
                         <SceneBuilderScreen
                             objects={scene.value}
                             onObjectsChange={scene.set}
@@ -679,6 +740,7 @@ function App() {
                         <CameraCapture
                             onBatchReady={handleBatchReady}
                             onReviewPhotos={reviewPhotosInEditor}
+                            onPickVideos={openVideosInExtractor}
                             onBack={() => goToTab('home')}
                             uploadError={uploadError}
                             initialPhotos={photosForCapture}
@@ -708,7 +770,8 @@ function App() {
                             onNamePromptClose={() => setNamePromptJobId(null)}
                             onBack={() => goToTab(modelReturnTab)}
                             onOpenPhotos={() => openLibrary('photos')}
-                            onAddToScene={addModelToScene}
+                            // Phones have no Scene Builder, so no Add to scene.
+                            onAddToScene={isMobile ? null : addModelToScene}
                             onDeleted={() => goToTab(modelReturnTab === 'model' ? 'library' : modelReturnTab)}
                         />
                     )}
@@ -754,18 +817,25 @@ function App() {
                 onShowDetails={showBuildDetails}
             />
 
+            {isStartOpen && (
+                <StartScreen
+                    onUploadPhotos={() => {
+                        answerStart('home');
+                        openNewModel();
+                    }}
+                    onUseVideo={() => answerStart('extractor')}
+                    onUseCamera={() => answerStart('capture')}
+                    onSkip={() => answerStart('home')}
+                />
+            )}
             {isWalkthroughOpen && <Walkthrough isGuest={currentUser.isGuest} onClose={closeWalkthrough} />}
             {isWelcomeOpen && <WelcomeCard onTakeTour={showWalkthroughAgain} onExplore={skipWelcome} />}
             {isVideoTipOpen && <TipCard tip={VIDEO_TIP} primaryLabel="Got it" onPrimary={closeVideoTip} />}
 
-            {isMobile && pageTab !== 'capture' && (
-                <Dock
-                    // The model page belongs with the Media Library, where
-                    // phones open models from.
-                    activeTab={activeTab === 'model' ? 'library' : activeTab}
-                    onNavigate={goToTab}
-                    onNewModel={() => goToTab('capture')}
-                />
+            {hasCameraButton && (
+                <button type="button" className="phone-camera-button" aria-label="Capture" onClick={() => goToTab('capture')}>
+                    <Icon name="camera" size={24} />
+                </button>
             )}
         </div>
     );

@@ -12,8 +12,11 @@ bottom) and the chosen section beside it. On wider screens it opens as a
 window over the page it was opened from (isModal; the X or Escape closes
 it); on phones it is a page, and the menu becomes a row of tabs above the
 section. Sections:
-- Profile: the user's photo, name, plan and email, counts of their models
-  and photos, and their models and photo batches (from GET /jobs).
+- Profile: laid out like the Figma's mobile Profile: the user's photo (or
+  initials), name and an Update button (to My account, where the photo is
+  changed); a plan card with cloud storage and counts of models, scenes
+  (saved scenes, SceneStorage.js) and photos; then their models and photo
+  batches (from GET /jobs).
 - My account: profile photo (saved in this browser, see ProfilePhoto.js),
   name, email, password ("Change password" opens ChangePasswordDialog;
   Google-only accounts, per GET /api/v1/auth/me/account, have none),
@@ -50,6 +53,7 @@ open a model or the Photo Library from the Profile section.
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { jobDisplayName } from './mediaApi.js';
+import { listScenes } from './SceneStorage.js';
 import { CURRENT_PLAN_ID, PLANS } from './plans.js';
 import {
     SOUND_CATEGORY_IDS,
@@ -148,6 +152,13 @@ const NOTIFICATION_PREFS_KEY = 'genesis-notification-prefs';
 
 // Saved notification choices: { [id]: { email, inApp } }. Everything is on
 // until the user changes it. Storage can be blocked, so it is wrapped.
+// Initials for the avatar when there is no profile photo ("Shaun Li" -> "SL"),
+// as the top bar shows them.
+function initialsOf(name) {
+    const words = (name || '').trim().split(/\s+/).filter(Boolean);
+    return words.slice(0, 2).map((word) => word[0].toUpperCase()).join('') || '?';
+}
+
 function loadNotificationPrefs() {
     try {
         return JSON.parse(window.localStorage.getItem(NOTIFICATION_PREFS_KEY)) ?? {};
@@ -188,6 +199,8 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     const [notificationPrefs, setNotificationPrefs] = useState(loadNotificationPrefs);
     const [jobs, setJobs] = useState([]);
     const [statsStatus, setStatsStatus] = useState('loading');
+    // Saved scenes, for the Profile's Scenes count (null until loaded or if it fails).
+    const [sceneCount, setSceneCount] = useState(null);
     const [photoError, setPhotoError] = useState(null);
     const [planNotice, setPlanNotice] = useState(null);
     // How the account signs in: { password, google }, or null until
@@ -209,6 +222,18 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     const profilePhoto = useProfilePhoto(user.email);
     const volumePercent = Math.round(volume * 100);
     const currentPlan = PLANS.find((plan) => plan.id === CURRENT_PLAN_ID);
+
+    useEffect(() => {
+        let isCancelled = false;
+        listScenes()
+            .then((scenes) => {
+                if (!isCancelled) setSceneCount(scenes.length);
+            })
+            .catch(() => { });
+        return () => {
+            isCancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         let isCancelled = false;
@@ -298,14 +323,13 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
         setActiveSection(sectionId);
     }
 
+    // The profile photo, or the user's initials (as in the top bar) when
+    // there isn't one. iconSize is kept for the guest icon.
     function renderAvatar(className, iconSize) {
-        return (
-            <span className={`acct-avatar ${className}`}>
-                {profilePhoto
-                    ? <img src={profilePhoto} alt="" />
-                    : <Icon name="user" size={iconSize} />}
-            </span>
-        );
+        let content = <span className="acct-avatar-initials">{initialsOf(user.name)}</span>;
+        if (profilePhoto) content = <img src={profilePhoto} alt="" />;
+        else if (user.isGuest) content = <Icon name="user" size={iconSize} />;
+        return <span className={`acct-avatar ${className}`}>{content}</span>;
     }
 
     // Delete account: the typed word must match, then the server removes the
@@ -624,21 +648,50 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
         const items = profileTab === 'models' ? finishedJobs : photoBatches;
         return (
             <>
-                <div className="forma-card acct-card acct-profile-head">
+                <div className="acct-profile-head">
                     {renderAvatar('acct-avatar-large', 40)}
                     <div className="acct-profile-identity">
-                        <h1 className="acct-title">
-                            {user.name}
-                            <span className="acct-plan-chip">{user.isGuest ? 'Guest' : currentPlan.name.replace('Genesis ', '')}</span>
-                        </h1>
-                        <p className="acct-muted">{user.email}</p>
+                        <h1 className="acct-title">{user.name}</h1>
+                        {!user.isGuest && (
+                            <button
+                                type="button"
+                                className="acct-update-button"
+                                onClick={() => openSection('account')}
+                            >
+                                <Icon name="edit" size={12} /> Update
+                            </button>
+                        )}
                     </div>
+                    <p className="acct-muted acct-profile-email">{user.email}</p>
                 </div>
 
-                <div className="forma-card acct-profile-stats">
-                    <div><strong>{statsStatus === 'ready' ? finishedJobs.length : '-'}</strong><span>Models</span></div>
-                    <div><strong>{statsStatus === 'ready' ? photoBatches.length : '-'}</strong><span>Photo batches</span></div>
-                    <div><strong>{statsStatus === 'ready' ? photoCount : '-'}</strong><span>Photos</span></div>
+                <div className="forma-card acct-profile-plan">
+                    <div className="acct-profile-plan-head">
+                        <span className="acct-plan-chip">{user.isGuest ? 'Guest' : currentPlan.name.replace('Genesis ', '')}</span>
+                        <strong>{user.isGuest ? 'Guest' : currentPlan.name}</strong>
+                        {!user.isGuest && (
+                            <button
+                                type="button"
+                                className="acct-icon-link"
+                                aria-label="Compare plans"
+                                onClick={() => openSection('plans')}
+                            >
+                                <Icon name="link" size={14} />
+                            </button>
+                        )}
+                    </div>
+                    <div className="acct-profile-storage">
+                        <span>Cloud storage</span>
+                        <span className="acct-mono">{'\u2013'} of {currentPlan.storage}</span>
+                    </div>
+                    {/* Storage used isn't reported by the server yet, so the bar stays empty. */}
+                    <span className="acct-storage-bar" aria-hidden="true"><span style={{ width: '0%' }} /></span>
+                    <p className="acct-muted acct-profile-storage-note">Storage use coming soon</p>
+                    <div className="acct-profile-stats">
+                        <div><strong>{statsStatus === 'ready' ? finishedJobs.length : '-'}</strong><span>Models</span></div>
+                        <div><strong>{sceneCount ?? '-'}</strong><span>Scenes</span></div>
+                        <div><strong>{statsStatus === 'ready' ? photoCount : '-'}</strong><span>Photos</span></div>
+                    </div>
                 </div>
 
                 <div className="acct-tabs" role="tablist">

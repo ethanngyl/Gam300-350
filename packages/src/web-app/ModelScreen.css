@@ -565,3 +565,105 @@
             margin-top: 6px;
         }
 }
+
+/* ---------- Phones: the mobile Figma's order ----------
+   The viewer first, then the name and badge, then the panel. */
+@media (max-width: 760px) {
+    .model-body {
+        display: contents;
+    }
+
+    .model-viewer {
+        order: 1;
+    }
+
+    .model-head {
+        order: 2;
+    }
+
+    .model-side {
+        order: 3;
+    }
+
+    .model-viewer-hint {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        z-index: 11;
+        display: block;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(var(--forma-bg-rgb), 0.7);
+        color: var(--forma-text-soft);
+        font-size: 0.72rem;
+    }
+
+    .model-title-row .model-badge {
+        align-self: center;
+    }
+}
+
+/* The phone "Export model" sheet. */
+.model-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.model-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--forma-border-strong);
+    border-radius: 18px 18px 0 0;
+    background: var(--forma-panel);
+    font-family: var(--forma-font);
+}
+
+.model-sheet-handle {
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    margin-bottom: 4px;
+    border-radius: 999px;
+    background: var(--forma-border-strong);
+}
+
+.model-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+    .model-sheet-head h2 {
+        margin: 0;
+        color: var(--forma-heading);
+        font-size: 1.05rem;
+        font-weight: 600;
+    }
+
+.model-sheet .model-sheet-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 8px;
+    background: var(--forma-panel-alt);
+    color: var(--forma-text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+    .model-sheet .model-sheet-option:hover {
+        border-color: rgb(var(--forma-accent-rgb));
+    }

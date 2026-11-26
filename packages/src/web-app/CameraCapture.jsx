@@ -25,10 +25,14 @@ clicking it asks for the camera again. The Remove background option and
 the Model detail slider (training iteration cap) are here and in the Photo
 Editor; coming back from there ("Back to camera"), initialPhotos brings
 the batch and those choices back with it.
-On phones the page is the mobile Figma's full-screen camera instead: close
-at the top left, the shot count, and upload at the top right; Manual / Auto
-above the shutter; the last photo and Done (both open the batch in the
-Photo Editor) beside it. Auto-capture uses its default interval and cap.
+On phones the page is JM's mobile Figma's full-screen camera instead:
+close at the top left, the shot count, and flash at the top right (only
+where the browser can turn the torch on, mostly Android Chrome); Manual /
+Auto above the shutter; the gallery button (showing the last photo) and
+Done beside it. The gallery button opens the phone's own picker: photos
+go to the Photo Editor with the shots taken so far, and a video opens the
+Video Extractor with it (onPickVideos). Done opens the batch in the Photo
+Editor. Auto-capture uses its default interval and cap.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -38,6 +42,7 @@ import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
 import { usePhotoThumbnails } from './PhotoThumbnails.js';
+import { MEDIA_ACCEPT, MEDIA_EXT_RE } from './mediaJobs.js';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import { useMobileView } from './useMobileView.js';
@@ -108,9 +113,11 @@ function createBatchPhoto(file) {
 
 // initialPhotos: { files, removeBackground, autoCrop, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
+// onPickVideos(files): phones, a video picked with the gallery button.
 function CameraCapture({
     onBatchReady,
     onReviewPhotos,
+    onPickVideos = null,
     onBack,
     uploadError,
     initialPhotos = null,
@@ -118,6 +125,10 @@ function CameraCapture({
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
+    // Phones: the gallery button's picker (photos and videos).
+    const galleryInputRef = useRef(null);
+    // Phones: whether the flash (torch) is on.
+    const [isTorchOn, setIsTorchOn] = useState(false);
     const streamRef = useRef(null);
     // Id of the photo currently being checked, so only one runs at a time.
     const analyzingPhotoIdRef = useRef(null);
@@ -426,6 +437,33 @@ function CameraCapture({
         fileInputRef.current?.click();
     }
 
+    // Phones: what was picked with the gallery button. A video (or GIF) opens
+    // the Video Extractor; photos open the Photo Editor with the shots so far.
+    function handleGalleryChange(event) {
+        const picked = Array.from(event.target.files ?? []);
+        event.target.value = '';
+        const videos = picked.filter((file) => file.type.startsWith('video/') || MEDIA_EXT_RE.test(file.name));
+        if (videos.length > 0 && onPickVideos) {
+            setIsAutoCapturing(false);
+            onPickVideos(videos);
+            return;
+        }
+        const pickedPhotos = picked.filter((file) => file.type.startsWith('image/'));
+        if (pickedPhotos.length === 0) return;
+        setIsAutoCapturing(false);
+        onReviewPhotos([...photos.map((photo) => photo.file), ...pickedPhotos], { removeBackground, autoCrop, trainIters });
+    }
+
+    // Phones: the flash, where the camera and browser allow it.
+    const videoTrack = stream?.getVideoTracks()[0];
+    const canUseTorch = Boolean(videoTrack?.getCapabilities?.().torch);
+    function toggleTorch() {
+        const isTurningOn = !isTorchOn;
+        videoTrack?.applyConstraints({ advanced: [{ torch: isTurningOn }] })
+            .then(() => setIsTorchOn(isTurningOn))
+            .catch(() => { });
+    }
+
     function handleFileInputChange(e) {
         if (e.target.files) {
             const addedCount = addFiles(e.target.files);
@@ -531,11 +569,9 @@ function CameraCapture({
                         <button
                             type="button"
                             className="forma-btn"
-                            onClick={() => {
-                                handleBrowseClick();
-                            }}
+                            onClick={() => galleryInputRef.current?.click()}
                         >
-                            <Icon name="upload" size={14} /> Upload photos instead
+                            <Icon name="image" size={14} /> Choose from gallery
                         </button>
                     </div>
                 )}
@@ -559,16 +595,20 @@ function CameraCapture({
                         <Icon name="close" size={18} />
                     </button>
                     <span className="capture-phone-count">{photos.length} / {SUGGESTED_PHOTO_COUNT} shots</span>
-                    <button
-                        type="button"
-                        className="capture-phone-round"
-                        aria-label="Upload photos"
-                        onClick={() => {
-                            handleBrowseClick();
-                        }}
-                    >
-                        <Icon name="upload" size={18} />
-                    </button>
+                    {canUseTorch ? (
+                        <button
+                            type="button"
+                            className={isTorchOn ? 'capture-phone-round is-on' : 'capture-phone-round'}
+                            aria-label="Flash"
+                            aria-pressed={isTorchOn}
+                            onClick={toggleTorch}
+                        >
+                            <Icon name="flash" size={18} />
+                        </button>
+                    ) : (
+                        // Keeps the shot count centred when there is no flash.
+                        <span className="capture-phone-round-spacer" aria-hidden="true" />
+                    )}
                 </div>
 
                 <div className="capture-phone-bottom">
@@ -600,13 +640,12 @@ function CameraCapture({
                         <button
                             type="button"
                             className="capture-phone-last"
-                            aria-label="Review photos"
-                            disabled={!lastPhoto}
-                            onClick={() => {
-                                handleReview();
-                            }}
+                            aria-label="Choose from gallery"
+                            onClick={() => galleryInputRef.current?.click()}
                         >
-                            {lastPhoto && thumbnailUrls[lastPhoto.id] && <img src={thumbnailUrls[lastPhoto.id]} alt="" />}
+                            {lastPhoto && thumbnailUrls[lastPhoto.id]
+                                ? <img src={thumbnailUrls[lastPhoto.id]} alt="" />
+                                : <Icon name="image" size={20} />}
                         </button>
                         <button
                             type="button"
@@ -637,6 +676,14 @@ function CameraCapture({
                 </div>
 
                 {fileInput}
+                <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept={`image/*,${MEDIA_ACCEPT}`}
+                    multiple
+                    onChange={handleGalleryChange}
+                    style={{ display: 'none' }}
+                />
             </div>
         );
     }

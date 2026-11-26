@@ -22,9 +22,11 @@ A .ply opened from the user's computer uses the same page with only the
 viewer, its file details and Export .obj. A .obj opened from the user's
 computer is shown with ObjViewer, with its vertex and triangle counts.
 On phones it follows the mobile Figma: a header with a back button, the
-model's name and a menu (Rename, Delete), then the viewer, the name and
-badge, a row of Photos / Size / Format, Download, Export .obj and Add to
-scene, and the source photos.
+model's name and a menu (Rename, Delete), then the viewer, the name with a
+READY badge, the same panel ("Built from N photos", the details), and
+Export model, which opens a sheet (.ply file / .obj file). Phones have no
+Scene Builder, so App passes no onAddToScene there and Add to scene is
+hidden.
 Right after a build, showNamePrompt asks for the model's name first.
 - ModelScreen({ jobId, localFile, backLabel, showNamePrompt, onNamePromptClose,
   onBack, onOpenPhotos, onAddToScene, onDeleted })
@@ -92,6 +94,8 @@ function ModelScreen({
     // From ObjViewer once a .obj is loaded: { vertexCount, triangleCount }.
     const [objInfo, setObjInfo] = useState(null);
     const [isExportOpen, setIsExportOpen] = useState(false);
+    // Phones: the "Export model" sheet (.ply file / .obj file), as in the Figma.
+    const [isExportSheetOpen, setIsExportSheetOpen] = useState(false);
     // Rename / delete dialog (ActionDialog props), or null.
     const [dialog, setDialog] = useState(null);
     // Bumped to load the model again (after naming it).
@@ -121,6 +125,16 @@ function ModelScreen({
             document.removeEventListener('keydown', closeOnEscape);
         };
     }, [isPhoneMenuOpen]);
+
+    // The export sheet closes on Escape.
+    useEffect(() => {
+        if (!isExportSheetOpen) return undefined;
+        function closeOnEscape(event) {
+            if (event.key === 'Escape') setIsExportSheetOpen(false);
+        }
+        document.addEventListener('keydown', closeOnEscape);
+        return () => document.removeEventListener('keydown', closeOnEscape);
+    }, [isExportSheetOpen]);
 
     // Server models are always .ply; a local file is whatever the user picked.
     const isObj = !jobId && /\.obj$/i.test(localFile?.name ?? '');
@@ -321,49 +335,11 @@ function ModelScreen({
                             </button>
                         )}
                         {!jobId && <span className="model-badge is-local">Local file</span>}
+                        {isPhone && jobId && model && <span className="model-badge">Ready</span>}
                     </div>
                     <p className="model-meta">{metaParts.filter(Boolean).join(' \u00B7 ')}</p>
                 </div>
 
-                {isPhone && (
-                    <dl className="model-phone-stats">
-                        {jobId && (
-                            <div><dt>Photos</dt><dd>{photoCount ?? '-'}</dd></div>
-                        )}
-                        <div><dt>Size</dt><dd>{fileSizeText ?? '-'}</dd></div>
-                        <div><dt>Format</dt><dd>PLY</dd></div>
-                    </dl>
-                )}
-
-                {jobId && isPhone && (
-                    <div className="model-actions">
-                        <a
-                            className="forma-btn forma-btn-primary model-download"
-                            href={plyUrl}
-                            download={`${(model?.name || 'model').replace(/[^\w.-]+/g, '_')}.ply`}
-                            onClick={() => playSound('save')}
-                        >
-                            <Icon name="download" size={15} /> Download .ply
-                        </a>
-                        <button
-                            className="forma-btn"
-                            onClick={() => {
-                                setIsExportOpen(true);
-                            }}
-                        >
-                            <Icon name="cube" size={15} /> Export .obj
-                        </button>
-                        <button
-                            className="forma-btn"
-                            disabled={!model}
-                            onClick={() => {
-                                onAddToScene({ id: jobId, name: modelName });
-                            }}
-                        >
-                            <Icon name="shield" size={15} /> Add to scene
-                        </button>
-                    </div>
-                )}
                 {!jobId && plyUrl && (
                     <div className="model-actions">
                         <button
@@ -395,7 +371,7 @@ function ModelScreen({
                     </span>
                 </div>
 
-                {jobId && !isPhone ? (
+                {jobId ? (
                     <aside className="model-side">
                         <div className="forma-card model-card model-panel">
                             {photos.length > 0 && (
@@ -435,40 +411,63 @@ function ModelScreen({
                                 )}
                             </dl>
 
-                            <div className="model-panel-actions">
-                                <button
-                                    className="forma-btn forma-btn-primary"
-                                    disabled={!model}
-                                    onClick={() => {
-                                        onAddToScene({ id: jobId, name: modelName });
-                                    }}
-                                >
-                                    Open in Scene builder
-                                </button>
-                                <div className="model-panel-row">
+                            {isPhone ? (
+                                // Phones: one Export button (the sheet), as in the Figma; delete is in the header's menu.
+                                <div className="model-panel-actions">
                                     <button
-                                        className="forma-btn"
+                                        className="forma-btn forma-btn-primary"
+                                        onClick={() => setIsExportSheetOpen(true)}
+                                    >
+                                        <Icon name="download" size={15} /> Export model
+                                    </button>
+                                    {onAddToScene && (
+                                        <button
+                                            className="forma-btn"
+                                            disabled={!model}
+                                            onClick={() => {
+                                                onAddToScene({ id: jobId, name: modelName });
+                                            }}
+                                        >
+                                            <Icon name="shield" size={15} /> Add to scene
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="model-panel-actions">
+                                    <button
+                                        className="forma-btn forma-btn-primary"
+                                        disabled={!model}
                                         onClick={() => {
-                                            setIsExportOpen(true);
+                                            onAddToScene({ id: jobId, name: modelName });
                                         }}
                                     >
-                                        Export .obj
+                                        Open in Scene builder
                                     </button>
-                                    <a
-                                        className="forma-btn"
-                                        href={plyUrl}
-                                        download={`${(model?.name || 'model').replace(/[^\w.-]+/g, '_')}.ply`}
-                                        onClick={() => playSound('save')}
-                                    >
-                                        Download .ply
-                                    </a>
+                                    <div className="model-panel-row">
+                                        <button
+                                            className="forma-btn"
+                                            onClick={() => {
+                                                setIsExportOpen(true);
+                                            }}
+                                        >
+                                            Export .obj
+                                        </button>
+                                        <a
+                                            className="forma-btn"
+                                            href={plyUrl}
+                                            download={`${(model?.name || 'model').replace(/[^\w.-]+/g, '_')}.ply`}
+                                            onClick={() => playSound('save')}
+                                        >
+                                            Download .ply
+                                        </a>
+                                    </div>
+                                    {model && (
+                                        <button className="model-link model-delete-link" onClick={openDeleteDialog}>
+                                            Delete model
+                                        </button>
+                                    )}
                                 </div>
-                                {model && (
-                                    <button className="model-link model-delete-link" onClick={openDeleteDialog}>
-                                        Delete model
-                                    </button>
-                                )}
-                            </div>
+                            )}
                         </div>
                     </aside>
                 ) : (
@@ -541,6 +540,51 @@ function ModelScreen({
             </div>
 
             {dialog && <ActionDialog {...dialog} onCancel={() => setDialog(null)} />}
+            {isExportSheetOpen && (
+                <div
+                    className="model-sheet-backdrop"
+                    onPointerDown={(event) => {
+                        if (event.target === event.currentTarget) setIsExportSheetOpen(false);
+                    }}
+                >
+                    <div className="model-sheet" role="dialog" aria-modal="true" aria-labelledby="model-sheet-title">
+                        <span className="model-sheet-handle" aria-hidden="true" />
+                        <div className="model-sheet-head">
+                            <h2 id="model-sheet-title">Export model</h2>
+                            <button
+                                type="button"
+                                className="model-round-btn"
+                                aria-label="Close"
+                                onClick={() => setIsExportSheetOpen(false)}
+                            >
+                                <Icon name="close" size={14} />
+                            </button>
+                        </div>
+                        <a
+                            className="model-sheet-option"
+                            href={plyUrl}
+                            download={`${(model?.name || 'model').replace(/[^\w.-]+/g, '_')}.ply`}
+                            onClick={() => {
+                                playSound('save');
+                                setIsExportSheetOpen(false);
+                            }}
+                        >
+                            .ply file
+                        </a>
+                        <button
+                            type="button"
+                            className="model-sheet-option"
+                            onClick={() => {
+                                setIsExportSheetOpen(false);
+                                setIsExportOpen(true);
+                            }}
+                        >
+                            .obj file
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {isExportOpen && plyUrl && (
                 <ExportObjDialog
                     plyUrl={plyUrl}
