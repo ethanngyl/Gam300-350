@@ -340,6 +340,9 @@ namespace {
 
     bool InsideFootprint(const Region& region, const glm::dvec3& v) {
         const double x = glm::dot(v, region.e1), y = glm::dot(v, region.e2);
+        // A NaN position (e.g. a bad point in COLMAP's points3D.bin) has no direction, and casting
+        // its angle to a bin index would read outside the profile. Treat it as outside.
+        if (!std::isfinite(x) || !std::isfinite(y)) return false;
         double angle = std::atan2(y, x);
         if (angle < 0) angle += kTwoPi;
         const int k = std::min(kFootprintBins - 1, static_cast<int>(angle / kTwoPi * kFootprintBins));
