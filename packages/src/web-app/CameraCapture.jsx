@@ -29,10 +29,11 @@ On phones the page is JM's mobile Figma's full-screen camera instead:
 close at the top left, the shot count, and flash at the top right (only
 where the browser can turn the torch on, mostly Android Chrome); Manual /
 Auto above the shutter; the gallery button (showing the last photo) and
-Done beside it. The gallery button opens the phone's own picker: photos
-go to the Photo Editor with the shots taken so far, and a video opens the
-Video Extractor with it (onPickVideos). Done opens the batch in the Photo
-Editor. Auto-capture uses its default interval and cap.
+Done beside it. The gallery button asks where to add from: the phone's
+own picker (photos go to the Photo Editor with the shots taken so far, and
+a video opens the Video Extractor with it, onPickVideos) or the Media
+Library (LibraryPhotoPicker.jsx; its photos go to the Photo Editor the same
+way). Done opens the batch in the Photo Editor. Auto-capture uses its default interval and cap.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -167,6 +168,9 @@ function CameraCapture({
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
+    // Phones: the sheet asking whether to add from the phone's gallery or
+    // the Media Library.
+    const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
 
     // Focus: what the current camera supports (null until it starts),
     // 'auto' or 'manual', the manual focus distance, the ring drawn where
@@ -448,10 +452,31 @@ function CameraCapture({
             onPickVideos(videos);
             return;
         }
-        const pickedPhotos = picked.filter((file) => file.type.startsWith('image/'));
+        reviewWithAddedPhotos(picked.filter((file) => file.type.startsWith('image/')));
+    }
+
+    // Phones: photos picked from the gallery or the Media Library go to the
+    // Photo Editor with the ones taken so far.
+    function reviewWithAddedPhotos(pickedPhotos) {
         if (pickedPhotos.length === 0) return;
         setIsAutoCapturing(false);
         onReviewPhotos([...photos.map((photo) => photo.file), ...pickedPhotos], { removeBackground, autoCrop, trainIters });
+    }
+
+    // Phones: the gallery button's sheet, then its two choices.
+    function openAddSheet() {
+        setIsAutoCapturing(false);
+        setIsAddSheetOpen(true);
+    }
+
+    function addFromGallery() {
+        setIsAddSheetOpen(false);
+        galleryInputRef.current?.click();
+    }
+
+    function addFromLibrary() {
+        setIsAddSheetOpen(false);
+        setIsLibraryPickerOpen(true);
     }
 
     // Phones: the flash, where the camera and browser allow it.
@@ -569,9 +594,9 @@ function CameraCapture({
                         <button
                             type="button"
                             className="forma-btn"
-                            onClick={() => galleryInputRef.current?.click()}
+                            onClick={openAddSheet}
                         >
-                            <Icon name="image" size={14} /> Choose from gallery
+                            <Icon name="image" size={14} /> Add photos or a video
                         </button>
                     </div>
                 )}
@@ -640,8 +665,8 @@ function CameraCapture({
                         <button
                             type="button"
                             className="capture-phone-last"
-                            aria-label="Choose from gallery"
-                            onClick={() => galleryInputRef.current?.click()}
+                            aria-label="Add photos or a video"
+                            onClick={openAddSheet}
                         >
                             {lastPhoto && thumbnailUrls[lastPhoto.id]
                                 ? <img src={thumbnailUrls[lastPhoto.id]} alt="" />
@@ -684,6 +709,44 @@ function CameraCapture({
                     onChange={handleGalleryChange}
                     style={{ display: 'none' }}
                 />
+
+                {isAddSheetOpen && (
+                    <div className="capture-phone-sheet">
+                        <button
+                            type="button"
+                            className="capture-phone-sheet-backdrop"
+                            aria-label="Close"
+                            onClick={() => setIsAddSheetOpen(false)}
+                        />
+                        <div className="capture-phone-sheet-panel" role="dialog" aria-modal="true" aria-label="Add photos or a video">
+                            <h2>Add photos or a video</h2>
+                            <button type="button" className="capture-phone-sheet-option" onClick={addFromGallery}>
+                                <Icon name="upload" size={20} />
+                                <span>
+                                    <strong>Phone gallery</strong>
+                                    <small>Photos or a video from this phone</small>
+                                </span>
+                            </button>
+                            <button type="button" className="capture-phone-sheet-option" onClick={addFromLibrary}>
+                                <Icon name="image" size={20} />
+                                <span>
+                                    <strong>Media Library</strong>
+                                    <small>Photos from your past models</small>
+                                </span>
+                            </button>
+                            <button type="button" className="forma-btn capture-phone-sheet-cancel" onClick={() => setIsAddSheetOpen(false)}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {isLibraryPickerOpen && (
+                    <LibraryPhotoPicker
+                        onAddFiles={reviewWithAddedPhotos}
+                        onClose={() => setIsLibraryPickerOpen(false)}
+                    />
+                )}
             </div>
         );
     }

@@ -580,6 +580,77 @@
             object-fit: cover;
         }
 
+    /* The gallery button's sheet: phone gallery or Media Library. */
+    .capture-phone-sheet {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        align-items: flex-end;
+    }
+
+    .capture-phone .capture-phone-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: rgba(0, 0, 0, 0.55);
+    }
+
+    .capture-phone-sheet-panel {
+        position: relative;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 20px 16px max(16px, env(safe-area-inset-bottom));
+        border-radius: 20px 20px 0 0;
+        background: var(--forma-panel);
+        color: var(--forma-text);
+    }
+
+        .capture-phone-sheet-panel h2 {
+            margin: 0 0 4px;
+            color: var(--forma-heading);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+    .capture-phone .capture-phone-sheet-option {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        padding: 14px;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 14px;
+        background: var(--forma-panel-raised);
+        color: rgb(var(--forma-accent-rgb));
+        text-align: left;
+    }
+
+    .capture-phone-sheet-option span {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .capture-phone-sheet-option strong {
+        color: var(--forma-heading);
+        font-weight: 600;
+    }
+
+    .capture-phone-sheet-option small {
+        color: var(--forma-text-muted);
+        font-size: 0.8rem;
+    }
+
+    .capture-phone .capture-phone-sheet-cancel {
+        justify-content: center;
+        margin-top: 4px;
+    }
+
     .capture-phone-message {
         position: absolute;
         inset: 0;
