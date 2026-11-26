@@ -19,7 +19,6 @@ React component.
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
 import { FEEDBACK_CATEGORIES } from './FeedbackCategories.js';
 
 const FILTERS = [{ id: null, label: 'All', icon: 'layers' }, ...FEEDBACK_CATEGORIES];
@@ -107,20 +106,17 @@ function FeedbackInbox() {
 
     function chooseFilter(category) {
         if (category === filter) return;
-        playSound('tap');
         setFilter(category);
         setIsLoading(true);
         loadFirstPage(category);
     }
 
     function refresh() {
-        playSound('tap');
         setIsLoading(true);
         loadFirstPage(filter);
     }
 
     async function loadMore() {
-        playSound('tap');
         const request = requestRef.current;
         setIsLoadingMore(true);
         try {

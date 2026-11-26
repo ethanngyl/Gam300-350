@@ -32,7 +32,6 @@ import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
 import { computeAutoFix, exportEditedFile, DEFAULT_EDITS } from './PhotoEdits.js';
 import { catalog } from './catalog.js';
-import { playSound } from '../audio/Audio.js';
 import './AddPhotosDialog.css';
 
 const MIN_PHOTOS = catalog.minPhotos;
@@ -101,7 +100,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
     function addFiles(fileList) {
         const images = Array.from(fileList ?? []).filter(isImageFile);
         if (images.length === 0) return;
-        playSound('tap');
         setPhotos((current) => [
             ...current,
             ...images.map((file) => ({ id: nextPhotoIdRef.current++, file, analysisStatus: 'pending', analysis: null })),
@@ -128,7 +126,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
     const hasTooFewPhotos = photos.length < MIN_PHOTOS;
 
     async function autoFix() {
-        playSound('tap');
         setAutoFixState('working');
 
         const leaveOutIds = new Set(flaggedPhotos
@@ -213,7 +210,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                 type="button"
                                 className="forma-btn add-photos-browse"
                                 onClick={() => {
-                                    playSound('tap');
                                     fileInputRef.current?.click();
                                 }}
                             >
@@ -229,7 +225,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                 type="button"
                                 className="forma-btn"
                                 onClick={() => {
-                                    playSound('tap');
                                     setIsLibraryOpen(true);
                                 }}
                             >
@@ -240,7 +235,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                     type="button"
                                     className="forma-btn"
                                     onClick={() => {
-                                        playSound('confirm');
                                         onOpenCamera();
                                     }}
                                 >
@@ -287,7 +281,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                     type="checkbox"
                                     checked={removeBackground}
                                     onChange={(event) => {
-                                        playSound('tap');
                                         setRemoveBackground(event.target.checked);
                                     }}
                                 />
@@ -303,7 +296,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                     type="button"
                                     className="forma-btn"
                                     onClick={() => {
-                                        playSound('tap');
                                         onEditManually(files, settings);
                                     }}
                                 >
@@ -314,7 +306,6 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                     className="forma-btn forma-btn-primary"
                                     disabled={isChecking || hasTooFewPhotos || autoFixState === 'working'}
                                     onClick={() => {
-                                        playSound('confirm');
                                         onRenderNow(files, settings);
                                     }}
                                 >

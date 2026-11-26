@@ -23,7 +23,6 @@ React component. activeTab is highlighted.
 
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
-import { playSound } from '../audio/Audio.js';
 
 // Four to a page, in this order. aria-labels (label) match the sidebar's,
 // so the walkthrough finds the same items.
@@ -53,7 +52,6 @@ function Dock({ activeTab, onNavigate, onNewModel }) {
     }, [activeTab]);
 
     function selectTab(tabId) {
-        playSound('tap');
         if (tabId === 'capture') onNewModel();
         else onNavigate(tabId);
     }
@@ -66,7 +64,6 @@ function Dock({ activeTab, onNavigate, onNewModel }) {
 
     // The arrow slides to the next four tabs, or back to the first.
     function showNextTabs() {
-        playSound('tap');
         const scroller = scrollerRef.current;
         if (!scroller) return;
         if (isAtLastTabs) scroller.scrollTo({ left: 0, behavior: 'smooth' });

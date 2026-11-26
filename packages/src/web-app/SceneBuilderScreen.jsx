@@ -244,7 +244,6 @@ function ModelPickerDialog({ models, modelsStatus, onPick, onClose }) {
                                     className={isSelected ? 'scene-builder-model-card is-selected' : 'scene-builder-model-card'}
                                     aria-pressed={isSelected}
                                     onClick={() => {
-                                        playSound('tap');
                                         setSelectedModelId(model.id);
                                     }}
                                     onDoubleClick={() => onPick(model)}
@@ -304,7 +303,6 @@ function SceneListDialog({ onOpenScene, onClose }) {
 
     async function handleDelete(scene) {
         if (!window.confirm(`Delete "${scene.name}"? This can't be undone.`)) return;
-        playSound('back');
         await deleteScene(scene.id);
         setListVersion((version) => version + 1);
     }
@@ -501,7 +499,6 @@ function SceneBuilderScreen({
 
     function undo() {
         if (!canUndo) return;
-        playSound('tap');
         leaveField();
         onUndo();
         markUnsaved();
@@ -509,7 +506,6 @@ function SceneBuilderScreen({
 
     function redo() {
         if (!canRedo) return;
-        playSound('tap');
         leaveField();
         onRedo();
         markUnsaved();
@@ -522,7 +518,6 @@ function SceneBuilderScreen({
             setStatusMessage(`Phone scenes hold up to ${PHONE_MODEL_LIMIT} models. Use a computer for bigger scenes.`);
             return;
         }
-        playSound('tap');
         const sceneObject = createSceneObject(model, objects);
         // The fit after loading shares this undo step (see autoFitRef).
         editObjects((current) => [...current, sceneObject], `add:${sceneObject.objectId}`);
@@ -574,7 +569,6 @@ function SceneBuilderScreen({
 
     function fitSelectedToGrid() {
         if (!selectedObject) return;
-        playSound('tap');
         if (!fitObjectToGrid(selectedObject)) {
             setStatusMessage('The model is still loading. Fit it to the grid once it shows.');
         }
@@ -586,7 +580,6 @@ function SceneBuilderScreen({
             setStatusMessage(`Phone scenes hold up to ${PHONE_MODEL_LIMIT} models.`);
             return;
         }
-        playSound('tap');
         const copy = {
             ...selectedObject,
             objectId: makeObjectId(),
@@ -599,20 +592,17 @@ function SceneBuilderScreen({
 
     function deleteSelected() {
         if (!selectedObject) return;
-        playSound('back');
         editObjects((current) => current.filter((sceneObject) => sceneObject.objectId !== selectedObject.objectId));
         setSelectedObjectId(null);
     }
 
     function toggleHidden(objectId) {
-        playSound('tap');
         const sceneObject = objects.find((item) => item.objectId === objectId);
         if (sceneObject) updateObject(objectId, { isHidden: !sceneObject.isHidden });
     }
 
     function dropSelectedToFloor() {
         if (!selectedObject) return;
-        playSound('tap');
         // The WebAssembly engine once it's wired up, else the splat viewer.
         const lowestPoint = measureLowestPoint(selectedObject.objectId) ??
             viewportApiRef.current?.measureLowestPoint(selectedObject.objectId) ?? null;
@@ -704,7 +694,6 @@ function SceneBuilderScreen({
 
     function startNewScene() {
         if (!confirmDiscardChanges()) return;
-        playSound('tap');
         endEdit();
         onObjectsReset([]);
         onSceneInfoChange(NEW_SCENE_INFO);
@@ -712,7 +701,6 @@ function SceneBuilderScreen({
     }
 
     async function handleSave() {
-        playSound('confirm');
         try {
             const savedScene = await saveScene({
                 id: sceneInfo.id ?? undefined,
@@ -723,14 +711,15 @@ function SceneBuilderScreen({
             });
             changeSceneInfo({ id: savedScene.id, hasUnsavedChanges: false });
             setStatusMessage(SCENES_SAVED_ON_SERVER ? 'Scene saved.' : 'Scene saved in this browser. Saving to your account is coming soon.');
+            playSound('save');
         } catch (error) {
             setStatusMessage(`Could not save: ${error.message}`);
+            playSound('error');
         }
     }
 
     async function handleOpenScene(sceneIdToOpen) {
         if (!confirmDiscardChanges()) return;
-        playSound('tap');
         try {
             const scene = await loadScene(sceneIdToOpen);
             // Skip models that were deleted since the scene was saved.
@@ -760,7 +749,6 @@ function SceneBuilderScreen({
     }
 
     async function handleScreenshot() {
-        playSound('tap');
         const imageBlob = await captureSceneScreenshot();
         if (!imageBlob) {
             setStatusMessage('Screenshots arrive with the engine update.');
@@ -774,7 +762,6 @@ function SceneBuilderScreen({
     }
 
     function chooseTransformMode(modeId) {
-        playSound('tap');
         setTransformMode(modeId);
     }
 
@@ -847,7 +834,6 @@ function SceneBuilderScreen({
                         <button
                             className="scene-builder-outliner-name"
                             onClick={() => {
-                                playSound('tap');
                                 setSelectedObjectId(sceneObject.objectId);
                             }}
                             onDoubleClick={() => focusObject(sceneObject)}
@@ -902,7 +888,6 @@ function SceneBuilderScreen({
                 <button
                     className="forma-btn"
                     onClick={() => {
-                        playSound('tap');
                         setIsSceneListOpen(true);
                     }}
                 >
@@ -981,7 +966,6 @@ function SceneBuilderScreen({
     );
 
     function openModelPicker() {
-        playSound('tap');
         setIsModelPickerOpen(true);
     }
 
@@ -1033,7 +1017,6 @@ function SceneBuilderScreen({
                     <button
                         className={phoneSheet === 'models' ? 'scene-builder-tool is-active' : 'scene-builder-tool'}
                         onClick={() => {
-                            playSound('tap');
                             setPhoneSheet(phoneSheet === 'models' ? null : 'models');
                         }}
                     >
@@ -1048,7 +1031,6 @@ function SceneBuilderScreen({
                     <button
                         className={isGridVisible ? 'scene-builder-tool is-active' : 'scene-builder-tool'}
                         onClick={() => {
-                            playSound('tap');
                             setIsGridVisible(!isGridVisible);
                         }}
                         aria-pressed={isGridVisible}
@@ -1059,7 +1041,6 @@ function SceneBuilderScreen({
                     <button
                         className={phoneSheet === 'cleanup' ? 'scene-builder-tool is-active' : 'scene-builder-tool'}
                         onClick={() => {
-                            playSound('tap');
                             setPhoneSheet(phoneSheet === 'cleanup' ? null : 'cleanup');
                         }}
                         disabled={!selectedObject}
@@ -1114,7 +1095,6 @@ function SceneBuilderScreen({
                     <button
                         className="scene-builder-tool"
                         onClick={() => {
-                            playSound('tap');
                             resetSceneCamera();
                         }}
                         disabled={!isSceneEngineReady()}
@@ -1141,7 +1121,6 @@ function SceneBuilderScreen({
                                 aria-selected={leftTab === tab.id}
                                 className={leftTab === tab.id ? 'scene-builder-left-tab is-active' : 'scene-builder-left-tab'}
                                 onClick={() => {
-                                    playSound('tap');
                                     setLeftTab(tab.id);
                                 }}
                             >
@@ -1324,7 +1303,6 @@ function SceneBuilderScreen({
                                         key={option.id}
                                         className={renderMode === option.id ? 'is-active' : ''}
                                         onClick={() => {
-                                            playSound('tap');
                                             changeSceneInfo({ renderMode: option.id, hasUnsavedChanges: true });
                                         }}
                                     >

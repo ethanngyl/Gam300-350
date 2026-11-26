@@ -242,7 +242,6 @@ export default function Processing({ jobId, source = 'photos', onDone, onCancel,
                     <button
                         className="forma-btn forma-btn-primary processing-action"
                         onClick={() => {
-                            playSound('back')
                             onCancel()
                         }}
                     >
@@ -296,7 +295,6 @@ export default function Processing({ jobId, source = 'photos', onDone, onCancel,
                         <button
                             className="forma-btn forma-btn-primary processing-action"
                             onClick={() => {
-                                playSound('back')
                                 onLeave()
                             }}
                         >
@@ -306,7 +304,6 @@ export default function Processing({ jobId, source = 'photos', onDone, onCancel,
                     <button
                         className="forma-btn processing-action processing-cancel"
                         onClick={() => {
-                            playSound('back')
                             cancel()
                         }}
                     >

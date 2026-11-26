@@ -30,7 +30,6 @@ import ModelCover from './ModelCover.jsx';
 import SortMenu from './SortMenu.jsx';
 import { deleteJob, jobDisplayName, renameJob } from './mediaApi.js';
 import { BUILD_STEPS, buildStepIndex } from './useBackgroundBuilds.js';
-import { playSound } from '../audio/Audio.js';
 
 // Statuses where a job has stopped for good. 'done' is the only one that
 // produces a model; the others are hidden from the grid.
@@ -206,7 +205,6 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                     <button
                         className={subTab === 'models' ? 'library-subtab is-active' : 'library-subtab'}
                         onClick={() => {
-                            playSound('tap');
                             onSubTabChange('models');
                         }}
                     >
@@ -215,7 +213,6 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                     <button
                         className={subTab === 'photos' ? 'library-subtab is-active' : 'library-subtab'}
                         onClick={() => {
-                            playSound('tap');
                             onSubTabChange('photos');
                         }}
                     >
@@ -263,7 +260,6 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                                 title={model.isReady ? 'Click to open' : undefined}
                                 onClick={() => {
                                     if (!model.isReady) return;
-                                    playSound('tap');
                                     onOpenModel(model.id);
                                 }}
                                 onKeyDown={(event) => {
@@ -306,7 +302,6 @@ function LibraryScreen({ subTab, onSubTabChange, onOpenModel }) {
                                             aria-label={`More for ${model.name}`}
                                             onClick={(event) => {
                                                 event.stopPropagation();
-                                                playSound('tap');
                                                 openModelMenu(event, model);
                                             }}
                                         >

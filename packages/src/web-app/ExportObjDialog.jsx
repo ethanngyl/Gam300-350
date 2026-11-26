@@ -86,7 +86,6 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
     }
 
     function close() {
-        playSound('back');
         onClose();
     }
 
@@ -102,11 +101,9 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
     function startExport(event) {
         event.preventDefault();
         if (status === 'done') {
-            playSound('tap');
             download();
             return;
         }
-        playSound('confirm');
         const cleanOptions = {
             geometry: options.geometry === 'points' ? 'points' : 'mesh',
             highDetail: Boolean(options.highDetail),
@@ -134,9 +131,11 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
                 setResult({ ...data, sizeBytes: data.blob.size });
                 setStatus('done');
                 download();
+                playSound('save');
             } else {
                 setError(data.message);
                 setStatus('error');
+                playSound('error');
             }
         };
         worker.onerror = (event) => {
@@ -144,6 +143,7 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
             workerRef.current = null;
             setError(event.message || 'The export failed.');
             setStatus('error');
+            playSound('error');
         };
         // A worker resolves relative URLs against its own script, so pass an absolute one.
         worker.postMessage({ url: new URL(plyUrl, window.location.href).href, sizeHint: sizeBytes, options: cleanOptions });
@@ -153,7 +153,6 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
         workerRef.current?.terminate();
         workerRef.current = null;
         setStatus('idle');
-        playSound('back');
     }
 
     function handleKeyDown(event) {

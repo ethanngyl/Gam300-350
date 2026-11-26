@@ -26,7 +26,8 @@ Navigation
 - Collapsible sidebar ("New model", "Add photos", all pages, user menu); it
   becomes a slide-in drawer on phones.
 - Layouts work on both desktop and phone.
-- UI sounds: tap, confirm, back, camera shutter, tick, success, error.
+- UI sounds: build step, model ready, build failed / can't open, model opened, 
+  saved, camera shutter. Buttons and sign-in are silent.
 
 Home
 ----

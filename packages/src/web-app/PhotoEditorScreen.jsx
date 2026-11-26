@@ -40,7 +40,6 @@ be left while it runs.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
-import { playSound } from '../audio/Audio.js';
 import {
     analyzePhoto,
     findPhotoIssues,
@@ -428,17 +427,14 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // where they came from or there for the first time. Edits and "leave
     // out" choices only live in the editor, so they reset.
     function backToCapture() {
-        playSound(isFromCapture ? 'back' : 'tap');
         onBackToCapture(photos.map((photo) => photo.file), { removeBackground, autoCrop, trainIters });
     }
 
     function openFilePicker() {
-        playSound('tap');
         fileInputRef.current?.click();
     }
 
     function openLibraryPicker() {
-        playSound('tap');
         setIsLibraryPickerOpen(true);
     }
 
@@ -472,7 +468,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function toggleExcluded(photoId) {
-        playSound('tap');
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
                 photo.id === photoId ? { ...photo, isExcluded: !photo.isExcluded } : photo
@@ -481,7 +476,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function removePhoto(photoId) {
-        playSound('tap');
         setPhotos((currentPhotos) => currentPhotos.filter((photo) => photo.id !== photoId));
         if (selectedPhotoId === photoId) {
             setSelectedPhotoId(null);
@@ -496,7 +490,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
             toggleExcluded(photoId);
             return;
         }
-        playSound('tap');
         setPreviewFailed(false);
         setPreviewClippedShare(null);
         setColorMessage(null);
@@ -504,7 +497,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function leaveOutFlagged() {
-        playSound('tap');
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
                 issuesById[photo.id]?.length > 0 ? { ...photo, isExcluded: true } : photo
@@ -513,7 +505,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function keepAll() {
-        playSound('tap');
         setPhotos((currentPhotos) => currentPhotos.map((photo) => ({ ...photo, isExcluded: false })));
     }
 
@@ -534,13 +525,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function changeEditTarget(target) {
-        playSound('tap');
         setEditTarget(target);
         setColorMessage(null);
     }
 
     function resetCurrentEdits() {
-        playSound('tap');
         setColorMessage(null);
         if (isEditingSinglePhoto) {
             // Clearing the photo's own edits (rather than zeroing them) drops
@@ -556,7 +545,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
 
     // Drops the selected photo's own edits so it follows the shared ones again.
     function matchAllPhotos() {
-        playSound('tap');
         const matchedPhotoId = selectedPhoto.id;
         setPhotos((currentPhotos) =>
             currentPhotos.map((photo) =>
@@ -566,14 +554,12 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function handleAutoFix() {
-        playSound('tap');
         const correction = computeAutoFix(autoSourceAnalyses);
         if (correction) updateEdits(correction);
     }
 
     // Gray world: the average colour across the photos should be neutral.
     function handleAutoColor() {
-        playSound('tap');
         const sourceCount = autoSourceAnalyses.length;
         if (sourceCount === 0) return;
 
@@ -591,7 +577,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function togglePickNeutral() {
-        playSound('tap');
         setColorMessage(null);
         setIsPickingNeutral((wasPicking) => !wasPicking);
     }
@@ -611,7 +596,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
             const sampledColor = await sampleColor(selectedPhoto.file, displayedCrop, fractionX, fractionY);
             const correction = computeWhiteBalance(sampledColor.red, sampledColor.green, sampledColor.blue);
             if (correction) {
-                playSound('tap');
                 updateEdits(correction);
                 setColorMessage(null);
             } else {
@@ -623,13 +607,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function toggleCropTool() {
-        playSound('tap');
         setIsPickingNeutral(false);
         setIsCropping((wasCropping) => !wasCropping);
     }
 
     function resetCrop() {
-        playSound('tap');
         updateEdits({ crop: NO_CROP });
     }
 
@@ -643,24 +625,20 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     }
 
     function handleUseOriginalsChange(event) {
-        playSound('tap');
         setUseOriginals(event.target.checked);
         setIsCropping(false);
         setIsPickingNeutral(false);
     }
 
     function handleRemoveBackgroundChange(event) {
-        playSound('tap');
         setRemoveBackground(event.target.checked);
     }
 
     function handleAutoCropChange(event) {
-        playSound('tap');
         setAutoCrop(event.target.checked);
     }
 
     async function handleGenerate() {
-        playSound('confirm');
         setIsCropping(false);
         setIsPickingNeutral(false);
         setPreparedCount(0);
@@ -782,7 +760,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                         className="photo-editor-quality-help"
                         aria-expanded={isQualityHelpOpen}
                         onClick={() => {
-                            playSound('tap');
                             setIsQualityHelpOpen((isOpen) => !isOpen);
                         }}
                     >
