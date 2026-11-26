@@ -10,8 +10,7 @@
 \brief
 Helpers for building a model from videos / animated GIFs, shared by the
 Frame Extractor page (FrameExtractor.jsx, which checks the chosen files)
-and App.jsx (which uploads them and shows the build on the processing
-screen). Moved out of FrameExtractor.jsx unchanged.
+and the background builds (useBackgroundBuilds.js, which upload them).
 - MEDIA_EXT_RE / MAX_MEDIA_FILES / MAX_MEDIA_SIZE_MB / MEDIA_ACCEPT
 Which files can be sent (same rules as the backend).
 - formatFileSize(bytes)

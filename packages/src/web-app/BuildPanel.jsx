@@ -12,8 +12,9 @@ and "Model ready" cards. A running build lists three steps (Aligning
 photos, Building point cloud, Finishing the model) with a progress bar on
 the current one; the X shrinks the panel to a small pill, and the build
 keeps going. A finished build offers Open model and Show in library; a
-failed one shows why, with a way to try again. Cancel build asks once
-before stopping it.
+failed one shows why, with a way to try again. One that can no longer be
+followed (signed out, or the server stopped answering) says so and points
+to the Media Library. Cancel build asks once before stopping it.
 - BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onDismiss, onShowDetails })
 React component. Renders nothing when there are no builds.
 **************************************************************************/
@@ -25,6 +26,8 @@ import { playSound } from '../audio/Audio.js';
 import './BuildPanel.css';
 
 const RUNNING_STATUSES = new Set(['uploading', 'queued', 'running']);
+// The heading of a finished build's card.
+const FINISHED_TITLES = { done: 'Model ready', error: 'Build failed', lost: "Can't follow this build" };
 
 // The small picture beside a build's name: its first photo, its cut-out
 // cover once it is finished, or an icon.
@@ -187,7 +190,7 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
             {finishedBuilds.map((build) => (
                 <section key={build.key} className="build-panel-card">
                     <div className="build-panel-head">
-                        <h2>{build.status === 'done' ? 'Model ready' : build.status === 'error' ? 'Build failed' : 'Build cancelled'}</h2>
+                        <h2>{FINISHED_TITLES[build.status] ?? 'Build cancelled'}</h2>
                         <button
                             type="button"
                             className="build-panel-close"
@@ -207,8 +210,20 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                             <small>{build.status === 'done' ? `Built from ${build.detail}` : build.detail}</small>
                         </span>
                     </div>
-                    {build.status === 'error' && <p className="build-panel-error">{build.error}</p>}
+                    {(build.status === 'error' || build.status === 'lost') && <p className="build-panel-error">{build.error}</p>}
                     <div className="build-panel-actions">
+                        {build.status === 'lost' && (
+                            <button
+                                type="button"
+                                className="forma-btn"
+                                onClick={() => {
+                                    playSound('tap');
+                                    onShowLibrary(build);
+                                }}
+                            >
+                                Open Media Library
+                            </button>
+                        )}
                         {build.status === 'done' && (
                             <>
                                 <button

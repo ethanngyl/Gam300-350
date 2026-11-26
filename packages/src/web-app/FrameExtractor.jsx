@@ -14,16 +14,14 @@ detail (training iteration cap, via TrainingQualitySlider). The drop zone,
 chosen files, fps and "Process media" share one box, with a note under it on
 how frames are picked.
 "Process media" hands the files and settings to App through
-onStartBuild({ files, fps, trainIters, removeBackground, autoCrop }). App opens the
-full-screen processing screen (Processing.jsx), the same one photo builds
-use, which shows the upload as its first step and then the build's progress;
-a finished model opens on the model page. The file rules and the upload live
-in mediaJobs.js. There is no Back button; the sidebar (or the dock on
+onStartBuild({ files, fps, trainIters, removeBackground, autoCrop }). App
+uploads and builds it in the background, shown in the build panel
+(useBackgroundBuilds.js), like a photo build. The file rules and the upload
+live in mediaJobs.js. There is no Back button; the sidebar (or the dock on
 phones) handles navigation.
-- FrameExtractor({ onStartBuild, initialDraft, notice })
+- FrameExtractor({ onStartBuild, initialDraft })
 initialDraft ({ files, fps, trainIters, removeBackground, autoCrop }, from App) fills
-the form in again after a failed or cancelled build. notice is a message
-shown in the form's error line, e.g. after a reload stopped an upload.
+the form in again after a failed build.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
@@ -61,7 +59,7 @@ function MediaPreview({ item }) {
     );
 }
 
-function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
+function FrameExtractor({ onStartBuild, initialDraft = null }) {
     // Starts from the last build's files and settings, if App passes them back.
     const [mediaItems, setMediaItems] = useState(() => initialDraft?.files.map(createMediaItem) ?? []);
     const [isDragging, setIsDragging] = useState(false);
@@ -74,7 +72,7 @@ function FrameExtractor({ onStartBuild, initialDraft = null, notice = null }) {
     const [autoCrop, setAutoCrop] = useState(initialDraft?.autoCrop ?? false);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialDraft?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
-    const [error, setError] = useState(notice);
+    const [error, setError] = useState(null);
     const fileInputRef = useRef(null);
     // Latest file list, read when the page closes to release preview URLs.
     const mediaItemsRef = useRef([]);

@@ -17,8 +17,9 @@ card and Upload photos button. Laid out like the Figma, in two steps:
    background (on, as recommended), then Edit manually (opens the Photo
    Editor) or Render now (starts the build in the background).
 Auto-fix leaves out blurry and near-duplicate photos (unless that would
-leave too few) and evens out the brightness of too-dark or too-bright
-ones, the same correction as the Photo Editor's Auto fix.
+leave too few) and evens out the brightness of too-dark and too-bright
+ones, using the Photo Editor's Auto fix brightness, worked out for each of
+the two groups on its own.
 Escape, the X and a click outside close it.
 - AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
 React component. onEditManually(files, settings) and onRenderNow(files,
@@ -138,12 +139,23 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
         const adjustPhotos = flaggedPhotos.filter((photo) =>
             (!canLeaveOut || !leaveOutIds.has(photo.id))
             && issuesById[photo.id].some((issue) => ADJUST_ISSUES.includes(issue)));
-        const correction = computeAutoFix(adjustPhotos.map((photo) => photo.analysis));
 
+        // Too-dark and too-bright photos get their own correction, so a bright
+        // photo isn't brightened along with dark ones (or the other way round).
         const fixedFiles = new Map();
-        for (const photo of adjustPhotos) {
-            if (!correction) break;
-            fixedFiles.set(photo.id, await exportEditedFile(photo.file, { ...DEFAULT_EDITS, ...correction }));
+        for (const issue of ADJUST_ISSUES) {
+            const groupPhotos = adjustPhotos.filter((photo) => issuesById[photo.id].includes(issue));
+            const correction = computeAutoFix(groupPhotos.map((photo) => photo.analysis));
+            if (!correction) continue;
+            // Only ever brightens dark photos and darkens bright ones. Brightness
+            // only: added contrast stretches around mid-grey, which would pull a
+            // dark photo darker again (and push a bright one brighter).
+            const brightness = issue === 'dark' ? Math.max(0, correction.brightness) : Math.min(0, correction.brightness);
+            // Nothing to change: leave these photos flagged rather than count them as fixed.
+            if (brightness === 0) continue;
+            for (const photo of groupPhotos) {
+                fixedFiles.set(photo.id, await exportEditedFile(photo.file, { ...DEFAULT_EDITS, brightness }));
+            }
         }
 
         const fixedCount = (canLeaveOut ? leaveOutIds.size : 0) + fixedFiles.size;

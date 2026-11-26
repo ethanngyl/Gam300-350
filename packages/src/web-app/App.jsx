@@ -116,11 +116,6 @@ function fromRouteView(view) {
     if (view.screen === 'local-model') return { ...view, screen: null, isLocalModel: true };
     return view;
 }
-// Shown on the Frame Extractor when a reload or Forward lands on an upload
-// that is no longer running (#/extractor/uploading, see AppRoutes.js).
-const UPLOAD_INTERRUPTED_NOTICE =
-    'Your upload stopped because the page was reloaded or left. Choose your files again to start the build.';
-
 // One flag per account (by email; guests share one), set once the
 // walkthrough has been finished or skipped on this browser.
 const WALKTHROUGH_SEEN_KEY_PREFIX = 'genesis-walkthrough-seen:';
@@ -280,9 +275,14 @@ function App() {
     // Builds running in the background, shown in the build panel.
     const backgroundBuilds = useBackgroundBuilds(currentUser);
     const { trackJob } = backgroundBuilds;
-    // A #/processing/<id> address (a refresh on a build's Details): follow that build too.
+    // A #/processing/<id> address (a refresh on a build's Details): follow
+    // that build too. Only once, so a build closed in the panel doesn't come
+    // back after signing out and in again.
+    const hasTrackedInitialJobRef = useRef(false);
     useEffect(() => {
-        if (currentUser && initialView.screen === 'processing' && initialView.jobId) trackJob(initialView.jobId);
+        if (hasTrackedInitialJobRef.current || !currentUser) return;
+        hasTrackedInitialJobRef.current = true;
+        if (initialView.screen === 'processing' && initialView.jobId) trackJob(initialView.jobId);
     }, [currentUser, initialView, trackJob]);
     // The New model dialog (AddPhotosDialog.jsx) is open.
     const [isNewModelOpen, setIsNewModelOpen] = useState(false);
@@ -290,9 +290,6 @@ function App() {
     // its form (a failed build's "Back to Video Extractor"). Cleared on any
     // other navigation.
     const [frameExtractorDraft, setFrameExtractorDraft] = useState(null);
-    // Message for the Frame Extractor, e.g. after a reload stopped an upload.
-    const [frameExtractorNotice, setFrameExtractorNotice] = useState(
-        initialView.wasUploadInterrupted ? UPLOAD_INTERRUPTED_NOTICE : null);
     // Job whose training just finished; the model page asks for its name.
     // Opening a model from the Model Viewer doesn't set it, so it isn't asked there.
     const [namePromptJobId, setNamePromptJobId] = useState(null);
@@ -351,7 +348,6 @@ function App() {
             setPhotosForEditor(null);
             setPhotosForCapture(null);
             setFrameExtractorDraft(null);
-            setFrameExtractorNotice(view.wasUploadInterrupted ? UPLOAD_INTERRUPTED_NOTICE : null);
             setActiveTab(view.activeTab);
             if (view.activeTab === 'library') setLibrarySubTab(view.librarySubTab);
             setScreen(view.screen);
@@ -398,7 +394,6 @@ function App() {
         setPhotosForEditor(null);
         setPhotosForCapture(null);
         setFrameExtractorDraft(null);
-        setFrameExtractorNotice(null);
         setActiveTab(tab);
     }, []);
 
@@ -469,14 +464,17 @@ function App() {
         goToTab('model');
     }, [goToTab]);
 
-    // The build on the Details screen finished: open its model page and ask for its name.
+    // The build on the Details screen finished: open its model page and ask
+    // for its name. Its "Model ready" card is closed, so it doesn't ask again.
+    const { dismissJob } = backgroundBuilds;
     const handleProcessingDone = useCallback(() => {
+        dismissJob(jobId);
         setNamePromptJobId(jobId);
         // The model replaces the build screen, so Back skips the finished build.
         replaceNextRef.current = true;
         setScreen(null);
         showModelPage({ jobId }, 'library');
-    }, [jobId, showModelPage]);
+    }, [jobId, showModelPage, dismissJob]);
 
     // The build panel's buttons.
     function openBuiltModel(build) {
@@ -575,9 +573,13 @@ function App() {
     }
 
     if (screen === 'processing' && jobId) {
+        // Photos or a Video Extractor build, from the build panel (the server's
+        // GET /jobs/:id doesn't say which).
+        const detailsSource = backgroundBuilds.builds.find((build) => build.jobId === jobId)?.source ?? 'photos';
         return (
             <Processing
                 jobId={jobId}
+                source={detailsSource}
                 onDone={handleProcessingDone}
                 onCancel={leaveBuildDetails}
                 onLeave={leaveBuildDetails}
@@ -672,7 +674,6 @@ function App() {
                         <FrameExtractor
                             onStartBuild={startMediaBuild}
                             initialDraft={frameExtractorDraft}
-                            notice={frameExtractorNotice}
                         />
                     )}
                     {pageTab === 'capture' && (
