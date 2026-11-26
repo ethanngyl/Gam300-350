@@ -13,14 +13,20 @@ one. The backend runs a build on its own once the photos are uploaded
 a page no longer cancels it; only Cancel does.
 Each build is { key, jobId, source: 'photos' | 'media', label, detail,
 previewUrl, status: 'uploading' | 'queued' | 'running' | 'done' | 'error'
-| 'cancelled', phase, progress (0-1), uploadFraction (0-1), waitingText,
-error, files, settings }. files and settings are kept so a failed upload
+| 'cancelled' | 'lost', phase, progress (0-1), uploadFraction (0-1),
+waitingText, error, files, settings }. 'lost' means the build can no
+longer be followed from here (signed out, or the server stopped
+answering); it may still be running on the server. files and settings are kept so a failed upload
 can be retried or opened in the Photo Editor / Video Extractor.
 The ids of builds started on this browser are saved per account, so after
 a reload the panel picks up the ones still running.
+Cancelling or signing out while photos are still being sent stops the
+upload. Once every byte is sent the server is already making the job, so
+the upload is left to finish: a cancelled build's job is then deleted, and
+a signed-out account's job is saved for when it signs in again.
 - useBackgroundBuilds(user)
 React hook. Returns { builds, startPhotoBuild, startMediaBuild,
-cancelBuild, dismissBuild, trackJob, isUploading }.
+cancelBuild, dismissBuild, dismissJob, trackJob, isUploading }.
 - BUILD_STEPS / buildStepIndex(build)
 The three steps the panel lists, and which one a build is on.
 **************************************************************************/
@@ -29,8 +35,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { uploadMedia, uploadPhotos } from './mediaJobs.js';
 import { playSound } from '../audio/Audio.js';
 
-// How often running builds are checked, in milliseconds.
+// How long to wait after checking the running builds before checking again, in milliseconds.
 const POLL_INTERVAL_MS = 2000;
+// Checks in a row that can fail (server down, bad replies) before a build
+// is given up on: about 30 seconds.
+const MAX_FAILED_POLLS = 15;
+const SESSION_ENDED_TEXT = 'Your session has ended. Sign in again to see this build in the Media Library.';
+const LOST_CONTACT_TEXT = 'Lost contact with the server. The build may still be running; check the Media Library.';
 const SAVED_BUILDS_KEY_PREFIX = 'genesis-builds:';
 
 // The panel's three steps, as in the Figma, with the backend phases each
@@ -48,7 +59,7 @@ export function buildStepIndex(build) {
     return index === -1 ? 0 : index;
 }
 
-const FINISHED_STATUSES = new Set(['done', 'error', 'cancelled']);
+const FINISHED_STATUSES = new Set(['done', 'error', 'cancelled', 'lost']);
 
 function savedBuildsKey(user) {
     return `${SAVED_BUILDS_KEY_PREFIX}${user?.email ?? 'guest'}`;
@@ -74,6 +85,22 @@ function saveBuilds(user, builds) {
     } catch {
         // Storage unavailable: the builds just aren't picked up after a reload.
     }
+}
+
+// Adds one build to an account's saved list, e.g. a job whose upload
+// finished after that account signed out.
+function addSavedBuild(user, entry) {
+    try {
+        const saved = loadSavedBuilds(user).filter((savedEntry) => savedEntry.jobId !== entry.jobId);
+        window.localStorage.setItem(savedBuildsKey(user), JSON.stringify([...saved, entry]));
+    } catch {
+        // Storage unavailable: the build still shows in the Media Library.
+    }
+}
+
+// Asks the server to stop a build. keepalive lets it finish even if the page closes.
+function deleteJob(jobId) {
+    fetch(`/api/v1/jobs/${jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
 }
 
 // "12 photos, background removed" -- the line under a build's name.
@@ -115,10 +142,27 @@ export function useBackgroundBuilds(user) {
         setLoadedUserKey(userKey);
         setBuilds(restoreBuilds(user));
     }
-    // Stops each upload still in progress, by build key.
-    const abortUploadsRef = useRef(new Map());
+    // Each upload still in progress, by build key: { owner, ownerKey,
+    // isCancelled, stopSending }. stopSending aborts the request unless every
+    // byte has been sent (see startBuild).
+    const uploadsRef = useRef(new Map());
     // The phase last seen per build, so the tick sound plays once per step.
     const lastPhasesRef = useRef(new Map());
+    // Checks in a row that failed, per build.
+    const failedPollsRef = useRef(new Map());
+    // The signed-in account and the current builds, for callbacks that run later.
+    const userRef = useRef(user);
+    const buildsRef = useRef(builds);
+    useEffect(() => {
+        userRef.current = user;
+        buildsRef.current = builds;
+    });
+
+    // Signing out, or in as someone else: stop the uploads still sending.
+    // One that has sent everything finishes, and is saved for its account.
+    useEffect(() => () => {
+        uploadsRef.current.forEach((upload) => upload.stopSending());
+    }, [userKey]);
 
     const updateBuild = useCallback((key, changes) => {
         setBuilds((current) => current.map((build) => (build.key === key ? { ...build, ...changes } : build)));
@@ -152,6 +196,14 @@ export function useBackgroundBuilds(user) {
             return { key: Number(key), jobId };
         });
         let isStopped = false;
+        let timerId = null;
+
+        // A check that failed. Too many in a row and the build is given up on.
+        function countFailedPoll(key) {
+            const failedCount = (failedPollsRef.current.get(key) ?? 0) + 1;
+            failedPollsRef.current.set(key, failedCount);
+            if (failedCount >= MAX_FAILED_POLLS) updateBuild(key, { status: 'lost', error: LOST_CONTACT_TEXT });
+        }
 
         async function checkBuilds() {
             for (const { key, jobId } of tracked) {
@@ -163,9 +215,18 @@ export function useBackgroundBuilds(user) {
                         setBuilds((current) => current.filter((build) => build.key !== key));
                         continue;
                     }
-                    if (!res.ok) continue;
+                    if (res.status === 401 || res.status === 403) {
+                        // Signed out (e.g. the session expired): this account can't see it any more.
+                        updateBuild(key, { status: 'lost', error: SESSION_ENDED_TEXT });
+                        continue;
+                    }
+                    if (!res.ok) {
+                        countFailedPoll(key);
+                        continue;
+                    }
                     const job = await res.json();
                     if (isStopped) return;
+                    failedPollsRef.current.delete(key);
 
                     const lastPhase = lastPhasesRef.current.get(key);
                     if (job.status === 'running' && lastPhase && job.phase !== lastPhase) playSound('tick');
@@ -185,15 +246,19 @@ export function useBackgroundBuilds(user) {
                     updateBuild(key, changes);
                 } catch {
                     // Server unreachable for a moment: try again next time.
+                    if (isStopped) return;
+                    countFailedPoll(key);
                 }
             }
+            // The next check is only scheduled once this one has finished, so
+            // a slow server can't make two run at once (and play a sound twice).
+            if (!isStopped) timerId = setTimeout(checkBuilds, POLL_INTERVAL_MS);
         }
 
         checkBuilds();
-        const timerId = setInterval(checkBuilds, POLL_INTERVAL_MS);
         return () => {
             isStopped = true;
-            clearInterval(timerId);
+            clearTimeout(timerId);
         };
     }, [pollKey, updateBuild]);
 
@@ -214,8 +279,23 @@ export function useBackgroundBuilds(user) {
         }]);
 
         let lastPercent = 0;
+        const owner = userRef.current;
+        const thisUpload = { owner, ownerKey: owner?.email ?? null, isCancelled: false, stopSending: () => { } };
+        uploadsRef.current.set(key, thisUpload);
         upload(
-            (xhr) => abortUploadsRef.current.set(key, () => xhr.abort()),
+            (xhr) => {
+                // Once every byte is sent the server is making the job, and
+                // aborting would lose the reply with its id, leaving the job
+                // running unseen. So from then on the upload is left to finish
+                // (the reply is handled below).
+                let hasSentAllBytes = false;
+                xhr.upload.addEventListener('load', () => {
+                    hasSentAllBytes = true;
+                });
+                thisUpload.stopSending = () => {
+                    if (!hasSentAllBytes) xhr.abort();
+                };
+            },
             (fraction) => {
                 // Only re-render when the shown percentage changes.
                 const percent = Math.round(fraction * 100);
@@ -225,16 +305,26 @@ export function useBackgroundBuilds(user) {
             },
         )
             .then((jobId) => {
+                if (thisUpload.isCancelled) {
+                    // Cancelled while the upload was finishing: stop the job it made.
+                    deleteJob(jobId);
+                    return;
+                }
+                if (thisUpload.ownerKey !== (userRef.current?.email ?? null)) {
+                    // Signed out while it finished: keep it for that account's next sign-in.
+                    if (owner) addSavedBuild(owner, { jobId, label: entry.label, detail: entry.detail, source: entry.source });
+                    return;
+                }
                 lastPhasesRef.current.set(key, 'upload');
                 updateBuild(key, { jobId, status: 'queued', uploadFraction: null });
             })
             .catch((err) => {
-                // Cancelled: the build was already taken off the list.
-                if (err?.aborted) return;
+                // Cancelled, or signed out: the build was already taken off the list.
+                if (err?.aborted || thisUpload.isCancelled || thisUpload.ownerKey !== (userRef.current?.email ?? null)) return;
                 playSound('error');
                 updateBuild(key, { status: 'error', error: err.message || 'Upload failed', uploadFraction: null });
             })
-            .finally(() => abortUploadsRef.current.delete(key));
+            .finally(() => uploadsRef.current.delete(key));
         return key;
     }, [updateBuild]);
 
@@ -281,21 +371,27 @@ export function useBackgroundBuilds(user) {
         });
     }, []);
 
-    // Stops a build: aborts its upload, or asks the server to cancel the job.
+    // Stops a build: stops its upload, or asks the server to cancel the job.
+    // (The request is sent here, not inside setBuilds, which React may run twice.)
     const cancelBuild = useCallback((key) => {
-        setBuilds((current) => {
-            const build = current.find((entry) => entry.key === key);
-            if (build?.jobId && !FINISHED_STATUSES.has(build.status)) {
-                fetch(`/api/v1/jobs/${build.jobId}`, { method: 'DELETE', keepalive: true }).catch(() => { });
-            }
-            return current.filter((entry) => entry.key !== key);
-        });
-        abortUploadsRef.current.get(key)?.();
+        const build = buildsRef.current.find((entry) => entry.key === key);
+        if (build?.jobId && !FINISHED_STATUSES.has(build.status)) deleteJob(build.jobId);
+        const thisUpload = uploadsRef.current.get(key);
+        if (thisUpload) {
+            thisUpload.isCancelled = true;
+            thisUpload.stopSending();
+        }
+        setBuilds((current) => current.filter((entry) => entry.key !== key));
     }, []);
 
     // Takes a finished build off the panel.
     const dismissBuild = useCallback((key) => {
         setBuilds((current) => current.filter((build) => build.key !== key));
+    }, []);
+
+    // Takes a build off the panel by its job id, e.g. once its Details screen has opened the model.
+    const dismissJob = useCallback((jobId) => {
+        setBuilds((current) => current.filter((build) => build.jobId !== jobId));
     }, []);
 
     const isUploading = builds.some((build) => build.status === 'uploading');
@@ -311,5 +407,5 @@ export function useBackgroundBuilds(user) {
         return () => window.removeEventListener('beforeunload', askBeforeLeaving);
     }, [isUploading]);
 
-    return { builds, startPhotoBuild, startMediaBuild, cancelBuild, dismissBuild, trackJob, isUploading };
+    return { builds, startPhotoBuild, startMediaBuild, cancelBuild, dismissBuild, dismissJob, trackJob, isUploading };
 }
