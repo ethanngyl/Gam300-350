@@ -209,10 +209,7 @@ function BuildPanel({ builds, onOpenModel, onShowLibrary, onRetry, onCancel, onD
                             <button
                                 type="button"
                                 className="forma-btn"
-                                onClick={() => {
-                                    playSound('tap');
-                                    onShowLibrary(build);
-                                }}
+                                onClick={() => onShowLibrary(build)}
                             >
                                 Open Media Library
                             </button>
