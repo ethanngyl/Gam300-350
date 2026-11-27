@@ -548,6 +548,8 @@ void MainWindow::createToolBar() {
     m_toolBar->setMovable(false);
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
+    m_toolBar->addAction(m_saveSceneAction);
+    m_toolBar->addSeparator();
     m_toolBar->addAction(m_importAction);
     m_toolBar->addAction(m_generateAction);
     m_toolBar->addAction(m_exportAction);
