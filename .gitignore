@@ -1,5 +1,7 @@
 # Build directories
 build/
+# ...but keep the architecture docs for the build system
+!docs/Architecture/**/build/
 out/
 bin/
 

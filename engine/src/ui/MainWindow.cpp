@@ -10,14 +10,16 @@ Implements MainWindow, the editor shell: builds the menus, toolbar, status
 bar and dock panels around the Viewport; routes scene commands (import,
 select, rename, delete, render mode) to the SplatRenderer and keeps the
 panels in sync with it; wires the Account menu and My Models panel to
-the backend; loads .ply files on a worker thread so the UI stays
-responsive; and saves/restores the layout and preferences via QSettings.
+the backend; loads .ply files and saves/opens .gscene scenes on worker
+threads so the UI stays responsive; and saves/restores the layout and
+preferences via QSettings.
 **************************************************************************/
 #include "ui/Viewport.h"
 #include "ui/MainWindow.h"
 
 #include "net/BackendClient.h"
 #include "pipeline/LocalReconstruction.h"
+#include "scene/SceneFile.h"
 #include "splat/CropBox.h"
 #include "splat/SplatExporter.h"
 #include "splat/SplatGenerator.h"
@@ -59,6 +61,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QStyle>
 #include <QThread>
@@ -70,6 +73,7 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include <functional>
 
 #include <memory>
+#include <utility>
 
 namespace {
     // Status bar stats refresh interval, so the FPS readout is legible.
@@ -100,6 +104,9 @@ namespace {
     const QString kTrimDivisionsKey = QStringLiteral("trim/voxelDivisions");
     const QString kTrimMinPerVoxelKey = QStringLiteral("trim/minPerVoxel");
     const QString kExportFolderKey = QStringLiteral("files/exportFolder");
+    const QString kSceneFolderKey = QStringLiteral("files/sceneFolder");
+
+    const QString kSceneFilter = QStringLiteral("Genesis scene (*.gscene)");
 
     bool IsPlyFile(const QString& path) {
         return path.endsWith(".ply", Qt::CaseInsensitive);
@@ -187,6 +194,9 @@ MainWindow::MainWindow() {
         m_viewport->setShowGrid(m_gridAction->isChecked());
         refreshScenePanels();
         startNextImport(); // anything queued before the renderer existed
+        if (!m_pendingScenePath.isEmpty()) {
+            openScenePath(std::exchange(m_pendingScenePath, QString()));
+        }
         qInfo("Renderer ready. Import a .ply to get started.");
     };
 
@@ -223,7 +233,7 @@ MainWindow::MainWindow() {
 
 MainWindow::~MainWindow() {
     // Never destroy a running QThread: wait for an in-flight import or export to finish.
-    for (QThread* thread : { m_loadThread.data(), m_exportThread.data(), m_copyThread.data() }) {
+    for (QThread* thread : { m_loadThread.data(), m_exportThread.data(), m_copyThread.data(), m_sceneThread.data() }) {
         if (thread) {
             thread->wait();
             delete thread;
@@ -255,6 +265,28 @@ void MainWindow::createActions() {
     m_exportAction->setStatusTip("Convert the selected model or the whole scene to .glb, .obj, .ply, .stl or .splat");
     m_exportAction->setEnabled(false); // until a model is loaded
     connect(m_exportAction, &QAction::triggered, this, [this] { exportModels(); });
+
+    m_newSceneAction = new QAction(s->standardIcon(QStyle::SP_FileIcon), "&New Scene", this);
+    m_newSceneAction->setShortcut(QKeySequence::New);
+    m_newSceneAction->setStatusTip("Remove every model and start a new, unsaved scene");
+    connect(m_newSceneAction, &QAction::triggered, this, [this] { newScene(); });
+
+    m_openSceneAction = new QAction(s->standardIcon(QStyle::SP_DirOpenIcon), "Open &Scene...", this);
+    m_openSceneAction->setShortcut(QKeySequence("Ctrl+Shift+O"));
+    m_openSceneAction->setStatusTip("Open a saved scene (.gscene), replacing the current one");
+    connect(m_openSceneAction, &QAction::triggered, this, [this] { openScene(); });
+
+    m_saveSceneAction = new QAction(s->standardIcon(QStyle::SP_DialogSaveButton), "&Save Scene", this);
+    m_saveSceneAction->setShortcut(QKeySequence::Save);
+    m_saveSceneAction->setStatusTip("Save every model with its position, trim and visibility to a .gscene file");
+    m_saveSceneAction->setEnabled(false); // until a model is loaded
+    connect(m_saveSceneAction, &QAction::triggered, this, [this] { saveScene(false); });
+
+    m_saveSceneAsAction = new QAction("Save Scene &As...", this);
+    m_saveSceneAsAction->setShortcut(QKeySequence("Ctrl+Shift+S"));
+    m_saveSceneAsAction->setStatusTip("Save the scene to a new .gscene file");
+    m_saveSceneAsAction->setEnabled(false);
+    connect(m_saveSceneAsAction, &QAction::triggered, this, [this] { saveScene(true); });
 
     m_generateAction = new QAction(s->standardIcon(QStyle::SP_ArrowUp), "&Generate Model...", this);
     m_generateAction->setShortcut(QKeySequence("Ctrl+G"));
@@ -450,6 +482,11 @@ void MainWindow::createActions() {
 
 void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu("&File");
+    fileMenu->addAction(m_newSceneAction);
+    fileMenu->addAction(m_openSceneAction);
+    fileMenu->addAction(m_saveSceneAction);
+    fileMenu->addAction(m_saveSceneAsAction);
+    fileMenu->addSeparator();
     fileMenu->addAction(m_importAction);
     fileMenu->addAction(m_trimOnImportAction);
     m_recentMenu = fileMenu->addMenu("Open &Recent");
@@ -808,7 +845,8 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 // ===========================================================================
-// Drag and drop: .ply files dropped anywhere on the window are imported.
+// Drag and drop: .ply files dropped anywhere on the window are imported, and
+// a dropped .gscene is opened.
 // ===========================================================================
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
@@ -816,7 +854,7 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
         return;
     }
     for (const QUrl& url : event->mimeData()->urls()) {
-        if (url.isLocalFile() && IsPlyFile(url.toLocalFile())) {
+        if (url.isLocalFile() && (IsPlyFile(url.toLocalFile()) || IsSceneFile(url.toLocalFile()))) {
             event->acceptProposedAction();
             return;
         }
@@ -824,12 +862,20 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
 }
 
 void MainWindow::dropEvent(QDropEvent* event) {
+    QStringList paths;
     for (const QUrl& url : event->mimeData()->urls()) {
-        if (url.isLocalFile() && IsPlyFile(url.toLocalFile())) {
-            importSplat(url.toLocalFile());
+        if (url.isLocalFile()) {
+            paths << url.toLocalFile();
         }
     }
     event->acceptProposedAction();
+    // Deferred: openScenePath can show a dialog, which must not run inside the drop.
+    QTimer::singleShot(0, this, [this, paths] {
+        for (const QString& path : paths) {
+            if (IsPlyFile(path)) importSplat(path);
+            else if (IsSceneFile(path)) openScenePath(path);
+        }
+    });
 }
 
 // ===========================================================================
@@ -840,8 +886,12 @@ void MainWindow::openFiles(const QStringList& paths) {
     for (const QString& path : paths) {
         if (IsPlyFile(path)) {
             importSplat(path);
+        } else if (IsSceneFile(path)) {
+            // Before the first show the renderer doesn't exist yet; onInitialized opens it.
+            if (m_viewport->renderer()) openScenePath(path);
+            else m_pendingScenePath = path;
         } else {
-            qWarning("Ignoring '%s': only .ply files can be opened.", qPrintable(path));
+            qWarning("Ignoring '%s': only .ply and .gscene files can be opened.", qPrintable(path));
         }
     }
 }
@@ -861,8 +911,8 @@ void MainWindow::importSplat(const QString& path) {
 
 void MainWindow::startNextImport() {
     SplatRenderer* renderer = m_viewport->renderer();
-    if (m_loadThread || m_pendingImports.isEmpty() || !renderer) {
-        return; // busy (picked up when the current load finishes), idle, or GL not ready
+    if (m_loadThread || m_sceneThread || m_pendingImports.isEmpty() || !renderer) {
+        return; // busy (picked up when the current load or scene save/open finishes), idle, or GL not ready
     }
 
     // Count queued files against the shader's fixed-size transform array too.
@@ -938,7 +988,6 @@ void MainWindow::finishImport(const QString& path, std::vector<SplatVertex>& spl
         imported->SetOriginal(std::move(original));
     }
     imported->SetTrimData(trimData, wasTrimmed);
-    addRecentFile(path);
 
     selectModel(static_cast<int>(renderer->ModelCount()) - 1);
     refreshScenePanels();
@@ -1581,10 +1630,265 @@ void MainWindow::exportModels() {
             summary += QString(", %1 triangles").arg(locale.toString(static_cast<qulonglong>(result->triangleCount)));
         }
         summary += QString(", %1").arg(locale.formattedDataSize(QFileInfo(path).size()));
+        // An .obj mesh also writes its material and colour texture, which must stay beside it.
+        QStringList extras;
+        for (const std::filesystem::path& extra : result->extraFiles) {
+            extras << QString::fromStdWString(extra.filename().wstring());
+        }
+        if (!extras.isEmpty()) {
+            summary += QString(", plus %1").arg(extras.join(" and "));
+        }
         qInfo("Exported %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
         statusBar()->showMessage(QString("Exported %1 (%2)").arg(fileName, summary), kStatusMessageMs);
     });
     m_exportThread->start();
+}
+
+// ===========================================================================
+// Scene files (.gscene, see scene/SceneFile.h)
+// ===========================================================================
+
+void MainWindow::updateWindowTitle() {
+    setWindowTitle(m_scenePath.isEmpty()
+                       ? kAppTitle
+                       : QString("%1 - %2").arg(QFileInfo(m_scenePath).completeBaseName(), kAppTitle));
+}
+
+bool MainWindow::confirmReplaceScene(const QString& action) {
+    const SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer || renderer->ModelCount() == 0) {
+        return true;
+    }
+    const size_t count = renderer->ModelCount();
+    const auto answer = QMessageBox::question(
+        this, action,
+        QString("This removes the %1 model%2 in the current scene. Changes since the scene was last saved "
+                "are lost.\n\nContinue?")
+            .arg(count)
+            .arg(count == 1 ? "" : "s"),
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    return answer == QMessageBox::Yes;
+}
+
+void MainWindow::clearScene() {
+    SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer) {
+        return;
+    }
+    cancelCropBox();
+    m_inspector->setModel(nullptr); // drop the pointer before the models are freed
+    m_cropBoxModel = nullptr;
+    m_undo.clear(); // commands point at the models about to go
+    while (renderer->ModelCount() > 0) {
+        renderer->RemoveModel(static_cast<int>(renderer->ModelCount()) - 1);
+    }
+    refreshScenePanels();
+}
+
+void MainWindow::newScene() {
+    if (m_sceneThread) {
+        return;
+    }
+    if (m_loadThread || !m_pendingImports.isEmpty()) {
+        statusBar()->showMessage("Wait for the imports to finish first.", kStatusMessageMs);
+        return;
+    }
+    if (!confirmReplaceScene("New Scene")) {
+        return;
+    }
+    clearScene();
+    m_scenePath.clear();
+    updateWindowTitle();
+    qInfo("Started a new scene.");
+    statusBar()->showMessage("New scene", kStatusMessageMs);
+}
+
+void MainWindow::saveScene(bool saveAs) {
+    SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer || renderer->ModelCount() == 0 || m_sceneThread) {
+        return;
+    }
+
+    QString path = m_scenePath;
+    if (saveAs || path.isEmpty()) {
+        QSettings settings;
+        QString folder = settings.value(kSceneFolderKey).toString();
+        if (folder.isEmpty()) {
+            folder = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        }
+        const QString name = m_scenePath.isEmpty() ? QStringLiteral("Untitled")
+                                                   : QFileInfo(m_scenePath).completeBaseName();
+        path = QFileDialog::getSaveFileName(this, "Save Scene",
+                                            QDir(folder).filePath(name + kSceneExtension), kSceneFilter);
+        if (path.isEmpty()) {
+            return;
+        }
+        if (!IsSceneFile(path)) {
+            path += kSceneExtension;
+        }
+        settings.setValue(kSceneFolderKey, QFileInfo(path).absolutePath());
+    }
+
+    // Snapshot the scene: the user can keep editing while it is written.
+    auto scene = std::make_shared<Scene>();
+    scene->gaussianMode = m_gaussianAction->isChecked();
+    for (int i = 0; i < static_cast<int>(renderer->ModelCount()); ++i) {
+        const SplatModel* model = renderer->GetModel(i);
+        SceneModel entry;
+        entry.name = model->GetName();
+        entry.splats = model->splats();
+        entry.transform = model->GetTransform();
+        entry.hidden = model->GetIsHidden();
+        entry.trim = model->GetTrimData();
+        entry.trimmed = model->IsTrimmed();
+        if (entry.trimmed) {
+            entry.original = model->SourceSplats(); // the untrimmed splats, so the trim can still be undone
+        }
+        scene->models.push_back(std::move(entry));
+    }
+
+    const QString fileName = QFileInfo(path).fileName();
+    const size_t modelCount = scene->models.size();
+    qInfo("Saving scene %s...", qPrintable(QDir::toNativeSeparators(path)));
+    statusBar()->showMessage(QString("Saving %1...").arg(fileName));
+
+    auto result = std::make_shared<SceneResult>();
+    m_sceneThread = QThread::create([scene, result, path] { *result = SaveScene(*scene, path); });
+    connect(m_sceneThread, &QThread::finished, this, [this, result, path, fileName, modelCount] {
+        m_sceneThread->deleteLater();
+        m_sceneThread = nullptr;
+        refreshScenePanels(); // re-enables the scene actions
+        startNextImport();    // imports asked for during the save were held back
+
+        if (!result->ok) {
+            qWarning("Saving %s failed: %s", qPrintable(fileName), qPrintable(result->error));
+            statusBar()->showMessage(QString("Saving %1 failed").arg(fileName), kStatusMessageMs);
+            QMessageBox::warning(this, "Save Failed",
+                                 QString("The scene could not be saved.\n\n%1").arg(result->error));
+            return;
+        }
+        m_scenePath = path;
+        updateWindowTitle();
+        const QString summary = QString("%1 model%2").arg(modelCount).arg(modelCount == 1 ? "" : "s");
+        qInfo("Saved scene %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
+        statusBar()->showMessage(QString("Saved %1 (%2)").arg(fileName, summary), kStatusMessageMs);
+    });
+    m_sceneThread->start();
+    refreshScenePanels(); // disables the scene actions until the save is done
+}
+
+void MainWindow::openScene() {
+    QSettings settings;
+    QString folder = settings.value(kSceneFolderKey).toString();
+    if (folder.isEmpty()) {
+        folder = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+    const QString path = QFileDialog::getOpenFileName(this, "Open Scene", folder,
+                                                      kSceneFilter + ";;All files (*.*)");
+    if (path.isEmpty()) {
+        return;
+    }
+    settings.setValue(kSceneFolderKey, QFileInfo(path).absolutePath());
+    openScenePath(path);
+}
+
+void MainWindow::openScenePath(const QString& path) {
+    SplatRenderer* renderer = m_viewport->renderer();
+    if (!renderer) {
+        m_pendingScenePath = path; // opened by onInitialized
+        return;
+    }
+    if (m_sceneThread) {
+        statusBar()->showMessage("A scene is already being saved or opened.", kStatusMessageMs);
+        return;
+    }
+    if (m_loadThread || !m_pendingImports.isEmpty()) {
+        QMessageBox::information(this, "Open Scene", "Wait for the current imports to finish, then open the scene.");
+        return;
+    }
+    if (!QFileInfo(path).isFile()) {
+        QMessageBox::warning(this, "Open Scene",
+                             QString("The file could not be found:\n%1").arg(QDir::toNativeSeparators(path)));
+        return;
+    }
+    if (!confirmReplaceScene("Open Scene")) {
+        return;
+    }
+
+    const QString fileName = QFileInfo(path).fileName();
+    qInfo("Opening scene %s...", qPrintable(QDir::toNativeSeparators(path)));
+    m_loadingLabel->setText(QString("Opening %1...").arg(fileName));
+    m_loadingLabel->setVisible(true);
+    m_loadingBar->setVisible(true);
+    setCursor(Qt::BusyCursor);
+
+    // Read every .ply on a worker thread; the current scene stays untouched until it has loaded.
+    auto scene = std::make_shared<Scene>();
+    auto result = std::make_shared<SceneResult>();
+    m_sceneThread = QThread::create([scene, result, path] { *result = LoadScene(path, *scene); });
+    connect(m_sceneThread, &QThread::finished, this, [this, scene, result, path, fileName] {
+        m_sceneThread->deleteLater();
+        m_sceneThread = nullptr;
+        setImportBusy(QString()); // hides the progress bar
+        // Imports asked for while the scene loaded were held back; they join the opened scene.
+        startNextImport();
+
+        if (!result->ok) {
+            refreshScenePanels();
+            qWarning("Opening %s failed: %s", qPrintable(fileName), qPrintable(result->error));
+            statusBar()->showMessage(QString("Opening %1 failed").arg(fileName), kStatusMessageMs);
+            QMessageBox::warning(this, "Open Scene Failed",
+                                 QString("The scene could not be opened.\n\n%1").arg(result->error));
+            return;
+        }
+
+        clearScene();
+        SplatRenderer* renderer = m_viewport->renderer();
+        QStringList warnings = result->warnings;
+        int skipped = 0;
+        for (SceneModel& entry : scene->models) {
+            if (renderer->ModelCount() >= static_cast<size_t>(SplatRenderer::kMaxModels)) {
+                ++skipped;
+                continue;
+            }
+            renderer->SetSplats(entry.splats, entry.name);
+            const int index = static_cast<int>(renderer->ModelCount()) - 1;
+            SplatModel* model = renderer->GetModel(index);
+            model->SetTransform(entry.transform);
+            const bool trimmed = entry.trimmed && !entry.original.empty();
+            if (trimmed) {
+                model->SetOriginal(std::move(entry.original));
+            }
+            model->SetTrimData(entry.trim, trimmed);
+            renderer->SetModelHidden(index, entry.hidden);
+        }
+        if (skipped > 0) {
+            warnings << QString("The scene holds more than the maximum of %1 models, so the last %2 were left out.")
+                            .arg(SplatRenderer::kMaxModels)
+                            .arg(skipped);
+        }
+
+        setRenderMode(static_cast<int>(scene->gaussianMode ? SplatRenderer::RenderMode::GaussianSplat
+                                                           : SplatRenderer::RenderMode::PointCloud));
+        selectModel(-1);
+        refreshScenePanels();
+        m_scenePath = path;
+        updateWindowTitle();
+
+        const size_t count = renderer->ModelCount();
+        const QString summary = QString("%1 model%2").arg(count).arg(count == 1 ? "" : "s");
+        qInfo("Opened scene %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
+        statusBar()->showMessage(QString("Opened %1 (%2)").arg(fileName, summary), kStatusMessageMs);
+        for (const QString& warning : warnings) {
+            qWarning("%s", qPrintable(warning));
+        }
+        if (!warnings.isEmpty()) {
+            QMessageBox::warning(this, "Scene Opened With Problems",
+                                 QString("%1 was opened, but:\n\n- %2").arg(fileName, warnings.join("\n- ")));
+        }
+    });
+    m_sceneThread->start();
+    refreshScenePanels(); // disables the scene actions until the scene has loaded
 }
 
 // ===========================================================================
@@ -1764,9 +2068,14 @@ void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollow
             return;
         }
         const QLocale locale;
-        qInfo("Saved %s (%s splats, %s)", qPrintable(QDir::toNativeSeparators(dest)),
+        QStringList extras; // a mesh .obj's material and colour texture
+        for (const std::filesystem::path& extra : result->extraFiles) {
+            extras << QString::fromStdWString(extra.filename().wstring());
+        }
+        qInfo("Saved %s (%s splats, %s)%s", qPrintable(QDir::toNativeSeparators(dest)),
               qPrintable(locale.toString(static_cast<qulonglong>(result->splatCount))),
-              qPrintable(locale.formattedDataSize(QFileInfo(dest).size())));
+              qPrintable(locale.formattedDataSize(QFileInfo(dest).size())),
+              qPrintable(extras.isEmpty() ? QString() : QString(" with %1 beside it").arg(extras.join(" and "))));
         statusBar()->showMessage(QString("Saved %1").arg(fileName), kStatusMessageMs);
     });
     m_copyThread->start();
@@ -1802,6 +2111,12 @@ void MainWindow::refreshScenePanels() {
     m_outliner->rebuild(*renderer);
     selectModel(renderer->GetSelectedModel());
     m_exportAction->setEnabled(renderer->ModelCount() > 0 && !m_exportThread);
+
+    const bool sceneIdle = !m_sceneThread;
+    m_saveSceneAction->setEnabled(renderer->ModelCount() > 0 && sceneIdle);
+    m_saveSceneAsAction->setEnabled(renderer->ModelCount() > 0 && sceneIdle);
+    m_openSceneAction->setEnabled(sceneIdle);
+    m_newSceneAction->setEnabled(sceneIdle);
 }
 
 void MainWindow::setImportBusy(const QString& fileName) {
@@ -1896,11 +2211,14 @@ void MainWindow::showControls() {
         "<tr><td>Left / Right</td><td>Nudge along Z</td></tr>"
         "<tr><td>Esc</td><td>Deselect</td></tr>"
         "<tr><td colspan='2'><br><b>Editor</b></td></tr>"
+        "<tr><td>Ctrl+N</td><td>New scene</td></tr>"
+        "<tr><td>Ctrl+Shift+O</td><td>Open scene (.gscene)</td></tr>"
+        "<tr><td>Ctrl+S / Ctrl+Shift+S</td><td>Save scene / Save scene as</td></tr>"
         "<tr><td>Ctrl+O</td><td>Import splat (.ply)</td></tr>"
         "<tr><td>Ctrl+E</td><td>Export to .glb / .obj / .ply / .stl / .splat</td></tr>"
         "<tr><td>F2 / Delete</td><td>Rename / remove selected model</td></tr>"
         "<tr><td>Ctrl+1 / Ctrl+2</td><td>Point Cloud / Gaussian Splat</td></tr>"
-        "<tr><td>Drag &amp; drop</td><td>Drop .ply files onto the window to import</td></tr>"
+        "<tr><td>Drag &amp; drop</td><td>Drop .ply files onto the window to import, or a .gscene to open it</td></tr>"
         "<tr><td colspan='2'><br><b>Account</b></td></tr>"
         "<tr><td>Account &gt; Sign In</td><td>Open the models you uploaded through the web app</td></tr>"
         "</table>");

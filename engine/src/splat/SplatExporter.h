@@ -56,10 +56,15 @@ struct ExportResult {
     size_t splatCount = 0;
     size_t vertexCount = 0;
     size_t triangleCount = 0;
+    std::vector<std::filesystem::path> extraFiles; //Written next to path, e.g. an .obj's .mtl and colour .png
 };
 
 //Writes every source into one file at path. Transforms are baked in, so the export
 //matches what the viewport shows. Safe to call from a worker thread.
+//Mesh exports to .obj and .glb carry their colours in a texture (one texel per splat,
+//UVs on every vertex) because Unity ignores vertex colours and Blender doesn't show them
+//without a custom material. A .glb embeds the PNG; an .obj gets "<name>.mtl" and
+//"<name>.png" beside it (spaces and other unsafe characters in <name> become '_').
 ExportResult ExportSplats(const std::vector<ExportSource>& sources, const std::filesystem::path& path,
                           const ExportOptions& options);
 

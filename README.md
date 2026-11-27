@@ -98,11 +98,13 @@ The web app's 3D viewer can render with the engine's own splat renderer (`engine
 ## How to use Engine
 The engine opens as a dockable editor: **Scene** (left), **Inspector** (right), and **Assets / My Models / Console** tabs (bottom). Panels can be dragged, tabbed, floated or hidden from the Window menu; the layout is remembered between runs (Window > Reset Layout restores the default).
 - Import a splat: double-click a .ply in the **Assets** panel, use File > Import Splat (Ctrl+O), drag .ply files onto the window, or pass them on the command line (`Codefine.exe model.ply`). Large files load in the background.
+- Save and open scenes: File > Save Scene (Ctrl+S) / Save Scene As (Ctrl+Shift+S) writes every model, with its position, trim and visibility, to a `.gscene` file plus a `<name>_data` folder of the models' splats beside it (keep the two together when moving a scene). File > Open Scene (Ctrl+Shift+O), dropping a `.gscene` on the window, or `Codefine.exe MyScene.gscene` opens it again; File > New Scene (Ctrl+N) empties the scene.
 - Select a model in the **Scene** panel; edit its name and position in the **Inspector**. F2 renames, Delete removes it from the scene (the file is untouched).
 - Camera: right-drag to orbit, left-drag to pan, scroll to zoom, Home to recenter. With the viewport focused, WASD/Arrow keys nudge the selected model and Esc deselects.
 - Switch between Point Cloud and Gaussian Splat rendering from the toolbar (Ctrl+1 / Ctrl+2).
 - Export: File > Export (Ctrl+E), or right-click a model in the **Scene** panel, converts the selected model (or the whole scene) to another format. Trimming and position changes are included.
   - .glb (glTF), .obj, .ply: points, or a mesh with one coloured ellipsoid per splat, for Blender, Unity, Unreal, MeshLab, etc.
+  - For Blender and Unity, export a **mesh**: .glb and .obj meshes carry their colours in a texture that both apply automatically (a .glb embeds it; an .obj writes a `.mtl` and `.png` next to it, so copy all three into the Unity project). Point exports only have vertex colours, which Unity can't show. Unity needs a glTF importer package such as glTFast for .glb.
   - .stl: mesh without colour, for 3D printing / CAD
   - Gaussian splat .ply or .splat: stays a splat, for Codefine and other splat viewers (view-dependent colour is not kept)
   - Mesh exports get large: raise "Min opacity" to drop faint haze splats, and use Low mesh detail for big scans

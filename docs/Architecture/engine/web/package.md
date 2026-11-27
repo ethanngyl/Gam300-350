@@ -12,7 +12,7 @@ The engine's splat renderer compiled to WebAssembly, behind a small JavaScript A
 
 ## Build (`engine/web/CMakeLists.txt`)
 - Must be configured with `emcmake`. Otherwise it stops with a `FATAL_ERROR` that points to `build-web.bat`.
-- C++20, Release by default. Only the portable dependencies are imported: **glm** and **happly** (no Qt, GLEW or FMOD).
+- C++20, Release by default. Only the portable dependencies are imported: **glm** and **happly** (no Qt or GLEW).
 - Sources: `WebMain.cpp`, `SplatLoader`, `SplatModel`, `SplatRenderer`, `Shader`, `Camera`, compiled with `-DCODEFINE_GLES`.
 - `-fwasm-exceptions`, because happly reports bad files by throwing and `SplatLoader` catches it.
 - Link flags: `MODULARIZE`, `EXPORT_ES6`, `EXPORT_NAME=createCodefineEngine`, web environment only, WebGL 2 only, `ALLOW_MEMORY_GROWTH` with `MAXIMUM_MEMORY=4GB` (a 1–2M splat `.ply` plus its decoded copies needs far more than the default heap), and exports `_malloc`, `_free`, `ccall` and `HEAPU8`.

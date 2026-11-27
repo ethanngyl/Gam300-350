@@ -6,11 +6,11 @@ Converts loaded splats into other 3D file formats so they can be used in other t
 
 | Type | Values / fields |
 |---|---|
-| `ExportFormat` | `GaussianPly` (3DGS, re-importable, DC colour only), `SplatFile` (antimatter15 `.splat`, 32 B per splat, for web viewers), `PointCloudPly` (coloured PLY for MeshLab, CloudCompare, Blender), `Obj` (with vertex colours), `Glb` (binary glTF 2.0), `Stl` (binary, mesh only, no colour). |
+| `ExportFormat` | `GaussianPly` (3DGS, re-importable, DC colour only), `SplatFile` (antimatter15 `.splat`, 32 B per splat, for web viewers), `PointCloudPly` (coloured PLY for MeshLab, CloudCompare, Blender), `Obj` (vertex colours; mesh exports also get a `.mtl` + `.png` colour texture), `Glb` (binary glTF 2.0; mesh exports embed a colour texture), `Stl` (binary, mesh only, no colour). |
 | `ExportGeometry` | `Points` (one vertex per splat) or `Mesh` (one ellipsoid per splat). |
 | `ExportOptions` | `format` (default Glb), `geometry` (default Points; ignored by formats that support only one), `highDetailMesh` (false = octahedron with 8 triangles, true = icosahedron with 20), `sigmaScale` (1.5 standard deviations), `minAlpha` (0 = keep all). |
 | `ExportSource` | A pointer to one model's splats in model space, plus its transform. |
-| `ExportResult` | `ok`, `error`, `splatCount`, `vertexCount`, `triangleCount`. |
+| `ExportResult` | `ok`, `error`, `splatCount`, `vertexCount`, `triangleCount`, `extraFiles` (files written beside the export: an `.obj` mesh's `.mtl` and `.png`). |
 
 ## Public functions
 
@@ -42,6 +42,7 @@ For each source it splits the transform's linear part into a **uniform scale** (
 ### `BuildMesh(splats, options)`
 - **Points:** one position and one RGBA byte colour per splat, with no indices.
 - **Mesh:** for each splat, every unit-shape vertex `u` becomes `position + R · (u ⊙ scale · sigmaScale)`. All of a splat's vertices get its colour, and the indices are offset by the splat's base vertex.
+- **Textured mesh (Obj and Glb):** also calls `BuildColorTexture` and records `verticesPerSplat`, so every vertex of splat *i* uses `splatUvs[i]`.
 
 ### `ColorBytes(s)`
 sRGB colour and alpha, each clamped to 0…1, converted to bytes 0…255.
@@ -59,11 +60,17 @@ A buffered `std::ofstream` that flushes every 1 MB. It provides `bytes`, `pod<T>
 
 ### Geometry formats (engine coordinates, y up)
 - **`WritePly`**: binary vertices with float xyz and uchar RGBA, plus an optional `face` element with `list uchar uint vertex_indices`.
-- **`WriteObj`**: `v x y z r g b` lines (the vertex-colour extension Blender and MeshLab read), plus `f a b c` lines using 1-based indices.
+- **`WriteObj(w, mesh, mtlFile)`**: `v x y z r g b` lines (the vertex-colour extension MeshLab reads), plus `f a b c` lines using 1-based indices. A **textured mesh** also gets `mtllib <mtlFile>`, one `vt u v` per splat (v flipped, since OBJ texture coordinates start at the bottom), `usemtl splats`, and `f v/vt ...` faces. `ExportSplats` writes the matching `<stem>.mtl` (`ObjMaterial`: white `Kd`, `map_Kd <stem>.png`) and `<stem>.png` beside the `.obj` first; `SafeFileStem` turns spaces and other characters that `mtllib`/`map_Kd` parsers split on into `_`.
 - **`WriteStl`**: 80-byte header, triangle count, then for each triangle a normal (normalised cross product), three vertices and a 2-byte attribute.
 - **`WriteGlb`**: glTF 2.0 binary.
-  - `COLOR_0` must be **linear**, so the sRGB bytes are converted through a 256-entry `SrgbToLinear` lookup table into **normalised `uint16`**, which keeps dark shades from banding. Alpha is `a·257`.
+  - **Textured mesh:** `TEXCOORD_0` (float2 per vertex) instead of `COLOR_0`, because glTF multiplies `COLOR_0` with the base colour texture and the colours would come out darker. The PNG is stored in the `BIN` chunk as a fourth buffer view (padded to 4 bytes) and used as the material's `baseColorTexture`, with a nearest-filter, clamp-to-edge sampler so each splat's texel stays exact.
+  - **Points:** `COLOR_0` must be **linear**, so the sRGB bytes are converted through a 256-entry `SrgbToLinear` lookup table into **normalised `uint16`**, which keeps dark shades from banding. Alpha is `a·257`.
   - The JSON declares one mesh primitive, `mode 0` (points) or `4` (triangles), and an **unlit** material (`KHR_materials_unlit`), so viewers show the captured colours without relighting them. It includes position min/max bounds and buffer views for positions, colours and indices, all 4-byte aligned. The JSON is padded with spaces to a multiple of 4.
   - It refuses files larger than 4 GB (the glTF size field is `uint32`) with advice.
   - It writes the `glTF` header, the `JSON` chunk and the `BIN` chunk.
 - **`SrgbToLinear(c)`**: the standard sRGB transfer function.
+
+### Colour texture (mesh exports to OBJ and GLB)
+Unity's OBJ importer ignores vertex colours, its standard shaders ignore them in `.glb` files too, and Blender only shows them with a custom material. So mesh exports carry the colours in a texture as well, which every importer applies to the material by default.
+- **`BuildColorTexture(splats, splatUvs)`**: one texel per splat in a square power-of-two texture (`ColorTexture`, sRGB RGB bytes, row 0 at the top), so a 1M-splat model uses 1024×1024. Splats are sorted by a 3D **Morton code** of their position (`SpreadBits3`, 10 bits per axis) and placed along a 2D Z-order curve (`CompactEvenBits`), so each 2×2, 4×4, … block of texels holds splats that are next to each other and mipmaps blend neighbouring colours rather than random ones. It returns each splat's texel centre as a UV. A texture larger than 16384 (Unity's limit, about 268M splats) throws.
+- **`EncodePng(texture)`**: a minimal PNG writer (8-bit RGB, filter 0, zlib with **stored** deflate blocks of at most 65535 bytes, Adler-32, CRC-32 per chunk). The file is larger than a compressed PNG (3 bytes per texel), but it needs no image library, so `src/splat` still builds in `lint-cpp.sh` with only glm, GLEW and happly.

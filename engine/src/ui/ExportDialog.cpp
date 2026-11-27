@@ -37,11 +37,12 @@ namespace {
     QString FormatDescription(ExportFormat format) {
         switch (format) {
         case ExportFormat::Glb:
-            return "Single-file glTF with vertex colours. Opens in Blender, Unity, Unreal, "
-                   "Windows 3D Viewer and web viewers.";
+            return "Single-file glTF. Mesh exports embed a colour texture, so the colours show in Blender, "
+                   "Unity (with a glTF importer such as glTFast), Unreal, Windows 3D Viewer and web viewers.";
         case ExportFormat::Obj:
-            return "Text format with vertex colours. Opens in almost every 3D tool; large and slow "
-                   "for big scans.";
+            return "Text format that opens in almost every 3D tool. Mesh exports also write a .mtl and a "
+                   ".png colour texture beside it (keep them together) so Blender and Unity show the colours. "
+                   "Large and slow for big scans.";
         case ExportFormat::PointCloudPly:
             return "Standard coloured .ply. Opens in MeshLab, CloudCompare and Blender.";
         case ExportFormat::Stl:
