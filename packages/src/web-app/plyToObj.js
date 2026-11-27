@@ -15,13 +15,20 @@ so the web app and the desktop editor write the same file:
 - geometry 'points' writes one coloured vertex per splat, 'mesh' one small
   ellipsoid per splat (octahedron, or icosahedron for highDetail) shaped by
   the Gaussian's scale (times sigmaScale) and rotation;
-- vertex colours use the "v x y z r g b" extension (Blender, MeshLab).
+- vertex colours use the "v x y z r g b" extension (Blender, MeshLab);
+- 'mesh' also gets a colour texture (one texel per splat, laid out along a
+  Z-order curve) plus a .mtl, like the engine, so the colours show up in
+  Blender and Unity, which don't display vertex colours by default.
 Used by plyToObj.worker.js so a large model doesn't freeze the page.
 - parsePlyHeader(bytes)
 Reads a .ply header: { format, elements, headerLength }.
 - convertPlyToObj(buffer, options, onProgress)
-Returns { parts, splatCount, vertexCount, triangleCount }; parts are the
-.obj text in ~1 MB strings, ready for new Blob(parts).
+Returns { parts, material, splatCount, vertexCount, triangleCount }; parts
+are the .obj text in ~1 MB strings, ready for new Blob(parts). material is
+null for points, otherwise { mtlFile, mtlText, pngFile, png } for the files
+the .obj references (named after options.fileStem), which must sit next to it.
+- safeFileStem(name)
+The file name stem used for the .obj, .mtl and .png.
 - OBJ_EXPORT_DEFAULTS, objExportEstimate(splatCount, options)
 The engine's Export dialog defaults, and its "Up to N vertices" estimate.
 **************************************************************************/
@@ -33,6 +40,8 @@ export const OBJ_EXPORT_DEFAULTS = Object.freeze({
     sigmaScale: 1.5, // mesh ellipsoid radius, in standard deviations
     minAlpha: 0.1, // skip splats fainter than this
 })
+
+import { crc32 } from './zipStore.js'
 
 const SH_C0 = 0.28209479177387814
 
@@ -131,6 +140,165 @@ function colorByte(v) {
     return Math.round(Math.min(Math.max(v, 0), 1) * 255)
 }
 
+// ----- Colour texture (SplatExporter.cpp BuildColorTexture / EncodePng) ----- //
+
+// Spreads the low 10 bits of v out to every third bit (for a 3D Morton code).
+function spreadBits3(v) {
+    v &= 0x3FF
+    v = (v | (v << 16)) & 0x030000FF
+    v = (v | (v << 8)) & 0x0300F00F
+    v = (v | (v << 4)) & 0x030C30C3
+    v = (v | (v << 2)) & 0x09249249
+    return v
+}
+
+// Gathers the even bits of v (bits 0, 2, 4, ...) into a contiguous number.
+function compactEvenBits(v) {
+    v &= 0x55555555
+    v = (v | (v >>> 1)) & 0x33333333
+    v = (v | (v >>> 2)) & 0x0F0F0F0F
+    v = (v | (v >>> 4)) & 0x00FF00FF
+    v = (v | (v >>> 8)) & 0x0000FFFF
+    return v
+}
+
+// Largest texture side most engines accept (Unity's limit).
+const MAX_TEXTURE_SIZE = 16384
+
+/**
+ * Puts each splat's colour in its own texel. Splats are ordered along a
+ * Z-order curve through space and laid out along a Z-order curve in the
+ * texture, so mipmaps average neighbouring colours instead of random ones.
+ * @param {Float32Array} positions  xyz per splat.
+ * @param {Uint8Array} colors       rgb bytes per splat.
+ * @param {number} count            Splats in use (the arrays may be longer).
+ * @returns {{ size: number, rgb: Uint8Array, uvs: Float32Array }}  uvs: texel
+ *          centre per splat, v = 0 at the top.
+ */
+function buildColorTexture(positions, colors, count) {
+    const lo = [Infinity, Infinity, Infinity]
+    const hi = [-Infinity, -Infinity, -Infinity]
+    for (let i = 0; i < count; ++i) {
+        for (let a = 0; a < 3; ++a) {
+            const v = positions[i * 3 + a]
+            if (v < lo[a]) lo[a] = v
+            if (v > hi[a]) hi[a] = v
+        }
+    }
+    const scale = lo.map((l, a) => 1023 / Math.max(hi[a] - l, 1e-12))
+    const quantize = (i, a) => Math.min(Math.max((positions[i * 3 + a] - lo[a]) * scale[a], 0), 1023) | 0
+
+    const codes = new Uint32Array(count)
+    for (let i = 0; i < count; ++i) {
+        codes[i] = (spreadBits3(quantize(i, 0)) | (spreadBits3(quantize(i, 1)) << 1)
+            | (spreadBits3(quantize(i, 2)) << 2)) >>> 0
+    }
+    const order = new Uint32Array(count)
+    for (let i = 0; i < count; ++i) order[i] = i
+    order.sort((a, b) => codes[a] - codes[b])
+
+    const side = Math.max(Math.ceil(Math.sqrt(count)), 1)
+    const size = 2 ** Math.ceil(Math.log2(side))
+    if (size > MAX_TEXTURE_SIZE) {
+        throw new Error('Too many splats for a colour texture. Raise the minimum opacity to export fewer splats.')
+    }
+    const rgb = new Uint8Array(size * size * 3)
+    const uvs = new Float32Array(count * 2)
+    for (let rank = 0; rank < count; ++rank) {
+        const index = order[rank]
+        const x = compactEvenBits(rank)
+        const y = compactEvenBits(rank >>> 1)
+        const texel = (y * size + x) * 3
+        rgb[texel] = colors[index * 3]
+        rgb[texel + 1] = colors[index * 3 + 1]
+        rgb[texel + 2] = colors[index * 3 + 2]
+        uvs[index * 2] = (x + 0.5) / size
+        uvs[index * 2 + 1] = (y + 0.5) / size
+    }
+    return { size, rgb, uvs }
+}
+
+/**
+ * Minimal PNG encoder (8-bit RGB, no filtering, stored deflate blocks), the
+ * same as the engine's. Larger than a compressed PNG but needs no library.
+ */
+function encodePng(size, rgb) {
+    const rowBytes = size * 3
+    const rawLength = (rowBytes + 1) * size
+    const blocks = Math.ceil(rawLength / 65535)
+    const zlibLength = 2 + rawLength + blocks * 5 + 4
+    // signature + IHDR (12 + 13) + IDAT (12 + data) + IEND (12)
+    const png = new Uint8Array(8 + 25 + 12 + zlibLength + 12)
+    const view = new DataView(png.buffer)
+    png.set([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], 0)
+    let pos = 8
+    const chunk = (type, length, writeData) => {
+        view.setUint32(pos, length) // PNG and zlib numbers are big-endian
+        const start = pos + 4
+        for (let i = 0; i < 4; ++i) png[start + i] = type.charCodeAt(i)
+        writeData(start + 4)
+        const end = start + 4 + length
+        view.setUint32(end, crc32(png.subarray(start, end)))
+        pos = end + 4
+    }
+
+    chunk('IHDR', 13, (at) => {
+        view.setUint32(at, size)
+        view.setUint32(at + 4, size)
+        png.set([8, 2, 0, 0, 0], at + 8) // 8-bit, RGB, deflate, no filter method, no interlace
+    })
+    chunk('IDAT', zlibLength, (at) => {
+        // Raw scanlines (a filter byte, 0 = none, then the row's RGB bytes),
+        // built row by row and written as stored deflate blocks of up to 65535 bytes.
+        const raw = new Uint8Array(rawLength)
+        for (let y = 0; y < size; ++y) raw.set(rgb.subarray(y * rowBytes, (y + 1) * rowBytes), y * (rowBytes + 1) + 1)
+
+        let out = at
+        png[out++] = 0x78
+        png[out++] = 0x01
+        for (let p = 0; p < rawLength; p += 65535) {
+            const length = Math.min(65535, rawLength - p)
+            png[out++] = p + length === rawLength ? 1 : 0
+            png[out++] = length & 0xFF
+            png[out++] = length >>> 8
+            png[out++] = ~length & 0xFF
+            png[out++] = (~length >>> 8) & 0xFF
+            png.set(raw.subarray(p, p + length), out)
+            out += length
+        }
+        let a = 1, b = 0 // Adler-32, reduced every 5552 bytes (the most that can't overflow)
+        for (let i = 0; i < rawLength;) {
+            const end = Math.min(rawLength, i + 5552)
+            for (; i < end; ++i) {
+                a += raw[i]
+                b += a
+            }
+            a %= 65521
+            b %= 65521
+        }
+        view.setUint32(out, ((b << 16) | a) >>> 0)
+    })
+    chunk('IEND', 0, () => { })
+    return png
+}
+
+// The .mtl for a textured .obj: a white diffuse colour multiplied by the colour texture.
+function objMaterial(pngFile) {
+    return '# Exported by Genesis Alpha Build\n'
+        + 'newmtl splats\n'
+        + 'Ka 0 0 0\n'
+        + 'Kd 1 1 1\n'
+        + 'Ks 0 0 0\n'
+        + 'd 1\n'
+        + 'illum 1\n'
+        + 'map_Kd ' + pngFile + '\n'
+}
+
+// File name stem safe for an .obj's mtllib / map_Kd lines, which many tools split at spaces.
+export function safeFileStem(name) {
+    return String(name ?? '').replace(/[^A-Za-z0-9._-]/g, '_') || 'model'
+}
+
 // ----- Conversion ----- //
 
 const REQUIRED = ['x', 'y', 'z', 'f_dc_0', 'f_dc_1', 'f_dc_2', 'opacity',
@@ -202,7 +370,14 @@ export function convertPlyToObj(buffer, options = OBJ_EXPORT_DEFAULTS, onProgres
     const minAlpha = Number(opts.minAlpha) || 0
     const sigma = Number(opts.sigmaScale) || OBJ_EXPORT_DEFAULTS.sigmaScale
 
-    const parts = ['# Exported by Genesis Alpha Build\n']
+    // Mesh exports are textured, as in the engine (it textures whenever there are faces).
+    const stem = safeFileStem(opts.fileStem)
+    const mtlFile = stem + '.mtl'
+    const pngFile = stem + '.png'
+    const parts = ['# Exported by Genesis Alpha Build\n' + (isMesh ? 'mtllib ' + mtlFile + '\n' : '')]
+    // Kept splats' positions and colours, for the texture.
+    const keptPositions = isMesh ? new Float32Array(count * 3) : null
+    const keptColors = isMesh ? new Uint8Array(count * 3) : null
     let text = ''
     const push = (s) => {
         text += s
@@ -229,15 +404,23 @@ export function convertPlyToObj(buffer, options = OBJ_EXPORT_DEFAULTS, onProgres
         const pz = rz(base)
         if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) continue
 
-        const colorText = ' ' + COLOR_TEXT[colorByte(0.5 + SH_C0 * rDc0(base))]
-            + ' ' + COLOR_TEXT[colorByte(0.5 + SH_C0 * rDc1(base))]
-            + ' ' + COLOR_TEXT[colorByte(0.5 + SH_C0 * rDc2(base))] + '\n'
-        ++kept
+        const cr = colorByte(0.5 + SH_C0 * rDc0(base))
+        const cg = colorByte(0.5 + SH_C0 * rDc1(base))
+        const cb = colorByte(0.5 + SH_C0 * rDc2(base))
+        const colorText = ' ' + COLOR_TEXT[cr] + ' ' + COLOR_TEXT[cg] + ' ' + COLOR_TEXT[cb] + '\n'
 
         if (!isMesh) {
+            ++kept
             push('v ' + formatFloat(px) + ' ' + formatFloat(py) + ' ' + formatFloat(pz) + colorText)
             continue
         }
+        keptPositions[kept * 3] = px
+        keptPositions[kept * 3 + 1] = py
+        keptPositions[kept * 3 + 2] = pz
+        keptColors[kept * 3] = cr
+        keptColors[kept * 3 + 1] = cg
+        keptColors[kept * 3 + 2] = cb
+        ++kept
 
         // rot_0..3 are (w, x, y, z), not always unit length. The y flip maps
         // the quaternion to (w, -x, y, -z) (SplatLoader.cpp).
@@ -271,23 +454,36 @@ export function convertPlyToObj(buffer, options = OBJ_EXPORT_DEFAULTS, onProgres
     }
 
     let triangleCount = 0
+    let material = null
     if (isMesh) {
+        const texture = buildColorTexture(keptPositions, keptColors, kept)
+        // One "vt" per splat; OBJ texture coordinates start at the bottom, so v is flipped.
+        for (let s = 0; s < kept; ++s) {
+            push('vt ' + formatFloat(texture.uvs[s * 2]) + ' ' + formatFloat(1 - texture.uvs[s * 2 + 1]) + '\n')
+        }
+        push('usemtl splats\n')
+
+        // Every vertex of splat s uses splat s's texel.
         const nv = unit.length
         const idx = shape.indices
         for (let s = 0; s < kept; ++s) {
             if ((s & (progressEvery - 1)) === 0) onProgress(passWeight + (s / kept) * (1 - passWeight))
             const first = s * nv + 1 // OBJ indices start at 1
+            const uv = '/' + (s + 1)
             for (let t = 0; t < idx.length; t += 3) {
-                push('f ' + (first + idx[t]) + ' ' + (first + idx[t + 1]) + ' ' + (first + idx[t + 2]) + '\n')
+                push('f ' + (first + idx[t]) + uv + ' ' + (first + idx[t + 1]) + uv
+                    + ' ' + (first + idx[t + 2]) + uv + '\n')
             }
         }
         triangleCount = kept * (idx.length / 3)
+        material = { mtlFile, mtlText: objMaterial(pngFile), pngFile, png: encodePng(texture.size, texture.rgb) }
     }
     if (text) parts.push(text)
     onProgress(1)
 
     return {
         parts,
+        material,
         splatCount: kept,
         vertexCount: isMesh ? kept * unit.length : kept,
         triangleCount,
