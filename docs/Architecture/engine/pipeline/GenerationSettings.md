@@ -10,7 +10,7 @@ Header-only (`namespace generation`). These are the model-generation rules share
 | `kMaxPhotos` | 400 | Most photos a build accepts. |
 | `kMaxMediaFiles` | 10 | Most videos or GIFs per build. |
 | `kMinTrainIters` / `kMaxTrainIters` | 1000 / 30000 | Allowed range of training iterations. |
-| `kDefaultTrainIters` | 7000 | The web app's *Normal* preset. |
+| `kDefaultTrainIters` | 7000 | The web app's *Medium* preset. |
 | `kDefaultFps` | 2.0 | Frames taken per second of video (the Frame Extractor default). |
 | `kPhotoSuffixes` | jpg, jpeg, png | Photo file types. |
 | `kMediaSuffixes` | mp4, m4v, mov, webm, mkv, avi, mpg, mpeg, gif | Video file types. |

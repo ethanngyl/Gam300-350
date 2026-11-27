@@ -554,7 +554,7 @@ function App() {
 
     // Starts a build from a photo batch in the background and returns to
     // Home, where the build panel follows it. trainIters is the training
-    // iteration cap (Fast / Normal / Detailed); left out, the server uses its
+    // iteration cap (Low / Medium / High); left out, the server uses its
     // default. autoCrop keeps only the object the photos were taken around.
     function handleBatchReady(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
         backgroundBuilds.startPhotoBuild(files, { removeBackground, autoCrop, trainIters });
@@ -714,7 +714,7 @@ function App() {
 
     if (!currentUser) {
         if (authPage === 'landing') {
-            return <LandingScreen onLogIn={() => showAuthPage('login')} onGetStarted={() => showAuthPage('signup')} />;
+            return <LandingScreen onLogIn={() => showAuthPage('login')} />;
         }
         return (
             <LoginScreen

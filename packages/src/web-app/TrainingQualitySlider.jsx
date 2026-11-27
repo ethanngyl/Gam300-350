@@ -6,7 +6,7 @@
 \par Software Engineering Project 5
 \date 27-10-2026
 \brief
-"Model detail" slider with three stops (Fast / Normal / Detailed) that
+"Model detail" slider with three stops (Low / Medium / High) that
 sets the training iteration cap for a new model. Only the "Model detail"
 heading, the slider and the stop labels show (the iteration count is
 kept out of sight). The stop labels under the slider can also be clicked. iterations is the current cap and
@@ -15,10 +15,12 @@ onChange gets the new one; see TrainingPresets.js for the values.
 
 import { TRAINING_PRESETS } from './TrainingPresets.js';
 
-// Index of the "Normal" stop, used if iterations matches no preset.
+// Index of the "Medium" stop, used if iterations matches no preset.
 const NORMAL_PRESET_INDEX = 1;
 
-function TrainingQualitySlider({ iterations, onChange, disabled = false }) {
+// headerAction (optional): shown at the right of the "Model detail" heading,
+// e.g. a "How does this work?" link.
+function TrainingQualitySlider({ iterations, onChange, disabled = false, headerAction = null }) {
     const matchingIndex = TRAINING_PRESETS.findIndex((preset) => preset.iterations === iterations);
     const selectedIndex = matchingIndex === -1 ? NORMAL_PRESET_INDEX : matchingIndex;
     const selectedPreset = TRAINING_PRESETS[selectedIndex];
@@ -32,6 +34,7 @@ function TrainingQualitySlider({ iterations, onChange, disabled = false }) {
         <div className={disabled ? 'training-quality is-disabled' : 'training-quality'}>
             <div className="training-quality-head">
                 <span>Model detail</span>
+                {headerAction}
             </div>
             <input
                 type="range"

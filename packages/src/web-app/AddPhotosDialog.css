@@ -234,6 +234,19 @@
         margin-top: 2px;
     }
 
+/* "How does this work?" at the right of the Model detail heading. */
+.add-photos-quality-help {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--forma-teal-text);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 /* Edit manually and Render now, at the bottom of the side column. */
 .add-photos-review-actions {
     display: flex;

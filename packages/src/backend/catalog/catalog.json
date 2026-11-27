@@ -26,9 +26,9 @@
     "maxLength": 1000
   },
   "trainingPresets": [
-    { "id": "fast", "label": "Fast", "iterations": 5000 },
-    { "id": "normal", "label": "Normal", "iterations": 7000 },
-    { "id": "detailed", "label": "Detailed", "iterations": 10000 }
+    { "id": "fast", "label": "Low", "iterations": 5000 },
+    { "id": "normal", "label": "Medium", "iterations": 7000 },
+    { "id": "detailed", "label": "High", "iterations": 10000 }
   ],
   "defaultTrainingPreset": "normal"
 }

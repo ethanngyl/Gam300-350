@@ -55,9 +55,9 @@ namespace {
         const char* tip;
     };
     constexpr DetailPreset kPresets[] = {
-        { "Fast", 5000, "Quickest build, a little blurrier" },
-        { "Normal", 7000, "Balanced (the web app's default)" },
-        { "Detailed", 10000, "Sharpest, takes the longest" },
+        { "Low", 5000, "Quickest build, a little blurrier" },
+        { "Medium", 7000, "Balanced (the web app's default)" },
+        { "High", 10000, "Sharpest, takes the longest" },
     };
     constexpr int kDefaultPreset = 1;
     // Item data of the "Custom..." detail choice; the spin box then gives the count.

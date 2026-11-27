@@ -173,7 +173,7 @@ function CameraCapture({
     const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
     // Keep only the object the photos were taken around (walk-around
     // captures). Also set in the Photo Editor, and kept when coming back.
-    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? false);
+    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? true);
     // Model detail (training iteration cap), also set in the Photo Editor.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 

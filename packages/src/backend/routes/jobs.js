@@ -106,7 +106,7 @@ router.post('/upload', requireUser, limitBuilds, assignJobId, upload.array('imag
     // Optional multipart text field: keep only the object the photos were
     // taken around (see autoCropPly in pipeline.js).
     job.autoCrop = ['true', '1', 'on'].includes(String(req.body?.autoCrop).toLowerCase())
-    // Optional multipart text field: training iteration cap (Fast / Normal / Detailed).
+    // Optional multipart text field: training iteration cap (Low / Medium / High).
     job.trainIters = parseTrainIters(req.body?.trainIters)
     saveJob(job) // gives upload-only jobs a status record from the start
     // fire-and-forget; do not await. Waits its turn if other builds are

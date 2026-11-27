@@ -84,6 +84,20 @@
         line-height: 1.6;
     }
 
+    /* Back to the landing page, styled like the Google button. */
+    .auth-hero-back {
+        width: 100%;
+        max-width: 180px;
+        margin-top: 32px;
+    }
+
+        /* Hover fills it with the Log in button's pink. */
+        .auth-hero-back:hover {
+            background: var(--forma-blue);
+            border-color: var(--forma-blue);
+            color: var(--forma-on-accent);
+        }
+
 /* ---------- Form ---------- */
 
 .auth-panel {
@@ -183,6 +197,11 @@
     margin: -10px 0 16px;
     color: var(--forma-text-muted);
 }
+
+    /* Hover turns it the Log in button's pink. */
+    .auth-forgot:hover {
+        color: var(--forma-blue);
+    }
 
 /* New-password rules under the password field, ticked green as each is met. */
 .auth-password-rules {

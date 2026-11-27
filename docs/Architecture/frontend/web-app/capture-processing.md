@@ -42,7 +42,7 @@
 ---
 
 ## `TrainingQualitySlider.jsx`
-*Author: Bryan.* The **Model detail** slider with three stops, *Fast / Normal / Detailed*, from `TRAINING_PRESETS` (the catalog). Only the heading, the slider and the stop labels are shown; the iteration count is kept out of sight. **The stop labels can also be clicked** (`choosePreset(index)`). Props: `iterations` (the current cap), `onChange(newCap)`, `disabled`. The default stop is `NORMAL_PRESET_INDEX = 1`.
+*Author: Bryan.* The **Model detail** slider with three stops, *Low / Medium / High*, from `TRAINING_PRESETS` (the catalog). Only the heading, the slider and the stop labels are shown; the iteration count is kept out of sight. **The stop labels can also be clicked** (`choosePreset(index)`). Props: `iterations` (the current cap), `onChange(newCap)`, `disabled`. The default stop is `NORMAL_PRESET_INDEX = 1`.
 
 ---
 

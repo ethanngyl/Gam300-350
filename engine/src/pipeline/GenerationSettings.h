@@ -41,7 +41,7 @@ constexpr int kMaxMediaFiles = 10;
 
 constexpr int kMinTrainIters = 1000;
 constexpr int kMaxTrainIters = 30000;
-constexpr int kDefaultTrainIters = 7000; // the web app's Normal preset
+constexpr int kDefaultTrainIters = 7000; // the web app's Medium preset
 
 // The Frame Extractor's default frames per second.
 constexpr double kDefaultFps = 2.0;

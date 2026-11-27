@@ -181,7 +181,7 @@ export async function getJob(id) {
 /*!
   \brief
     Read the optional training iteration cap the site sends with a new job
-    (Fast / Normal / Detailed). Rounded to a whole number and clamped to
+    (Low / Medium / High). Rounded to a whole number and clamped to
     config.minTrainIters..config.maxTrainIters.
   \param value
     The raw field value: a string from a multipart form, or a number from

@@ -8,9 +8,9 @@
 \brief
 The "New model" dialog, opened by New in the sidebar, Home's Add photos
 card and Upload photos button. Laid out like the Figma, in two steps:
-1. "Add source photos": a drop area with Browse files, plus "Choose from
-   Media Library" (LibraryPhotoPicker.jsx) to reuse photos already
-   uploaded, and "Capture with camera" (not in the Figma; it keeps the
+1. "Add source photos": a drop area with Browse files, plus "Photo
+   library" (LibraryPhotoPicker.jsx) to reuse photos already
+   uploaded, and "Camera capture" (not in the Figma; it keeps the
    camera reachable from New). Choosing photos moves on at once.
 2. "Photos added": the first photo with the count, a quick check of the
    photos (the Photo Editor's checks, PhotoChecks.js), Auto-fix, the same
@@ -61,8 +61,10 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
     const [removeBackground, setRemoveBackground] = useState(true);
     // The same build settings as Camera Capture: keep only the main object
     // (walk-around captures) and model detail (training iteration cap).
-    const [autoCrop, setAutoCrop] = useState(false);
+    const [autoCrop, setAutoCrop] = useState(true);
     const [trainIters, setTrainIters] = useState(DEFAULT_TRAINING_ITERATIONS);
+    // Whether "How does this work?" above Model detail is open.
+    const [isQualityHelpOpen, setIsQualityHelpOpen] = useState(false);
     // null, 'working', or { fixedCount } once Auto-fix has run.
     const [autoFixState, setAutoFixState] = useState(null);
     const fileInputRef = useRef(null);
@@ -236,7 +238,7 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                     setIsLibraryOpen(true);
                                 }}
                             >
-                                <Icon name="image" size={15} /> Choose from Media Library
+                                <Icon name="image" size={15} /> Photo library
                             </button>
                             {onOpenCamera && (
                                 <button
@@ -246,7 +248,7 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                         onOpenCamera();
                                     }}
                                 >
-                                    <Icon name="camera" size={15} /> Capture with camera
+                                    <Icon name="camera" size={15} /> Camera capture
                                 </button>
                             )}
                         </div>
@@ -314,7 +316,28 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                 When you walk around an object, removes everything outside the path you took. Turn off for rooms and scenery.
                             </p>
 
-                            <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} />
+                            <TrainingQualitySlider
+                                iterations={trainIters}
+                                onChange={setTrainIters}
+                                headerAction={(
+                                    <button
+                                        type="button"
+                                        className="add-photos-quality-help"
+                                        aria-expanded={isQualityHelpOpen}
+                                        onClick={() => {
+                                            setIsQualityHelpOpen((isOpen) => !isOpen);
+                                        }}
+                                    >
+                                        How does this work?
+                                    </button>
+                                )}
+                            />
+                            {isQualityHelpOpen && (
+                                <p className="add-photos-tip">
+                                    More detail trains the model for longer. Low is quickest to try things out;
+                                    High gives the sharpest model but takes the longest to build.
+                                </p>
+                            )}
 
                             <div className="add-photos-review-actions">
                                 <button

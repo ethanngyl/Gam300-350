@@ -16,7 +16,7 @@ settings, lost highlight/shadow detail, large crops and mixed crops all
 show warnings. "Use original photos" bypasses every edit, and "Remove
 background" (moved here from Camera Capture, so it covers both captured
 and uploaded batches) masks out the background when the model is
-built, and the "Model detail" slider (Fast / Normal / Detailed) sets how
+built, and the "Model detail" slider (Low / Medium / High) sets how
 many training iterations the build runs. Edits are only
 settings until upload, so the originals are never changed. Phones get a
 simpler, batch-only set of tools, laid out like the mobile Figma: an
@@ -274,7 +274,7 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // Starts with the choice carried over from Camera Capture, if any.
     const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
     // Keep only the object the photos were taken around (walk-around captures).
-    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? false);
+    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? true);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     // Whether "How does this work?" under Model detail is open.
@@ -789,8 +789,8 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
             </button>
             {isQualityHelpOpen && (
                 <p className="photo-editor-hint">
-                    More detail trains the model for longer. Fast is quickest to try things out;
-                    Detailed gives the sharpest model but takes the longest to build.
+                    More detail trains the model for longer. Low is quickest to try things out;
+                    High gives the sharpest model but takes the longest to build.
                 </p>
             )}
         </div>
@@ -1078,13 +1078,17 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                 <span className="is-left-out" style={{ flexGrow: photos.length - keptPhotos.length }} />
                             </span>
                         </div>
-                        <div className="photo-editor-summary-actions">
-                            <button className="forma-btn" onClick={leaveOutFlagged} disabled={flaggedCount === 0}>
-                                <Icon name="wand" size={14} /> Leave out flagged
-                            </button>
-                            <button className="forma-btn photo-editor-keep-all" onClick={keepAll}>
-                                <Icon name="refresh" size={14} /> Keep all
-                            </button>
+                        <div className="photo-editor-summary-side">
+                            {/* Generate above Leave out flagged / Keep all (phones: the bottom bar). */}
+                            {!isPhone && generateArea}
+                            <div className="photo-editor-summary-actions">
+                                <button className="forma-btn" onClick={leaveOutFlagged} disabled={flaggedCount === 0}>
+                                    <Icon name="wand" size={14} /> Leave out flagged
+                                </button>
+                                <button className="forma-btn photo-editor-keep-all" onClick={keepAll}>
+                                    <Icon name="refresh" size={14} /> Keep all
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1271,8 +1275,6 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                             )}
 
                             {!isPhone && adjustCard}
-
-                            {!isPhone && generateArea}
                         </aside>
                     </div>
 

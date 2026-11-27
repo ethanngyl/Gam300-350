@@ -407,7 +407,7 @@
         color: var(--forma-orange);
     }
 
-    /* Model detail on one line: the name, then Fast / Normal / Detailed. */
+    /* Model detail on one line: the name, then Low / Medium / High. */
     .photo-editor .photo-editor-footer .training-quality {
         display: flex;
         flex-direction: row;
@@ -908,7 +908,7 @@
    Controls a finger has to hit get about 36-40px, mostly from padding, so
    they look the same. */
 @media (max-width: 760px) {
-    /* Model detail's Fast / Normal / Detailed (Photo Editor). */
+    /* Model detail's Low / Medium / High (Photo Editor). */
     .photo-editor .photo-editor-footer .training-quality-stop {
         min-height: 36px;
         padding: 6px 14px;

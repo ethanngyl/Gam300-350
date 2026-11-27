@@ -312,6 +312,9 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                         Upload photos or a walkaround video of an object. Genesis rebuilds it
                         as a 3D model you can edit and share.
                     </p>
+                    <button type="button" className="forma-btn auth-alternative auth-hero-back" onClick={onBackToLanding}>
+                        <Icon name="arrowLeft" size={17} /> Genesis Home
+                    </button>
                 </div>
             </aside>
 

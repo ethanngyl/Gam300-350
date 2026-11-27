@@ -19,11 +19,11 @@ The landing page signed-out visitors see first, laid out like the Figma's
 - a light panel: Plans (plans.js), with a Monthly / Annual switch;
 - a dark panel: the closing call to action;
 - the footer.
-"Log in" opens the login screen; "Get started" opens it in create-account
-mode. The pictures are our own (landing/): screenshots of the real app
+"Log in" and "Get started" both open the login screen, which links to
+create-account. The pictures are our own (landing/): screenshots of the real app
 and renders of the cat statue sample model. The panels keep their own
 light and dark colours in both themes, as in the design.
-- LandingScreen({ onLogIn, onGetStarted })
+- LandingScreen({ onLogIn })
 React component.
 **************************************************************************/
 
@@ -110,15 +110,17 @@ function PillButton({ tone = 'pink', isWide = false, onClick, children }) {
     );
 }
 
-function LandingScreen({ onLogIn, onGetStarted }) {
+function LandingScreen({ onLogIn }) {
     const [billing, setBilling] = useState('monthly');
 
     function logIn() {
         onLogIn();
     }
 
+    // "Get started" opens the login screen too; it links to create-account
+    // for new visitors.
     function getStarted() {
-        onGetStarted();
+        onLogIn();
     }
 
     const logo = (

@@ -10,7 +10,7 @@ What to do once the model is built. The `.ply` is always saved in `copyFolder`.
 
 ## Constants
 - `kMaxNameLength = 80`, the same limit as the web app's `MAX_JOB_NAME_LENGTH`.
-- **Detail presets**, from the web app's `catalog.json`: *Fast* 5000, *Normal* 7000 (the default) and *Detailed* 10000 iterations, plus *Custom…* (item data 0), which shows a 1000–30000 spin box in steps of 500.
+- **Detail presets**, from the web app's `catalog.json`: *Low* 5000, *Medium* 7000 (the default) and *High* 10000 iterations, plus *Custom…* (item data 0), which shows a 1000–30000 spin box in steps of 500.
 - QSettings keys under `generate/`: `source`, `detail`, `customIters`, `fps`, `removeBackground`, `autoCrop`, `import`, `copy`, `copyFolder`, `lastFolder`.
 
 ## Helpers

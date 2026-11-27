@@ -104,6 +104,13 @@
     color: var(--forma-teal-text);
 }
 
+/* Generate stacked above Leave out flagged / Keep all. */
+.photo-editor-summary-side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 .photo-editor-summary-actions {
     display: flex;
     gap: 8px;
@@ -396,13 +403,13 @@
     cursor: pointer;
 }
 
-.photo-editor-panel .photo-editor-generate {
+.photo-editor-summary-side .photo-editor-generate {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-    .photo-editor-panel .photo-editor-generate .forma-btn-primary {
+    .photo-editor-summary-side .photo-editor-generate .forma-btn-primary {
         justify-content: center;
         min-height: 46px;
         font-size: 0.92rem;
@@ -487,9 +494,10 @@
         margin-bottom: 24px;
     }
 
+    /* Counts line up with the buttons at the bottom of the side column. */
     .photo-editor-summary {
         flex-direction: row;
-        align-items: center;
+        align-items: flex-end;
         justify-content: space-between;
     }
 
@@ -542,7 +550,7 @@
     }
 
     /* Same width as the side panel, so the two line up. */
-    .photo-editor-summary-actions {
+    .photo-editor-summary-side {
         width: 320px;
     }
 
