@@ -18,7 +18,7 @@ import { after, before, describe, test } from 'node:test'
 import { call, sessionCookie, signUp, startServer, tempDir } from './helpers.js'
 
 const KEY = 'test-shared-key-0123456789'
-const PASSWORD = 'correct-horse-battery'
+const PASSWORD = 'Horse-battery#9'
 // What SceneStorage.js keeps in the browser today: version 0.
 const V0_SCENE = {
   id: 'scene-mh2x1k-abc123',

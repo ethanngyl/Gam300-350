@@ -184,6 +184,62 @@
     color: var(--forma-text-muted);
 }
 
+/* New-password rules under the password field, ticked green as each is met. */
+.auth-password-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: -8px 0 18px;
+    padding: 0;
+    list-style: none;
+    color: var(--forma-text-dim);
+    font-size: 0.8rem;
+}
+
+    .auth-password-rules li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: color 0.15s ease;
+    }
+
+    .auth-password-rules li.is-met {
+        color: var(--forma-green);
+    }
+
+.auth-password-rule-mark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 50%;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+    .auth-password-rules li.is-met .auth-password-rule-mark {
+        border-color: rgba(var(--forma-green-rgb), 0.55);
+        background: rgba(var(--forma-green-rgb), 0.14);
+    }
+
+/* "Passwords don't match" under a confirm field. */
+.auth-field-hint {
+    color: var(--forma-red);
+    font-size: 0.8rem;
+}
+
+/* Read by screen readers only (the checklist's done / not yet). */
+.auth-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
 .auth-remember {
     display: flex;
     align-items: center;

@@ -90,7 +90,7 @@ export async function runUserSession(base, index, onCall = () => {})
 
   const email = `load-user-${index}@example.test`
   const signup = await step('POST /auth/signup', 'POST', '/api/v1/auth/signup', 201,
-    { name: `Load User ${index}`, email, password: `load-test-password-${index}` })
+    { name: `Load User ${index}`, email, password: `Load-test-${index}!` })
   cookie = signup && sessionCookie(signup)
   if (!cookie) return { ok: false, errors: errors.length ? errors : ['POST /auth/signup: no session cookie'] }
 

@@ -164,7 +164,7 @@ export function sessionCookie(reply)
   return value ? `genesis_session=${value}` : null
 }
 
-export async function signUp(base, { name = 'Test User', email, password = 'correct-horse-battery' })
+export async function signUp(base, { name = 'Test User', email, password = 'Horse-battery#9' })
 {
   const reply = await call(base, 'POST', '/api/v1/auth/signup', { json: { name, email, password } })
   if (reply.status !== 201) throw new Error(`sign-up failed: ${reply.status} ${JSON.stringify(reply.body)}`)

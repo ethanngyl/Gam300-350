@@ -13,8 +13,12 @@
 Business logic: account rules shared by the auth and account routes. No
 req / res. Moved out of server.js.
 - validateSignup(body)
-The signup rules (email shape, password length, name), shared by
+The signup rules (email shape, password strength, name), shared by
 /auth/signup and the VM's /register.
+- passwordProblem(password)
+The rules every new password must meet (signup, password change, password
+reset): 8+ characters, an uppercase letter and a special character. Returns
+the message naming what is missing, or null.
 - checkCredentials(email, password)
 The password check, with a per-email limit of 10 wrong passwords per 15
 minutes. Shared by /auth/login, the VM's /verify-account and the password
@@ -38,9 +42,39 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/
 const failedLoginLimiter = createLimiter({ windowMs: 15 * 60 * 1000, max: 10 })
 
 // Shared by signup, the account page's password change and password reset.
-export const MIN_PASSWORD_LENGTH = 6
+// The web app shows the same rules as a checklist (web-app/PasswordRules.js);
+// keep the two in step.
+export const MIN_PASSWORD_LENGTH = 8
+const UPPERCASE_RE = /\p{Lu}/u
+const SPECIAL_RE = /[^\p{L}\p{N}\s]/u // anything but a letter, digit or space
 
 // ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Checks a new password against the rules: at least MIN_PASSWORD_LENGTH
+    characters, an uppercase letter and a special character (anything but
+    a letter, digit or space). Only new passwords are checked; signing in
+    with an older, weaker password still works.
+  \param password
+  any
+  \return
+    null if it meets every rule, else one sentence naming everything that
+    is missing, e.g. "Password needs an uppercase letter and a special
+    character (e.g. ! @ # $)."
+*/
+/************************************************************************/
+export function passwordProblem(password) {
+    if (typeof password !== 'string') return 'Enter a password.'
+    const missing = []
+    if (password.length < MIN_PASSWORD_LENGTH) missing.push(`at least ${MIN_PASSWORD_LENGTH} characters`)
+    if (!UPPERCASE_RE.test(password)) missing.push('an uppercase letter')
+    if (!SPECIAL_RE.test(password)) missing.push('a special character (e.g. ! @ # $)')
+    if (missing.length === 0) return null
+    const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`
+    return `Password needs ${list}.`
+}
 
 /************************************************************************/
 /*!
@@ -86,8 +120,8 @@ export function validateSignup(body) {
     const trimmedEmail = typeof email === 'string' ? email.trim() : ''
     const trimmedName = typeof name === 'string' ? name.trim() : ''
     if (!EMAIL_RE.test(trimmedEmail)) return { error: 'Enter a valid email address.' }
-    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH)
-        return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` }
+    const weakness = passwordProblem(password)
+    if (weakness) return { error: weakness }
     if (!trimmedName) return { error: 'Enter your name.' }
     return { name: trimmedName, email: trimmedEmail, password }
 }

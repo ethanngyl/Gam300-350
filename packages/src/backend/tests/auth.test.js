@@ -19,7 +19,7 @@ import { after, before, describe, test } from 'node:test'
 import SwaggerParser from '@apidevtools/swagger-parser'
 import { BACKEND_DIR, call, openDb, sessionCookie, signUp, startServer, tempDir } from './helpers.js'
 
-const PASSWORD = 'correct-horse-battery'
+const PASSWORD = 'Horse-battery#9'
 const spec = await SwaggerParser.dereference(path.join(BACKEND_DIR, 'openapi.yaml'))
 
 // Every documented operation, with its path parameters filled in from their examples.
@@ -63,6 +63,32 @@ describe('sign-up, sign-in and protected endpoints', () =>
     assert.match(setCookie, /SameSite=Lax/i)
     assert.equal(reply.body.email, 'bob@example.com')
     assert.ok(!('password' in reply.body) && !JSON.stringify(reply.body).includes(PASSWORD))
+  })
+
+  test('sign-up refuses a password without 8 characters, an uppercase letter and a special character', async () =>
+  {
+    const cases = [
+      ['Ab1!', /at least 8 characters/],
+      ['lowercase-only!', /an uppercase letter/],
+      ['NoSpecial123', /a special character/],
+      ['short', /at least 8 characters, an uppercase letter and a special character/],
+    ]
+    for (const [password, message] of cases)
+    {
+      const reply = await call(server.base, 'POST', '/api/v1/auth/signup', { json: { name: 'Weak', email: 'weak@example.com', password } })
+      assert.equal(reply.status, 400, password)
+      assert.match(reply.body.error, message, password)
+    }
+    // None of them made the account.
+    const login = await call(server.base, 'POST', '/api/v1/auth/login', { json: { email: 'weak@example.com', password: 'Ab1!' } })
+    assert.equal(login.status, 401)
+  })
+
+  test('changing the password applies the same rules to the new one', async () =>
+  {
+    const reply = await call(server.base, 'POST', '/api/v1/auth/me/password', { cookie, json: { currentPassword: PASSWORD, newPassword: 'alllowercase' } })
+    assert.equal(reply.status, 400)
+    assert.match(reply.body.error, /an uppercase letter and a special character/)
   })
 
   test('login: wrong password and unknown email get the same 401, the right password a session', async () =>

@@ -13,6 +13,10 @@ Accounts and sign-in
 - Sign in or create an account (email and password, stored as a hash in
   SQLite), or continue as a guest.
 - Login and signup are rate-limited to slow down password guessing.
+- New passwords (sign-up, password reset, password change) need at least 8
+  characters, an uppercase letter and a special character, checked in the
+  browser and by the server. Sign-up shows the rules as a live checklist
+  and asks for the password twice ("Confirm password").
 - Account page: profile card, sign out, sound settings (on/off and volume),
   and usage stats (models, photos, failed builds, queue).
 - Admins see every user's jobs; normal users see only their own.
@@ -189,6 +193,22 @@ Import
 - Files load on a worker thread.
 - Optional trim on import.
 
+Scenes (.gscene)
+----------------
+- New Scene (Ctrl+N), Open Scene (Ctrl+Shift+O), Save Scene (Ctrl+S) and
+  Save Scene As (Ctrl+Shift+S) in the File menu; a .gscene can also be
+  dropped onto the window or passed on the command line.
+- Saves every model with its name, position/rotation/scale, visibility,
+  trim values and render mode. Each model's current splats (crops and moved
+  splats included, plus the untrimmed copy of a trimmed model) are saved in
+  a "<scene>_data" folder beside the .gscene, so a scene doesn't need the
+  original .ply files and can be copied to another PC.
+- Saving and opening run on a worker thread; a missing model file is
+  reported and the rest of the scene still opens.
+- Not done yet: no unsaved-changes warning (Open/New always ask when the
+  scene has models, and quitting doesn't ask); the engine's .gscene and the
+  web Scene Builder's scenes are separate formats.
+
 Trimming
 --------
 - Removes low-opacity splats, crops a percentage off each end of every axis,
@@ -202,6 +222,10 @@ Export (Ctrl+E, written on a worker thread)
 - Export the selected model or the whole scene.
 - Choose how splats become mesh geometry, see a size estimate, and the last
   choices are remembered.
+- Mesh exports to .obj and .glb carry the colours in a texture (one texel per
+  splat), so they show in Blender and Unity without setting up a material.
+  A .glb embeds it; an .obj writes a .mtl and .png beside it. Point exports
+  still use vertex colours only, which Unity can't display.
 
 Panels (dockable; the layout is saved and can be reset)
 -------------------------------------------------------
@@ -211,7 +235,6 @@ Panels (dockable; the layout is saved and can be reset)
   changes.
 - My Models: your web-app models, downloaded to a per-user cache.
 - Console: captures stdout, stderr and Qt logs, colour-coded.
-- Audio: an FMOD player that can play several files at once.
 
 Account
 -------

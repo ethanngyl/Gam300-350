@@ -32,7 +32,7 @@ import { askVm, isForVm, proxyToVm } from '../library.js'
 import { createLimiter } from '../ratelimit.js'
 import { SESSION_COOKIE, readCookie, requireUser } from '../middleware/session.js'
 import { tooManyAttempts } from '../middleware/limits.js'
-import { MIN_PASSWORD_LENGTH, accountDetails, checkCredentials } from '../services/accounts.js'
+import { accountDetails, checkCredentials, passwordProblem } from '../services/accounts.js'
 import { getJob } from '../services/jobs.js'
 import { accountFor, toV1Account } from '../adapters/apiVersions.js'
 
@@ -160,7 +160,7 @@ router.patch(['/auth/me', '/library/account'], requireUser, async (req, res) => 
     machine's; other client machines keep theirs until they expire.
   \return
     401 if not logged in, 400 if a field is missing, the new password is
-    too short or the same, or the current one is wrong, 409 if the account
+    breaks the password rules or is the same, or the current one is wrong, 409 if the account
     has no password (Google only), 429 when locked, 503 if the VM can't be
     reached (client machine), else the account details
 */
@@ -169,8 +169,8 @@ router.post(['/auth/me/password', '/library/account/password'], requireUser, asy
     const { currentPassword, newPassword } = req.body || {}
     if (typeof currentPassword !== 'string' || !currentPassword || typeof newPassword !== 'string')
         return res.status(400).json({ error: 'Enter your current password and a new password.' })
-    if (newPassword.length < MIN_PASSWORD_LENGTH)
-        return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
+    const weakness = passwordProblem(newPassword)
+    if (weakness) return res.status(400).json({ error: weakness })
     if (newPassword === currentPassword)
         return res.status(400).json({ error: 'Choose a new password that is different from your current one.' })
 

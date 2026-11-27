@@ -90,7 +90,7 @@ async function requestHere(email) {
 /************************************************************************/
 async function resetHere(input) {
     const result = await resetPassword(input)
-    if (result.status === 'weak') return { status: 400, body: { error: 'Password must be at least 6 characters.' } }
+    if (result.status === 'weak') return { status: 400, body: { error: result.error } }
     if (result.status === 'invalid') return { status: 400, body: { error: WRONG_CODE } }
     return { status: 200, body: { id: result.userId, message: CHANGED } }
 }

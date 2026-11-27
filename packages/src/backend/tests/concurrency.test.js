@@ -87,7 +87,7 @@ describe('many users at once', () =>
   {
     const headers = { 'X-Forwarded-For': userIp(USERS + 1) }
     const signup = await call(server.base, 'POST', '/api/v1/auth/signup', {
-      headers, json: { name: 'Editor', email: 'editor@example.test', password: 'editor-password-123' },
+      headers, json: { name: 'Editor', email: 'editor@example.test', password: 'Editor-pass-12!' },
     })
     assert.equal(signup.status, 201)
     const cookie = `genesis_session=${signup.headers.get('set-cookie').match(/genesis_session=([^;]+)/)[1]}`
@@ -120,7 +120,7 @@ describe('many users at once', () =>
     {
       const headers = { 'X-Forwarded-For': userIp(index) }
       const reply = await call(server.base, 'POST', '/api/v1/auth/signup', {
-        headers, json: { name: `Uploader ${index}`, email: `uploader-${index}@example.test`, password: 'uploader-password-123' },
+        headers, json: { name: `Uploader ${index}`, email: `uploader-${index}@example.test`, password: 'Uploader-pw-12!' },
       })
       assert.equal(reply.status, 201)
       return { headers, cookie: sessionCookie(reply) }

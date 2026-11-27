@@ -8,13 +8,14 @@
 \brief
 Declares MainWindow, the editor shell. It hosts the 3D Viewport in the
 centre and arranges the editor around it: menu bar, main toolbar, status
-bar, and the dockable Scene (outliner), Inspector, Assets, My Models,
-Console and Audio panels, plus the Account menu for signing in with a web
+bar, and the dockable Scene (outliner), Inspector, Assets, My Models and
+Console panels, plus the Account menu for signing in with a web
 app account. It owns the scene-editing commands (import, select, rename,
-delete, render mode, export), builds new models from photos or videos on
-this PC (Generate Model, no server), loads .ply files and writes exports on
-worker threads, accepts .ply
-drag-and-drop, and persists layout and preferences with QSettings.
+delete, render mode, export) and scene files (new, open, save .gscene),
+builds new models from photos or videos on this PC (Generate Model, no
+server), loads .ply files, writes exports and saves/opens scenes on worker
+threads, accepts .ply and .gscene drag-and-drop, and persists layout and
+preferences with QSettings.
 **************************************************************************/
 #pragma once
 
@@ -48,7 +49,6 @@ class QPushButton;
 class SplatModel;
 
 class AssetBrowserPanel;
-class AudioPanel;
 class BackendClient;
 class ConsolePanel;
 class InspectorPanel;
@@ -64,8 +64,9 @@ public:
     MainWindow();
     ~MainWindow() override;
 
-    // Imports each .ply in paths (e.g. from the command line). Safe to call
-    // before the window is shown; loading starts once the renderer exists.
+    // Imports each .ply in paths (e.g. from the command line) and opens a
+    // .gscene scene. Safe to call before the window is shown; loading starts
+    // once the renderer exists.
     void openFiles(const QStringList& paths);
 
 protected:
@@ -117,6 +118,24 @@ private:
     // Asks for export options and a file name, then writes the selected
     // model (or the whole scene) on a worker thread.
     void exportModels();
+
+    // ---- scene files (.gscene, see scene/SceneFile.h) ----
+    // Writes the whole scene on a worker thread. Asks for a file name when
+    // saveAs is set or the scene has not been saved yet.
+    void saveScene(bool saveAs);
+    // Asks for a .gscene and opens it (see openScenePath).
+    void openScene();
+    // Reads the scene on a worker thread, then replaces the current scene
+    // with it (after asking, if the current scene has models).
+    void openScenePath(const QString& path);
+    // Empties the scene (after asking) and forgets the scene file.
+    void newScene();
+    // Removes every model and clears the undo history and crop box.
+    void clearScene();
+    // Asks before the current models are replaced; true when it's fine to go ahead.
+    bool confirmReplaceScene(const QString& action);
+    void updateWindowTitle(); // "<scene name> - Genesis Alpha Build"
+
     //Toggles developer mode
     void toggleDevMode();
     //Refreshes the dev mode menu text to match m_devMode
@@ -171,7 +190,6 @@ private:
     InspectorPanel* m_inspector = nullptr;
     AssetBrowserPanel* m_assets = nullptr;
     ConsolePanel* m_console = nullptr;
-    AudioPanel* m_audio = nullptr;
     RemoteModelsPanel* m_remoteModels = nullptr;
     StressTestPanel* m_stressTestPanel = nullptr; //Dev mode only, its dock is shown/hidden by updateDevModeAction
     QList<QDockWidget*> m_docks;
@@ -180,6 +198,10 @@ private:
     //Actions.
     QAction* m_importAction = nullptr;
     QAction* m_exportAction = nullptr;
+    QAction* m_newSceneAction = nullptr;
+    QAction* m_openSceneAction = nullptr;
+    QAction* m_saveSceneAction = nullptr;
+    QAction* m_saveSceneAsAction = nullptr;
     QAction* m_generateAction = nullptr;
     QAction* m_exitAction = nullptr;
     QAction* m_renameAction = nullptr;
@@ -237,6 +259,10 @@ private:
     QPointer<QThread> m_loadThread;
     QPointer<QThread> m_exportThread;
     QPointer<QThread> m_copyThread; // saving a generated model's .obj copy
+    QPointer<QThread> m_sceneThread; // saving or opening a .gscene
+
+    QString m_scenePath;        // the open .gscene; empty until the scene is saved or opened
+    QString m_pendingScenePath; // a scene asked for before the renderer existed
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout

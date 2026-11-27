@@ -34,7 +34,7 @@ import {
   hashPassword, savePasswordReset, setUserPassword, verifyPassword,
 } from '../db.js'
 import { createLimiter } from '../ratelimit.js'
-import { MIN_PASSWORD_LENGTH, clearLoginFailures } from './accounts.js'
+import { clearLoginFailures, passwordProblem } from './accounts.js'
 import { sendMail } from './mail.js'
 
 // Wrong codes allowed before a code stops working.
@@ -133,11 +133,12 @@ export async function requestReset(email) {
     { email, code, newPassword } (strings)
   \return
     Promise of { status: 'ok', userId } | { status: 'invalid' } |
-    { status: 'weak' } (new password too short)
+    { status: 'weak', error } (new password breaks the rules; error says how)
 */
 /************************************************************************/
 export async function resetPassword({ email, code, newPassword }) {
-  if (newPassword.length < MIN_PASSWORD_LENGTH) return { status: 'weak' }
+  const weakness = passwordProblem(newPassword)
+  if (weakness) return { status: 'weak', error: weakness }
 
   const user = findUserByEmail(email.trim())
   const reset = user ? getPasswordReset(user.id) : null
