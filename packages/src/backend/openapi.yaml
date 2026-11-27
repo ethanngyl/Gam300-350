@@ -313,7 +313,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/PasswordResetInput' }
-            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+            example: { email: alice@example.com, code: '482913', newPassword: A-new-long-password! }
       responses:
         '200':
           description: Password changed
@@ -325,7 +325,7 @@ paths:
                 properties: { message: { type: string } }
               example: { message: Password changed. Sign in with your new password. }
         '400':
-          description: Wrong or expired code, or a new password that is too short
+          description: Wrong or expired code, or a new password that breaks the rules (8+ characters, an uppercase letter and a special character)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -971,8 +971,8 @@ paths:
               properties:
                 name: { type: string }
                 email: { type: string }
-                password: { type: string, minLength: 6 }
-            example: { name: Alice, email: alice@example.com, password: correct-horse-battery }
+                password: { type: string, minLength: 8, description: 'At least 8 characters, with an uppercase letter and a special character (anything but a letter, digit or space)' }
+            example: { name: Alice, email: alice@example.com, password: Correct-horse-9! }
       responses:
         '201':
           description: Created; the id is the account's id everywhere
@@ -1137,7 +1137,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/PasswordResetInput' }
-            example: { email: alice@example.com, code: '482913', newPassword: a-new-long-password }
+            example: { email: alice@example.com, code: '482913', newPassword: A-new-long-password! }
       responses:
         '200':
           description: Password changed
@@ -1151,7 +1151,7 @@ paths:
                   message: { type: string }
               example: { id: 7, message: Password changed. Sign in with your new password. }
         '400':
-          description: Wrong or expired code, or a new password that is too short
+          description: Wrong or expired code, or a new password that breaks the rules (8+ characters, an uppercase letter and a special character)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1696,9 +1696,9 @@ components:
             properties:
               name: { type: string }
               email: { type: string }
-              password: { type: string, minLength: 6 }
+              password: { type: string, minLength: 8, description: 'At least 8 characters, with an uppercase letter and a special character (anything but a letter, digit or space)' }
               remember: { type: boolean }
-          example: { name: Alice, email: alice@example.com, password: correct-horse-battery, remember: true }
+          example: { name: Alice, email: alice@example.com, password: Correct-horse-9!, remember: true }
     Rename:
       required: true
       content:
@@ -1727,8 +1727,8 @@ components:
             required: [currentPassword, newPassword]
             properties:
               currentPassword: { type: string }
-              newPassword: { type: string, minLength: 6 }
-          example: { currentPassword: correct-horse-battery, newPassword: staple-battery-horse-7 }
+              newPassword: { type: string, minLength: 8, description: 'At least 8 characters, with an uppercase letter and a special character (anything but a letter, digit or space)' }
+          example: { currentPassword: correct-horse-battery, newPassword: Staple-battery-7! }
     Avatar:
       required: true
       content:
@@ -2154,7 +2154,7 @@ components:
       properties:
         email: { type: string }
         code: { type: string, description: The 6 digits from the email }
-        newPassword: { type: string, minLength: 6 }
+        newPassword: { type: string, minLength: 8, description: 'At least 8 characters, with an uppercase letter and a special character (anything but a letter, digit or space)' }
     Account:
       type: object
       required: [name, email, role, createdAt, memberSince, emailVerified, passwordChangedAt, signInMethods, photoVersion]

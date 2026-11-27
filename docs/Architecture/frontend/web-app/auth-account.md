@@ -8,20 +8,22 @@ The **log in / create account** screen, opened from the landing page's *Log in* 
 **Props:** `initialMode` (`signin` or `signup`), `onLogin(user)`, `onBackToLanding`.
 
 ### Constants
-`GOOGLE_SIGN_IN_READY = true`, `GOOGLE_SIGN_IN_URL = '/api/v1/auth/google'`, `FORGOT_PASSWORD_URL`, `RESET_PASSWORD_URL`, `RESEND_AFTER_MS = 60 s` (matching the backend's one-request-a-minute limit), `MIN_PASSWORD_LENGTH = 6`.
+`GOOGLE_SIGN_IN_READY = true`, `GOOGLE_SIGN_IN_URL = '/api/v1/auth/google'`, `FORGOT_PASSWORD_URL`, `RESET_PASSWORD_URL`, `RESEND_AFTER_MS = 60 s` (matching the backend's one-request-a-minute limit). The new-password rules come from [`PasswordRules.js`](#passwordrulesjs).
 
 ### Functions
 | Function | Behaviour |
 |---|---|
 | `postJson(url, body)` *(module)* | POSTs JSON and returns `{ ok, status, data }`. |
 | `GoogleLogo({ size })` | The inline SVG mark. |
-| `switchMode()` / `backToSignIn()` | Toggles between sign-in and create-account, and leaves the forgot-password steps. |
+| `switchMode()` / `backToSignIn()` | Toggles between sign-in and create-account (clearing *Confirm password*), and leaves the forgot-password steps. |
+| `PasswordChecklist({ password })` | The live list under a new password (create account, and the reset step's new password): one row per rule in `PASSWORD_RULES`, ticked green (`is-met`) once the password meets it. |
+| `MismatchHint({ password, confirmation })` | *"Passwords don't match."* under a confirm field, once something has been typed in it. |
 | **`continueWithGoogle()`** | Navigates the browser to `/api/v1/auth/google`. The backend's OAuth flow ends with a redirect back to `/` signed in, or `/?login=google_failed|google_denied`, which the screen explains. See [routes/auth](../../backend/routes/auth.md). |
 | `handleForgotPassword()` | Switches the card to the two **forgot-password** steps. |
 | **`requestResetCode()`** | `POST /auth/forgot-password { email }`. It always says the same thing whether or not the account exists (the backend does the same). A 429 shows the wait. It starts the 60 s resend cooldown. |
-| **`submitNewPassword()`** | `POST /auth/reset-password { email, code, newPassword }`. On success it returns to Sign in with a *"Password changed"* note. A wrong or expired code shows the server's message. |
+| **`submitNewPassword()`** | `POST /auth/reset-password { email, code, newPassword }`. It first checks the code shape, `passwordProblem(newPassword)` and that both new passwords match. On success it returns to Sign in with a *"Password changed"* note. A wrong or expired code shows the server's message. |
 | `continueAsGuest()` | **Skips the backend.** It hands `onLogin` a local guest user (`isGuest: true`). Guests cannot save work or send feedback. |
-| **`handleSubmit(e)`** | Checks the form shape first: email format, a password of at least 6 characters, and a name when creating an account. Then `POST /api/v1/auth/signup` or `/auth/login` with `{ name?, email, password, remember }`. The backend sets the **HttpOnly** session cookie. On success it calls `onLogin(user)`, and App caches the profile. The error shown is the server's (for example *"Incorrect email or password."* or the lockout). |
+| **`handleSubmit(e)`** | Checks the form shape first: email format and a password; when creating an account also a name, `passwordProblem(password)` (the message names every missing rule) and a matching *Confirm password*. Signing in only needs a non-empty password, so accounts made before the rules can still log in. Then `POST /api/v1/auth/signup` with `{ name, email, password }` or `/auth/login` with `{ email, password, remember }` (*Keep me logged in* is only on the log-in form; a new account's session ends when the browser closes). The backend sets the **HttpOnly** session cookie. On success it calls `onLogin(user)`, and App caches the profile. The error shown is the server's (for example *"Incorrect email or password."* or the lockout). |
 
 ---
 
@@ -78,3 +80,10 @@ The admins' **read-only Inbox**. It lists feedback from `GET /feedback` (which a
 - **`fetchFeedbackPage(category, before)`**: builds the query string and returns `{ items, hasMore }`.
 - `formatWhen(ms)`: a relative or short date.
 - `loadFirstPage(category)`, `chooseFilter(category)`, `refresh()`, **`loadMore()`** (`before` is the id of the last item shown), `renderList()`.
+
+---
+
+## `PasswordRules.js`
+The rules every **new** password must meet in the browser: at least `MIN_PASSWORD_LENGTH = 8` characters, an uppercase letter (`\p{Lu}`) and a special character (anything but a letter, digit or space). The server applies the same rules ([services/accounts](../../backend/services/accounts.md) `passwordProblem`); keep the two in step.
+- **`PASSWORD_RULES`**: `[{ id, label, test(password) }]` (`length`, `upper`, `special`), in the order the checklist shows them.
+- **`passwordProblem(password)`**: `null` when every rule is met, otherwise one sentence naming everything missing, for example *"Password needs an uppercase letter and a special character (e.g. ! @ # $)."*

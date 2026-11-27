@@ -8,8 +8,9 @@
 \brief
 Log in / create account screen, opened from the landing page's "Log in"
 (#/login) or "Get started" (#/signup) buttons. Validates the
-form shape (email format, 6+ character password, name when creating an
-account), then posts it to the backend: /auth/signup creates the account
+form shape (email format, a password, and when creating an account a name,
+a password that meets PasswordRules.js - shown as a live checklist - and a
+matching "Confirm password"), then posts it to the backend: /auth/signup creates the account
 in the SQLite database (password stored only as a hash), /auth/login checks
 the password. On success the user object the server returns is handed to
 the parent, which keeps it as this browser's session. "Continue as guest"
@@ -26,6 +27,7 @@ password (/auth/reset-password), after which the card goes back to Sign in.
 import { useEffect, useState } from 'react';
 import genesisLogo from './GenesisLogo.svg';
 import Icon from './Icons.jsx';
+import { PASSWORD_RULES, passwordProblem } from './PasswordRules.js';
 import './LoginScreen.css';
 
 // TODO(backend): set to true once GET /auth/google starts the Google sign-in
@@ -41,7 +43,6 @@ const FORGOT_PASSWORD_URL = '/api/v1/auth/forgot-password';
 const RESET_PASSWORD_URL = '/api/v1/auth/reset-password';
 // The server allows one code request per email per minute.
 const RESEND_AFTER_MS = 60 * 1000;
-const MIN_PASSWORD_LENGTH = 6;
 
 // Posts JSON to the backend; returns { ok, data } (data is {} if the reply
 // wasn't JSON, e.g. from a proxy).
@@ -55,6 +56,33 @@ async function postJson(url, body) {
     return { ok: res.ok, data };
 }
 
+
+// Live list of the new-password rules (PasswordRules.js), each ticked green
+// once the password meets it.
+function PasswordChecklist({ password }) {
+    return (
+        <ul className="auth-password-rules">
+            {PASSWORD_RULES.map((rule) => {
+                const met = rule.test(password);
+                return (
+                    <li key={rule.id} className={met ? 'is-met' : undefined}>
+                        <span className="auth-password-rule-mark" aria-hidden="true">
+                            {met && <Icon name="check" size={11} />}
+                        </span>
+                        <span>{rule.label}</span>
+                        <span className="auth-visually-hidden">{met ? ' - done' : ' - not yet'}</span>
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
+// "Passwords don't match" under a confirm field, once something has been typed in it.
+function MismatchHint({ password, confirmation }) {
+    if (!confirmation || confirmation === password) return null;
+    return <span className="auth-field-hint">Passwords don&apos;t match.</span>;
+}
 
 // Google's "G" logo, as required on a Google sign-in button.
 function GoogleLogo({ size = 17 }) {
@@ -73,6 +101,7 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
     const [displayName, setDisplayName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [passwordAgain, setPasswordAgain] = useState(''); // "Confirm password" when creating an account
     const [rememberMe, setRememberMe] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     // A success message (code sent, password changed).
@@ -100,6 +129,7 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
         setMode(isSignUp ? 'signin' : 'signup');
         setErrorMessage(null);
         setNotice(null);
+        setPasswordAgain('');
     }
 
     function backToSignIn() {
@@ -160,8 +190,9 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
             setErrorMessage('Enter the 6-digit code from the email.');
             return;
         }
-        if (newPassword.length < MIN_PASSWORD_LENGTH) {
-            setErrorMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+        const weakness = passwordProblem(newPassword);
+        if (weakness) {
+            setErrorMessage(weakness);
             return;
         }
         if (newPassword !== confirmPassword) {
@@ -218,12 +249,24 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
             setErrorMessage('Enter a valid email address.');
             return;
         }
-        if (password.length < 6) {
-            setErrorMessage('Password must be at least 6 characters.');
-            return;
-        }
         if (isSignUp && !displayName.trim()) {
             setErrorMessage('Enter your name.');
+            return;
+        }
+        if (isSignUp) {
+            // New accounts must meet every rule; signing in only needs a password,
+            // so accounts made before the rules existed can still log in.
+            const weakness = passwordProblem(password);
+            if (weakness) {
+                setErrorMessage(weakness);
+                return;
+            }
+            if (password !== passwordAgain) {
+                setErrorMessage('The two passwords don\'t match.');
+                return;
+            }
+        } else if (!password) {
+            setErrorMessage('Enter your password.');
             return;
         }
 
@@ -233,7 +276,8 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
 
         try {
             const body = isSignUp
-                ? { name: displayName.trim(), email: trimmedEmail, password, remember: rememberMe }
+                // No "Keep me logged in" when creating an account: the new session ends with the browser.
+                ? { name: displayName.trim(), email: trimmedEmail, password }
                 : { email: trimmedEmail, password, remember: rememberMe };
             const res = await fetch(isSignUp ? '/api/v1/auth/signup' : '/api/v1/auth/login', {
                 method: 'POST',
@@ -364,10 +408,11 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                                         value={newPassword}
                                         onChange={(event) => setNewPassword(event.target.value)}
                                         autoComplete="new-password"
-                                        placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                                        placeholder="Create a new password"
                                     />
                                 </span>
                             </label>
+                            <PasswordChecklist password={newPassword} />
                             <label className="auth-field">
                                 <span className="auth-field-label">Confirm new password</span>
                                 <span className="auth-input">
@@ -380,6 +425,7 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                                         placeholder="Type it again"
                                     />
                                 </span>
+                                <MismatchHint password={newPassword} confirmation={confirmPassword} />
                             </label>
                         </>
                     )}
@@ -395,24 +441,43 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                                        placeholder={isSignUp ? 'At least 6 characters' : 'Enter your password'}
+                                        placeholder={isSignUp ? 'Create a password' : 'Enter your password'}
                                     />
                                 </span>
                             </label>
+                            {isSignUp && <PasswordChecklist password={password} />}
+                            {isSignUp && (
+                                <label className="auth-field">
+                                    <span className="auth-field-label">Confirm password</span>
+                                    <span className="auth-input">
+                                        <Icon name="lock" size={16} />
+                                        <input
+                                            type="password"
+                                            value={passwordAgain}
+                                            onChange={(event) => setPasswordAgain(event.target.value)}
+                                            autoComplete="new-password"
+                                            placeholder="Type it again"
+                                        />
+                                    </span>
+                                    <MismatchHint password={password} confirmation={passwordAgain} />
+                                </label>
+                            )}
                             {!isSignUp && (
                                 <button type="button" className="auth-link auth-forgot" onClick={handleForgotPassword}>
                                     Forgot password?
                                 </button>
                             )}
 
-                            <label className="auth-remember">
-                                <input
-                                    type="checkbox"
-                                    checked={rememberMe}
-                                    onChange={(event) => setRememberMe(event.target.checked)}
-                                />
-                                Keep me logged in
-                            </label>
+                            {!isSignUp && (
+                                <label className="auth-remember">
+                                    <input
+                                        type="checkbox"
+                                        checked={rememberMe}
+                                        onChange={(event) => setRememberMe(event.target.checked)}
+                                    />
+                                    Keep me logged in
+                                </label>
+                            )}
                         </>
                     )}
 

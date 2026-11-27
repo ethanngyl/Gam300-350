@@ -199,7 +199,7 @@ describe('the server answers as documented', () =>
     await check('PUT', '/auth/me/avatar', '/auth/me/avatar', { cookie, body: jpeg, headers: { 'Content-Type': 'image/jpeg' } })
     await check('GET', '/auth/me/avatar', '/auth/me/avatar', { cookie })
     await check('DELETE', '/auth/me/avatar', '/auth/me/avatar', { cookie })
-    await check('POST', '/auth/me/password', '/auth/me/password', { cookie, json: { currentPassword: 'wrong-one', newPassword: 'another-password' } })
+    await check('POST', '/auth/me/password', '/auth/me/password', { cookie, json: { currentPassword: 'wrong-one', newPassword: 'Another-pass-1!' } })
     await check('POST', '/auth/login', '/auth/login', { json: { email: 'erin@example.com', password: 'nope' } })
     await check('POST', '/auth/signup', '/auth/signup', { json: { name: 'X', email: 'not-an-email', password: 'abcdefgh' } })
   })

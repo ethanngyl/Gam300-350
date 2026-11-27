@@ -22,9 +22,9 @@ import path from 'node:path'
 import { after, before, describe, test } from 'node:test'
 import { call, openDb, sessionCookie, signUp, startServer, tempDir } from './helpers.js'
 
-const PASSWORD = 'correct-horse-battery'
+const PASSWORD = 'Horse-battery#9'
 // Under 16 characters, so secrets.test.js doesn't take it for a real one.
-const NEW_PASSWORD = 'new-pass-1234'
+const NEW_PASSWORD = 'New-pass-1234!'
 const KEY = 'test-shared-key-0123456789'
 // RESET_CODE_TTL_MIN for the tests: 6 seconds, so expiry can be tested.
 const TTL_MIN = 0.1
@@ -147,7 +147,7 @@ describe('"Forgot password?" on the machine that holds the accounts', () =>
     const code = codeFrom(await waitForEmail(mailDir, 'dave@example.com'))
     const weak = await reset(server.base, 'dave@example.com', code, '123')
     assert.equal(weak.status, 400)
-    assert.match(weak.body.error, /at least 6/)
+    assert.match(weak.body.error, /at least 8 characters/)
     assert.equal((await reset(server.base, 'dave@example.com', code)).status, 200)
   })
 

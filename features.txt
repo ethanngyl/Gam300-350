@@ -13,6 +13,10 @@ Accounts and sign-in
 - Sign in or create an account (email and password, stored as a hash in
   SQLite), or continue as a guest.
 - Login and signup are rate-limited to slow down password guessing.
+- New passwords (sign-up, password reset, password change) need at least 8
+  characters, an uppercase letter and a special character, checked in the
+  browser and by the server. Sign-up shows the rules as a live checklist
+  and asks for the password twice ("Confirm password").
 - Account page: profile card, sign out, sound settings (on/off and volume),
   and usage stats (models, photos, failed builds, queue).
 - Admins see every user's jobs; normal users see only their own.

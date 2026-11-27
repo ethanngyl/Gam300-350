@@ -51,7 +51,7 @@ const THREADS = process.env.UV_THREADPOOL_SIZE || '16'
 
 // Routes that hash a password; timed apart from the light routes.
 const SLOW_ROUTES = new Set(['POST /auth/signup'])
-const PASSWORD = 'stress-test-password'
+const PASSWORD = 'Stress-test-pw!'
 // Accounts the script makes itself are numbered from here, so their
 // addresses and emails never clash with the simulated visits'.
 const OWN_USERS_FROM = 1_000_000

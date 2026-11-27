@@ -24,7 +24,7 @@ Calls `sendMail` **without awaiting it**, so the reply takes the same time wheth
 4. Otherwise it saves the hash with its expiry (replacing any earlier code and attempt count) and emails *"Your Genesis password reset code: NNNNNN"* with instructions. Returns `{ status: 'sent' }`.
 
 ### `resetPassword({ email, code, newPassword })` *(exported)*
-1. A password shorter than 6 characters gives `{ status: 'weak' }`.
+1. A password that breaks the rules gives `{ status: 'weak', error }`, with `passwordProblem`'s message (the route returns it as the 400).
 2. Looks up the user and the reset. With no reset, an expired one, or one with too many attempts, it deletes any stale code, **runs a dummy `verifyPassword`** so the timing matches, and returns `{ status: 'invalid' }`.
 3. The code must match `^\d{6}$` **and** verify against the hash. If not, the attempt is counted; reaching 5 deletes the code. Returns `invalid`.
 4. On success: deletes the code, `setUserPassword`, `endOtherSessions(user, null)` (**every** session, including this browser's), `clearLoginFailures`, and an email in the background saying the password was changed. Returns `{ status: 'ok', userId }`.
