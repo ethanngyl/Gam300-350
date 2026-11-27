@@ -21,6 +21,7 @@ elsewhere (e.g. WASD nudges in the viewport) back into the fields.
 #include <QWidget>
 
 #include <array>
+#include <cstddef>
 
 class QCheckBox;
 class QDoubleSpinBox;
@@ -62,6 +63,12 @@ public:
     // restores it. `confirmed` is whether move mode has a confirmed selection.
     // Cheap enough to call every frame.
     void setCropState(bool active, bool moveContents, bool removeInside, bool confirmed);
+
+    // Developer-only readout under the Crop Box section: how many splats the confirmed selection holds.
+    // Cheap enough to call every frame.
+    void setSelectedSplatCount(std::size_t count);
+    // Shows or hides that readout (it is only visible in developer mode).
+    void setDevMode(bool on);
 
 //QT's events
 signals:
@@ -129,6 +136,8 @@ private:
     std::array<QPushButton*, 2> m_cropCutButtons{}; // Cut Inside, Cut Outside
     QPushButton* m_cropModeToggle = nullptr;        // shows the mode, click switches Crop <-> Move
     QPushButton* m_cropApply = nullptr;
+    QLabel* m_selectedSplats = nullptr; // dev mode only
+    std::size_t m_selectedSplatCount = 0;
     // Last state shown, so the per-frame setCropState only touches widgets when something changed
     bool m_cropShown = false; // false until the first setCropState has filled the widgets in
     bool m_cropActive = false;

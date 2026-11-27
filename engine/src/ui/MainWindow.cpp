@@ -211,6 +211,7 @@ MainWindow::MainWindow() {
         const SplatRenderer* cropRenderer = m_viewport->renderer();
         m_inspector->setCropState(cropBox.active, cropBox.moveContents, cropBox.removeInside,
                                   cropRenderer && cropRenderer->HasSelection());
+        m_inspector->setSelectedSplatCount(cropRenderer ? cropRenderer->Selection().size() : 0);
 
         if (m_statsTimer.elapsed() < kStatsRefreshMs) {
             return;
@@ -2117,6 +2118,10 @@ void MainWindow::updateDevModeAction()
 {
     if (m_devModeAction)
         m_devModeAction->setText(m_devMode ? "Developer Mode: &On" : "Developer Mode: &Off");
+
+    //The inspector's selected splat count is developer-only too. The inspector exists after the first call
+    if (m_inspector)
+        m_inspector->setDevMode(m_devMode);
 
     //Stats overlay and metrics recording are developer-only. A hidden action also stops its shortcut from firing.
     //These can run before the actions or the viewport exist, so check them first

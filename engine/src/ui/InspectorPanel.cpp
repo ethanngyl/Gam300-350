@@ -237,6 +237,13 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     m_cropApply->setToolTip("Enter, with the viewport focused");
     layout->addWidget(m_cropApply);
 
+    m_selectedSplats = new QLabel(page);
+    m_selectedSplats->setObjectName("PanelHint");
+    m_selectedSplats->setToolTip("Splats in the confirmed selection (Move mode)");
+    m_selectedSplats->setVisible(false); // developer mode only, see setDevMode
+    layout->addWidget(m_selectedSplats);
+    setSelectedSplatCount(0);
+
     connect(m_cropToggle, &QPushButton::clicked, this, [this](bool on) { emit cropBoxToggled(on); });
     //Button ids are the CropRemoveInside / CropRemoveOutside values
     connect(cutGroup, &QButtonGroup::idClicked, this, [this](int side) { emit cropModeSelected(side); });
@@ -486,6 +493,19 @@ void InspectorPanel::setCropState(bool active, bool moveContents, bool removeIns
     } else {
         m_cropApply->setText("Remove Splats");
     }
+}
+
+void InspectorPanel::setSelectedSplatCount(std::size_t count) {
+    if (!m_selectedSplats) return;
+    //Called every frame, so only touch the label when the number changed (the first call always applies)
+    if (m_selectedSplats->text().isEmpty() || count != m_selectedSplatCount) {
+        m_selectedSplatCount = count;
+        m_selectedSplats->setText(QString("Selected splats: %1").arg(QLocale().toString(static_cast<qulonglong>(count))));
+    }
+}
+
+void InspectorPanel::setDevMode(bool on) {
+    if (m_selectedSplats) m_selectedSplats->setVisible(on);
 }
 
 void InspectorPanel::setSnapToGrid(bool on) {
