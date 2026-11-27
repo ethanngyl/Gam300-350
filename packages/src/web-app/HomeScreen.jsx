@@ -27,6 +27,7 @@ import Icon from './Icons.jsx';
 import ModelCover from './ModelCover.jsx';
 import { jobDisplayName } from './mediaApi.js';
 import { smallPhotoUrl } from './LibraryPhotos.js';
+import { useMobileView } from './useMobileView.js';
 import './HomeScreen.css';
 
 // How many cards each Recent tab shows.
@@ -73,6 +74,8 @@ function formatTimeAgo(timestamp) {
 }
 
 function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
+    // Phones start a model from the tab bar's camera, not New.
+    const isPhone = useMobileView();
     const [jobs, setJobs] = useState([]);
     // Whether the server has the sample model (sample jobs can be switched off).
     const [hasSampleModel, setHasSampleModel] = useState(false);
@@ -216,7 +219,11 @@ function HomeScreen({ onNewModel, onNavigate, onOpenLibrary, onOpenModel }) {
 
             {!isLoading && !loadError && !isShowingFiles && !hasModels && (
                 <div className="home-empty-state">
-                    <p className="home-empty-note">No models yet. Click New to start one from photos or a video.</p>
+                    <p className="home-empty-note">
+                        {isPhone
+                            ? 'No models yet. Tap the camera to start one from photos or a video.'
+                            : 'No models yet. Click New to start one from photos or a video.'}
+                    </p>
                     <div className="home-empty-actions">
                         <button
                             type="button"

@@ -62,3 +62,19 @@
 .build-panel-pill ~ .welcome-card {
     right: 360px;
 }
+
+/* Phones: across the bottom, above the camera button (where the build panel sits). */
+@media (max-width: 760px) {
+    .welcome-card {
+        left: 12px;
+        right: 12px;
+        bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+        width: auto;
+    }
+
+    .build-panel ~ .welcome-card,
+    .build-panel-pill ~ .welcome-card {
+        right: 12px;
+        bottom: calc(92px + 72px + env(safe-area-inset-bottom, 0px));
+    }
+}

@@ -8,7 +8,11 @@
 \brief
 Pop-up for choosing photos from the library (past jobs). Lists each batch
 with its photos; the user ticks single photos or whole batches, then the
-chosen photos are downloaded and handed to onAddFiles as File objects.
+chosen photos are downloaded and handed to onAddFiles(files, { failedCount })
+as File objects; failedCount says how many couldn't be downloaded (the
+picker then stays open to say so).
+When they have all downloaded the tick sound plays (the error sound if
+any couldn't be).
 Used by the Photo Editor, Camera Capture and the New model dialog. Laid
 out like the Figma's "Add photos from library": a title with an X, each
 photo with its file name, then Cancel and "Add selected photos".
@@ -17,6 +21,7 @@ photo with its file name, then Cancel and "Add selected photos".
 import { useEffect, useState } from 'react';
 import Icon from './Icons.jsx';
 import { downloadLibraryPhoto, fetchLibraryBatches, smallPhotoUrl } from './LibraryPhotos.js';
+import { playSound } from '../audio/Audio.js';
 import './LibraryPhotoPicker.css';
 
 function photoKey(jobId, imageName) {
@@ -117,11 +122,13 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
         setDownloadedCount(null);
 
         if (downloadedFiles.length === 0) {
+            playSound('error');
             setDownloadError("Couldn't download the selected photos. Check that the server is running and try again.");
             return;
         }
 
-        onAddFiles(downloadedFiles);
+        playSound(failedCount > 0 ? 'error' : 'tick');
+        onAddFiles(downloadedFiles, { failedCount });
 
         if (failedCount > 0) {
             // Keep the picker open so the user sees that some photos are missing.
@@ -244,4 +251,4 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     );
 }
 
-export default LibraryPhotoPicker;
+export default LibraryPhotoPicker;  

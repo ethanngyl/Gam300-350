@@ -26,16 +26,19 @@
     background: radial-gradient(ellipse at 85% 10%, rgba(var(--forma-accent-rgb), 0.28), transparent 60%), linear-gradient(120deg, rgba(var(--forma-accent-rgb), 0.22), rgba(var(--forma-accent-rgb), 0.08));
 }
 
-/* Stacked layers on the right, like the Figma's 3D graphic. */
+/* The sliced cube on the right, as in the Figma (Concepts 8): the Genesis
+   logo (GenesisLogo.svg) drawn large, used as a stencil and filled with the
+   heading colour, so it is white in the dark theme and near-black in the
+   light one. Its top runs off the banner. */
 .home-screen .home-hero-art {
     position: absolute;
-    top: 10px;
-    right: 48px;
-    width: 220px;
-    height: 200px;
-    background: repeating-linear-gradient(90deg, rgba(var(--forma-accent-light-rgb), 0.16) 0 10px, transparent 10px 22px);
-    clip-path: polygon(0 18%, 70% 0, 100% 12%, 100% 100%, 30% 100%, 0 88%);
-    opacity: 0.8;
+    top: -51px;
+    right: 55px;
+    width: 213px;
+    height: 246px;
+    background-color: var(--forma-heading);
+    -webkit-mask: url('./GenesisLogo.svg') center / contain no-repeat;
+    mask: url('./GenesisLogo.svg') center / contain no-repeat;
     pointer-events: none;
 }
 

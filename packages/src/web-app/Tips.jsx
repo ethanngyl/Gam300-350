@@ -6,7 +6,7 @@
 \par Software Engineering Project 5
 \date 25-11-2026
 \brief
-First-run help on wider screens, as in the Figma:
+First-run help, as in the Figma:
 - WelcomeCard: "Welcome to Genesis" in the bottom corner of Home, the
   first time an account signs in on this browser: Take the tour (the
   walkthrough, Walkthrough.jsx), or I'll explore.

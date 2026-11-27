@@ -25,10 +25,16 @@ clicking it asks for the camera again. The Remove background option and
 the Model detail slider (training iteration cap) are here and in the Photo
 Editor; coming back from there ("Back to camera"), initialPhotos brings
 the batch and those choices back with it.
-On phones the page is the mobile Figma's full-screen camera instead: close
-at the top left, the shot count, and upload at the top right; Manual / Auto
-above the shutter; the last photo and Done (both open the batch in the
-Photo Editor) beside it. Auto-capture uses its default interval and cap.
+On phones the page is JM's mobile Figma's full-screen camera instead:
+close at the top left, the shot count, and flash at the top right (only
+where the browser can turn the torch on, mostly Android Chrome); Manual /
+Auto above the shutter; the gallery button (showing the last photo) and
+Done beside it. The gallery button asks where to add from: the phone's
+own picker (photos go to the Photo Editor with the shots taken so far, and
+a video opens the Video Extractor with it, onPickVideos, which asks first
+if there are shots; photos and videos picked together are refused) or the
+Media Library (LibraryPhotoPicker.jsx; its photos go to the Photo Editor
+the same way, or join the shots if some couldn't be downloaded). Done opens the batch in the Photo Editor. Auto-capture uses its default interval and cap.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -38,6 +44,7 @@ import './CameraCapture.css';
 import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
 import { usePhotoThumbnails } from './PhotoThumbnails.js';
+import { MEDIA_ACCEPT, MEDIA_EXT_RE } from './mediaJobs.js';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import { useMobileView } from './useMobileView.js';
@@ -108,9 +115,14 @@ function createBatchPhoto(file) {
 
 // initialPhotos: { files, removeBackground, autoCrop, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
+// onPickVideos(files): phones, a video picked with the gallery button.
+// onUnsavedWorkChange(hasPhotos): told whether there are photos to lose, so
+// App can ask before leaving.
 function CameraCapture({
     onBatchReady,
     onReviewPhotos,
+    onPickVideos = null,
+    onUnsavedWorkChange = null,
     onBack,
     uploadError,
     initialPhotos = null,
@@ -118,6 +130,10 @@ function CameraCapture({
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
+    // Phones: the gallery button's picker (photos and videos).
+    const galleryInputRef = useRef(null);
+    // Phones: whether the flash (torch) is on.
+    const [isTorchOn, setIsTorchOn] = useState(false);
     const streamRef = useRef(null);
     // Id of the photo currently being checked, so only one runs at a time.
     const analyzingPhotoIdRef = useRef(null);
@@ -136,6 +152,12 @@ function CameraCapture({
             .filter((file) => file.type.startsWith('image/'))
             .map(createBatchPhoto)
     );
+
+    // Tells App whether leaving now would throw the photos taken away, so it asks first.
+    useEffect(() => {
+        onUnsavedWorkChange?.(photos.length > 0);
+    }, [photos.length, onUnsavedWorkChange]);
+    useEffect(() => () => onUnsavedWorkChange?.(false), [onUnsavedWorkChange]);
 
     const [captureFeedback, setCaptureFeedback] = useState(null);
     const [uploadFeedback, setUploadFeedback] = useState(null);
@@ -156,6 +178,11 @@ function CameraCapture({
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 
     const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
+    // Phones: the sheet asking whether to add from the phone's gallery or
+    // the Media Library.
+    const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+    // Phones: why the last gallery pick couldn't be used, or null.
+    const [galleryError, setGalleryError] = useState(null);
 
     // Focus: what the current camera supports (null until it starts),
     // 'auto' or 'manual', the manual focus distance, the ring drawn where
@@ -400,7 +427,7 @@ function CameraCapture({
     useEffect(() => {
         function handleKeyDown(event) {
             if (event.code !== 'Space' || event.repeat || !stream) return;
-            if (isLibraryPickerOpen || isShortcutBlockedBy(event.target)) return;
+            if (isLibraryPickerOpen || isAddSheetOpen || isShortcutBlockedBy(event.target)) return;
             event.preventDefault();
             // A focused camera button would otherwise also be pressed on key-up.
             if (event.target.closest?.('.capture-controls')) event.target.blur();
@@ -413,7 +440,7 @@ function CameraCapture({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [captureMode, stream, capturePhoto, isLibraryPickerOpen]);
+    }, [captureMode, stream, capturePhoto, isLibraryPickerOpen, isAddSheetOpen]);
 
     function handleModeChange(mode) {
         setCaptureMode(mode);
@@ -424,6 +451,70 @@ function CameraCapture({
 
     function handleBrowseClick() {
         fileInputRef.current?.click();
+    }
+
+    // Phones: what was picked with the gallery button. A video (or GIF) opens
+    // the Video Extractor; photos open the Photo Editor with the shots so far.
+    function handleGalleryChange(event) {
+        const picked = Array.from(event.target.files ?? []);
+        event.target.value = '';
+        const videos = picked.filter((file) => file.type.startsWith('video/') || MEDIA_EXT_RE.test(file.name));
+        const pickedPhotos = picked.filter((file) => file.type.startsWith('image/') && !videos.includes(file));
+        // Photos and videos go to different pages, so one or the other.
+        if (videos.length > 0 && pickedPhotos.length > 0) {
+            setGalleryError('Pick photos or videos, not both at once.');
+            return;
+        }
+        setGalleryError(null);
+        if (videos.length > 0 && onPickVideos) {
+            setIsAutoCapturing(false);
+            onPickVideos(videos);
+            return;
+        }
+        reviewWithAddedPhotos(pickedPhotos);
+    }
+
+    // Phones: photos from the Media Library go to the Photo Editor, unless
+    // some couldn't be downloaded: then they join the shots here, and the
+    // picker stays open to say which were missing.
+    function handleLibraryPicked(files, { failedCount = 0 } = {}) {
+        if (failedCount > 0) addFiles(files);
+        else reviewWithAddedPhotos(files);
+    }
+
+    // Phones: photos picked from the gallery or the Media Library go to the
+    // Photo Editor with the ones taken so far.
+    function reviewWithAddedPhotos(pickedPhotos) {
+        if (pickedPhotos.length === 0) return;
+        setIsAutoCapturing(false);
+        onReviewPhotos([...photos.map((photo) => photo.file), ...pickedPhotos], { removeBackground, autoCrop, trainIters });
+    }
+
+    // Phones: the gallery button's sheet, then its two choices.
+    function openAddSheet() {
+        setIsAutoCapturing(false);
+        setGalleryError(null);
+        setIsAddSheetOpen(true);
+    }
+
+    function addFromGallery() {
+        setIsAddSheetOpen(false);
+        galleryInputRef.current?.click();
+    }
+
+    function addFromLibrary() {
+        setIsAddSheetOpen(false);
+        setIsLibraryPickerOpen(true);
+    }
+
+    // Phones: the flash, where the camera and browser allow it.
+    const videoTrack = stream?.getVideoTracks()[0];
+    const canUseTorch = Boolean(videoTrack?.getCapabilities?.().torch);
+    function toggleTorch() {
+        const isTurningOn = !isTorchOn;
+        videoTrack?.applyConstraints({ advanced: [{ torch: isTurningOn }] })
+            .then(() => setIsTorchOn(isTurningOn))
+            .catch(() => { });
     }
 
     function handleFileInputChange(e) {
@@ -531,11 +622,9 @@ function CameraCapture({
                         <button
                             type="button"
                             className="forma-btn"
-                            onClick={() => {
-                                handleBrowseClick();
-                            }}
+                            onClick={openAddSheet}
                         >
-                            <Icon name="upload" size={14} /> Upload photos instead
+                            <Icon name="image" size={14} /> Add photos or a video
                         </button>
                     </div>
                 )}
@@ -559,21 +648,26 @@ function CameraCapture({
                         <Icon name="close" size={18} />
                     </button>
                     <span className="capture-phone-count">{photos.length} / {SUGGESTED_PHOTO_COUNT} shots</span>
-                    <button
-                        type="button"
-                        className="capture-phone-round"
-                        aria-label="Upload photos"
-                        onClick={() => {
-                            handleBrowseClick();
-                        }}
-                    >
-                        <Icon name="upload" size={18} />
-                    </button>
+                    {canUseTorch ? (
+                        <button
+                            type="button"
+                            className={isTorchOn ? 'capture-phone-round is-on' : 'capture-phone-round'}
+                            aria-label="Flash"
+                            aria-pressed={isTorchOn}
+                            onClick={toggleTorch}
+                        >
+                            <Icon name="flash" size={18} />
+                        </button>
+                    ) : (
+                        // Keeps the shot count centred when there is no flash.
+                        <span className="capture-phone-round-spacer" aria-hidden="true" />
+                    )}
                 </div>
 
                 <div className="capture-phone-bottom">
                     {stream && <p className="capture-phone-hint" role="status">{hint}</p>}
                     {uploadError && <p className="capture-phone-hint is-error" role="alert">{uploadError}</p>}
+                    {galleryError && <p className="capture-phone-hint is-error" role="alert">{galleryError}</p>}
 
                     <div className="capture-phone-modes">
                         <button
@@ -600,13 +694,12 @@ function CameraCapture({
                         <button
                             type="button"
                             className="capture-phone-last"
-                            aria-label="Review photos"
-                            disabled={!lastPhoto}
-                            onClick={() => {
-                                handleReview();
-                            }}
+                            aria-label="Add photos or a video"
+                            onClick={openAddSheet}
                         >
-                            {lastPhoto && thumbnailUrls[lastPhoto.id] && <img src={thumbnailUrls[lastPhoto.id]} alt="" />}
+                            {lastPhoto && thumbnailUrls[lastPhoto.id]
+                                ? <img src={thumbnailUrls[lastPhoto.id]} alt="" />
+                                : <Icon name="image" size={20} />}
                         </button>
                         <button
                             type="button"
@@ -637,6 +730,52 @@ function CameraCapture({
                 </div>
 
                 {fileInput}
+                <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept={`image/*,${MEDIA_ACCEPT}`}
+                    multiple
+                    onChange={handleGalleryChange}
+                    style={{ display: 'none' }}
+                />
+
+                {isAddSheetOpen && (
+                    <div className="capture-phone-sheet">
+                        <button
+                            type="button"
+                            className="capture-phone-sheet-backdrop"
+                            aria-label="Close"
+                            onClick={() => setIsAddSheetOpen(false)}
+                        />
+                        <div className="capture-phone-sheet-panel" role="dialog" aria-modal="true" aria-label="Add photos or a video">
+                            <h2>Add photos or a video</h2>
+                            <button type="button" className="capture-phone-sheet-option" onClick={addFromGallery}>
+                                <Icon name="upload" size={20} />
+                                <span>
+                                    <strong>Phone gallery</strong>
+                                    <small>Photos or a video from this phone</small>
+                                </span>
+                            </button>
+                            <button type="button" className="capture-phone-sheet-option" onClick={addFromLibrary}>
+                                <Icon name="image" size={20} />
+                                <span>
+                                    <strong>Media Library</strong>
+                                    <small>Photos from your past models</small>
+                                </span>
+                            </button>
+                            <button type="button" className="forma-btn capture-phone-sheet-cancel" onClick={() => setIsAddSheetOpen(false)}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {isLibraryPickerOpen && (
+                    <LibraryPhotoPicker
+                        onAddFiles={handleLibraryPicked}
+                        onClose={() => setIsLibraryPickerOpen(false)}
+                    />
+                )}
             </div>
         );
     }

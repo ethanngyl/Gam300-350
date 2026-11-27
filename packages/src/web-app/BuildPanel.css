@@ -294,12 +294,12 @@
     }
 }
 
-/* Phones: full width, above the tab bar. */
+/* Phones: full width, above the camera button. */
 @media (max-width: 760px) {
     .build-panel,
     .build-panel-pill {
         right: 12px;
-        bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+        bottom: calc(92px + env(safe-area-inset-bottom, 0px));
     }
 
     .build-panel {

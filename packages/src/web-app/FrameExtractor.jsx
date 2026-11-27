@@ -17,11 +17,19 @@ how frames are picked.
 onStartBuild({ files, fps, trainIters, removeBackground, autoCrop }). App
 uploads and builds it in the background, shown in the build panel
 (useBackgroundBuilds.js), like a photo build. The file rules and the upload
-live in mediaJobs.js. There is no Back button; the sidebar (or the dock on
-phones) handles navigation.
-- FrameExtractor({ onStartBuild, initialDraft })
+live in mediaJobs.js. There is no Back button; the sidebar handles navigation.
+Phones get JM's mobile layout instead (reached by picking a video with
+Capture's gallery button; the top bar's Back to home leaves): a card per
+video with its preview (tap to play), name, length, resolution and size;
+an "Extract settings" card with an FPS stepper and how many frames that
+gives, the two options and Model detail ("How does this work?" opens the
+note on how frames are picked); and "Extract frames" along the bottom.
+Everything the wider layout does is there: more videos can be added and
+any removed.
+- FrameExtractor({ onStartBuild, initialDraft, onUnsavedWorkChange })
 initialDraft ({ files, fps, trainIters, removeBackground, autoCrop }, from App) fills
-the form in again after a failed build.
+the form in again after a failed build. onUnsavedWorkChange(hasFiles) is
+told whether there are videos to lose, so App can ask before leaving.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
@@ -29,6 +37,7 @@ import Icon from './Icons.jsx';
 import TrainingQualitySlider from './TrainingQualitySlider.jsx';
 import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import { MAX_MEDIA_FILES, MAX_MEDIA_SIZE_MB, MEDIA_ACCEPT, MEDIA_EXT_RE, formatFileSize } from './mediaJobs.js';
+import { useMobileView } from './useMobileView.js';
 import './FrameExtractor.css';
 
 function createMediaItem(file) {
@@ -58,9 +67,118 @@ function MediaPreview({ item }) {
     );
 }
 
-function FrameExtractor({ onStartBuild, initialDraft = null }) {
+// Which of chosenFiles the extractor can take, given room for roomLeft
+// more, and the message about any it can't (or null). Used for files added
+// here and for files handed over (a video picked in Capture, a retried build).
+function checkMediaFiles(chosenFiles, roomLeft) {
+    const usableFiles = chosenFiles.filter((file) => MEDIA_EXT_RE.test(file.name));
+    const smallEnoughFiles = usableFiles.filter((file) => file.size <= MAX_MEDIA_SIZE_MB * 1024 * 1024);
+    const files = smallEnoughFiles.slice(0, roomLeft);
+
+    let error = null;
+    if (usableFiles.length < chosenFiles.length) {
+        error = 'Only MP4, MOV, WEBM, MKV, AVI, MPEG videos and animated GIFs can be used here.';
+    } else if (smallEnoughFiles.length < usableFiles.length) {
+        error = `Each file must be under ${formatFileSize(MAX_MEDIA_SIZE_MB * 1024 * 1024)}.`;
+    } else if (files.length < smallEnoughFiles.length) {
+        error = `You can add up to ${MAX_MEDIA_FILES} files at a time.`;
+    }
+    return { files, error };
+}
+
+// The phone FPS stepper's range (any rate can still be typed in the box).
+const MIN_STEPPER_FPS = 1;
+const MAX_FPS = 30;
+
+// "0:24" from a length in seconds.
+function formatDuration(seconds) {
+    const wholeSeconds = Math.round(seconds);
+    return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, '0')}`;
+}
+
+// Phones: one video's card. Its preview plays when tapped, and its length and
+// resolution are read from the file once the browser has loaded them
+// (onInfo gets { duration, width, height }). Formats the browser can't play
+// show an icon and just the name and size.
+function PhoneMediaCard({ item, info, onInfo, onRemove }) {
+    const videoRef = useRef(null);
+    const [hasFailed, setHasFailed] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+
+    function playVideo() {
+        setIsPlaying(true);
+        videoRef.current?.play().catch(() => setIsPlaying(false));
+    }
+
+    const details = [
+        info?.duration ? formatDuration(info.duration) : null,
+        info?.height ? `${Math.min(info.width, info.height)}p` : null,
+        formatFileSize(item.file.size),
+    ].filter(Boolean);
+
+    let preview;
+    if (hasFailed) {
+        preview = <span className="fx-media-fallback"><Icon name="video" size={28} /></span>;
+    } else if (item.isGif) {
+        preview = <img src={item.url} alt="" onError={() => setHasFailed(true)} />;
+    } else {
+        preview = (
+            <>
+                <video
+                    ref={videoRef}
+                    src={`${item.url}#t=0.1`}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    controls={isPlaying}
+                    onLoadedMetadata={(e) => {
+                        const video = e.currentTarget;
+                        // Some WebM files report Infinity until played through: unknown.
+                        const duration = Number.isFinite(video.duration) ? video.duration : null;
+                        onInfo({ duration, width: video.videoWidth, height: video.videoHeight });
+                    }}
+                    onError={() => setHasFailed(true)}
+                />
+                {!isPlaying && (
+                    <button type="button" className="fx-phone-play" aria-label={`Play ${item.file.name}`} onClick={playVideo}>
+                        <Icon name="playSolid" size={18} />
+                    </button>
+                )}
+                {!isPlaying && info?.duration > 0 && (
+                    <span className="fx-phone-duration">{formatDuration(info.duration)}</span>
+                )}
+            </>
+        );
+    }
+
+    return (
+        <li className="forma-card fx-phone-card fx-phone-media">
+            <div className="fx-phone-preview">{preview}</div>
+            <div className="fx-phone-media-text">
+                <span>
+                    <strong title={item.file.name}>{item.file.name}</strong>
+                    <small>{details.join(' \u00b7 ')}</small>
+                </span>
+                <button type="button" className="fx-phone-remove" aria-label={`Remove ${item.file.name}`} onClick={onRemove}>
+                    <Icon name="close" size={16} />
+                </button>
+            </div>
+        </li>
+    );
+}
+
+function FrameExtractor({ onStartBuild, initialDraft = null, onUnsavedWorkChange = null }) {
+    const isPhone = useMobileView();
     // Starts from the last build's files and settings, if App passes them back.
-    const [mediaItems, setMediaItems] = useState(() => initialDraft?.files.map(createMediaItem) ?? []);
+    // Handed-over files get the same checks as ones added here.
+    const [initialCheck] = useState(() => checkMediaFiles(initialDraft?.files ?? [], MAX_MEDIA_FILES));
+    const [mediaItems, setMediaItems] = useState(() => initialCheck.files.map(createMediaItem));
+
+    // Tells App whether leaving now would throw the chosen videos away, so it asks first.
+    useEffect(() => {
+        onUnsavedWorkChange?.(mediaItems.length > 0);
+    }, [mediaItems.length, onUnsavedWorkChange]);
+    useEffect(() => () => onUnsavedWorkChange?.(false), [onUnsavedWorkChange]);
     const [isDragging, setIsDragging] = useState(false);
     const [fps, setFps] = useState(initialDraft?.fps ?? 2);
     // Mask out the background before reconstruction. On by default here, since
@@ -71,7 +189,11 @@ function FrameExtractor({ onStartBuild, initialDraft = null }) {
     const [autoCrop, setAutoCrop] = useState(initialDraft?.autoCrop ?? false);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialDraft?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(initialCheck.error);
+    // Phones: each video's length and resolution, by item id.
+    const [mediaInfo, setMediaInfo] = useState({});
+    // Phones: whether the note under Model detail is open.
+    const [isHelpOpen, setIsHelpOpen] = useState(false);
     const fileInputRef = useRef(null);
     // Latest file list, read when the page closes to release preview URLs.
     const mediaItemsRef = useRef([]);
@@ -89,21 +211,9 @@ function FrameExtractor({ onStartBuild, initialDraft = null }) {
     }, []);
 
     function addFiles(fileList) {
-        const chosenFiles = Array.from(fileList);
-        const usableFiles = chosenFiles.filter((file) => MEDIA_EXT_RE.test(file.name));
-        const smallEnoughFiles = usableFiles.filter((file) => file.size <= MAX_MEDIA_SIZE_MB * 1024 * 1024);
-        const newFiles = smallEnoughFiles.slice(0, MAX_MEDIA_FILES - mediaItems.length);
-
-        if (usableFiles.length < chosenFiles.length) {
-            setError('Only videos and animated GIFs can be used here. For photos, use New model.');
-        } else if (smallEnoughFiles.length < usableFiles.length) {
-            setError(`Each file must be under ${formatFileSize(MAX_MEDIA_SIZE_MB * 1024 * 1024)}.`);
-        } else if (newFiles.length < smallEnoughFiles.length) {
-            setError(`You can add up to ${MAX_MEDIA_FILES} files at a time.`);
-        } else {
-            setError(null);
-        }
-        setMediaItems((prev) => [...prev, ...newFiles.map(createMediaItem)]);
+        const { files, error: fileError } = checkMediaFiles(Array.from(fileList), MAX_MEDIA_FILES - mediaItems.length);
+        setError(fileError);
+        setMediaItems((prev) => [...prev, ...files.map(createMediaItem)]);
     }
 
     function removeMediaItem(id) {
@@ -146,6 +256,154 @@ function FrameExtractor({ onStartBuild, initialDraft = null }) {
         });
     }
 
+    const fileInput = (
+        <input
+            ref={fileInputRef}
+            type="file"
+            accept={MEDIA_ACCEPT}
+            multiple
+            onChange={handleFileInputChange}
+            style={{ display: 'none' }}
+            aria-label="Choose media files"
+        />
+    );
+
+    if (isPhone) {
+        // Frames from every video at this rate, once their lengths are known.
+        const fpsNumber = Number(fps) || 0;
+        const totalSeconds = mediaItems.reduce((sum, item) => sum + (mediaInfo[item.id]?.duration || 0), 0);
+        const hasAllLengths = mediaItems.length > 0 && mediaItems.every((item) => mediaInfo[item.id]?.duration > 0);
+
+        return (
+            <form className="fx fx-phone" onSubmit={handleSubmit}>
+                <h1 className="page-title">Video Extractor</h1>
+
+                {mediaItems.length > 0 && (
+                    <ul className="fx-phone-media-list">
+                        {mediaItems.map((item) => (
+                            <PhoneMediaCard
+                                key={item.id}
+                                item={item}
+                                info={mediaInfo[item.id]}
+                                onInfo={(info) => setMediaInfo((prev) => ({ ...prev, [item.id]: info }))}
+                                onRemove={() => {
+                                    removeMediaItem(item.id);
+                                }}
+                            />
+                        ))}
+                    </ul>
+                )}
+
+                {mediaItems.length < MAX_MEDIA_FILES && (
+                    <button type="button" className="forma-btn fx-phone-add" onClick={handleBrowseClick}>
+                        <Icon name={mediaItems.length === 0 ? 'video' : 'plus'} size={16} />
+                        {mediaItems.length === 0 ? 'Choose a video' : 'Add another video'}
+                    </button>
+                )}
+                {fileInput}
+
+                {error && <p className="fx-error">{error}</p>}
+
+                <div className="forma-card fx-phone-card fx-phone-settings">
+                    <h2>Extract settings</h2>
+                    <div className="fx-phone-fps-row">
+                        <label className="fx-phone-stepper">
+                            <input
+                                type="number"
+                                min="0.1"
+                                max={MAX_FPS}
+                                step="0.1"
+                                value={fps}
+                                onChange={(e) => setFps(e.target.value)}
+                                aria-label="Frames per second to extract"
+                            />
+                            <span className="fx-phone-stepper-buttons">
+                                <button
+                                    type="button"
+                                    aria-label="More frames per second"
+                                    disabled={fpsNumber >= MAX_FPS}
+                                    onClick={() => setFps(Math.min(MAX_FPS, Math.floor(fpsNumber) + 1))}
+                                >
+                                    <Icon name="chevron" size={12} />
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-label="Fewer frames per second"
+                                    disabled={fpsNumber <= MIN_STEPPER_FPS}
+                                    onClick={() => setFps(Math.max(MIN_STEPPER_FPS, Math.ceil(fpsNumber) - 1))}
+                                >
+                                    <Icon name="chevron" size={12} />
+                                </button>
+                            </span>
+                            <span className="fx-phone-stepper-unit">FPS</span>
+                        </label>
+                        {hasAllLengths && fpsNumber > 0 && (
+                            <span className="fx-phone-estimate">
+                                {'\u2248'} {Math.round(totalSeconds * fpsNumber)} frames from {formatDuration(totalSeconds)}
+                            </span>
+                        )}
+                    </div>
+
+                    <label className="fx-phone-option">
+                        <span>
+                            Remove background
+                            <small>Keeps just the object. Turn off to keep the surroundings in the model.</small>
+                        </span>
+                        <input
+                            type="checkbox"
+                            className="forma-switch"
+                            checked={removeBackground}
+                            onChange={(e) => {
+                                setRemoveBackground(e.target.checked);
+                            }}
+                        />
+                    </label>
+                    <label className="fx-phone-option">
+                        <span>
+                            Keep only the main object
+                            <small>For walkarounds: removes everything outside the path the camera took.</small>
+                        </span>
+                        <input
+                            type="checkbox"
+                            className="forma-switch"
+                            checked={autoCrop}
+                            onChange={(e) => {
+                                setAutoCrop(e.target.checked);
+                            }}
+                        />
+                    </label>
+
+                    <div className="fx-phone-quality">
+                        <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} />
+                        <button
+                            type="button"
+                            className="fx-phone-help"
+                            aria-expanded={isHelpOpen}
+                            onClick={() => {
+                                setIsHelpOpen((isOpen) => !isOpen);
+                            }}
+                        >
+                            How does this work?
+                        </button>
+                    </div>
+                    {isHelpOpen && (
+                        <p className="fx-hint">
+                            We pull evenly spaced frames from across each whole video, skip blurry and
+                            duplicate ones, and build the model from them. More FPS means more frames:
+                            slower, but more detailed. More model detail trains for longer.
+                        </p>
+                    )}
+                </div>
+
+                <div className="fx-phone-footer">
+                    <button type="submit" className="forma-btn forma-btn-primary" disabled={mediaItems.length === 0}>
+                        <Icon name="sparkle" size={16} /> Extract frames
+                    </button>
+                </div>
+            </form>
+        );
+    }
+
     return (
         <div className="fx">
             <div className="fx-heading">
@@ -183,15 +441,7 @@ function FrameExtractor({ onStartBuild, initialDraft = null }) {
                             Browse files
                         </button>
                         <span className="fx-dropzone-types">MP4 - MOV - WEBM - MKV - AVI - MPEG - GIF</span>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept={MEDIA_ACCEPT}
-                            multiple
-                            onChange={handleFileInputChange}
-                            style={{ display: 'none' }}
-                            aria-label="Choose media files"
-                        />
+                        {fileInput}
                     </div>
 
                     {mediaItems.length > 0 && (

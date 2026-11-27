@@ -1,7 +1,7 @@
 /* ============================================================
    App shell (TopNav.jsx, Sidebar.jsx): top bar across the
    top, sidebar down the left, page in the rest. Above 760px only;
-   phones keep the dock (Dock.jsx). Imported after AppTheme.css, so
+   phones have a camera button instead (App.jsx). Imported after AppTheme.css, so
    these rules win over the older shell layouts there.
    Colours come from the theme tokens (the palette isn't final).
    ============================================================ */

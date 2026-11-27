@@ -7,27 +7,26 @@
 \date 02-11-2026
 \brief
 First-run walkthrough of the dashboard (Genesis design). The page is
-dimmed and a glowing spotlight is drawn around one item at a time (each
-page in the sidebar from top to bottom, or in the dock on phones, then the
-profile), with a tooltip beside it, styled like the Genesis Figma: "Step 2
-of 7" and "Skip tour", a bar with a segment per step, the title, a short
-line of text, Back / Next (Finish on the last step), and an arrow pointing
-at the item.
-The tooltip goes to the right of sidebar items, under the top bar's and
-above the dock's. Escape skips. If a step's item is not on the screen,
-its tooltip is shown in the middle of the page instead; steps marked
-optional are left out when their item isn't there (e.g. Learn on phones).
-In the mobile view the dock shows four tabs at a time, so each step slides
-the tabs to the four that hold its item, and finishing slides back to the
-four that hold the current page.
-App.jsx shows it from the welcome card's "Take the tour" (straight away
-on phones, the first time each account signs in on a browser), and again
-from Learn or "Show walkthrough". Guests can't save work, so their last step suggests signing in.
-- WALKTHROUGH_STEPS
-The steps: CSS selectors for the item to highlight (the first one on the
-page is used: the sidebar's, else the dock's), title, text (and
-mobileText / guestText where phones or guests see different text), and
-optional for steps to leave out when their item isn't there.
+dimmed and a glowing spotlight is drawn around one item at a time, with a
+tooltip beside it, styled like the Genesis Figma: "Step 2 of 7" and "Skip
+tour", a bar with a segment per step, the title, a short line of text,
+Back / Next (Finish on the last step), and an arrow pointing at the item.
+Wider screens step through each page in the sidebar, then the profile.
+Phones have no sidebar or tab bar (JM's mobile Figma), so they get a
+shorter tour of how to get around: Home, the camera button, View all (the
+Media Library) and the profile.
+The tooltip goes to the right of sidebar items, above the camera button,
+and under anything else. Escape skips. If a step's item is not on the
+screen, its tooltip is shown in the middle of the page instead; steps
+marked optional are left out when their item isn't there.
+App.jsx shows it from the welcome card's "Take the tour" (the first time
+each account signs in on a browser), and again from Learn or "Show
+walkthrough". Guests can't save work, so their last step suggests signing in.
+- WALKTHROUGH_STEPS / PHONE_WALKTHROUGH_STEPS
+The steps on wider screens and on phones: CSS selectors for the item to
+highlight (the first one on the page is used), title, text (and guestText
+where guests see different text), and optional for steps to leave out
+when their item isn't there.
 - Walkthrough({ isGuest, onClose })
 React component. Calls onClose() when the user skips or finishes.
 **************************************************************************/
@@ -35,7 +34,15 @@ React component. Calls onClose() when the user skips or finishes.
 import { useCallback, useEffect, useState } from 'react';
 import './Walkthrough.css';
 
-// One step per page in the sidebar (or tab bar), then the profile.
+// The profile, the last step on every layout.
+const PROFILE_STEP = {
+    targets: ['.app-topbar .app-avatar'],
+    title: 'Your profile',
+    text: 'Your account, plan, storage and sounds. You can replay this tour from Learn.',
+    guestText: 'Sign in here to save your work, choose a plan and send feedback.',
+};
+
+// Wider screens: one step per page in the sidebar, then the profile.
 const WALKTHROUGH_STEPS = [
     ...[
         ['Home', 'Home is your workspace', 'A customised space for you, with quick starts and your recent files.'],
@@ -45,16 +52,34 @@ const WALKTHROUGH_STEPS = [
         ['Video Extractor', 'Video Extractor works from video', 'Upload a walkaround video and it pulls out sharp frames to build a model from.'],
         ['Model Viewer', 'Model Viewer shows the result', 'Open and inspect your finished models, or a .ply file from your computer.'],
     ].map(([label, title, text]) => ({
-        targets: [`.app-sidebar [aria-label="${label}"]`, `.genesis-dock [aria-label="${label}"]`],
+        targets: [`.app-sidebar [aria-label="${label}"]`],
         title,
         text,
     })),
+    PROFILE_STEP,
+];
+
+// Phones: how to get around without a sidebar (the tour starts on Home).
+const PHONE_WALKTHROUGH_STEPS = [
     {
-        targets: ['.app-topbar .app-avatar'],
-        title: 'Your profile',
-        text: 'Your account, plan, storage and sounds. You can replay this tour from Learn.',
-        mobileText: 'Your account, plan, storage and sounds. You can replay this tour from here.',
-        guestText: 'Sign in here to save your work, choose a plan and send feedback.',
+        targets: ['.home-screen .home-recent-v2-header'],
+        title: 'Home is your workspace',
+        text: 'Your recent models and photos. Tap a model to open it.',
+    },
+    {
+        targets: ['.phone-camera-button'],
+        title: 'Start a model here',
+        text: 'Take photos as you walk around an object, or pick photos or a video from your gallery.',
+    },
+    {
+        targets: ['.home-screen .home-view-all-link'],
+        title: 'Your Media Library',
+        text: 'View all opens every model and the photos it was built from.',
+        optional: true,
+    },
+    {
+        ...PROFILE_STEP,
+        text: 'Your account, plan, storage and sounds. You can replay this tour from here.',
     },
 ];
 
@@ -67,8 +92,6 @@ const TOOLTIP_WIDTH = 300;
 const ARROW_INSET = 36;
 // Closest the tooltip may come to the sides of the screen.
 const SCREEN_MARGIN = 12;
-// The mobile dock's tabs (Dock.jsx), four to a page.
-const MOBILE_DOCK_SCROLLER = '.genesis-mdock-scroller';
 
 // The step's item: the first of its selectors found on the page.
 function findTarget(step) {
@@ -79,50 +102,46 @@ function findTarget(step) {
     return null;
 }
 
-// Where the tooltip goes for an item: right of the sidebar, under the top
-// bar, above the dock, and under anything else.
+// Where the tooltip goes for an item: right of the sidebar, above the
+// phone camera button, and under anything else.
 function placementFor(element) {
     if (element?.closest('.app-sidebar')) return 'right';
-    if (element?.closest('.genesis-dock')) return 'above';
+    if (element?.closest('.phone-camera-button')) return 'above';
     return 'below';
 }
 
-// Mobile dock: slide its tabs to the four that hold tabElement. Instant, so
-// the spotlight can be measured straight after.
-function showMobileDockPageWith(tabElement) {
-    const scroller = tabElement?.closest(MOBILE_DOCK_SCROLLER);
-    if (!scroller || scroller.clientWidth === 0) return false;
-    const page = Math.floor(tabElement.offsetLeft / scroller.clientWidth);
-    scroller.scrollTo({ left: page * scroller.clientWidth, behavior: 'instant' });
-    return true;
-}
-
 function Walkthrough({ isGuest = false, onClose }) {
-    // The steps for this layout: optional ones whose item isn't on the page are left out.
-    const [steps] = useState(() => WALKTHROUGH_STEPS.filter((step) => !step.optional || findTarget(step)));
+    // The steps for this layout (phones have no sidebar); optional ones whose
+    // item isn't on the page are left out. null until chosen: the tour can
+    // start from another page, and Home only appears in the same update, so
+    // they are chosen once it has been drawn.
+    const [steps, setSteps] = useState(null);
     const [stepIndex, setStepIndex] = useState(0);
     // The highlighted item's position on screen and where its tooltip goes,
     // or null if it isn't there.
     const [target, setTarget] = useState(null);
 
-    const step = steps[stepIndex];
-    const isLastStep = stepIndex === steps.length - 1;
-    const padding = step.padding ?? DEFAULT_PADDING;
-    // Phones have the tab bar instead of the sidebar.
-    const isPhoneLayout = target !== null && !document.querySelector('.app-sidebar');
-    let stepText = step.text;
-    if (isPhoneLayout && step.mobileText) stepText = step.mobileText;
-    if (isGuest && step.guestText) stepText = step.guestText;
+    useEffect(() => {
+        const frameId = requestAnimationFrame(() => {
+            const layoutSteps = document.querySelector('.app-sidebar') ? WALKTHROUGH_STEPS : PHONE_WALKTHROUGH_STEPS;
+            setSteps(layoutSteps.filter((layoutStep) => !layoutStep.optional || findTarget(layoutStep)));
+        });
+        return () => cancelAnimationFrame(frameId);
+    }, []);
+
+    const step = steps?.[stepIndex] ?? null;
+    const isLastStep = steps !== null && stepIndex === steps.length - 1;
+    const padding = step?.padding ?? DEFAULT_PADDING;
+    const stepText = isGuest && step?.guestText ? step.guestText : step?.text;
 
     const finish = useCallback(() => {
-        // Mobile dock: back to the tabs that hold the current page.
-        showMobileDockPageWith(document.querySelector(`${MOBILE_DOCK_SCROLLER} [aria-current="page"]`));
         onClose();
     }, [onClose]);
 
     // Find the step's item (scrolling it into view if needed) and keep the
     // spotlight on it when the window is resized or the page scrolls.
     useEffect(() => {
+        if (!step) return undefined;
         function measureTarget() {
             const targetElement = findTarget(step);
             if (!targetElement) {
@@ -139,9 +158,7 @@ function Walkthrough({ isGuest = false, onClose }) {
             });
         }
 
-        const targetElement = findTarget(step);
-        // The mobile dock snaps to pages of four, which would undo scrollIntoView.
-        if (!showMobileDockPageWith(targetElement)) targetElement?.scrollIntoView({ block: 'nearest' });
+        findTarget(step)?.scrollIntoView({ block: 'nearest' });
         const frameId = requestAnimationFrame(measureTarget);
         window.addEventListener('resize', measureTarget);
         // true: also hear scrolling inside the page's own scroll area.
@@ -178,7 +195,10 @@ function Walkthrough({ isGuest = false, onClose }) {
         setStepIndex((index) => index - 1);
     }
 
-    // Spotlight: the item plus padding. Dock items are round, so it is too.
+    // Nothing to show until the steps are chosen (a frame after opening).
+    if (!step) return null;
+
+    // Spotlight: the item plus padding.
     let spotlightStyle = null;
     let tooltipStyle;
     const tooltipWidth = Math.min(TOOLTIP_WIDTH, window.innerWidth - SCREEN_MARGIN * 2);

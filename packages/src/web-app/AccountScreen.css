@@ -97,7 +97,7 @@
         }
 }
 
-/* ---------- Avatars (photo or user icon) ---------- */
+/* ---------- Avatars (photo, or initials as in the top bar) ---------- */
 
 .acct-avatar {
     flex: none;
@@ -106,16 +106,25 @@
     justify-content: center;
     overflow: hidden;
     border-radius: 50%;
-    border: 1px solid rgba(var(--forma-accent-rgb), 0.45);
-    background: radial-gradient(circle at 68% 28%, rgba(var(--forma-accent-light-rgb), 0.35), transparent 40%), linear-gradient(145deg, rgba(var(--forma-accent-rgb), 0.42), rgba(var(--forma-accent-rgb), 0.12));
-    color: var(--forma-teal-text);
+    background: var(--forma-panel-raised);
+    color: var(--forma-heading);
 }
 
-    .acct-avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
+.acct-avatar-initials {
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+}
+
+.acct-avatar-large .acct-avatar-initials {
+    font-size: 1.7rem;
+}
+
+.acct-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
 
 .acct-avatar-small {
     width: 44px;
@@ -207,11 +216,13 @@
     overflow: hidden;
 }
 
-/* Phones: label above value; any button on its own line. */
+/* Phones: label above value, any button on the right, as in the Figma. */
 .acct-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 4px;
     padding: 14px 18px;
     border-bottom: 1px solid var(--forma-border);
 }
@@ -221,11 +232,13 @@
     }
 
     .acct-row dt {
+        grid-column: 1;
         font-size: 0.78rem;
         color: var(--forma-text-muted);
     }
 
     .acct-row dd {
+        grid-column: 1;
         min-width: 0;
         color: var(--forma-text);
         font-size: 0.92rem;
@@ -240,10 +253,18 @@
 }
 
 .acct-screen .acct-row-action {
-    justify-self: start;
-    margin-top: 6px;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    border-color: transparent;
+    background: #ffffff;
+    color: #111110;
     font-size: 0.82rem;
 }
+
+    .acct-screen .acct-row-action:hover:not(:disabled) {
+        background: #e8e6e1;
+    }
 
     .acct-screen .acct-row-action:disabled {
         opacity: 0.5;
@@ -442,8 +463,14 @@
         min-height: 36px;
     }
 
+        .acct-row dt,
+        .acct-row dd {
+            grid-column: auto;
+        }
+
     .acct-screen .acct-row-action {
-        margin-top: 0;
+        grid-column: auto;
+        grid-row: auto;
     }
 
     .acct-logout,
@@ -746,25 +773,131 @@
         gap: 8px;
     }
 
-/* Profile */
+/* Profile, laid out like the Figma's mobile Profile: centred photo and
+   name with Update, then the plan card. */
 .acct-profile-head {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: 14px;
+    padding: 8px 0 22px;
+    text-align: center;
 }
 
 .acct-profile-identity {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
     min-width: 0;
 }
 
-    .acct-profile-identity .acct-title {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+.acct-screen .acct-profile-identity .acct-title {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.acct-screen .acct-profile-email {
+    margin: -6px 0 0;
+}
+
+/* The white "Update" pill beside the name. */
+.acct-screen .acct-update-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #111110;
+    font-family: inherit;
+    font-size: 0.76rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+    .acct-screen .acct-update-button:hover {
+        background: #e8e6e1;
     }
+
+.acct-profile-plan {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 16px 0;
+    overflow: hidden;
+}
+
+.acct-profile-plan-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+    .acct-profile-plan-head strong {
+        flex: 1;
+        color: var(--forma-heading);
+        font-size: 0.92rem;
+        font-weight: 500;
+    }
+
+.acct-screen .acct-icon-link {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--forma-text-muted);
+    cursor: pointer;
+}
+
+    .acct-screen .acct-icon-link:hover {
+        background: var(--forma-panel-raised);
+        color: var(--forma-heading);
+    }
+
+.acct-profile-storage {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--forma-text);
+    font-size: 0.86rem;
+}
+
+.acct-mono {
+    color: var(--forma-text-muted);
+    font: 0.8rem var(--forma-font-mono);
+}
+
+.acct-storage-bar {
+    display: block;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--forma-border-strong);
+    overflow: hidden;
+}
+
+    .acct-storage-bar > span {
+        display: block;
+        height: 100%;
+        background: rgb(var(--forma-accent-rgb));
+    }
+
+.acct-screen .acct-profile-storage-note {
+    margin: -2px 0 0;
+    font-size: 0.76rem;
+}
+
+.acct-profile-plan .acct-profile-stats {
+    margin: 4px -16px 0;
+    border-top: 1px solid var(--forma-border);
+}
 
 .acct-plan-chip {
     padding: 2px 8px;
@@ -1150,4 +1283,126 @@
     gap: 6px;
     font-size: 0.8rem;
     color: var(--forma-text-muted);
+}
+
+/* Phones: the Profile's plan card as compact as the Figma's. */
+@media (max-width: 760px) {
+    .acct-profile-plan .acct-profile-stats > div {
+        padding: 12px 8px;
+    }
+
+    .acct-profile-plan .acct-profile-stats strong {
+        font-size: 1.05rem;
+    }
+
+    .acct-profile-plan .acct-profile-stats span {
+        font-size: 0.72rem;
+    }
+
+    .acct-profile-storage {
+        font-size: 0.82rem;
+    }
+
+    .acct-screen .acct-avatar-large {
+        width: 72px;
+        height: 72px;
+    }
+
+    .acct-avatar-large .acct-avatar-initials {
+        font-size: 1.4rem;
+    }
+}
+
+/* ---------- Phones: the one-page Profile ---------- */
+
+.acct-screen.is-phone-page {
+    gap: 14px;
+}
+
+/* A small label above each part of the page. */
+.acct-screen .acct-phone-heading {
+    margin: 10px 0 -4px;
+    color: var(--forma-text-muted);
+    font-family: var(--forma-font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    scroll-margin-top: 16px;
+}
+
+/* "Remove photo" under the email. */
+.acct-screen .acct-text-button {
+    margin-top: -6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.acct-screen .acct-profile-usage {
+    padding-bottom: 14px;
+    font-size: 0.76rem;
+    text-align: center;
+}
+
+/* Billing rows: the icon beside the label. */
+.acct-screen.is-phone-page .acct-row dt {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* The plans, one row each. */
+.acct-phone-plans {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.acct-phone-plan {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .acct-phone-plan:last-of-type {
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+
+    .acct-phone-plan .forma-btn {
+        flex: none;
+    }
+
+.acct-phone-plan-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+    .acct-phone-plan-text .acct-mono {
+        font-size: 0.7rem;
+    }
+
+.acct-phone-plan-name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--forma-heading);
+}
+
+/* Your work's Show all / Show less, under the first few. */
+.acct-screen .acct-show-all {
+    justify-content: center;
+    width: 100%;
 }

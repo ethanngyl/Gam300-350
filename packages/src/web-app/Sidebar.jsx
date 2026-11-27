@@ -6,8 +6,8 @@
 \par Software Engineering Project 5
 \date 27-10-2026
 \brief
-Left sidebar of the app on wider screens (above 760px; phones keep the
-dock, Dock.jsx), laid out like the Genesis Figma: a "New" button at the
+Left sidebar of the app on wider screens (above 760px; phones have a
+camera button instead, App.jsx), laid out like the Genesis Figma: a "New" button at the
 top, the workspace pages as an icon with a short label under it, and
 "Learn" at the bottom, which replays the walkthrough.
 "New" opens the New model dialog (AddPhotosDialog.jsx): upload photos,

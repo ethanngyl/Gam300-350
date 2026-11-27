@@ -21,12 +21,13 @@ Top bar of the app, laid out like the Genesis Figma. Left to right:
   account", their plan and storage, Send feedback (the Feedback page,
   moved here from the sidebar as in the Figma), sound on/off, and Log out
   (or Sign in for guests).
-On phones (isCompact) it is the mobile Figma's top bar: the logo, then a
-search button that opens the search box in a row under the bar,
+On phones (isCompact) it is the mobile Figma's top bar: the logo (or
+"Back to home" on other pages, isBackToHome), then a search button that
+opens the search box in a row under the bar,
 notifications and the avatar. The storage meter and the
 gear are left out, and the avatar menu also has "Show walkthrough", since
 phones have no Learn button.
-- TopNav({ user, isCompact, onGoHome, onOpenModel, onOpenLibrary,
+- TopNav({ user, isCompact, isBackToHome, onGoHome, onOpenModel, onOpenLibrary,
   onOpenSettings, onOpenFeedback, onOpenAccount, onShowWalkthrough, onSignOut })
 React component.
 **************************************************************************/
@@ -176,6 +177,7 @@ function SearchBox({ onOpenModel, onOpenLibrary, autoFocus = false, onResultOpen
 function TopNav({
     user,
     isCompact = false,
+    isBackToHome = false,
     onGoHome,
     onOpenModel,
     onOpenLibrary,
@@ -207,10 +209,17 @@ function TopNav({
 
     return (
         <header className={isCompact ? 'app-topbar is-compact' : 'app-topbar'}>
-            <button type="button" className="app-topbar-logo" onClick={onGoHome} aria-label="GENESIS home">
-                <img src={genesisLogo} alt="" />
-                <span>GENESIS</span>
-            </button>
+            {isBackToHome ? (
+                <button type="button" className="app-topbar-back" onClick={onGoHome}>
+                    <Icon name="arrow" size={16} />
+                    <span>Back to home</span>
+                </button>
+            ) : (
+                <button type="button" className="app-topbar-logo" onClick={onGoHome} aria-label="GENESIS home">
+                    <img src={genesisLogo} alt="" />
+                    <span>GENESIS</span>
+                </button>
+            )}
 
             {!isCompact && <SearchBox onOpenModel={onOpenModel} onOpenLibrary={onOpenLibrary} />}
 

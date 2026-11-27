@@ -1,6 +1,6 @@
 /* ============================================================
    Phone layouts (760px wide or less), following the Genesis mobile
-   Figma: the top bar (TopNav.jsx, isCompact), the tab bar (Dock.jsx),
+   Figma: the top bar (TopNav.jsx, isCompact), the camera button (App.jsx),
    and the Home, Library, Photo Editor, model page, Capture and login
    screens. Imported last in App.jsx, so these rules win over the older
    phone rules in AppTheme.css and the page stylesheets. Colours come
@@ -97,7 +97,6 @@
         }
 
 /* Phone-only pieces stay hidden on wider screens. */
-.photo-editor-phone-add,
 .auth-card-intro {
     display: none;
 }
@@ -119,6 +118,25 @@
             width: auto;
             font-size: 0.9rem;
         }
+
+        /* "Back to home" in place of the logo on other pages, as in the Figma. */
+        .app-topbar.is-compact .app-topbar-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 4px;
+            border: 0;
+            background: none;
+            color: var(--forma-heading);
+            font-family: var(--forma-font);
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+            .app-topbar.is-compact .app-topbar-back svg {
+                transform: rotate(180deg);
+            }
 
         .app-topbar.is-compact .app-topbar-actions {
             width: auto;
@@ -158,78 +176,62 @@
             margin: 0;
         }
 
-    /* ---------- Tab bar ---------- */
+    /* ---------- Camera button (JM's mobile Figma) ----------
+       A pink round button in the middle of the bottom on Home, the Library
+       and the model page (App.jsx). Phones have no tab bar. */
 
-    .genesis-dock.genesis-dock-mobile {
-        left: 0;
-        right: 0;
-        bottom: 0;
-        gap: 0;
-        padding: 6px 4px max(6px, env(safe-area-inset-bottom));
+    .phone-camera-button {
+        position: fixed;
+        left: 50%;
+        bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+        z-index: 70;
+        display: grid;
+        place-items: center;
+        width: 60px;
+        height: 60px;
+        padding: 0;
         border: 0;
-        border-top: 1px solid var(--forma-border);
-        border-radius: 0;
-        background: var(--forma-bg);
-        box-shadow: none;
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
+        border-radius: 50%;
+        background: rgb(var(--forma-accent-rgb));
+        color: #ffffff;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+        transform: translateX(-50%);
+        cursor: pointer;
     }
 
-    .genesis-dock-mobile .genesis-mdock-item {
-        flex: 0 0 25%;
-        height: 58px;
-        gap: 5px;
-        border: 0;
-        color: var(--forma-text-dim);
-        font-size: 0.7rem;
-        font-weight: 500;
-    }
-
-        /* Pages of four snap into place. */
-        .genesis-dock-mobile .genesis-mdock-item:nth-child(5n + 1) {
-            scroll-snap-align: none;
+        .phone-camera-button:active {
+            transform: translateX(-50%) scale(0.95);
         }
 
-        .genesis-dock-mobile .genesis-mdock-item:nth-child(4n + 1) {
-            scroll-snap-align: start;
+        .phone-camera-button:focus-visible {
+            outline: 2px solid #ffffff;
+            outline-offset: 3px;
         }
-
-        .genesis-dock-mobile .genesis-mdock-item.is-active {
-            background: transparent;
-            color: var(--forma-heading);
-        }
-
-        .genesis-dock-mobile .genesis-mdock-item:focus-visible .genesis-mdock-icon {
-            outline: 2px solid var(--forma-teal-text);
-            outline-offset: 2px;
-            border-radius: 10px;
-        }
-
-        /* Capture: a raised pill. */
-        .genesis-dock-mobile .genesis-mdock-item.is-raised {
-            color: var(--forma-heading);
-        }
-
-            .genesis-dock-mobile .genesis-mdock-item.is-raised .genesis-mdock-icon {
-                width: 48px;
-                height: 34px;
-                border-radius: 12px;
-                background: var(--forma-blue);
-                color: var(--forma-on-accent);
-            }
-
-    .genesis-dock-mobile .genesis-mdock-arrow {
-        width: 30px;
-        height: 46px;
-        border: 0;
-        border-radius: 10px;
-        background: transparent;
-        color: var(--forma-text-muted);
-    }
 
     .genesis-main {
-        padding-bottom: 92px;
+        padding-bottom: 24px;
     }
+
+    /* Room so the camera button never covers the last content. */
+    .genesis-shell.has-camera-button .genesis-main {
+        padding-bottom: 100px;
+    }
+
+    /* Scene Builder on a phone: a note that it needs a larger screen. */
+    .phone-only-note {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 20px 16px;
+        border: 0;
+    }
+
+        .phone-only-note p {
+            margin: 0;
+            color: var(--forma-text-muted);
+            line-height: 1.55;
+        }
 
     /* Page titles (Library, Model Viewer ...) show on phones too. */
     .genesis-shell .page-title {
@@ -366,14 +368,10 @@
         font-size: 1.75rem;
     }
 
+    /* Leave out flagged is in the "Adjust all photos" card and Add photos in
+       the Batch settings sheet (PhotoEditor.css), as in the mobile Figma. */
     .photo-editor .photo-editor-summary-actions {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 8px;
-    }
-
-    .photo-editor .photo-editor-phone-add {
-        display: inline-flex;
+        display: none;
     }
 
     .photo-editor .photo-editor-grid {
@@ -399,10 +397,15 @@
         font-size: 0.76rem;
     }
 
-        /* Only problems show here; the photo count is in the summary. */
-        .photo-editor .photo-editor-footer-text:not(:has(.photo-editor-error)) {
+        /* Only problems (an error, or too few photos to build) show here;
+           the photo count is in the summary. */
+        .photo-editor .photo-editor-footer-text:not(:has(.photo-editor-error, .photo-editor-footer-warning)) {
             display: none;
         }
+
+    .photo-editor .photo-editor-footer-warning {
+        color: var(--forma-orange);
+    }
 
     /* Model detail on one line: the name, then Fast / Normal / Detailed. */
     .photo-editor .photo-editor-footer .training-quality {
@@ -582,6 +585,83 @@
             object-fit: cover;
         }
 
+    /* The build panel would cover the viewfinder and the gallery sheet; it
+       comes back (as it was) when the camera closes. */
+    .genesis-shell.is-capturing .build-panel {
+        display: none;
+    }
+
+    /* The gallery button's sheet: phone gallery or Media Library. */
+    .capture-phone-sheet {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        align-items: flex-end;
+    }
+
+    .capture-phone .capture-phone-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: rgba(0, 0, 0, 0.55);
+    }
+
+    .capture-phone-sheet-panel {
+        position: relative;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 20px 16px max(16px, env(safe-area-inset-bottom));
+        border-radius: 20px 20px 0 0;
+        background: var(--forma-panel);
+        color: var(--forma-text);
+    }
+
+        .capture-phone-sheet-panel h2 {
+            margin: 0 0 4px;
+            color: var(--forma-heading);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+    .capture-phone .capture-phone-sheet-option {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        padding: 14px;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 14px;
+        background: var(--forma-panel-raised);
+        color: rgb(var(--forma-accent-rgb));
+        text-align: left;
+    }
+
+    .capture-phone-sheet-option span {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .capture-phone-sheet-option strong {
+        color: var(--forma-heading);
+        font-weight: 600;
+    }
+
+    .capture-phone-sheet-option small {
+        color: var(--forma-text-muted);
+        font-size: 0.8rem;
+    }
+
+    .capture-phone .capture-phone-sheet-cancel {
+        justify-content: center;
+        margin-top: 4px;
+    }
+
     .capture-phone-message {
         position: absolute;
         inset: 0;
@@ -630,6 +710,18 @@
         background: rgba(20, 20, 24, 0.6);
         color: #fff;
         cursor: pointer;
+    }
+
+        /* The flash while it is on. */
+        .capture-phone-round.is-on {
+            background: #ffffff;
+            color: #111110;
+        }
+
+    /* Keeps the shot count centred when there is no flash button. */
+    .capture-phone-round-spacer {
+        width: 40px;
+        height: 40px;
     }
 
     .capture-phone-count {
@@ -695,7 +787,11 @@
         align-items: center;
     }
 
+    /* The gallery button: the last photo, or a picture icon before there is one. */
     .capture-phone-last {
+        display: grid;
+        place-items: center;
+        color: #fff;
         justify-self: start;
         width: 52px;
         height: 52px;
@@ -711,11 +807,6 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-        }
-
-        .capture-phone-last:disabled {
-            opacity: 0.5;
-            cursor: default;
         }
 
     /* The shutter: a white ring around a white disc. */
@@ -810,5 +901,65 @@
         overflow: hidden;
         clip: rect(0 0 0 0);
         white-space: nowrap;
+    }
+}
+
+/* ---------- Phones: tap targets ----------
+   Controls a finger has to hit get about 36-40px, mostly from padding, so
+   they look the same. */
+@media (max-width: 760px) {
+    /* Model detail's Fast / Normal / Detailed (Photo Editor). */
+    .photo-editor .photo-editor-footer .training-quality-stop {
+        min-height: 36px;
+        padding: 6px 14px;
+    }
+
+    /* Video Extractor: the same pill switch in place of the slider, whose
+       labels were the only way to tap a choice. */
+    .fx-phone .training-quality-range {
+        display: none;
+    }
+
+    .fx-phone .training-quality-stops {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 999px;
+    }
+
+    .fx-phone .training-quality-stop {
+        flex: 1;
+        min-height: 36px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+    }
+
+        .fx-phone .training-quality-stop.is-active {
+            background: var(--forma-panel-raised);
+            color: var(--forma-heading);
+        }
+
+    /* Text links: taller to tap, without moving anything. */
+    .photo-editor .photo-editor-quality-help,
+    .model-screen .model-link {
+        padding: 10px 0;
+        margin: -10px 0;
+    }
+
+    .library-item-more {
+        width: 36px;
+        height: 36px;
+    }
+
+    .acct-screen .acct-icon-link {
+        width: 40px;
+        height: 40px;
+        margin: -6px;
+    }
+
+    .acct-screen .acct-update-button {
+        padding: 8px 12px;
     }
 }
