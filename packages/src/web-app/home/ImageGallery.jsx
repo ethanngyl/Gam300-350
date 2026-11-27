@@ -1,0 +1,240 @@
+/*!************************************************************************
+\file ImageGallery.jsx
+\author1 Bryan Lim Jun Jie
+\author2 Gabriel Sebastian Putra
+\par DP email1: bryanjunjie.lim@digipen.edu
+\par DP email2: gabrielsebastian.p@digipen.edu
+\par Course: csd3401f26
+\par Software Engineering Project 5
+\date 08-10-2026
+\brief
+React page that shows the photos under backend/jobs/<jobId>/images that the
+signed-in user may see, grouped by job: every job for admins, only the
+user's own jobs otherwise (the backend filters GET /jobs by the session
+cookie). It fetches the job list once when it opens (load() is
+unchanged). The "full" variant shows a section per job with a download-on-
+click thumbnail grid. The "compact" variant, used inside the Library tab's
+Photo Library, shows one card per job with a single small thumbnail of its
+first photo and the photo count (with search and sort);
+clicking a card opens that job's full grid so photos can still be
+downloaded, with a Back button above it to return to the cards.
+- ImageGallery({ onBack, variant, searchTerm, sortOrder })
+The gallery component.
+- load()
+Fetches GET /jobs and stores the result in state. Ignores the response if
+the user left the page before it arrived.
+- renderJobSection(job)
+Renders one job's heading and download-on-click thumbnail grid.
+**************************************************************************/
+
+// ----- Headers ------------------------------------------------------- //
+import { useEffect, useState } from 'react';
+import Icon from '../components/Icons.jsx';
+import { jobDisplayName } from '../lib/mediaApi.js';
+import { smallPhotoUrl } from './LibraryPhotos.js';
+import './ImageGallery.css';
+
+// Same badge wording and colours as the 3D Models cards.
+function getBatchBadge(status) {
+    if (status === 'done') return { label: 'Ready', className: 'forma-badge-ready' };
+    if (status === 'error' || status === 'cancelled') return { label: 'Failed', className: 'forma-badge-processing' };
+    return { label: 'Processing', className: 'forma-badge-processing' };
+}
+
+// ----- Start of Functions --------------------------------------------------- //
+
+/************************************************************************/
+/*!
+  \brief
+    Shows the signed-in user's photos (every job's photos for admins),
+    grouped by job. Data comes from GET /jobs (list, already filtered by
+    role on the server) and GET /jobs/:id/images/:name (each image).
+  \param onBack
+    function, optional
+    Called when the Back button is clicked. No Back button is rendered
+    when omitted (the Library tab already has navigation).
+  \param variant
+    'full' (default) | 'compact'
+  \param searchTerm
+    string, compact only. Filters jobs by id or status.
+  \param sortOrder
+    'newest' (server order) | 'oldest' | 'name', compact only.
+  \return
+    The gallery page
+*/
+/************************************************************************/
+function ImageGallery({ onBack, variant = 'full', searchTerm = '', sortOrder = 'newest' }) {
+    const [jobs, setJobs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [openJobId, setOpenJobId] = useState(null);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        /************************************************************************/
+        /*!
+          \brief
+            Fetch the job list from GET /jobs and store it in state. State is
+            only updated if the component is still open.
+          \return
+            Sets jobs on success, or error with the message on failure.
+            Always clears loading.
+        */
+        /************************************************************************/
+        async function load() {
+            try {
+                const res = await fetch('/api/v1/jobs');
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                const data = await res.json();
+                if (!cancelled) setJobs(data);
+            } catch (err) {
+                if (!cancelled) setError(err.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        }
+
+        load();
+        // Ignore the response if the user navigates away before it arrives.
+        return () => { cancelled = true; };
+    }, []);
+
+    /************************************************************************/
+    /*!
+      \brief
+        One job's heading plus its thumbnail grid. Clicking a thumbnail
+        downloads that photo.
+    */
+    /************************************************************************/
+    function renderJobSection(job) {
+        return (
+            <section key={job.id} className="gallery-job">
+                <h3>
+                    {jobDisplayName(job, 'Job')}
+                    <span>{job.status}</span>
+                    <span>{job.images.length} photos</span>
+                </h3>
+                <div className="gallery-grid">
+                    {job.images.map((img) => (
+                        <a
+                            key={img.name}
+                            href={img.url}
+                            download={`${job.id.slice(0, 8)}-${img.name}`}
+                            title="Click to download"
+                        >
+                            <img
+                                src={smallPhotoUrl(img.url)}
+                                decoding="async"
+                                alt={`Job ${job.id.slice(0, 8)} - ${img.name}`}
+                                loading="lazy"
+                            />
+                        </a>
+                    ))}
+                </div>
+            </section>
+        );
+    }
+
+    if (variant === 'compact') {
+        const openJob = jobs.find((job) => job.id === openJobId);
+
+        if (openJob) {
+            return (
+                <div className="gallery gallery-compact">
+                    <button className="gallery-compact-back" onClick={() => { setOpenJobId(null); }}>
+                        <Icon name="arrowLeft" size={15} /> Back
+                    </button>
+                    {renderJobSection(openJob)}
+                </div>
+            );
+        }
+
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+        const visibleJobs = jobs.filter((job) =>
+            `${jobDisplayName(job, 'Batch')} ${job.id} ${job.status}`.toLowerCase().includes(normalizedSearch)
+        );
+        if (sortOrder === 'oldest') visibleJobs.reverse();
+        if (sortOrder === 'lastEdited') {
+            // Most recently changed first; jobs with no update time use when they were made.
+            const lastEditedTime = (job) => Date.parse(job.updatedAt ?? job.createdAt) || 0;
+            visibleJobs.sort((a, b) => lastEditedTime(b) - lastEditedTime(a));
+        }
+        if (sortOrder === 'name') {
+            visibleJobs.sort((a, b) => jobDisplayName(a, 'Batch').localeCompare(jobDisplayName(b, 'Batch')));
+        }
+
+        return (
+            <div className="gallery gallery-compact">
+                {loading && <p className="gallery-note">Loading...</p>}
+                {error && <p className="gallery-note gallery-error">Couldn't load images: {error}</p>}
+                {!loading && !error && visibleJobs.length === 0 && (
+                    <p className="gallery-note">No images found.</p>
+                )}
+
+                <div className="library-photo-grid">
+                    {visibleJobs.map((job) => {
+                        // One small thumbnail per batch: full-size photos made the
+                        // Library lag once it held about 50 batches.
+                        const coverImage = job.images[0];
+                        const badge = getBatchBadge(job.status);
+
+                        return (
+                            <button
+                                key={job.id}
+                                type="button"
+                                className="forma-card library-photo-card"
+                                onClick={() => {
+                                    setOpenJobId(job.id);
+                                }}
+                            >
+                                <div className="library-photo-cover">
+                                    {coverImage ? (
+                                        <img src={smallPhotoUrl(coverImage.url)} alt="" loading="lazy" decoding="async" />
+                                    ) : (
+                                        <Icon name="image" size={26} />
+                                    )}
+                                    <span className={`forma-badge library-photo-badge ${badge.className}`}>
+                                        {badge.label}
+                                    </span>
+                                    <span className="library-photo-total" aria-hidden="true">
+                                        <Icon name="image" size={12} /> {job.images.length}
+                                    </span>
+                                </div>
+                                {/* Same name and meta rows as the 3D Models cards, so both tabs line up. */}
+                                <div className="library-item-name">{jobDisplayName(job, 'Batch')}</div>
+                                <div className="library-item-meta">
+                                    <span>{job.images.length} photos</span>
+                                    <span>{job.createdAt ? new Date(job.createdAt).toLocaleDateString() : ''}</span>
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="gallery">
+            <div className="gallery-head">
+                {onBack && (
+                    <button className="btn btn-ghost" onClick={() => { onBack(); }}>Back</button>
+                )}
+                <h2>Uploaded images</h2>
+            </div>
+
+            {loading && <p className="gallery-note">Loading...</p>}
+            {error && <p className="gallery-note gallery-error">Couldn't load images: {error}</p>}
+            {!loading && !error && jobs.length === 0 && (
+                <p className="gallery-note">No images uploaded yet.</p>
+            )}
+
+            {jobs.map((job) => renderJobSection(job))}
+        </div>
+    );
+}
+
+// ----- End of Functions ----------------------------------------------------- //
+
+export default ImageGallery;

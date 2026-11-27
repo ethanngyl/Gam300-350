@@ -1,11 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-//import './index.css'
+//import './styles/index.css'
 import App from './App.jsx'
 // Reports this page's load time to the backend (p95 load times for admins).
-import './pageLoadTiming.js'
+import './lib/pageLoadTiming.js'
 // Applies the saved light / dark theme and follows the device on 'system'.
-import './AppearanceSettings.js'
+import './account/AppearanceSettings.js'
 
 // NOTE: StrictMode is intentionally omitted. It double-mounts effects in dev, which
 // would initialize the heavy WebGL splat viewer (and re-download the 350 MB .ply) twice.
