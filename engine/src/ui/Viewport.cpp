@@ -33,6 +33,7 @@ overlay. Loading and editing splats is done by the Qt editor panels.
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 #include <stdexcept>
@@ -349,6 +350,13 @@ void Viewport::DrawGizmo(const glm::mat4& view, const glm::mat4& proj) {
     if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), operation,
                              space, glm::value_ptr(transform)))
     {
+        //Snap the dragged position onto the thin grid lines. ImGuizmo's own snap is relative to where the drag
+        //started, so rounding the absolute position here is what lands the model on the lines.
+        if (m_snapToGrid && operation == ImGuizmo::TRANSLATE) {
+            for (int axis = 0; axis < 3; ++axis) {
+                transform[3][axis] = std::round(transform[3][axis] / GridRenderer::kMinorStep) * GridRenderer::kMinorStep;
+            }
+        }
         //Apply transform value
         if (editingBox) m_cropBox.transform = transform;
         else model->SetTransform(transform);

@@ -21,7 +21,9 @@ elsewhere (e.g. WASD nudges in the viewport) back into the fields.
 #include <QWidget>
 
 #include <array>
+#include <cstddef>
 
+class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
@@ -50,6 +52,9 @@ public:
     // Cheap enough to call every frame.
     void syncFromModel();
 
+    // Shows the snap to grid state without emitting snapToGridToggled (the menu action owns the state).
+    void setSnapToGrid(bool on);
+
     // The modes the crop box buttons can ask for. The two cut values are the cut button ids.
     enum CropMode { CropRemoveInside = 0, CropRemoveOutside = 1, CropMoveContents = 2 };
 
@@ -58,6 +63,12 @@ public:
     // restores it. `confirmed` is whether move mode has a confirmed selection.
     // Cheap enough to call every frame.
     void setCropState(bool active, bool moveContents, bool removeInside, bool confirmed);
+
+    // Developer-only readout under the Crop Box section: how many splats the confirmed selection holds.
+    // Cheap enough to call every frame.
+    void setSelectedSplatCount(std::size_t count);
+    // Shows or hides that readout (it is only visible in developer mode).
+    void setDevMode(bool on);
 
 //QT's events
 signals:
@@ -75,6 +86,9 @@ signals:
 
     //The Reset Position button was clicked
     void resetPositionRequested();
+
+    //The Snap to Grid checkbox was toggled by the user
+    void snapToGridToggled(bool on);
 
     //Asks to change the model transform
     //The inspector panel does not apply it, the listener does, so it can be an undo step,
@@ -122,12 +136,16 @@ private:
     std::array<QPushButton*, 2> m_cropCutButtons{}; // Cut Inside, Cut Outside
     QPushButton* m_cropModeToggle = nullptr;        // shows the mode, click switches Crop <-> Move
     QPushButton* m_cropApply = nullptr;
+    QLabel* m_selectedSplats = nullptr; // dev mode only
+    std::size_t m_selectedSplatCount = 0;
     // Last state shown, so the per-frame setCropState only touches widgets when something changed
     bool m_cropShown = false; // false until the first setCropState has filled the widgets in
     bool m_cropActive = false;
     bool m_cropMove = false;
     bool m_cropRemoveInside = true;
     bool m_cropConfirmed = false;
+
+    QCheckBox* m_snapToGrid = nullptr;
 
     SplatModel* m_model = nullptr;
 };

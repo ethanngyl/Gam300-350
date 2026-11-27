@@ -11,10 +11,12 @@
  * All rights reserved.
  ******************************************************************************/
 #include "pipeline/HeadlessBuild.h"
+#include "ui/AssetPaths.h"
 #include "ui/EditorTheme.h"
 #include "ui/MainWindow.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QSurfaceFormat>
 
 int main(int argc, char** argv) {
@@ -38,6 +40,7 @@ int main(int argc, char** argv) {
         return RunHeadlessBuild(app.arguments());
     }
 
+    app.setWindowIcon(QIcon(AssetPaths::AssetsSubdir("icons/genesis.png")));
     EditorTheme::Apply(app);
 
     MainWindow window;

@@ -141,6 +141,9 @@ private:
     //Refreshes the dev mode menu text to match m_devMode
     void updateDevModeAction();
 
+    //Marks the scene as having (or not having) changes since the last save, and appends * to the Save text
+    void setSceneModified(bool dirty);
+
     //Stress tests run on the GUI thread, so input is blocked from begin to end
     //Only the stress test panel stays usable, and its Stop button if the run can be stopped
     void beginStressRun(bool stoppable);
@@ -209,6 +212,7 @@ private:
     QAction* m_deselectAction = nullptr;
     QAction* m_toggleVisibilityAction = nullptr;
     QAction* m_resetPositionAction = nullptr;
+    QAction* m_snapToGridAction = nullptr;
     QAction* m_addCropBoxAction = nullptr;
     QAction* m_applyCropBoxAction = nullptr;
     QAction* m_cropInsideAction = nullptr;
@@ -266,6 +270,10 @@ private:
 
     QStringList m_recentFiles;
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
+
+    bool m_sceneModified = false;      //Changes since the scene was last saved, opened or cleared
+    quint64 m_modifyCount = 0;      // bumped on every change, so a save can tell if edits arrived while it wrote
+    size_t m_lastModelCount = 0;    // model count at the last refresh, to spot imports and deletes
 
     //Dev mode
     bool m_devMode = false;
