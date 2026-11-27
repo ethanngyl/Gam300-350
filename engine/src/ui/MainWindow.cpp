@@ -98,6 +98,7 @@ namespace {
     const QString kRenderModeKey = QStringLiteral("view/renderMode");
     const QString kStatsOverlayKey = QStringLiteral("view/statsOverlay");
     const QString kGridKey = QStringLiteral("view/grid");
+    const QString kSnapToGridKey = QStringLiteral("edit/snapToGrid");
     const QString kTrimOnImportKey = QStringLiteral("files/trimOnImport");
     const QString kTrimAlphaKey = QStringLiteral("trim/minAlpha");
     const QString kTrimCropKey = QStringLiteral("trim/cropPct");
@@ -190,7 +191,7 @@ MainWindow::MainWindow() {
         setRenderMode(m_gaussianAction->isChecked()
                           ? static_cast<int>(SplatRenderer::RenderMode::GaussianSplat)
                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
-        m_viewport->setShowImGuiStats(m_statsOverlayAction->isChecked());
+        m_viewport->setShowImGuiStats(m_statsOverlayAction->isChecked() && m_devMode);
         m_viewport->setShowGrid(m_gridAction->isChecked());
         refreshScenePanels();
         startNextImport(); // anything queued before the renderer existed
@@ -210,6 +211,7 @@ MainWindow::MainWindow() {
         const SplatRenderer* cropRenderer = m_viewport->renderer();
         m_inspector->setCropState(cropBox.active, cropBox.moveContents, cropBox.removeInside,
                                   cropRenderer && cropRenderer->HasSelection());
+        m_inspector->setSelectedSplatCount(cropRenderer ? cropRenderer->Selection().size() : 0);
 
         if (m_statsTimer.elapsed() < kStatsRefreshMs) {
             return;
@@ -260,7 +262,7 @@ void MainWindow::createActions() {
         }
     });
 
-    m_exportAction = new QAction(s->standardIcon(QStyle::SP_DialogSaveButton), "&Export...", this);
+    m_exportAction = new QAction(s->standardIcon(QStyle::SP_ArrowRight), "&Export...", this);
     m_exportAction->setShortcut(QKeySequence("Ctrl+E"));
     m_exportAction->setStatusTip("Convert the selected model or the whole scene to .glb, .obj, .ply, .stl or .splat");
     m_exportAction->setEnabled(false); // until a model is loaded
@@ -373,6 +375,14 @@ void MainWindow::createActions() {
         refreshScenePanels();
     });
 
+    m_snapToGridAction = new QAction("Snap to &Grid", this);
+    m_snapToGridAction->setCheckable(true);
+    m_snapToGridAction->setStatusTip("Dragging the move gizmo snaps the position to the grid lines");
+    connect(m_snapToGridAction, &QAction::toggled, this, [this](bool on) {
+        m_viewport->setSnapToGrid(on);
+        m_inspector->setSnapToGrid(on); //The inspector checkbox mirrors this action
+    });
+
     m_resetPositionAction = new QAction("Reset &Position", this);
     connect(m_resetPositionAction, &QAction::triggered, this, [this] {
         SplatRenderer* renderer = m_viewport->renderer();
@@ -396,6 +406,7 @@ void MainWindow::createActions() {
     //QUndoStack::indexChanged is the signal thats emmited if the undo stack pos moves
     //this is reciever
     connect(&m_undo, &QUndoStack::indexChanged, this, [this] {
+        setSceneModified(true); //Every edit, undo and redo is a change since the last save
         //0ms delay -> run on next event loop
         //this -> reciever
         QTimer::singleShot(0, this, [this] { 
@@ -431,7 +442,7 @@ void MainWindow::createActions() {
     m_statsOverlayAction->setCheckable(true);
     m_statsOverlayAction->setChecked(true);
     m_statsOverlayAction->setStatusTip("Show the FPS / splat count overlay in the viewport");
-    connect(m_statsOverlayAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowImGuiStats(on); });
+    connect(m_statsOverlayAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowImGuiStats(on && m_devMode); });
 
     m_recordMetricsAction = new QAction("&Record Metrics", this);
     m_recordMetricsAction->setCheckable(true);
@@ -505,6 +516,7 @@ void MainWindow::createMenus() {
     editMenu->addAction(m_toggleVisibilityAction);
     editMenu->addSeparator();
     editMenu->addAction(m_resetPositionAction);
+    editMenu->addAction(m_snapToGridAction);
     editMenu->addAction(m_deselectAction);
     editMenu->addSeparator();
     editMenu->addAction(m_addCropBoxAction);
@@ -548,6 +560,8 @@ void MainWindow::createToolBar() {
     m_toolBar->setMovable(false);
     m_toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
+    m_toolBar->addAction(m_saveSceneAction);
+    m_toolBar->addSeparator();
     m_toolBar->addAction(m_importAction);
     m_toolBar->addAction(m_generateAction);
     m_toolBar->addAction(m_exportAction);
@@ -726,6 +740,7 @@ void MainWindow::createDocks() {
         m_undo.push(new MoveModelCommand(model, before, after));
     });
     connect(m_inspector, &InspectorPanel::resetPositionRequested, m_resetPositionAction, &QAction::trigger);
+    connect(m_inspector, &InspectorPanel::snapToGridToggled, m_snapToGridAction, &QAction::setChecked);
     connect(m_inspector, &InspectorPanel::transformFieldEdited, this,
             [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after, nullptr, true));
@@ -798,6 +813,7 @@ void MainWindow::restoreSettings() {
     (gaussian ? m_gaussianAction : m_pointCloudAction)->setChecked(true);
     m_statsOverlayAction->setChecked(settings.value(kStatsOverlayKey, true).toBool());
     m_gridAction->setChecked(settings.value(kGridKey, true).toBool());
+    m_snapToGridAction->setChecked(settings.value(kSnapToGridKey, false).toBool());
     m_trimOnImportAction->setChecked(settings.value(kTrimOnImportKey, true).toBool());
     m_trimSettings.minAlpha = settings.value(kTrimAlphaKey, m_trimSettings.minAlpha).toFloat();
     m_trimSettings.cropPct = settings.value(kTrimCropKey, m_trimSettings.cropPct).toFloat();
@@ -819,6 +835,7 @@ void MainWindow::saveSettings() const {
                                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
     settings.setValue(kStatsOverlayKey, m_statsOverlayAction->isChecked());
     settings.setValue(kGridKey, m_gridAction->isChecked());
+    settings.setValue(kSnapToGridKey, m_snapToGridAction->isChecked());
     settings.setValue(kTrimOnImportKey, m_trimOnImportAction->isChecked());
     settings.setValue(kTrimAlphaKey, m_trimSettings.minAlpha);
     settings.setValue(kTrimCropKey, m_trimSettings.cropPct);
@@ -1375,6 +1392,7 @@ void MainWindow::toggleModelHidden(int index) {
         return;
     }
     renderer->SetModelHidden(index, !model->GetIsHidden());
+    setSceneModified(true); //Visibility is saved in the scene but isn't an undo step
     // Deferred: this can be reached from the outliner's context menu, and
     // rebuilding the tree in the middle of that is unsafe.
     QTimer::singleShot(0, this, [this] { refreshScenePanels(); });
@@ -1648,6 +1666,13 @@ void MainWindow::exportModels() {
 // Scene files (.gscene, see scene/SceneFile.h)
 // ===========================================================================
 
+void MainWindow::setSceneModified(bool dirty) {
+    m_sceneModified = dirty;
+    if (dirty) ++m_modifyCount;
+    if (m_saveSceneAction)
+        m_saveSceneAction->setText(dirty ? "&Save Scene*" : "&Save Scene");
+}
+
 void MainWindow::updateWindowTitle() {
     setWindowTitle(m_scenePath.isEmpty()
                        ? kAppTitle
@@ -1698,6 +1723,7 @@ void MainWindow::newScene() {
     }
     clearScene();
     m_scenePath.clear();
+    setSceneModified(false);
     updateWindowTitle();
     qInfo("Started a new scene.");
     statusBar()->showMessage("New scene", kStatusMessageMs);
@@ -1749,12 +1775,13 @@ void MainWindow::saveScene(bool saveAs) {
 
     const QString fileName = QFileInfo(path).fileName();
     const size_t modelCount = scene->models.size();
+    const quint64 savedAtModifyCount = m_modifyCount; //Edits made while the file is written are not in it
     qInfo("Saving scene %s...", qPrintable(QDir::toNativeSeparators(path)));
     statusBar()->showMessage(QString("Saving %1...").arg(fileName));
 
     auto result = std::make_shared<SceneResult>();
     m_sceneThread = QThread::create([scene, result, path] { *result = SaveScene(*scene, path); });
-    connect(m_sceneThread, &QThread::finished, this, [this, result, path, fileName, modelCount] {
+    connect(m_sceneThread, &QThread::finished, this, [this, result, path, fileName, modelCount, savedAtModifyCount] {
         m_sceneThread->deleteLater();
         m_sceneThread = nullptr;
         refreshScenePanels(); // re-enables the scene actions
@@ -1768,6 +1795,7 @@ void MainWindow::saveScene(bool saveAs) {
             return;
         }
         m_scenePath = path;
+        if (m_modifyCount == savedAtModifyCount) setSceneModified(false); //Otherwise the * stays: newer edits are unsaved
         updateWindowTitle();
         const QString summary = QString("%1 model%2").arg(modelCount).arg(modelCount == 1 ? "" : "s");
         qInfo("Saved scene %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
@@ -1873,6 +1901,7 @@ void MainWindow::openScenePath(const QString& path) {
         selectModel(-1);
         refreshScenePanels();
         m_scenePath = path;
+        setSceneModified(false);
         updateWindowTitle();
 
         const size_t count = renderer->ModelCount();
@@ -2092,6 +2121,24 @@ void MainWindow::updateDevModeAction()
     if (m_devModeAction)
         m_devModeAction->setText(m_devMode ? "Developer Mode: &On" : "Developer Mode: &Off");
 
+    //The inspector's selected splat count is developer-only too. The inspector exists after the first call
+    if (m_inspector)
+        m_inspector->setDevMode(m_devMode);
+
+    //Stats overlay and metrics recording are developer-only. A hidden action also stops its shortcut from firing.
+    //These can run before the actions or the viewport exist, so check them first
+    if (m_statsOverlayAction) {
+        m_statsOverlayAction->setVisible(m_devMode);
+        if (m_viewport)
+            m_viewport->setShowImGuiStats(m_devMode && m_statsOverlayAction->isChecked());
+    }
+    if (m_recordMetricsAction) {
+        //Stop an active recording so it isn't left running with no way to end it
+        if (!m_devMode && m_recordMetricsAction->isChecked())
+            m_recordMetricsAction->setChecked(false);
+        m_recordMetricsAction->setVisible(m_devMode);
+    }
+
     //This can run before the dock is created, so check it exists first
     if (m_stressTestPanel) {
         //The panel's parent is the QDockWidget that addPanelDock wrapped it in
@@ -2111,6 +2158,12 @@ void MainWindow::refreshScenePanels() {
     m_outliner->rebuild(*renderer);
     selectModel(renderer->GetSelectedModel());
     m_exportAction->setEnabled(renderer->ModelCount() > 0 && !m_exportThread);
+
+    //Imports, generated models and deletes change the count without going through the modified triggers above
+    if (renderer->ModelCount() != m_lastModelCount) {
+        m_lastModelCount = renderer->ModelCount();
+        setSceneModified(true);
+    }
 
     const bool sceneIdle = !m_sceneThread;
     m_saveSceneAction->setEnabled(renderer->ModelCount() > 0 && sceneIdle);
@@ -2203,7 +2256,7 @@ void MainWindow::showControls() {
         "<tr><td>Left mouse drag</td><td>Pan (when not grabbing a gizmo)</td></tr>"
         "<tr><td>Mouse wheel</td><td>Zoom</td></tr>"
         "<tr><td>Home</td><td>Recenter camera</td></tr>"
-        "<tr><td>Ctrl+Shift+R</td><td>Start / stop recording metrics (FPS, drops, splats)</td></tr>"
+        + QString(m_devMode ? "<tr><td>Ctrl+Shift+R</td><td>Start / stop recording metrics (FPS, drops, splats)</td></tr>" : "") +
         "<tr><td>Ctrl+Shift+G</td><td>Show / hide the grid (bright line every 1 unit; X red, Y green, Z blue)</td></tr>"
         "<tr><td colspan='2'><br><b>Selected model</b> (viewport focused)</td></tr>"
         "<tr><td>Q / W / E / R</td><td>Pan / Translate / Rotate / Scale tool</td></tr>"

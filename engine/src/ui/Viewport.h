@@ -66,6 +66,9 @@ public:
     // Qt UI -> viewport: whether the ground grid, axes and coordinate labels are drawn.
     void setShowGrid(bool show) { m_showGrid = show; }
 
+    // Qt UI -> viewport: whether dragging the move gizmo snaps the position to the grid lines.
+    void setSnapToGrid(bool on) { m_snapToGrid = on; }
+
     // The scene renderer the editor panels operate on. Null until the GL
     // context exists (i.e. before the widget is first shown).
     SplatRenderer* renderer() const { return m_renderer.get(); }
@@ -171,6 +174,7 @@ private:
 
     std::unique_ptr<GridRenderer> m_gridRenderer; // created once the GL context exists
     bool m_showGrid = true;
+    bool m_snapToGrid = false;
 
     //ModelCentre cache. The data pointer, count and end points catch a re-trim or reload.
     struct CentreCache {

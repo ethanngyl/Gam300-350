@@ -55,8 +55,12 @@ source_group(
 # ======================= Target Creation =========================
 
 # Create executable
+set(APP_RC "")
+if(WIN32)
+    set(APP_RC "app.rc") # embeds assets/icons/genesis.ico as the exe icon
+endif()
 add_executable(${CMAKE_PROJECT_NAME} ${APP_SRC} 
-"src/main.cpp")
+"src/main.cpp" ${APP_RC})
 
 # MSVC-only: disable noisy integer conversion warnings
 #  - C4244: converting larger numeric types to smaller ones (possible loss of data)
@@ -228,6 +232,12 @@ install(CODE "
     set(QT_DEPLOY_PLUGINS_DIR \"${CMAKE_INSTALL_BINDIR}\")
 " COMPONENT ${CODEFINE_COMPONENT})
 install(SCRIPT ${CODEFINE_DEPLOY_SCRIPT} COMPONENT ${CODEFINE_COMPONENT})
+
+# The window icon is loaded from assets/icons at runtime (see main.cpp).
+install(DIRECTORY assets/icons
+    DESTINATION ${CMAKE_INSTALL_BINDIR}/assets
+    COMPONENT ${CODEFINE_COMPONENT}
+)
 
 if(CODEFINE_PACKAGE_SAMPLES)
     install(DIRECTORY assets/samples

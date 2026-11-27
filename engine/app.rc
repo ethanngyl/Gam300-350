@@ -1,0 +1,2 @@
+// Windows resource: the exe icon shown in Explorer and the taskbar (same artwork as the web app).
+IDI_ICON1 ICON "assets/icons/genesis.ico"

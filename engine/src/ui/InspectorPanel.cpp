@@ -18,6 +18,7 @@ to a SplatModel.
 #include <glm/gtc/quaternion.hpp>
 
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -188,6 +189,11 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     scaleForm->addRow("Scale", scaleRow);
     layout->addLayout(scaleForm);
 
+    m_snapToGrid = new QCheckBox("Snap to Grid", page);
+    m_snapToGrid->setToolTip("Dragging the move gizmo snaps the position to the grid lines (also in Edit > Snap to Grid)");
+    layout->addWidget(m_snapToGrid);
+    connect(m_snapToGrid, &QCheckBox::toggled, this, &InspectorPanel::snapToGridToggled);
+
     auto* resetButton = new QPushButton("Reset Position", page);
     layout->addWidget(resetButton, 0, Qt::AlignRight);
 
@@ -230,6 +236,13 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     m_cropApply = new QPushButton(page);
     m_cropApply->setToolTip("Enter, with the viewport focused");
     layout->addWidget(m_cropApply);
+
+    m_selectedSplats = new QLabel(page);
+    m_selectedSplats->setObjectName("PanelHint");
+    m_selectedSplats->setToolTip("Splats in the confirmed selection (Move mode)");
+    m_selectedSplats->setVisible(false); // developer mode only, see setDevMode
+    layout->addWidget(m_selectedSplats);
+    setSelectedSplatCount(0);
 
     connect(m_cropToggle, &QPushButton::clicked, this, [this](bool on) { emit cropBoxToggled(on); });
     //Button ids are the CropRemoveInside / CropRemoveOutside values
@@ -480,6 +493,25 @@ void InspectorPanel::setCropState(bool active, bool moveContents, bool removeIns
     } else {
         m_cropApply->setText("Remove Splats");
     }
+}
+
+void InspectorPanel::setSelectedSplatCount(std::size_t count) {
+    if (!m_selectedSplats) return;
+    //Called every frame, so only touch the label when the number changed (the first call always applies)
+    if (m_selectedSplats->text().isEmpty() || count != m_selectedSplatCount) {
+        m_selectedSplatCount = count;
+        m_selectedSplats->setText(QString("Selected splats: %1").arg(QLocale().toString(static_cast<qulonglong>(count))));
+    }
+}
+
+void InspectorPanel::setDevMode(bool on) {
+    if (m_selectedSplats) m_selectedSplats->setVisible(on);
+}
+
+void InspectorPanel::setSnapToGrid(bool on) {
+    if (!m_snapToGrid) return;
+    const QSignalBlocker block(m_snapToGrid);
+    m_snapToGrid->setChecked(on);
 }
 
 void InspectorPanel::writePosition() {
