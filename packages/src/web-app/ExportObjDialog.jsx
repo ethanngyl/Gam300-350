@@ -11,7 +11,8 @@ dialog (ExportDialog.cpp) for Wavefront OBJ: geometry (points or one
 ellipsoid per splat), mesh detail, splat size in standard deviations and
 minimum opacity, with the same "Up to N vertices" estimate. The last-used
 options are remembered per browser. Exporting runs plyToObj.worker.js (so
-the page stays responsive), shows its progress, then downloads the .obj.
+the page stays responsive), shows its progress, then downloads the .obj, or
+for meshes a .zip of the .obj with its .mtl and colour texture.
 - ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose })
 plyUrl: the .ply to convert (server path or blob: URL). fileName: the
 download's name without extension. splatCount (optional) feeds the
@@ -20,7 +21,7 @@ estimate.
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { OBJ_EXPORT_DEFAULTS, objExportEstimate } from './plyToObj.js';
+import { OBJ_EXPORT_DEFAULTS, objExportEstimate, safeFileStem } from './plyToObj.js';
 import { playSound } from '../audio/Audio.js';
 
 const OPTIONS_KEY = 'genesis.objExportOptions';
@@ -63,10 +64,12 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
     const workerRef = useRef(null);
     const downloadUrlRef = useRef(null);
     const confirmRef = useRef(null);
+    const fileStem = safeFileStem(fileName);
+    // .zip for meshes (with the .mtl and texture), .obj for points; the worker decides.
+    const downloadNameRef = useRef(`${fileStem}.obj`);
 
     const isMesh = options.geometry === 'mesh';
     const isWorking = status === 'working';
-    const downloadName = `${(fileName || 'model').replace(/[^\w.-]+/g, '_')}.obj`;
 
     useEffect(() => {
         confirmRef.current?.focus();
@@ -92,7 +95,7 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
     function download() {
         const link = document.createElement('a');
         link.href = downloadUrlRef.current;
-        link.download = downloadName;
+        link.download = downloadNameRef.current;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -128,6 +131,7 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
             if (data.type === 'done') {
                 if (downloadUrlRef.current) URL.revokeObjectURL(downloadUrlRef.current);
                 downloadUrlRef.current = URL.createObjectURL(data.blob);
+                downloadNameRef.current = data.fileName;
                 setResult({ ...data, sizeBytes: data.blob.size });
                 setStatus('done');
                 download();
@@ -146,7 +150,7 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
             playSound('error');
         };
         // A worker resolves relative URLs against its own script, so pass an absolute one.
-        worker.postMessage({ url: new URL(plyUrl, window.location.href).href, sizeHint: sizeBytes, options: cleanOptions });
+        worker.postMessage({ url: new URL(plyUrl, window.location.href).href, sizeHint: sizeBytes, options: cleanOptions, fileStem });
     }
 
     function cancelExport() {
@@ -196,7 +200,9 @@ function ExportObjDialog({ plyUrl, fileName, splatCount, sizeBytes, onClose }) {
             >
                 <h3 id="export-obj-title">Export as .obj</h3>
                 <p className="action-dialog-message">
-                    Wavefront OBJ with vertex colours. Opens in almost every 3D tool; large and slow for big scans.
+                    Wavefront OBJ with vertex colours. Meshes download as a .zip with a material and colour
+                    texture so the colours show in Blender and Unity; keep the three files together.
+                    Opens in almost every 3D tool; large and slow for big scans.
                 </p>
 
                 <fieldset className="export-obj-fields" disabled={isWorking}>
