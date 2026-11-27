@@ -260,7 +260,7 @@ void MainWindow::createActions() {
         }
     });
 
-    m_exportAction = new QAction(s->standardIcon(QStyle::SP_DialogSaveButton), "&Export...", this);
+    m_exportAction = new QAction(s->standardIcon(QStyle::SP_ArrowRight), "&Export...", this);
     m_exportAction->setShortcut(QKeySequence("Ctrl+E"));
     m_exportAction->setStatusTip("Convert the selected model or the whole scene to .glb, .obj, .ply, .stl or .splat");
     m_exportAction->setEnabled(false); // until a model is loaded
