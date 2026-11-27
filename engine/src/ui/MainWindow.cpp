@@ -1668,6 +1668,7 @@ void MainWindow::exportModels() {
 
 void MainWindow::setSceneModified(bool dirty) {
     m_sceneModified = dirty;
+    if (dirty) ++m_modifyCount;
     if (m_saveSceneAction)
         m_saveSceneAction->setText(dirty ? "&Save Scene*" : "&Save Scene");
 }
@@ -1774,12 +1775,13 @@ void MainWindow::saveScene(bool saveAs) {
 
     const QString fileName = QFileInfo(path).fileName();
     const size_t modelCount = scene->models.size();
+    const quint64 savedAtModifyCount = m_modifyCount; //Edits made while the file is written are not in it
     qInfo("Saving scene %s...", qPrintable(QDir::toNativeSeparators(path)));
     statusBar()->showMessage(QString("Saving %1...").arg(fileName));
 
     auto result = std::make_shared<SceneResult>();
     m_sceneThread = QThread::create([scene, result, path] { *result = SaveScene(*scene, path); });
-    connect(m_sceneThread, &QThread::finished, this, [this, result, path, fileName, modelCount] {
+    connect(m_sceneThread, &QThread::finished, this, [this, result, path, fileName, modelCount, savedAtModifyCount] {
         m_sceneThread->deleteLater();
         m_sceneThread = nullptr;
         refreshScenePanels(); // re-enables the scene actions
@@ -1793,7 +1795,7 @@ void MainWindow::saveScene(bool saveAs) {
             return;
         }
         m_scenePath = path;
-        setSceneModified(false);
+        if (m_modifyCount == savedAtModifyCount) setSceneModified(false); //Otherwise the * stays: newer edits are unsaved
         updateWindowTitle();
         const QString summary = QString("%1 model%2").arg(modelCount).arg(modelCount == 1 ? "" : "s");
         qInfo("Saved scene %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
@@ -2254,7 +2256,7 @@ void MainWindow::showControls() {
         "<tr><td>Left mouse drag</td><td>Pan (when not grabbing a gizmo)</td></tr>"
         "<tr><td>Mouse wheel</td><td>Zoom</td></tr>"
         "<tr><td>Home</td><td>Recenter camera</td></tr>"
-        "<tr><td>Ctrl+Shift+R</td><td>Start / stop recording metrics (FPS, drops, splats)</td></tr>"
+        + QString(m_devMode ? "<tr><td>Ctrl+Shift+R</td><td>Start / stop recording metrics (FPS, drops, splats)</td></tr>" : "") +
         "<tr><td>Ctrl+Shift+G</td><td>Show / hide the grid (bright line every 1 unit; X red, Y green, Z blue)</td></tr>"
         "<tr><td colspan='2'><br><b>Selected model</b> (viewport focused)</td></tr>"
         "<tr><td>Q / W / E / R</td><td>Pan / Translate / Rotate / Scale tool</td></tr>"

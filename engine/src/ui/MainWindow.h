@@ -272,6 +272,7 @@ private:
     QByteArray m_defaultLayout; // dock layout before restoring, for Reset Layout
 
     bool m_sceneModified = false;      //Changes since the scene was last saved, opened or cleared
+    quint64 m_modifyCount = 0;      // bumped on every change, so a save can tell if edits arrived while it wrote
     size_t m_lastModelCount = 0;    // model count at the last refresh, to spot imports and deletes
 
     //Dev mode
