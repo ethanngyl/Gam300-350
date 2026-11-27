@@ -45,6 +45,12 @@ full processing screen (Processing.jsx), which, like the legacy image
 gallery, replaces the whole screen. Each page has its own address-bar
 hash (AppRoutes.js), so the browser's Back and Forward buttons move
 between pages and a refresh stays on the page.
+Leaving Capture, the Photo Editor or the Video Extractor while it holds
+photos or a video (by any link, Back, signing out, or the build panel)
+asks "Discard your photos?" first, and reloading or closing the tab gets
+the browser's own warning. Moving the photos on (Capture to the Photo
+Editor and back, a picked video to the Video Extractor) or starting a
+build from them doesn't ask.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -67,6 +73,7 @@ import ModelViewerScreen from './ModelViewerScreen.jsx';
 import ModelScreen from './ModelScreen.jsx';
 import Walkthrough from './Walkthrough.jsx';
 import AddPhotosDialog from './AddPhotosDialog.jsx';
+import ActionDialog from './ActionDialog.jsx';
 import { TipCard, WelcomeCard } from './Tips.jsx';
 import { VIDEO_TIP } from './TipsContent.js';
 import StartScreen from './StartScreen.jsx';
@@ -338,6 +345,18 @@ function App() {
     const scene = useUndoableState([]);
     const [sceneInfo, setSceneInfo] = useState(NEW_SCENE_INFO);
 
+    // Whether the page holds photos or a video that leaving would throw
+    // away (Capture, the Photo Editor and the Video Extractor report it).
+    const hasUnsavedWorkRef = useRef(false);
+    // The address of the page shown now, for staying put on Back (below).
+    const currentHashRef = useRef(window.location.hash);
+    // What to do if the user chooses Discard in "Discard your photos?", or
+    // null while it isn't open.
+    const [pendingLeave, setPendingLeave] = useState(null);
+    const setHasUnsavedWork = useCallback((hasUnsavedWork) => {
+        hasUnsavedWorkRef.current = hasUnsavedWork;
+    }, []);
+
     // Browser Back / Forward. Every page change gets its own history entry
     // with the page's hash (AppRoutes.js), so Back and Forward move between
     // pages instead of leaving the site. Set replaceNextRef before a change
@@ -356,6 +375,7 @@ function App() {
         const hash = viewToHash(toRouteView({ activeTab, librarySubTab, screen, jobId, viewedModel }));
         const replace = replaceNextRef.current;
         replaceNextRef.current = false;
+        currentHashRef.current = hash;
         if (hash === window.location.hash) return;
         if (replace) window.history.replaceState(null, '', hash);
         else window.history.pushState(null, '', hash);
@@ -363,6 +383,13 @@ function App() {
 
     useEffect(() => {
         function handlePopState() {
+            // Back / Forward from a page holding photos or a video: stay (put
+            // its address back) and ask first; Discard goes back again.
+            if (hasUnsavedWorkRef.current) {
+                window.history.pushState(null, '', currentHashRef.current);
+                setPendingLeave(() => () => window.history.back());
+                return;
+            }
             const view = fromRouteView(hashToView(window.location.hash));
             if (view.isLocalModel) {
                 if (viewedModelRef.current?.localFile) view.activeTab = 'model';
@@ -412,13 +439,15 @@ function App() {
 
     // Guests (who aren't really signed in) go to the login screen instead.
     function handleSignOutOrSignIn() {
-        handleSignOut(currentUser?.isGuest ? 'login' : 'landing');
+        confirmLeave(() => handleSignOut(currentUser?.isGuest ? 'login' : 'landing'));
     }
 
-    // Every navigation goes through here: it clears a stale upload error so
-    // it doesn't reappear on the next visit.
+    // Switches page. It clears a stale upload error so it doesn't reappear on
+    // the next visit, and the one-off hand-offs between pages. Used directly
+    // only where the photos on the page go with the user (to another page or
+    // into a build); everything else goes through goToTab, which asks first.
     // (Only state setters, so it never changes and callbacks can depend on it.)
-    const goToTab = useCallback((tab) => {
+    const switchTab = useCallback((tab) => {
         setUploadError(null);
         setPhotosForEditor(null);
         setPhotosForCapture(null);
@@ -426,15 +455,56 @@ function App() {
         setActiveTab(tab);
     }, []);
 
+    // The page shown now (as pageTab below), so going to it again doesn't ask.
+    const pageTabRef = useRef(activeTab);
+    useEffect(() => {
+        pageTabRef.current = !isMobile && activeTab === 'account' ? accountReturnTab : activeTab;
+    }, [isMobile, activeTab, accountReturnTab]);
+
+    // Runs leave() now, or after "Discard your photos?" if the page holds
+    // photos or a video.
+    const confirmLeave = useCallback((leave) => {
+        if (!hasUnsavedWorkRef.current) {
+            leave();
+            return;
+        }
+        setPendingLeave(() => leave);
+    }, [setPendingLeave]);
+
+    function discardAndLeave() {
+        const leave = pendingLeave;
+        setPendingLeave(null);
+        hasUnsavedWorkRef.current = false;
+        leave();
+    }
+
+    // Reloading or closing the tab with photos or a video: the browser asks.
+    useEffect(() => {
+        function warnBeforeUnload(event) {
+            if (!hasUnsavedWorkRef.current) return;
+            event.preventDefault();
+            event.returnValue = '';
+        }
+        window.addEventListener('beforeunload', warnBeforeUnload);
+        return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+    }, []);
+
+    // Every other navigation goes through here: leaving a page that holds
+    // photos or a video asks first.
+    const goToTab = useCallback((tab) => {
+        if (tab === pageTabRef.current) switchTab(tab);
+        else confirmLeave(() => switchTab(tab));
+    }, [switchTab, confirmLeave]);
+
     // Opens the Photo Editor with the photos from Camera Capture loaded.
     function reviewPhotosInEditor(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
-        goToTab('editor');
+        switchTab('editor');
         setPhotosForEditor({ files, removeBackground, autoCrop, trainIters });
     }
 
     // Reopens Camera Capture with the photos that were in the Photo Editor.
     function returnPhotosToCapture(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
-        goToTab('capture');
+        switchTab('capture');
         setPhotosForCapture({ files, removeBackground, autoCrop, trainIters });
     }
 
@@ -448,7 +518,9 @@ function App() {
     function openAccount(section = 'account') {
         if (activeTab !== 'account') setAccountReturnTab(activeTab);
         setAccountSection(section);
-        goToTab('account');
+        // Wider screens: a window over the page, which stays as it is.
+        if (isMobile) goToTab('account');
+        else switchTab('account');
     }
 
     // Starts a build from a photo batch in the background and returns to
@@ -458,11 +530,12 @@ function App() {
     function handleBatchReady(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
         backgroundBuilds.startPhotoBuild(files, { removeBackground, autoCrop, trainIters });
         setIsNewModelOpen(false);
-        goToTab('home');
+        switchTab('home');
     }
 
     // The New model dialog (New in the sidebar, Home's Add photos).
-    const openNewModel = useCallback(() => setIsNewModelOpen(true), []);
+    // Its photos would replace the page's, so it asks first too.
+    const openNewModel = useCallback(() => confirmLeave(() => setIsNewModelOpen(true)), [confirmLeave]);
 
     function backToDashboard() {
         setScreen(null);
@@ -483,7 +556,7 @@ function App() {
     // from here, shown in the build panel) and returns to Home.
     function startMediaBuild({ files, fps, trainIters, removeBackground, autoCrop = false }) {
         backgroundBuilds.startMediaBuild(files, { fps, trainIters, removeBackground, autoCrop });
-        goToTab('home');
+        switchTab('home');
     }
 
     // Shows a model on the model page; its back link returns to returnTab.
@@ -520,24 +593,28 @@ function App() {
     // Phones: a video picked with Capture's gallery button opens the Video
     // Extractor with it.
     function openVideosInExtractor(files) {
-        goToTab('extractor');
+        switchTab('extractor');
         setFrameExtractorDraft({ files });
     }
 
     // A failed build: back to the Photo Editor or the Video Extractor with its files.
     function retryBuild(build) {
-        backgroundBuilds.dismissBuild(build.key);
-        if (build.source === 'media') {
-            goToTab('extractor');
-            setFrameExtractorDraft({ files: build.files, ...build.settings });
-        } else {
-            reviewPhotosInEditor(build.files, build.settings ?? {});
-        }
+        confirmLeave(() => {
+            backgroundBuilds.dismissBuild(build.key);
+            if (build.source === 'media') {
+                switchTab('extractor');
+                setFrameExtractorDraft({ files: build.files, ...build.settings });
+            } else {
+                reviewPhotosInEditor(build.files, build.settings ?? {});
+            }
+        });
     }
 
     function showBuildDetails(build) {
-        setJobId(build.jobId);
-        setScreen('processing');
+        confirmLeave(() => {
+            setJobId(build.jobId);
+            setScreen('processing');
+        });
     }
 
     // Opens a finished model from Home, the Media Library or the Model Viewer.
@@ -577,8 +654,10 @@ function App() {
     // Take the tour, Learn and "Show walkthrough": the walkthrough from step
     // 1, on Home.
     function showWalkthroughAgain() {
-        goToTab('home');
-        setIsReplayingWalkthrough(true);
+        confirmLeave(() => {
+            switchTab('home');
+            setIsReplayingWalkthrough(true);
+        });
     }
 
     function closeWalkthrough() {
@@ -647,7 +726,7 @@ function App() {
 
     return (
         <div className={isMobile
-            ? `forma-app genesis-shell has-mobile-topbar${hasCameraButton ? ' has-camera-button' : ''}`
+            ? `forma-app genesis-shell has-mobile-topbar${hasCameraButton ? ' has-camera-button' : ''}${pageTab === 'capture' ? ' is-capturing' : ''}`
             : 'forma-app genesis-shell has-app-sidebar'}>
             {/* Phones: the full-screen camera has no top bar, and the model
                 page has its own header with a back button instead. */}
@@ -699,6 +778,7 @@ function App() {
                     {pageTab === 'editor' && (
                         <PhotoEditorScreen
                             onGenerateModel={handleBatchReady}
+                            onUnsavedWorkChange={setHasUnsavedWork}
                             uploadError={uploadError}
                             initialPhotos={photosForEditor}
                             onBackToCapture={returnPhotosToCapture}
@@ -733,12 +813,14 @@ function App() {
                     {pageTab === 'extractor' && (
                         <FrameExtractor
                             onStartBuild={startMediaBuild}
+                            onUnsavedWorkChange={setHasUnsavedWork}
                             initialDraft={frameExtractorDraft}
                         />
                     )}
                     {pageTab === 'capture' && (
                         <CameraCapture
                             onBatchReady={handleBatchReady}
+                            onUnsavedWorkChange={setHasUnsavedWork}
                             onReviewPhotos={reviewPhotosInEditor}
                             onPickVideos={openVideosInExtractor}
                             onBack={() => goToTab('home')}
@@ -784,11 +866,23 @@ function App() {
                     user={currentUser}
                     isModal
                     initialSection={accountSection}
-                    onClose={() => goToTab(accountReturnTab)}
+                    onClose={() => switchTab(accountReturnTab)}
                     onOpenModel={openModel}
                     onOpenLibrary={openLibrary}
                     onSignOut={handleSignOutOrSignIn}
                     onShowWalkthrough={showWalkthroughAgain}
+                />
+            )}
+
+            {pendingLeave && (
+                <ActionDialog
+                    title="Discard your photos?"
+                    message="The photos or video on this page haven't been made into a model yet. Leaving now throws them away."
+                    confirmLabel="Discard and leave"
+                    cancelLabel="Stay"
+                    danger
+                    onConfirm={discardAndLeave}
+                    onCancel={() => setPendingLeave(null)}
                 />
             )}
 

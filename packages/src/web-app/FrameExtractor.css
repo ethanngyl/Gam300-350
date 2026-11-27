@@ -555,8 +555,9 @@
 }
 
 .fx-phone .fx-phone-stepper-buttons button {
-    width: 22px;
-    height: 16px;
+    /* Two stacked arrows, together a finger-sized target. */
+    width: 36px;
+    height: 24px;
     padding: 0;
     display: grid;
     place-items: center;
@@ -609,9 +610,10 @@
 
 .fx-phone .fx-phone-help {
     position: absolute;
-    top: 0;
+    /* Taller to tap, in the same place. */
+    top: -10px;
     right: 0;
-    padding: 0;
+    padding: 10px 0;
     border: 0;
     background: transparent;
     color: var(--forma-teal-text);

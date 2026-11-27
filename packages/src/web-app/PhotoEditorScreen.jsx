@@ -251,7 +251,9 @@ function CropOverlay({ crop, onChange }) {
 // Camera Capture, or null when the editor is opened on its own.
 // onBackToCapture(files, { removeBackground, autoCrop, trainIters }) sends the photos
 // to Camera Capture.
-function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null, onBackToCapture }) {
+// onUnsavedWorkChange(hasPhotos): told whether there are photos to lose, so
+// App can ask before leaving.
+function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null, onBackToCapture, onUnsavedWorkChange = null }) {
     const isPhone = useIsPhone();
     const fileInputRef = useRef(null);
     const previewCanvasRef = useRef(null);
@@ -261,6 +263,12 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     const [photos, setPhotos] = useState(() =>
         (initialPhotos?.files ?? []).filter(isImageFile).map(createEditorPhoto)
     );
+
+    // Tells App whether leaving now would throw the batch away, so it asks first.
+    useEffect(() => {
+        onUnsavedWorkChange?.(photos.length > 0);
+    }, [photos.length, onUnsavedWorkChange]);
+    useEffect(() => () => onUnsavedWorkChange?.(false), [onUnsavedWorkChange]);
     // Mask out the background before reconstruction. Needed for turntable
     // captures, where the static background makes the model come out flat.
     // Starts with the choice carried over from Camera Capture, if any.
@@ -679,7 +687,11 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
             return <span className="photo-editor-error" role="alert">{uploadError}</span>;
         }
         if (keptPhotos.length < MIN_PHOTOS) {
-            return `Keep at least ${MIN_PHOTOS} photos to build a model (${keptPhotos.length} kept).`;
+            return (
+                <span className="photo-editor-footer-warning">
+                    Keep at least {MIN_PHOTOS} photos to build a model ({keptPhotos.length} kept).
+                </span>
+            );
         }
         if (useOriginals) {
             return `${keptPhotos.length} original photos will be used, without edits.`;

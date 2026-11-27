@@ -115,10 +115,13 @@ function createBatchPhoto(file) {
 // initialPhotos: { files, removeBackground, autoCrop, trainIters } handed back from the Photo
 // Editor, or null when the page is opened fresh.
 // onPickVideos(files): phones, a video picked with the gallery button.
+// onUnsavedWorkChange(hasPhotos): told whether there are photos to lose, so
+// App can ask before leaving.
 function CameraCapture({
     onBatchReady,
     onReviewPhotos,
     onPickVideos = null,
+    onUnsavedWorkChange = null,
     onBack,
     uploadError,
     initialPhotos = null,
@@ -148,6 +151,12 @@ function CameraCapture({
             .filter((file) => file.type.startsWith('image/'))
             .map(createBatchPhoto)
     );
+
+    // Tells App whether leaving now would throw the photos taken away, so it asks first.
+    useEffect(() => {
+        onUnsavedWorkChange?.(photos.length > 0);
+    }, [photos.length, onUnsavedWorkChange]);
+    useEffect(() => () => onUnsavedWorkChange?.(false), [onUnsavedWorkChange]);
 
     const [captureFeedback, setCaptureFeedback] = useState(null);
     const [uploadFeedback, setUploadFeedback] = useState(null);

@@ -26,9 +26,10 @@ gives, the two options and Model detail ("How does this work?" opens the
 note on how frames are picked); and "Extract frames" along the bottom.
 Everything the wider layout does is there: more videos can be added and
 any removed.
-- FrameExtractor({ onStartBuild, initialDraft })
+- FrameExtractor({ onStartBuild, initialDraft, onUnsavedWorkChange })
 initialDraft ({ files, fps, trainIters, removeBackground, autoCrop }, from App) fills
-the form in again after a failed build.
+the form in again after a failed build. onUnsavedWorkChange(hasFiles) is
+told whether there are videos to lose, so App can ask before leaving.
 **************************************************************************/
 
 import { useEffect, useRef, useState } from 'react';
@@ -145,10 +146,16 @@ function PhoneMediaCard({ item, info, onInfo, onRemove }) {
     );
 }
 
-function FrameExtractor({ onStartBuild, initialDraft = null }) {
+function FrameExtractor({ onStartBuild, initialDraft = null, onUnsavedWorkChange = null }) {
     const isPhone = useMobileView();
     // Starts from the last build's files and settings, if App passes them back.
     const [mediaItems, setMediaItems] = useState(() => initialDraft?.files.map(createMediaItem) ?? []);
+
+    // Tells App whether leaving now would throw the chosen videos away, so it asks first.
+    useEffect(() => {
+        onUnsavedWorkChange?.(mediaItems.length > 0);
+    }, [mediaItems.length, onUnsavedWorkChange]);
+    useEffect(() => () => onUnsavedWorkChange?.(false), [onUnsavedWorkChange]);
     const [isDragging, setIsDragging] = useState(false);
     const [fps, setFps] = useState(initialDraft?.fps ?? 2);
     // Mask out the background before reconstruction. On by default here, since

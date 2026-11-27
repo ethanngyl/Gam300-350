@@ -397,10 +397,15 @@
         font-size: 0.76rem;
     }
 
-        /* Only problems show here; the photo count is in the summary. */
-        .photo-editor .photo-editor-footer-text:not(:has(.photo-editor-error)) {
+        /* Only problems (an error, or too few photos to build) show here;
+           the photo count is in the summary. */
+        .photo-editor .photo-editor-footer-text:not(:has(.photo-editor-error, .photo-editor-footer-warning)) {
             display: none;
         }
+
+    .photo-editor .photo-editor-footer-warning {
+        color: var(--forma-orange);
+    }
 
     /* Model detail on one line: the name, then Fast / Normal / Detailed. */
     .photo-editor .photo-editor-footer .training-quality {
@@ -579,6 +584,12 @@
             height: 100%;
             object-fit: cover;
         }
+
+    /* The build panel would cover the viewfinder and the gallery sheet; it
+       comes back (as it was) when the camera closes. */
+    .genesis-shell.is-capturing .build-panel {
+        display: none;
+    }
 
     /* The gallery button's sheet: phone gallery or Media Library. */
     .capture-phone-sheet {
@@ -890,5 +901,65 @@
         overflow: hidden;
         clip: rect(0 0 0 0);
         white-space: nowrap;
+    }
+}
+
+/* ---------- Phones: tap targets ----------
+   Controls a finger has to hit get about 36-40px, mostly from padding, so
+   they look the same. */
+@media (max-width: 760px) {
+    /* Model detail's Fast / Normal / Detailed (Photo Editor). */
+    .photo-editor .photo-editor-footer .training-quality-stop {
+        min-height: 36px;
+        padding: 6px 14px;
+    }
+
+    /* Video Extractor: the same pill switch in place of the slider, whose
+       labels were the only way to tap a choice. */
+    .fx-phone .training-quality-range {
+        display: none;
+    }
+
+    .fx-phone .training-quality-stops {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--forma-border-strong);
+        border-radius: 999px;
+    }
+
+    .fx-phone .training-quality-stop {
+        flex: 1;
+        min-height: 36px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+    }
+
+        .fx-phone .training-quality-stop.is-active {
+            background: var(--forma-panel-raised);
+            color: var(--forma-heading);
+        }
+
+    /* Text links: taller to tap, without moving anything. */
+    .photo-editor .photo-editor-quality-help,
+    .model-screen .model-link {
+        padding: 10px 0;
+        margin: -10px 0;
+    }
+
+    .library-item-more {
+        width: 36px;
+        height: 36px;
+    }
+
+    .acct-screen .acct-icon-link {
+        width: 40px;
+        height: 40px;
+        margin: -6px;
+    }
+
+    .acct-screen .acct-update-button {
+        padding: 8px 12px;
     }
 }
