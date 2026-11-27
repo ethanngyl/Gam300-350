@@ -526,13 +526,13 @@ function App() {
     }
 
     // Opens the Photo Editor with the photos from Camera Capture loaded.
-    function reviewPhotosInEditor(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
+    function reviewPhotosInEditor(files, { removeBackground = true, autoCrop = false, trainIters = null } = {}) {
         handOff('editor');
         setPhotosForEditor({ files, removeBackground, autoCrop, trainIters });
     }
 
     // Reopens Camera Capture with the photos that were in the Photo Editor.
-    function returnPhotosToCapture(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
+    function returnPhotosToCapture(files, { removeBackground = true, autoCrop = false, trainIters = null } = {}) {
         handOff('capture');
         setPhotosForCapture({ files, removeBackground, autoCrop, trainIters });
     }
@@ -556,7 +556,7 @@ function App() {
     // Home, where the build panel follows it. trainIters is the training
     // iteration cap (Low / Medium / High); left out, the server uses its
     // default. autoCrop keeps only the object the photos were taken around.
-    function handleBatchReady(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
+    function handleBatchReady(files, { removeBackground = true, autoCrop = false, trainIters = null } = {}) {
         backgroundBuilds.startPhotoBuild(files, { removeBackground, autoCrop, trainIters });
         setIsNewModelOpen(false);
         switchTab('home');
@@ -583,7 +583,7 @@ function App() {
 
     // Starts a Video Extractor build in the background (its files upload
     // from here, shown in the build panel) and returns to Home.
-    function startMediaBuild({ files, fps, trainIters, removeBackground, autoCrop = false }) {
+    function startMediaBuild({ files, fps, trainIters, removeBackground = true, autoCrop = false }) {
         backgroundBuilds.startMediaBuild(files, { fps, trainIters, removeBackground, autoCrop });
         switchTab('home');
     }

@@ -272,9 +272,9 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
     // Mask out the background before reconstruction. Needed for turntable
     // captures, where the static background makes the model come out flat.
     // Starts with the choice carried over from Camera Capture, if any.
-    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? true);
     // Keep only the object the photos were taken around (walk-around captures).
-    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? true);
+    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? false);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
     // Whether "How does this work?" under Model detail is open.
@@ -1078,17 +1078,13 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                                 <span className="is-left-out" style={{ flexGrow: photos.length - keptPhotos.length }} />
                             </span>
                         </div>
-                        <div className="photo-editor-summary-side">
-                            {/* Generate above Leave out flagged / Keep all (phones: the bottom bar). */}
-                            {!isPhone && generateArea}
-                            <div className="photo-editor-summary-actions">
-                                <button className="forma-btn" onClick={leaveOutFlagged} disabled={flaggedCount === 0}>
-                                    <Icon name="wand" size={14} /> Leave out flagged
-                                </button>
-                                <button className="forma-btn photo-editor-keep-all" onClick={keepAll}>
-                                    <Icon name="refresh" size={14} /> Keep all
-                                </button>
-                            </div>
+                        <div className="photo-editor-summary-actions">
+                            <button className="forma-btn" onClick={leaveOutFlagged} disabled={flaggedCount === 0}>
+                                <Icon name="wand" size={14} /> Leave out flagged
+                            </button>
+                            <button className="forma-btn photo-editor-keep-all" onClick={keepAll}>
+                                <Icon name="refresh" size={14} /> Keep all
+                            </button>
                         </div>
                     </div>
 
@@ -1275,6 +1271,9 @@ function PhotoEditorScreen({ onGenerateModel, uploadError, initialPhotos = null,
                             )}
 
                             {!isPhone && adjustCard}
+
+                            {/* Stuck to the bottom of the side panel so it stays in view (phones: the bottom bar). */}
+                            {!isPhone && generateArea}
                         </aside>
                     </div>
 

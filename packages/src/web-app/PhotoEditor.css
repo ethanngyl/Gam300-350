@@ -104,13 +104,6 @@
     color: var(--forma-teal-text);
 }
 
-/* Generate stacked above Leave out flagged / Keep all. */
-.photo-editor-summary-side {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
 .photo-editor-summary-actions {
     display: flex;
     gap: 8px;
@@ -403,13 +396,13 @@
     cursor: pointer;
 }
 
-.photo-editor-summary-side .photo-editor-generate {
+.photo-editor-panel .photo-editor-generate {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-    .photo-editor-summary-side .photo-editor-generate .forma-btn-primary {
+    .photo-editor-panel .photo-editor-generate .forma-btn-primary {
         justify-content: center;
         min-height: 46px;
         font-size: 0.92rem;
@@ -494,10 +487,9 @@
         margin-bottom: 24px;
     }
 
-    /* Counts line up with the buttons at the bottom of the side column. */
     .photo-editor-summary {
         flex-direction: row;
-        align-items: flex-end;
+        align-items: center;
         justify-content: space-between;
     }
 
@@ -544,13 +536,24 @@
         scrollbar-width: thin;
     }
 
+        /* Generate stays pinned to the bottom of the panel while the cards
+           above it scroll, so it is always in reach. */
+        .photo-editor-panel .photo-editor-generate {
+            position: sticky;
+            bottom: 0;
+            z-index: 1;
+            margin-top: auto;
+            padding: 12px 0 2px;
+            background: var(--forma-bg);
+        }
+
     /* Keep the preview compact so the sliders stay close by. */
     .photo-editor-preview-canvas {
         max-height: 180px;
     }
 
     /* Same width as the side panel, so the two line up. */
-    .photo-editor-summary-side {
+    .photo-editor-summary-actions {
         width: 320px;
     }
 

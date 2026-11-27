@@ -185,7 +185,7 @@ GenerateModelDialog::GenerateModelDialog(QWidget* parent)
     m_removeBackground = new QCheckBox("Remove the background first", this);
     m_removeBackground->setToolTip("Masks out everything but the object before reconstruction. "
                                    "Use it for turntable captures where the object spins and the camera stays still.");
-    m_removeBackground->setChecked(settings.value(kRemoveBackgroundKey, false).toBool());
+    m_removeBackground->setChecked(settings.value(kRemoveBackgroundKey, true).toBool());
     options->addRow("", m_removeBackground);
 
     m_autoCrop = new QCheckBox("Keep only the main object", this);

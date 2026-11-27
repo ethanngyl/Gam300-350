@@ -74,7 +74,7 @@ function sendUpload(url, body, onStart, onProgress) {
 
 // Uploads a photo batch to POST /upload and starts its build. Text fields go
 // before the files so the server has them as the upload streams in.
-export function uploadPhotos(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}, onStart, onProgress) {
+export function uploadPhotos(files, { removeBackground = true, autoCrop = false, trainIters = null } = {}, onStart, onProgress) {
     const body = new FormData();
     body.append('removeBackground', String(removeBackground));
     body.append('autoCrop', String(autoCrop));
@@ -87,7 +87,7 @@ export function uploadPhotos(files, { removeBackground = false, autoCrop = false
 // progress and a video can take a while. onStart receives the request, so
 // Cancel can abort it. Resolves with the new job's id; rejects with a readable
 // error, or with { aborted: true } when it was cancelled.
-export function uploadMedia(files, { fps, trainIters, removeBackground, autoCrop = false }, onStart, onProgress) {
+export function uploadMedia(files, { fps, trainIters, removeBackground = true, autoCrop = false }, onStart, onProgress) {
     return new Promise((resolve, reject) => {
         const body = new FormData();
         body.append('fps', String(fps));

@@ -170,10 +170,10 @@ function CameraCapture({
     // Mask out the background before reconstruction. Needed for turntable
     // captures, where the static background makes the model come out flat.
     // Also set in the Photo Editor, and kept when coming back from it.
-    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? false);
+    const [removeBackground, setRemoveBackground] = useState(initialPhotos?.removeBackground ?? true);
     // Keep only the object the photos were taken around (walk-around
     // captures). Also set in the Photo Editor, and kept when coming back.
-    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? true);
+    const [autoCrop, setAutoCrop] = useState(initialPhotos?.autoCrop ?? false);
     // Model detail (training iteration cap), also set in the Photo Editor.
     const [trainIters, setTrainIters] = useState(initialPhotos?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
 

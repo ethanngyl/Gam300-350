@@ -61,7 +61,7 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
     const [removeBackground, setRemoveBackground] = useState(true);
     // The same build settings as Camera Capture: keep only the main object
     // (walk-around captures) and model detail (training iteration cap).
-    const [autoCrop, setAutoCrop] = useState(true);
+    const [autoCrop, setAutoCrop] = useState(false);
     const [trainIters, setTrainIters] = useState(DEFAULT_TRAINING_ITERATIONS);
     // Whether "How does this work?" above Model detail is open.
     const [isQualityHelpOpen, setIsQualityHelpOpen] = useState(false);
