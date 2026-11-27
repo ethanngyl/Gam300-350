@@ -57,7 +57,7 @@ const FEATURES = [
     { title: 'Photo editor', text: 'Blurry and duplicate shots are flagged before you build.' },
     { title: 'Media library', text: 'Source photos stay linked to the model they built.' },
     { title: 'Scene builder', text: 'Arrange models, set the light and the camera.' },
-    { title: 'Share a link', text: 'Send a model or a whole scene to anyone.' },
+    { title: 'Export a model', text: 'Download it as a .ply or .obj file for other 3D tools.' },
 ];
 
 // The build progress shown over the Media Library screenshot.
@@ -79,7 +79,7 @@ const STEPS = [
     },
     {
         title: 'You get a real model',
-        text: 'View it, clean it up, drop it into a scene and share a link.',
+        text: 'View it, clean it up, drop it into a scene or export it.',
     },
 ];
 
@@ -149,7 +149,7 @@ function LandingScreen({ onLogIn, onGetStarted }) {
                         <h1>Build 3D<br />models from<br />photos.</h1>
                         <p>
                             Upload 40 to 80 photos of an object, or a walkaround video. Genesis turns them
-                            into a 3D model you can edit, stage and share in your browser.
+                            into a 3D model you can edit, stage and export in your browser.
                         </p>
                         <div className="landing-actions">
                             <PillButton onClick={getStarted}>Get started free</PillButton>
@@ -181,7 +181,7 @@ function LandingScreen({ onLogIn, onGetStarted }) {
                 <section className="landing-panel is-light" id="product">
                     <div className="landing-container landing-split">
                         <div className="landing-split-copy">
-                            <h2>Check, build, stage and share in one workspace.</h2>
+                            <h2>Check, build, stage and export in one workspace.</h2>
                             <p className="landing-lead">These are the screens you use once you log in.</p>
                             <ul className="landing-features">
                                 {FEATURES.map((feature) => (

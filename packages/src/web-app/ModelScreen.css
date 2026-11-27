@@ -598,6 +598,12 @@
         font-size: 0.72rem;
     }
 
+    /* The engine renderer's Gaussian / Point cloud / Reset view fill the
+       bottom edge, so the hint sits on its own line above them. */
+    .model-viewer:has(.engine-viewer-controls) .model-viewer-hint {
+        bottom: 52px;
+    }
+
     .model-title-row .model-badge {
         align-self: center;
     }

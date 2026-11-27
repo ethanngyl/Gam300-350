@@ -23,7 +23,8 @@ volume.
 - SOUND_CATEGORY_IDS
 The groups, in the order Account > Audio lists them.
 Sounds, as agreed in the audio consult (buttons and sign-in stay silent):
-tick (a build moved on to its next step, UI_Dull_04), success (model ready,
+tick (a build moved on to its next step, or photos chosen from the library
+finished downloading, UI_Dull_04), success (model ready,
 UI_Dull_08), error (a build failed or a model couldn't open, UI_Dull_01),
 open (a model opened, UI_Dull_02), save (a model, export or scene saved,
 UI_Dull_05), camera (shutter).
