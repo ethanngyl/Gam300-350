@@ -13,8 +13,7 @@ a password that meets PasswordRules.js - shown as a live checklist - and a
 matching "Confirm password"), then posts it to the backend: /auth/signup creates the account
 in the SQLite database (password stored only as a hash), /auth/login checks
 the password. On success the user object the server returns is handed to
-the parent, which keeps it as this browser's session. "Continue as guest"
-skips the backend and hands the parent a local guest user instead.
+the parent, which keeps it as this browser's session.
 Layout (Genesis Figma): a hero panel on the left (hidden on narrow
 screens) and the form on the right. The GENESIS logo goes back to the
 landing page. "Continue with Google" sends the browser to /auth/google once
@@ -223,17 +222,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
         } finally {
             setIsSubmitting(false);
         }
-    }
-
-    // Temporary bypass: skips the backend and signs in as a local-only guest.
-    // The backend does not check the session, so every feature still works.
-    function continueAsGuest() {
-        onLogin({
-            name: 'Guest',
-            email: 'Not signed in',
-            memberSince: new Date().toLocaleDateString('en-SG', { month: 'short', year: 'numeric' }),
-            isGuest: true,
-        });
     }
 
     async function handleSubmit(event) {
@@ -518,9 +506,6 @@ function LoginScreen({ initialMode = 'signin', onLogin, onBackToLanding }) {
                             <div className="auth-alternatives">
                                 <button type="button" className="forma-btn auth-alternative" onClick={continueWithGoogle} disabled={isSubmitting}>
                                     <GoogleLogo /> Google
-                                </button>
-                                <button type="button" className="forma-btn auth-alternative" onClick={continueAsGuest} disabled={isSubmitting}>
-                                    <Icon name="user" size={16} /> Guest
                                 </button>
                             </div>
 

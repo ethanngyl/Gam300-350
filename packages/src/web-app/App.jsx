@@ -199,7 +199,9 @@ function markTipSeen(tipId, email) {
 function loadSavedUser() {
     try {
         const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
-        return savedSession ? JSON.parse(savedSession) : null;
+        const user = savedSession ? JSON.parse(savedSession) : null;
+        // Guest sign-in was removed; drop any guest session cached before then.
+        return user?.isGuest ? null : user;
     } catch {
         return null;
     }
