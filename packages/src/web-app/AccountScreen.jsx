@@ -205,6 +205,12 @@ function buildUsageStats(jobs) {
     ];
 }
 
+// Phones' "This week" line: builds that failed in the last seven days.
+function countFailedThisWeek(jobs) {
+    const weekAgo = Date.now() - ONE_WEEK_MS;
+    return jobs.filter((job) => job.status === 'error' && job.createdAt >= weekAgo).length;
+}
+
 function AccountScreen({ user, isModal = false, initialSection = 'account', onClose, onOpenModel, onOpenLibrary, onSignOut, onShowWalkthrough }) {
     const [activeSection, setActiveSection] = useState(initialSection);
     const [profileTab, setProfileTab] = useState('models');
@@ -777,7 +783,9 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     // The plan, cloud storage and counts of models, scenes and photos. Phones
     // also show this week's usage (the Storage section's cards).
     function renderPlanCard() {
-        const [modelsStat, photosStat, failedStat] = usageStats;
+        const [modelsStat, photosStat] = usageStats;
+        // The usage cards count failed builds of all time; this line is this week's.
+        const failedThisWeek = countFailedThisWeek(jobs);
         return (
             <div className="forma-card acct-profile-plan" ref={phoneSectionRef('plan')}>
                 <div className="acct-profile-plan-head">
@@ -809,7 +817,7 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                 {isPhone && statsStatus === 'ready' && (
                     <p className="acct-muted acct-profile-usage">
                         This week: {modelsStat.note.replace(' this week', '')} models, {photosStat.note.replace(' this week', '')} photos
-                        {' \u00b7 '}{failedStat.value} failed {failedStat.value === 1 ? 'build' : 'builds'}
+                        {' \u00b7 '}{failedThisWeek} failed {failedThisWeek === 1 ? 'build' : 'builds'}
                     </p>
                 )}
             </div>

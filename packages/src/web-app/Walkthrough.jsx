@@ -112,20 +112,27 @@ function placementFor(element) {
 
 function Walkthrough({ isGuest = false, onClose }) {
     // The steps for this layout (phones have no sidebar); optional ones whose
-    // item isn't on the page are left out.
-    const [steps] = useState(() => {
-        const layoutSteps = document.querySelector('.app-sidebar') ? WALKTHROUGH_STEPS : PHONE_WALKTHROUGH_STEPS;
-        return layoutSteps.filter((step) => !step.optional || findTarget(step));
-    });
+    // item isn't on the page are left out. null until chosen: the tour can
+    // start from another page, and Home only appears in the same update, so
+    // they are chosen once it has been drawn.
+    const [steps, setSteps] = useState(null);
     const [stepIndex, setStepIndex] = useState(0);
     // The highlighted item's position on screen and where its tooltip goes,
     // or null if it isn't there.
     const [target, setTarget] = useState(null);
 
-    const step = steps[stepIndex];
-    const isLastStep = stepIndex === steps.length - 1;
-    const padding = step.padding ?? DEFAULT_PADDING;
-    const stepText = isGuest && step.guestText ? step.guestText : step.text;
+    useEffect(() => {
+        const frameId = requestAnimationFrame(() => {
+            const layoutSteps = document.querySelector('.app-sidebar') ? WALKTHROUGH_STEPS : PHONE_WALKTHROUGH_STEPS;
+            setSteps(layoutSteps.filter((layoutStep) => !layoutStep.optional || findTarget(layoutStep)));
+        });
+        return () => cancelAnimationFrame(frameId);
+    }, []);
+
+    const step = steps?.[stepIndex] ?? null;
+    const isLastStep = steps !== null && stepIndex === steps.length - 1;
+    const padding = step?.padding ?? DEFAULT_PADDING;
+    const stepText = isGuest && step?.guestText ? step.guestText : step?.text;
 
     const finish = useCallback(() => {
         onClose();
@@ -134,6 +141,7 @@ function Walkthrough({ isGuest = false, onClose }) {
     // Find the step's item (scrolling it into view if needed) and keep the
     // spotlight on it when the window is resized or the page scrolls.
     useEffect(() => {
+        if (!step) return undefined;
         function measureTarget() {
             const targetElement = findTarget(step);
             if (!targetElement) {
@@ -186,6 +194,9 @@ function Walkthrough({ isGuest = false, onClose }) {
         if (stepIndex === 0) return;
         setStepIndex((index) => index - 1);
     }
+
+    // Nothing to show until the steps are chosen (a frame after opening).
+    if (!step) return null;
 
     // Spotlight: the item plus padding.
     let spotlightStyle = null;

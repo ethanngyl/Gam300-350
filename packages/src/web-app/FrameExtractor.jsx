@@ -67,6 +67,25 @@ function MediaPreview({ item }) {
     );
 }
 
+// Which of chosenFiles the extractor can take, given room for roomLeft
+// more, and the message about any it can't (or null). Used for files added
+// here and for files handed over (a video picked in Capture, a retried build).
+function checkMediaFiles(chosenFiles, roomLeft) {
+    const usableFiles = chosenFiles.filter((file) => MEDIA_EXT_RE.test(file.name));
+    const smallEnoughFiles = usableFiles.filter((file) => file.size <= MAX_MEDIA_SIZE_MB * 1024 * 1024);
+    const files = smallEnoughFiles.slice(0, roomLeft);
+
+    let error = null;
+    if (usableFiles.length < chosenFiles.length) {
+        error = 'Only MP4, MOV, WEBM, MKV, AVI, MPEG videos and animated GIFs can be used here.';
+    } else if (smallEnoughFiles.length < usableFiles.length) {
+        error = `Each file must be under ${formatFileSize(MAX_MEDIA_SIZE_MB * 1024 * 1024)}.`;
+    } else if (files.length < smallEnoughFiles.length) {
+        error = `You can add up to ${MAX_MEDIA_FILES} files at a time.`;
+    }
+    return { files, error };
+}
+
 // The phone FPS stepper's range (any rate can still be typed in the box).
 const MIN_STEPPER_FPS = 1;
 const MAX_FPS = 30;
@@ -114,7 +133,9 @@ function PhoneMediaCard({ item, info, onInfo, onRemove }) {
                     controls={isPlaying}
                     onLoadedMetadata={(e) => {
                         const video = e.currentTarget;
-                        onInfo({ duration: video.duration, width: video.videoWidth, height: video.videoHeight });
+                        // Some WebM files report Infinity until played through: unknown.
+                        const duration = Number.isFinite(video.duration) ? video.duration : null;
+                        onInfo({ duration, width: video.videoWidth, height: video.videoHeight });
                     }}
                     onError={() => setHasFailed(true)}
                 />
@@ -149,7 +170,9 @@ function PhoneMediaCard({ item, info, onInfo, onRemove }) {
 function FrameExtractor({ onStartBuild, initialDraft = null, onUnsavedWorkChange = null }) {
     const isPhone = useMobileView();
     // Starts from the last build's files and settings, if App passes them back.
-    const [mediaItems, setMediaItems] = useState(() => initialDraft?.files.map(createMediaItem) ?? []);
+    // Handed-over files get the same checks as ones added here.
+    const [initialCheck] = useState(() => checkMediaFiles(initialDraft?.files ?? [], MAX_MEDIA_FILES));
+    const [mediaItems, setMediaItems] = useState(() => initialCheck.files.map(createMediaItem));
 
     // Tells App whether leaving now would throw the chosen videos away, so it asks first.
     useEffect(() => {
@@ -166,7 +189,7 @@ function FrameExtractor({ onStartBuild, initialDraft = null, onUnsavedWorkChange
     const [autoCrop, setAutoCrop] = useState(initialDraft?.autoCrop ?? false);
     // Training iteration cap from the "Model detail" slider.
     const [trainIters, setTrainIters] = useState(initialDraft?.trainIters ?? DEFAULT_TRAINING_ITERATIONS);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(initialCheck.error);
     // Phones: each video's length and resolution, by item id.
     const [mediaInfo, setMediaInfo] = useState({});
     // Phones: whether the note under Model detail is open.
@@ -188,21 +211,9 @@ function FrameExtractor({ onStartBuild, initialDraft = null, onUnsavedWorkChange
     }, []);
 
     function addFiles(fileList) {
-        const chosenFiles = Array.from(fileList);
-        const usableFiles = chosenFiles.filter((file) => MEDIA_EXT_RE.test(file.name));
-        const smallEnoughFiles = usableFiles.filter((file) => file.size <= MAX_MEDIA_SIZE_MB * 1024 * 1024);
-        const newFiles = smallEnoughFiles.slice(0, MAX_MEDIA_FILES - mediaItems.length);
-
-        if (usableFiles.length < chosenFiles.length) {
-            setError('Only videos and animated GIFs can be used here. For photos, use New model.');
-        } else if (smallEnoughFiles.length < usableFiles.length) {
-            setError(`Each file must be under ${formatFileSize(MAX_MEDIA_SIZE_MB * 1024 * 1024)}.`);
-        } else if (newFiles.length < smallEnoughFiles.length) {
-            setError(`You can add up to ${MAX_MEDIA_FILES} files at a time.`);
-        } else {
-            setError(null);
-        }
-        setMediaItems((prev) => [...prev, ...newFiles.map(createMediaItem)]);
+        const { files, error: fileError } = checkMediaFiles(Array.from(fileList), MAX_MEDIA_FILES - mediaItems.length);
+        setError(fileError);
+        setMediaItems((prev) => [...prev, ...files.map(createMediaItem)]);
     }
 
     function removeMediaItem(id) {

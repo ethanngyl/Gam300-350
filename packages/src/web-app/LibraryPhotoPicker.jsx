@@ -8,7 +8,9 @@
 \brief
 Pop-up for choosing photos from the library (past jobs). Lists each batch
 with its photos; the user ticks single photos or whole batches, then the
-chosen photos are downloaded and handed to onAddFiles as File objects.
+chosen photos are downloaded and handed to onAddFiles(files, { failedCount })
+as File objects; failedCount says how many couldn't be downloaded (the
+picker then stays open to say so).
 When they have all downloaded the tick sound plays (the error sound if
 any couldn't be).
 Used by the Photo Editor, Camera Capture and the New model dialog. Laid
@@ -126,7 +128,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
         }
 
         playSound(failedCount > 0 ? 'error' : 'tick');
-        onAddFiles(downloadedFiles);
+        onAddFiles(downloadedFiles, { failedCount });
 
         if (failedCount > 0) {
             // Keep the picker open so the user sees that some photos are missing.
@@ -249,4 +251,4 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     );
 }
 
-export default LibraryPhotoPicker;
+export default LibraryPhotoPicker;  

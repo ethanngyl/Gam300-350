@@ -49,8 +49,10 @@ Leaving Capture, the Photo Editor or the Video Extractor while it holds
 photos or a video (by any link, Back, signing out, or the build panel)
 asks "Discard your photos?" first, and reloading or closing the tab gets
 the browser's own warning. Moving the photos on (Capture to the Photo
-Editor and back, a picked video to the Video Extractor) or starting a
-build from them doesn't ask.
+Editor and back) or starting a build from them doesn't ask; a video picked
+in Capture asks if it would leave shots behind. The page clears the flag
+itself as it closes, so a choice that keeps it open (New model, then
+Cancel) still asks next time.
 **************************************************************************/
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -356,6 +358,19 @@ function App() {
     const setHasUnsavedWork = useCallback((hasUnsavedWork) => {
         hasUnsavedWorkRef.current = hasUnsavedWork;
     }, []);
+    // The page shown now (as pageTab below), so going to it again, or Back
+    // from the account window on wider screens, doesn't ask.
+    const pageTabRef = useRef(activeTab);
+    const isMobileRef = useRef(isMobile);
+    useEffect(() => {
+        pageTabRef.current = !isMobile && activeTab === 'account' ? accountReturnTab : activeTab;
+        isMobileRef.current = isMobile;
+    }, [isMobile, activeTab, accountReturnTab]);
+    // Set just before Discard goes Back again, so that Back doesn't ask twice.
+    const isLeavingByBackRef = useRef(false);
+    // Changed by each hand-off of photos or videos to a page (handOff below),
+    // so the page starts again with them even when it is already open.
+    const [handOffKey, setHandOffKey] = useState(0);
 
     // Browser Back / Forward. Every page change gets its own history entry
     // with the page's hash (AppRoutes.js), so Back and Forward move between
@@ -383,14 +398,23 @@ function App() {
 
     useEffect(() => {
         function handlePopState() {
+            const view = fromRouteView(hashToView(window.location.hash));
             // Back / Forward from a page holding photos or a video: stay (put
-            // its address back) and ask first; Discard goes back again.
-            if (hasUnsavedWorkRef.current) {
+            // its address back) and ask first; Discard goes back again. Not
+            // when the page stays on screen: the same page, or (wider
+            // screens) the account window opening or closing over it.
+            const isPageKept = !view.screen && (view.activeTab === pageTabRef.current
+                || (!isMobileRef.current && view.activeTab === 'account'));
+            if (isLeavingByBackRef.current) {
+                isLeavingByBackRef.current = false;
+            } else if (hasUnsavedWorkRef.current && !isPageKept) {
                 window.history.pushState(null, '', currentHashRef.current);
-                setPendingLeave(() => () => window.history.back());
+                setPendingLeave(() => () => {
+                    isLeavingByBackRef.current = true;
+                    window.history.back();
+                });
                 return;
             }
-            const view = fromRouteView(hashToView(window.location.hash));
             if (view.isLocalModel) {
                 if (viewedModelRef.current?.localFile) view.activeTab = 'model';
                 // That file is gone (the page was reloaded): open the Model Viewer.
@@ -455,12 +479,6 @@ function App() {
         setActiveTab(tab);
     }, []);
 
-    // The page shown now (as pageTab below), so going to it again doesn't ask.
-    const pageTabRef = useRef(activeTab);
-    useEffect(() => {
-        pageTabRef.current = !isMobile && activeTab === 'account' ? accountReturnTab : activeTab;
-    }, [isMobile, activeTab, accountReturnTab]);
-
     // Runs leave() now, or after "Discard your photos?" if the page holds
     // photos or a video.
     const confirmLeave = useCallback((leave) => {
@@ -471,10 +489,11 @@ function App() {
         setPendingLeave(() => leave);
     }, [setPendingLeave]);
 
+    // The flag is left for the page to clear as it closes: some choices
+    // (New model) keep the page open, and it must still ask next time.
     function discardAndLeave() {
         const leave = pendingLeave;
         setPendingLeave(null);
-        hasUnsavedWorkRef.current = false;
         leave();
     }
 
@@ -496,15 +515,23 @@ function App() {
         else confirmLeave(() => switchTab(tab));
     }, [switchTab, confirmLeave]);
 
+    // Opens a page with photos or videos handed to it; it starts again with
+    // them even if it is already open (New model's Edit manually from the
+    // Photo Editor, say).
+    function handOff(tab) {
+        switchTab(tab);
+        setHandOffKey((key) => key + 1);
+    }
+
     // Opens the Photo Editor with the photos from Camera Capture loaded.
     function reviewPhotosInEditor(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
-        switchTab('editor');
+        handOff('editor');
         setPhotosForEditor({ files, removeBackground, autoCrop, trainIters });
     }
 
     // Reopens Camera Capture with the photos that were in the Photo Editor.
     function returnPhotosToCapture(files, { removeBackground = false, autoCrop = false, trainIters = null } = {}) {
-        switchTab('capture');
+        handOff('capture');
         setPhotosForCapture({ files, removeBackground, autoCrop, trainIters });
     }
 
@@ -591,10 +618,13 @@ function App() {
     }
 
     // Phones: a video picked with Capture's gallery button opens the Video
-    // Extractor with it.
+    // Extractor with it. Shots already taken in Capture would be lost, so it
+    // asks first if there are any.
     function openVideosInExtractor(files) {
-        switchTab('extractor');
-        setFrameExtractorDraft({ files });
+        confirmLeave(() => {
+            handOff('extractor');
+            setFrameExtractorDraft({ files });
+        });
     }
 
     // A failed build: back to the Photo Editor or the Video Extractor with its files.
@@ -602,7 +632,7 @@ function App() {
         confirmLeave(() => {
             backgroundBuilds.dismissBuild(build.key);
             if (build.source === 'media') {
-                switchTab('extractor');
+                handOff('extractor');
                 setFrameExtractorDraft({ files: build.files, ...build.settings });
             } else {
                 reviewPhotosInEditor(build.files, build.settings ?? {});
@@ -777,6 +807,7 @@ function App() {
                     )}
                     {pageTab === 'editor' && (
                         <PhotoEditorScreen
+                            key={handOffKey}
                             onGenerateModel={handleBatchReady}
                             onUnsavedWorkChange={setHasUnsavedWork}
                             uploadError={uploadError}
@@ -812,6 +843,7 @@ function App() {
                     )}
                     {pageTab === 'extractor' && (
                         <FrameExtractor
+                            key={handOffKey}
                             onStartBuild={startMediaBuild}
                             onUnsavedWorkChange={setHasUnsavedWork}
                             initialDraft={frameExtractorDraft}
@@ -819,6 +851,7 @@ function App() {
                     )}
                     {pageTab === 'capture' && (
                         <CameraCapture
+                            key={handOffKey}
                             onBatchReady={handleBatchReady}
                             onUnsavedWorkChange={setHasUnsavedWork}
                             onReviewPhotos={reviewPhotosInEditor}
@@ -896,7 +929,8 @@ function App() {
                     }}
                     onOpenCamera={() => {
                         setIsNewModelOpen(false);
-                        goToTab('capture');
+                        // Opening New model already asked about the page's photos.
+                        switchTab('capture');
                     }}
                 />
             )}

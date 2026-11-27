@@ -31,9 +31,10 @@ where the browser can turn the torch on, mostly Android Chrome); Manual /
 Auto above the shutter; the gallery button (showing the last photo) and
 Done beside it. The gallery button asks where to add from: the phone's
 own picker (photos go to the Photo Editor with the shots taken so far, and
-a video opens the Video Extractor with it, onPickVideos) or the Media
-Library (LibraryPhotoPicker.jsx; its photos go to the Photo Editor the same
-way). Done opens the batch in the Photo Editor. Auto-capture uses its default interval and cap.
+a video opens the Video Extractor with it, onPickVideos, which asks first
+if there are shots; photos and videos picked together are refused) or the
+Media Library (LibraryPhotoPicker.jsx; its photos go to the Photo Editor
+the same way, or join the shots if some couldn't be downloaded). Done opens the batch in the Photo Editor. Auto-capture uses its default interval and cap.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -180,6 +181,8 @@ function CameraCapture({
     // Phones: the sheet asking whether to add from the phone's gallery or
     // the Media Library.
     const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+    // Phones: why the last gallery pick couldn't be used, or null.
+    const [galleryError, setGalleryError] = useState(null);
 
     // Focus: what the current camera supports (null until it starts),
     // 'auto' or 'manual', the manual focus distance, the ring drawn where
@@ -424,7 +427,7 @@ function CameraCapture({
     useEffect(() => {
         function handleKeyDown(event) {
             if (event.code !== 'Space' || event.repeat || !stream) return;
-            if (isLibraryPickerOpen || isShortcutBlockedBy(event.target)) return;
+            if (isLibraryPickerOpen || isAddSheetOpen || isShortcutBlockedBy(event.target)) return;
             event.preventDefault();
             // A focused camera button would otherwise also be pressed on key-up.
             if (event.target.closest?.('.capture-controls')) event.target.blur();
@@ -437,7 +440,7 @@ function CameraCapture({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [captureMode, stream, capturePhoto, isLibraryPickerOpen]);
+    }, [captureMode, stream, capturePhoto, isLibraryPickerOpen, isAddSheetOpen]);
 
     function handleModeChange(mode) {
         setCaptureMode(mode);
@@ -456,12 +459,27 @@ function CameraCapture({
         const picked = Array.from(event.target.files ?? []);
         event.target.value = '';
         const videos = picked.filter((file) => file.type.startsWith('video/') || MEDIA_EXT_RE.test(file.name));
+        const pickedPhotos = picked.filter((file) => file.type.startsWith('image/') && !videos.includes(file));
+        // Photos and videos go to different pages, so one or the other.
+        if (videos.length > 0 && pickedPhotos.length > 0) {
+            setGalleryError('Pick photos or videos, not both at once.');
+            return;
+        }
+        setGalleryError(null);
         if (videos.length > 0 && onPickVideos) {
             setIsAutoCapturing(false);
             onPickVideos(videos);
             return;
         }
-        reviewWithAddedPhotos(picked.filter((file) => file.type.startsWith('image/')));
+        reviewWithAddedPhotos(pickedPhotos);
+    }
+
+    // Phones: photos from the Media Library go to the Photo Editor, unless
+    // some couldn't be downloaded: then they join the shots here, and the
+    // picker stays open to say which were missing.
+    function handleLibraryPicked(files, { failedCount = 0 } = {}) {
+        if (failedCount > 0) addFiles(files);
+        else reviewWithAddedPhotos(files);
     }
 
     // Phones: photos picked from the gallery or the Media Library go to the
@@ -475,6 +493,7 @@ function CameraCapture({
     // Phones: the gallery button's sheet, then its two choices.
     function openAddSheet() {
         setIsAutoCapturing(false);
+        setGalleryError(null);
         setIsAddSheetOpen(true);
     }
 
@@ -648,6 +667,7 @@ function CameraCapture({
                 <div className="capture-phone-bottom">
                     {stream && <p className="capture-phone-hint" role="status">{hint}</p>}
                     {uploadError && <p className="capture-phone-hint is-error" role="alert">{uploadError}</p>}
+                    {galleryError && <p className="capture-phone-hint is-error" role="alert">{galleryError}</p>}
 
                     <div className="capture-phone-modes">
                         <button
@@ -752,7 +772,7 @@ function CameraCapture({
 
                 {isLibraryPickerOpen && (
                     <LibraryPhotoPicker
-                        onAddFiles={reviewWithAddedPhotos}
+                        onAddFiles={handleLibraryPicked}
                         onClose={() => setIsLibraryPickerOpen(false)}
                     />
                 )}
