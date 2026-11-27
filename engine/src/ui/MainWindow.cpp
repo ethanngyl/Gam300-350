@@ -98,6 +98,7 @@ namespace {
     const QString kRenderModeKey = QStringLiteral("view/renderMode");
     const QString kStatsOverlayKey = QStringLiteral("view/statsOverlay");
     const QString kGridKey = QStringLiteral("view/grid");
+    const QString kSnapToGridKey = QStringLiteral("edit/snapToGrid");
     const QString kTrimOnImportKey = QStringLiteral("files/trimOnImport");
     const QString kTrimAlphaKey = QStringLiteral("trim/minAlpha");
     const QString kTrimCropKey = QStringLiteral("trim/cropPct");
@@ -373,6 +374,14 @@ void MainWindow::createActions() {
         refreshScenePanels();
     });
 
+    m_snapToGridAction = new QAction("Snap to &Grid", this);
+    m_snapToGridAction->setCheckable(true);
+    m_snapToGridAction->setStatusTip("Dragging the move gizmo snaps the position to the grid lines");
+    connect(m_snapToGridAction, &QAction::toggled, this, [this](bool on) {
+        m_viewport->setSnapToGrid(on);
+        m_inspector->setSnapToGrid(on); //The inspector checkbox mirrors this action
+    });
+
     m_resetPositionAction = new QAction("Reset &Position", this);
     connect(m_resetPositionAction, &QAction::triggered, this, [this] {
         SplatRenderer* renderer = m_viewport->renderer();
@@ -506,6 +515,7 @@ void MainWindow::createMenus() {
     editMenu->addAction(m_toggleVisibilityAction);
     editMenu->addSeparator();
     editMenu->addAction(m_resetPositionAction);
+    editMenu->addAction(m_snapToGridAction);
     editMenu->addAction(m_deselectAction);
     editMenu->addSeparator();
     editMenu->addAction(m_addCropBoxAction);
@@ -729,6 +739,7 @@ void MainWindow::createDocks() {
         m_undo.push(new MoveModelCommand(model, before, after));
     });
     connect(m_inspector, &InspectorPanel::resetPositionRequested, m_resetPositionAction, &QAction::trigger);
+    connect(m_inspector, &InspectorPanel::snapToGridToggled, m_snapToGridAction, &QAction::setChecked);
     connect(m_inspector, &InspectorPanel::transformFieldEdited, this,
             [this](SplatModel* model, const glm::mat4& before, const glm::mat4& after) {
         m_undo.push(new MoveModelCommand(model, before, after, nullptr, true));
@@ -801,6 +812,7 @@ void MainWindow::restoreSettings() {
     (gaussian ? m_gaussianAction : m_pointCloudAction)->setChecked(true);
     m_statsOverlayAction->setChecked(settings.value(kStatsOverlayKey, true).toBool());
     m_gridAction->setChecked(settings.value(kGridKey, true).toBool());
+    m_snapToGridAction->setChecked(settings.value(kSnapToGridKey, false).toBool());
     m_trimOnImportAction->setChecked(settings.value(kTrimOnImportKey, true).toBool());
     m_trimSettings.minAlpha = settings.value(kTrimAlphaKey, m_trimSettings.minAlpha).toFloat();
     m_trimSettings.cropPct = settings.value(kTrimCropKey, m_trimSettings.cropPct).toFloat();
@@ -822,6 +834,7 @@ void MainWindow::saveSettings() const {
                                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
     settings.setValue(kStatsOverlayKey, m_statsOverlayAction->isChecked());
     settings.setValue(kGridKey, m_gridAction->isChecked());
+    settings.setValue(kSnapToGridKey, m_snapToGridAction->isChecked());
     settings.setValue(kTrimOnImportKey, m_trimOnImportAction->isChecked());
     settings.setValue(kTrimAlphaKey, m_trimSettings.minAlpha);
     settings.setValue(kTrimCropKey, m_trimSettings.cropPct);

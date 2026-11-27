@@ -22,6 +22,7 @@ elsewhere (e.g. WASD nudges in the viewport) back into the fields.
 
 #include <array>
 
+class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
@@ -50,6 +51,9 @@ public:
     // Cheap enough to call every frame.
     void syncFromModel();
 
+    // Shows the snap to grid state without emitting snapToGridToggled (the menu action owns the state).
+    void setSnapToGrid(bool on);
+
     // The modes the crop box buttons can ask for. The two cut values are the cut button ids.
     enum CropMode { CropRemoveInside = 0, CropRemoveOutside = 1, CropMoveContents = 2 };
 
@@ -75,6 +79,9 @@ signals:
 
     //The Reset Position button was clicked
     void resetPositionRequested();
+
+    //The Snap to Grid checkbox was toggled by the user
+    void snapToGridToggled(bool on);
 
     //Asks to change the model transform
     //The inspector panel does not apply it, the listener does, so it can be an undo step,
@@ -128,6 +135,8 @@ private:
     bool m_cropMove = false;
     bool m_cropRemoveInside = true;
     bool m_cropConfirmed = false;
+
+    QCheckBox* m_snapToGrid = nullptr;
 
     SplatModel* m_model = nullptr;
 };

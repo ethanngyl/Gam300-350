@@ -212,6 +212,7 @@ private:
     QAction* m_deselectAction = nullptr;
     QAction* m_toggleVisibilityAction = nullptr;
     QAction* m_resetPositionAction = nullptr;
+    QAction* m_snapToGridAction = nullptr;
     QAction* m_addCropBoxAction = nullptr;
     QAction* m_applyCropBoxAction = nullptr;
     QAction* m_cropInsideAction = nullptr;

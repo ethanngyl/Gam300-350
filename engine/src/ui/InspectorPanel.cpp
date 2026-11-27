@@ -18,6 +18,7 @@ to a SplatModel.
 #include <glm/gtc/quaternion.hpp>
 
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -187,6 +188,11 @@ InspectorPanel::InspectorPanel(QWidget* parent)
     scaleForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
     scaleForm->addRow("Scale", scaleRow);
     layout->addLayout(scaleForm);
+
+    m_snapToGrid = new QCheckBox("Snap to Grid", page);
+    m_snapToGrid->setToolTip("Dragging the move gizmo snaps the position to the grid lines (also in Edit > Snap to Grid)");
+    layout->addWidget(m_snapToGrid);
+    connect(m_snapToGrid, &QCheckBox::toggled, this, &InspectorPanel::snapToGridToggled);
 
     auto* resetButton = new QPushButton("Reset Position", page);
     layout->addWidget(resetButton, 0, Qt::AlignRight);
@@ -480,6 +486,12 @@ void InspectorPanel::setCropState(bool active, bool moveContents, bool removeIns
     } else {
         m_cropApply->setText("Remove Splats");
     }
+}
+
+void InspectorPanel::setSnapToGrid(bool on) {
+    if (!m_snapToGrid) return;
+    const QSignalBlocker block(m_snapToGrid);
+    m_snapToGrid->setChecked(on);
 }
 
 void InspectorPanel::writePosition() {
