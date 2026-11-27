@@ -43,7 +43,8 @@ Phones: everything above on one page, in this order: the photo, name and
 Update (which changes the photo); the plan card, with storage, the counts
 and this week's usage; the account details (email, password, sign-in
 methods, role, member since); billing; the plans, one row each; the user's
-models and source photos (not for guests); preferences (theme, sounds on/off and volume,
+models and source photos (not for guests; the first four, with Show all
+for the rest); preferences (theme, sounds on/off and volume,
 and one switch per notification); then the walkthrough, Log out and Delete
 account. Guests get a sign-in card instead of the account details and
 billing. Opening it for one section (initialSection) scrolls to it.
@@ -112,6 +113,9 @@ const DELETE_ACCOUNT_READY = false;
 const DELETE_ACCOUNT_URL = '/api/v1/auth/me';
 // What the user types to confirm deleting their account.
 const DELETE_CONFIRM_WORD = 'DELETE';
+
+// Phones: how many models or photo batches Your work shows before Show all.
+const PHONE_WORK_PREVIEW_COUNT = 4;
 
 // Phones: which part of the one-page Profile each section opens at.
 const PHONE_SCROLL_TARGETS = {
@@ -204,6 +208,8 @@ function buildUsageStats(jobs) {
 function AccountScreen({ user, isModal = false, initialSection = 'account', onClose, onOpenModel, onOpenLibrary, onSignOut, onShowWalkthrough }) {
     const [activeSection, setActiveSection] = useState(initialSection);
     const [profileTab, setProfileTab] = useState('models');
+    // Phones: whether Your work shows everything, not just the first few.
+    const [isWorkExpanded, setIsWorkExpanded] = useState(false);
     const [notificationPrefs, setNotificationPrefs] = useState(loadNotificationPrefs);
     const [jobs, setJobs] = useState([]);
     const [statsStatus, setStatsStatus] = useState('loading');
@@ -813,6 +819,9 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     // The user's models and source photos, in two tabs.
     function renderWorkTabs() {
         const items = profileTab === 'models' ? finishedJobs : photoBatches;
+        // Phones: the first few until Show all, so the rest of the page stays close.
+        const isCollapsible = isPhone && items.length > PHONE_WORK_PREVIEW_COUNT;
+        const shownItems = isCollapsible && !isWorkExpanded ? items.slice(0, PHONE_WORK_PREVIEW_COUNT) : items;
         return (
             <>
                 <div className="acct-tabs" role="tablist">
@@ -825,6 +834,7 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                             className={profileTab === id ? 'acct-tab is-active' : 'acct-tab'}
                             onClick={() => {
                                 setProfileTab(id);
+                                setIsWorkExpanded(false);
                             }}
                         >
                             {label} <span>{count}</span>
@@ -837,7 +847,7 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                     <p className="acct-muted">{profileTab === 'models' ? 'No finished models yet.' : 'No photos yet.'}</p>
                 )}
                 <div className="acct-profile-grid">
-                    {items.map((job) => (
+                    {shownItems.map((job) => (
                         <button
                             key={job.id}
                             type="button"
@@ -857,6 +867,22 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         </button>
                     ))}
                 </div>
+                {isCollapsible && (
+                    <button
+                        type="button"
+                        className="forma-btn acct-show-all"
+                        aria-expanded={isWorkExpanded}
+                        onClick={() => {
+                            // Show less: back to the heading, not left far down the page.
+                            if (isWorkExpanded) phoneSectionRefs.current.work?.scrollIntoView({ block: 'start' });
+                            setIsWorkExpanded((isExpanded) => !isExpanded);
+                        }}
+                    >
+                        {isWorkExpanded
+                            ? 'Show less'
+                            : `Show all ${items.length} ${profileTab === 'models' ? 'models' : 'photo batches'}`}
+                    </button>
+                )}
             </>
         );
     }
@@ -1266,7 +1292,7 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                 {/* Guests have no saved work. */}
                 {!user.isGuest && (
                     <>
-                        <h2 className="acct-phone-heading">Your work</h2>
+                        <h2 className="acct-phone-heading" ref={phoneSectionRef('work')}>Your work</h2>
                         {renderWorkTabs()}
                     </>
                 )}

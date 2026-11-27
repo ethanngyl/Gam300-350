@@ -1400,3 +1400,9 @@
     gap: 8px;
     color: var(--forma-heading);
 }
+
+/* Your work's Show all / Show less, under the first few. */
+.acct-screen .acct-show-all {
+    justify-content: center;
+    width: 100%;
+}
