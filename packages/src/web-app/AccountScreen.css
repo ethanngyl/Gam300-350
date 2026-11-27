@@ -1312,3 +1312,91 @@
         font-size: 1.4rem;
     }
 }
+
+/* ---------- Phones: the one-page Profile ---------- */
+
+.acct-screen.is-phone-page {
+    gap: 14px;
+}
+
+/* A small label above each part of the page. */
+.acct-screen .acct-phone-heading {
+    margin: 10px 0 -4px;
+    color: var(--forma-text-muted);
+    font-family: var(--forma-font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    scroll-margin-top: 16px;
+}
+
+/* "Remove photo" under the email. */
+.acct-screen .acct-text-button {
+    margin-top: -6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--forma-teal-text);
+    font-family: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.acct-screen .acct-profile-usage {
+    padding-bottom: 14px;
+    font-size: 0.76rem;
+    text-align: center;
+}
+
+/* Billing rows: the icon beside the label. */
+.acct-screen.is-phone-page .acct-row dt {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* The plans, one row each. */
+.acct-phone-plans {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.acct-phone-plan {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--forma-border);
+}
+
+    .acct-phone-plan:last-of-type {
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+
+    .acct-phone-plan .forma-btn {
+        flex: none;
+    }
+
+.acct-phone-plan-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+    .acct-phone-plan-text .acct-mono {
+        font-size: 0.7rem;
+    }
+
+.acct-phone-plan-name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--forma-heading);
+}

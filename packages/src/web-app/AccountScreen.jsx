@@ -10,8 +10,8 @@ Account settings, laid out like the Genesis Figma: a side menu (the
 user's photo, name and plan on top, the sections, and Log out at the
 bottom) and the chosen section beside it. On wider screens it opens as a
 window over the page it was opened from (isModal; the X or Escape closes
-it); on phones it is a page, and the menu becomes a row of tabs above the
-section. Sections:
+it). On phones it is one long page instead, laid out like the mobile
+Figma's Profile (see "Phones" below). Sections:
 - Profile: laid out like the Figma's mobile Profile: the user's photo (or
   initials), name and an Update button (to My account, where the photo is
   changed); a plan card with cloud storage and counts of models, scenes
@@ -39,8 +39,14 @@ section. Sections:
 - Audio: sound effects on/off and overall volume, then each kind of
   sound (build sounds, open and save, camera shutter) on/off with its own
   volume and a Play button to hear it (Audio.js), saved in this browser.
-On phones the three preference sections are one simpler Preferences tab:
-the theme, sounds on/off and volume, and one switch per notification.
+Phones: everything above on one page, in this order: the photo, name and
+Update (which changes the photo); the plan card, with storage, the counts
+and this week's usage; the account details (email, password, sign-in
+methods, role, member since); billing; the plans, one row each; the user's
+models and source photos (not for guests); preferences (theme, sounds on/off and volume,
+and one switch per notification); then the walkthrough, Log out and Delete
+account. Guests get a sign-in card instead of the account details and
+billing. Opening it for one section (initialSection) scrolls to it.
 - buildUsageStats(jobs)
 Turns the GET /jobs list into the three usage cards.
 - AccountScreen({ user, isModal, onClose, onOpenModel, onOpenLibrary,
@@ -107,18 +113,20 @@ const DELETE_ACCOUNT_URL = '/api/v1/auth/me';
 // What the user types to confirm deleting their account.
 const DELETE_CONFIRM_WORD = 'DELETE';
 
-// Phones: the three preference sections are one Preferences tab.
-const PREFERENCE_SECTION_IDS = ['notifications', 'appearance', 'audio'];
-const PHONE_SECTION_GROUPS = SECTION_GROUPS.map((group) => (
-    group.label === 'Preferences'
-        ? { ...group, sections: [{ id: 'preferences', label: 'Preferences', icon: 'settings' }] }
-        : group
-));
+// Phones: which part of the one-page Profile each section opens at.
+const PHONE_SCROLL_TARGETS = {
+    billing: 'billing',
+    plans: 'plans',
+    storage: 'plan',
+    notifications: 'preferences',
+    appearance: 'preferences',
+    audio: 'preferences',
+};
 
 // Account > Audio: each kind of sound (Audio.js SOUND_CATEGORY_IDS), with
 // the sound its Play button plays.
 const SOUND_CATEGORY_DETAILS = {
-    notifications: { title: 'Build sounds', hint: 'Each build step, model ready and build failed.', sampleSound: 'success' },
+    notifications: { title: 'Build sounds', hint: 'Each build step, library photos downloaded, model ready and build failed.', sampleSound: 'success' },
     actions: { title: 'Open and save', hint: 'Opening a model, and saving a model, export or scene.', sampleSound: 'save' },
     camera: { title: 'Camera shutter', hint: 'When you take a photo.', sampleSound: 'camera' },
 };
@@ -212,12 +220,10 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     const [isDeletingAccount, setIsDeletingAccount] = useState(false);
     const [passwordNotice, setPasswordNotice] = useState(null);
     const photoInputRef = useRef(null);
+    // Phones: the parts of the one-page Profile, by name, for scrolling to.
+    const phoneSectionRefs = useRef({});
     const { isMuted, volume, categories } = useSoundSettings();
     const isPhone = useMobileView();
-    // The section to show: phones show the three preference sections as one.
-    let shownSection = activeSection;
-    if (isPhone && PREFERENCE_SECTION_IDS.includes(activeSection)) shownSection = 'preferences';
-    if (!isPhone && activeSection === 'preferences') shownSection = 'appearance';
     const { theme } = useAppearanceSettings();
     const profilePhoto = useProfilePhoto(user.email);
     const volumePercent = Math.round(volume * 100);
@@ -281,6 +287,28 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
             isCancelled = true;
         };
     }, [user.isGuest, user.email]);
+
+    // Phones: opened for one section (Notifications from the bell, say),
+    // scroll to it on the one-page Profile.
+    useEffect(() => {
+        if (!isPhone) return;
+        const target = PHONE_SCROLL_TARGETS[initialSection];
+        if (target) phoneSectionRefs.current[target]?.scrollIntoView({ block: 'start' });
+    }, [isPhone, initialSection]);
+
+    // Phones: keeps a part of the one-page Profile, for scrolling to it.
+    function phoneSectionRef(name) {
+        return (element) => {
+            phoneSectionRefs.current[name] = element;
+        };
+    }
+
+    // The plan card's link and Change plan: the Plans section, or on phones
+    // the plans further down the page.
+    function showPlans() {
+        if (isPhone) phoneSectionRefs.current.plans?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else openSection('plans');
+    }
 
     const usageStats = buildUsageStats(jobs);
     const finishedJobs = jobs.filter((job) => job.status === 'done');
@@ -371,6 +399,35 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
         );
     }
 
+    function renderGuestCard() {
+        return (
+            <div className="forma-card acct-card acct-guest">
+                <span className="acct-guest-icon"><Icon name="lock" size={22} /></span>
+                <div className="acct-guest-text">
+                    <h2 className="acct-card-title">Sign in to manage your account</h2>
+                    <p className="acct-muted">
+                        Guests have no account to manage. Sign in or create an account to
+                        keep your models, choose a plan and send feedback.
+                    </p>
+                </div>
+                {renderSignOutButton()}
+            </div>
+        );
+    }
+
+    // The hidden file input behind Upload photo / Change photo / Update.
+    function renderPhotoInput() {
+        return (
+            <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChosen}
+                style={{ display: 'none' }}
+            />
+        );
+    }
+
     function renderAccountSection() {
         if (user.isGuest) {
             return (
@@ -380,17 +437,7 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         <h1 className="acct-title">My account</h1>
                         <p className="acct-subtitle">You are browsing as a guest.</p>
                     </div>
-                    <div className="forma-card acct-card acct-guest">
-                        <span className="acct-guest-icon"><Icon name="lock" size={22} /></span>
-                        <div className="acct-guest-text">
-                            <h2 className="acct-card-title">Sign in to manage your account</h2>
-                            <p className="acct-muted">
-                                Guests have no account to manage. Sign in or create an account to
-                                keep your models, choose a plan and send feedback.
-                            </p>
-                        </div>
-                        {renderSignOutButton()}
-                    </div>
+                    {renderGuestCard()}
                 </>
             );
         }
@@ -432,21 +479,31 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                             )}
                         </div>
                         {photoError && <p className="acct-error" role="alert">{photoError}</p>}
-                        <input
-                            ref={photoInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handlePhotoChosen}
-                            style={{ display: 'none' }}
-                        />
+                        {renderPhotoInput()}
                     </div>
                 </div>
 
+                {renderAccountDetails(true)}
+                {renderPasswordDialog()}
+
+                {renderWalkthroughCard()}
+                {renderLeaveCard()}
+            </>
+        );
+    }
+
+    // Name (wider screens; phones show it at the top), email, password,
+    // sign-in methods, role and member since.
+    function renderAccountDetails(isNameShown) {
+        return (
+            <>
                 <dl className="forma-card acct-card acct-details">
-                    <div className="acct-row">
-                        <dt>Name</dt>
-                        <dd>{user.name}</dd>
-                    </div>
+                    {isNameShown && (
+                        <div className="acct-row">
+                            <dt>Name</dt>
+                            <dd>{user.name}</dd>
+                        </div>
+                    )}
                     <div className="acct-row">
                         <dt>Email</dt>
                         <dd className="acct-email">{user.email}</dd>
@@ -494,6 +551,13 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                     </div>
                 </dl>
                 {passwordNotice && <p className="acct-notice" role="status">{passwordNotice}</p>}
+            </>
+        );
+    }
+
+    function renderPasswordDialog() {
+        return (
+            <>
                 {isChangingPassword && (
                     <ChangePasswordDialog
                         onChanged={() => {
@@ -503,22 +567,33 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         onCancel={() => setIsChangingPassword(false)}
                     />
                 )}
+            </>
+        );
+    }
 
-                <div className="forma-card acct-card acct-logout">
-                    <div>
-                        <h2 className="acct-card-title">Walkthrough</h2>
-                        <p className="acct-muted">Take the quick tour of the workspace again.</p>
-                    </div>
-                    <button
-                        className="forma-btn"
-                        onClick={() => {
-                            onShowWalkthrough();
-                        }}
-                    >
-                        <Icon name="refresh" size={14} /> Show walkthrough
-                    </button>
+    function renderWalkthroughCard() {
+        return (
+            <div className="forma-card acct-card acct-logout">
+                <div>
+                    <h2 className="acct-card-title">Walkthrough</h2>
+                    <p className="acct-muted">Take the quick tour of the workspace again.</p>
                 </div>
+                <button
+                    className="forma-btn"
+                    onClick={() => {
+                        onShowWalkthrough();
+                    }}
+                >
+                    <Icon name="refresh" size={14} /> Show walkthrough
+                </button>
+            </div>
+        );
+    }
 
+    // Log out, and Delete account once the backend has it.
+    function renderLeaveCard() {
+        return (
+            <>
                 <div className="forma-card acct-card acct-leave">
                     <div className="acct-leave-row">
                         <div>
@@ -645,55 +720,101 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     }
 
     function renderProfileSection() {
+        return (
+            <>
+                {renderProfileHead()}
+                {renderPlanCard()}
+                {renderWorkTabs()}
+            </>
+        );
+    }
+
+    // The photo (or initials), name and Update: to My account on wider
+    // screens; on phones it changes the photo here.
+    function renderProfileHead() {
+        return (
+            <div className="acct-profile-head">
+                {renderAvatar('acct-avatar-large', 40)}
+                <div className="acct-profile-identity">
+                    <h1 className="acct-title">{user.name}</h1>
+                    {!user.isGuest && (
+                        <button
+                            type="button"
+                            className="acct-update-button"
+                            aria-label={isPhone ? 'Update profile photo' : undefined}
+                            onClick={() => {
+                                if (isPhone) photoInputRef.current?.click();
+                                else openSection('account');
+                            }}
+                        >
+                            <Icon name="edit" size={12} /> Update
+                        </button>
+                    )}
+                </div>
+                <p className="acct-muted acct-profile-email">{user.email}</p>
+                {isPhone && profilePhoto && (
+                    <button
+                        type="button"
+                        className="acct-text-button"
+                        onClick={() => {
+                            removeProfilePhoto(user.email);
+                        }}
+                    >
+                        Remove photo
+                    </button>
+                )}
+                {isPhone && photoError && <p className="acct-error" role="alert">{photoError}</p>}
+            </div>
+        );
+    }
+
+    // The plan, cloud storage and counts of models, scenes and photos. Phones
+    // also show this week's usage (the Storage section's cards).
+    function renderPlanCard() {
+        const [modelsStat, photosStat, failedStat] = usageStats;
+        return (
+            <div className="forma-card acct-profile-plan" ref={phoneSectionRef('plan')}>
+                <div className="acct-profile-plan-head">
+                    <span className="acct-plan-chip">{user.isGuest ? 'Guest' : currentPlan.name.replace('Genesis ', '')}</span>
+                    <strong>{user.isGuest ? 'Guest' : currentPlan.name}</strong>
+                    {!user.isGuest && (
+                        <button
+                            type="button"
+                            className="acct-icon-link"
+                            aria-label="Compare plans"
+                            onClick={showPlans}
+                        >
+                            <Icon name="link" size={14} />
+                        </button>
+                    )}
+                </div>
+                <div className="acct-profile-storage">
+                    <span>Cloud storage</span>
+                    <span className="acct-mono">{'\u2013'} of {currentPlan.storage}</span>
+                </div>
+                {/* Storage used isn't reported by the server yet, so the bar stays empty. */}
+                <span className="acct-storage-bar" aria-hidden="true"><span style={{ width: '0%' }} /></span>
+                <p className="acct-muted acct-profile-storage-note">Storage use coming soon</p>
+                <div className="acct-profile-stats">
+                    <div><strong>{statsStatus === 'ready' ? finishedJobs.length : '-'}</strong><span>Models</span></div>
+                    <div><strong>{sceneCount ?? '-'}</strong><span>Scenes</span></div>
+                    <div><strong>{statsStatus === 'ready' ? photoCount : '-'}</strong><span>Photos</span></div>
+                </div>
+                {isPhone && statsStatus === 'ready' && (
+                    <p className="acct-muted acct-profile-usage">
+                        This week: {modelsStat.note.replace(' this week', '')} models, {photosStat.note.replace(' this week', '')} photos
+                        {' \u00b7 '}{failedStat.value} failed {failedStat.value === 1 ? 'build' : 'builds'}
+                    </p>
+                )}
+            </div>
+        );
+    }
+
+    // The user's models and source photos, in two tabs.
+    function renderWorkTabs() {
         const items = profileTab === 'models' ? finishedJobs : photoBatches;
         return (
             <>
-                <div className="acct-profile-head">
-                    {renderAvatar('acct-avatar-large', 40)}
-                    <div className="acct-profile-identity">
-                        <h1 className="acct-title">{user.name}</h1>
-                        {!user.isGuest && (
-                            <button
-                                type="button"
-                                className="acct-update-button"
-                                onClick={() => openSection('account')}
-                            >
-                                <Icon name="edit" size={12} /> Update
-                            </button>
-                        )}
-                    </div>
-                    <p className="acct-muted acct-profile-email">{user.email}</p>
-                </div>
-
-                <div className="forma-card acct-profile-plan">
-                    <div className="acct-profile-plan-head">
-                        <span className="acct-plan-chip">{user.isGuest ? 'Guest' : currentPlan.name.replace('Genesis ', '')}</span>
-                        <strong>{user.isGuest ? 'Guest' : currentPlan.name}</strong>
-                        {!user.isGuest && (
-                            <button
-                                type="button"
-                                className="acct-icon-link"
-                                aria-label="Compare plans"
-                                onClick={() => openSection('plans')}
-                            >
-                                <Icon name="link" size={14} />
-                            </button>
-                        )}
-                    </div>
-                    <div className="acct-profile-storage">
-                        <span>Cloud storage</span>
-                        <span className="acct-mono">{'\u2013'} of {currentPlan.storage}</span>
-                    </div>
-                    {/* Storage used isn't reported by the server yet, so the bar stays empty. */}
-                    <span className="acct-storage-bar" aria-hidden="true"><span style={{ width: '0%' }} /></span>
-                    <p className="acct-muted acct-profile-storage-note">Storage use coming soon</p>
-                    <div className="acct-profile-stats">
-                        <div><strong>{statsStatus === 'ready' ? finishedJobs.length : '-'}</strong><span>Models</span></div>
-                        <div><strong>{sceneCount ?? '-'}</strong><span>Scenes</span></div>
-                        <div><strong>{statsStatus === 'ready' ? photoCount : '-'}</strong><span>Photos</span></div>
-                    </div>
-                </div>
-
                 <div className="acct-tabs" role="tablist">
                     {[['models', 'Models', finishedJobs.length], ['photos', 'Source photos', photoBatches.length]].map(([id, label, count]) => (
                         <button
@@ -754,7 +875,7 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         <h2 className="acct-card-title">{currentPlan.name}</h2>
                         <p className="acct-muted">No payment needed. Paid plans are coming later.</p>
                     </div>
-                    <button type="button" className="forma-btn forma-btn-primary" onClick={() => openSection('plans')}>
+                    <button type="button" className="forma-btn forma-btn-primary" onClick={showPlans}>
                         Change plan
                     </button>
                 </div>
@@ -1009,10 +1130,9 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
     }
 
     // Phones: theme, sounds and notifications together, with fewer choices.
-    function renderPhonePreferencesSection() {
+    function renderPhonePreferenceCards() {
         return (
             <>
-                {renderSectionHeading('Preferences', 'Preferences', 'Saved for this browser.')}
                 <div className="forma-card acct-card">
                     <p className="acct-label">Theme</p>
                     {renderThemeOptions(true)}
@@ -1047,7 +1167,129 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
         );
     }
 
-    const screen = (
+    // Phones: the month's models out of the plan's, for Billing.
+    function countModelsThisMonth() {
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        return finishedJobs.filter((job) => job.createdAt >= monthStart.getTime()).length;
+    }
+
+    // Phones: billing as rows, as in the Figma.
+    function renderPhoneBillingCard() {
+        return (
+            <dl className="forma-card acct-card acct-details">
+                <div className="acct-row">
+                    <dt><Icon name="creditCard" size={14} /> Payment method</dt>
+                    <dd className="acct-muted">None. You can add one when paid plans are available.</dd>
+                </div>
+                <div className="acct-row">
+                    <dt><Icon name="book" size={14} /> Billing history</dt>
+                    <dd className="acct-muted">No invoices yet.</dd>
+                </div>
+                <div className="acct-row">
+                    <dt>Billing cycle</dt>
+                    <dd>None {'\u00b7'} free plan</dd>
+                </div>
+                <div className="acct-row">
+                    <dt>Models this month</dt>
+                    <dd>{statsStatus === 'ready' ? countModelsThisMonth() : '-'} {'\u00b7'} your plan allows {currentPlan.models}</dd>
+                </div>
+            </dl>
+        );
+    }
+
+    // Phones: the plans as rows, with what each includes.
+    function renderPhonePlansCard() {
+        return (
+            <div className="forma-card acct-card acct-phone-plans">
+                {planNotice && <p className="acct-notice" role="status">{planNotice}</p>}
+                {PLANS.map((plan) => {
+                    const isCurrent = plan.id === CURRENT_PLAN_ID;
+                    return (
+                        <div key={plan.id} className="acct-phone-plan">
+                            <div className="acct-phone-plan-text">
+                                <div className="acct-phone-plan-name">
+                                    <strong>{plan.name}</strong>
+                                    {isCurrent && <span className="acct-plan-current">Current plan</span>}
+                                    {!isCurrent && plan.isFeatured && <span className="acct-plan-current">Most popular</span>}
+                                </div>
+                                <p className="acct-muted">{plan.description}</p>
+                                <p className="acct-muted acct-mono">
+                                    {plan.storage} storage {'\u00b7'} Models: {plan.models} {'\u00b7'} {plan.formats.join(', ')}
+                                </p>
+                            </div>
+                            {!isCurrent && (
+                                <button
+                                    type="button"
+                                    className={plan.isFeatured ? 'forma-btn forma-btn-primary' : 'forma-btn'}
+                                    onClick={() => {
+                                        setPlanNotice(
+                                            user.isGuest
+                                                ? 'Sign in to choose a plan.'
+                                                : `${plan.name} is not available yet. Paid plans are coming later; you are on ${currentPlan.name} for now.`,
+                                        );
+                                    }}
+                                >
+                                    Choose
+                                </button>
+                            )}
+                        </div>
+                    );
+                })}
+                <p className="acct-footnote">A prototype; final plan details may change. * Within fair use.</p>
+            </div>
+        );
+    }
+
+    // Phones: the whole account on one page, as in the mobile Figma.
+    function renderPhoneProfilePage() {
+        return (
+            <>
+                {renderProfileHead()}
+                {renderPhotoInput()}
+                {renderPlanCard()}
+
+                <h2 className="acct-phone-heading" ref={phoneSectionRef('account')}>Account</h2>
+                {user.isGuest ? renderGuestCard() : renderAccountDetails(false)}
+
+                {!user.isGuest && (
+                    <>
+                        <h2 className="acct-phone-heading" ref={phoneSectionRef('billing')}>Billing</h2>
+                        {renderPhoneBillingCard()}
+                    </>
+                )}
+
+                <h2 className="acct-phone-heading" ref={phoneSectionRef('plans')}>Plans</h2>
+                {renderPhonePlansCard()}
+
+                {/* Guests have no saved work. */}
+                {!user.isGuest && (
+                    <>
+                        <h2 className="acct-phone-heading">Your work</h2>
+                        {renderWorkTabs()}
+                    </>
+                )}
+
+                <h2 className="acct-phone-heading" ref={phoneSectionRef('preferences')}>Preferences</h2>
+                {renderPhonePreferenceCards()}
+
+                {!user.isGuest && (
+                    <>
+                        {renderWalkthroughCard()}
+                        {renderLeaveCard()}
+                        {renderPasswordDialog()}
+                    </>
+                )}
+            </>
+        );
+    }
+
+    const screen = isPhone ? (
+        <div className={isModal ? 'acct-screen is-phone-page is-modal' : 'acct-screen is-phone-page'}>
+            {renderPhoneProfilePage()}
+        </div>
+    ) : (
         <div className={isModal ? 'acct-screen is-modal' : 'acct-screen'}>
             <nav className="forma-card acct-menu" aria-label="Account sections">
                 <div className="acct-menu-user">
@@ -1058,15 +1300,15 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                     </div>
                 </div>
 
-                {(isPhone ? PHONE_SECTION_GROUPS : SECTION_GROUPS).map((group) => (
+                {SECTION_GROUPS.map((group) => (
                     <div key={group.label} className="acct-menu-group">
                         <span className="acct-menu-label">{group.label}</span>
                         {group.sections.map((section) => (
                             <button
                                 key={section.id}
-                                className={shownSection === section.id ? 'acct-menu-item is-active' : 'acct-menu-item'}
+                                className={activeSection === section.id ? 'acct-menu-item is-active' : 'acct-menu-item'}
                                 onClick={() => openSection(section.id)}
-                                aria-current={shownSection === section.id ? 'page' : undefined}
+                                aria-current={activeSection === section.id ? 'page' : undefined}
                             >
                                 <Icon name={section.icon} size={16} />
                                 <span>{section.label}</span>
@@ -1100,15 +1342,14 @@ function AccountScreen({ user, isModal = false, initialSection = 'account', onCl
                         <Icon name="close" size={16} />
                     </button>
                 )}
-                {shownSection === 'profile' && renderProfileSection()}
-                {shownSection === 'account' && renderAccountSection()}
-                {shownSection === 'billing' && renderBillingSection()}
-                {shownSection === 'plans' && renderPlansSection()}
-                {shownSection === 'storage' && renderStorageSection()}
-                {shownSection === 'notifications' && renderNotificationsSection()}
-                {shownSection === 'appearance' && renderAppearanceSection()}
-                {shownSection === 'audio' && renderAudioSection()}
-                {shownSection === 'preferences' && renderPhonePreferencesSection()}
+                {activeSection === 'profile' && renderProfileSection()}
+                {activeSection === 'account' && renderAccountSection()}
+                {activeSection === 'billing' && renderBillingSection()}
+                {activeSection === 'plans' && renderPlansSection()}
+                {activeSection === 'storage' && renderStorageSection()}
+                {activeSection === 'notifications' && renderNotificationsSection()}
+                {activeSection === 'appearance' && renderAppearanceSection()}
+                {activeSection === 'audio' && renderAudioSection()}
             </div>
         </div>
     );
