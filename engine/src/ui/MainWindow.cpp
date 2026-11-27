@@ -190,7 +190,7 @@ MainWindow::MainWindow() {
         setRenderMode(m_gaussianAction->isChecked()
                           ? static_cast<int>(SplatRenderer::RenderMode::GaussianSplat)
                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
-        m_viewport->setShowImGuiStats(m_statsOverlayAction->isChecked());
+        m_viewport->setShowImGuiStats(m_statsOverlayAction->isChecked() && m_devMode);
         m_viewport->setShowGrid(m_gridAction->isChecked());
         refreshScenePanels();
         startNextImport(); // anything queued before the renderer existed
@@ -431,7 +431,7 @@ void MainWindow::createActions() {
     m_statsOverlayAction->setCheckable(true);
     m_statsOverlayAction->setChecked(true);
     m_statsOverlayAction->setStatusTip("Show the FPS / splat count overlay in the viewport");
-    connect(m_statsOverlayAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowImGuiStats(on); });
+    connect(m_statsOverlayAction, &QAction::toggled, this, [this](bool on) { m_viewport->setShowImGuiStats(on && m_devMode); });
 
     m_recordMetricsAction = new QAction("&Record Metrics", this);
     m_recordMetricsAction->setCheckable(true);
@@ -2091,6 +2091,20 @@ void MainWindow::updateDevModeAction()
 {
     if (m_devModeAction)
         m_devModeAction->setText(m_devMode ? "Developer Mode: &On" : "Developer Mode: &Off");
+
+    //Stats overlay and metrics recording are developer-only. A hidden action also stops its shortcut from firing.
+    //These can run before the actions or the viewport exist, so check them first
+    if (m_statsOverlayAction) {
+        m_statsOverlayAction->setVisible(m_devMode);
+        if (m_viewport)
+            m_viewport->setShowImGuiStats(m_devMode && m_statsOverlayAction->isChecked());
+    }
+    if (m_recordMetricsAction) {
+        //Stop an active recording so it isn't left running with no way to end it
+        if (!m_devMode && m_recordMetricsAction->isChecked())
+            m_recordMetricsAction->setChecked(false);
+        m_recordMetricsAction->setVisible(m_devMode);
+    }
 
     //This can run before the dock is created, so check it exists first
     if (m_stressTestPanel) {
