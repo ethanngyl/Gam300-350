@@ -62,7 +62,6 @@ Engine C++ libraries (fetched automatically by CMake / FetchContent):
 - stb (image loader, header-only)
 - Lua 5.4.7
 - happly (.ply reader/writer, header-only)
-- FMOD Studio API (Windows x64, bundled in engine/Library)
 - Qt 6.8.3 (msvc2022_64: Core, Gui, Widgets, OpenGL, OpenGLWidgets, Network; downloaded by engine/run.bat on first run)
 
 External tools (downloaded automatically on first run):
@@ -120,15 +119,15 @@ clean.bat: Deep clean -- removes all build artifacts so the next run rebuilds fr
 
 To run (For macOS):
 packages/start.sh: Open a terminal in the packages folder and run "./start.sh" to start the web application.
-Note: The desktop engine has no macOS support at the moment (Windows only), so there is no engine launcher for macOS. FMOD ships a
-different build per operating system and the current CMake fetch setup only handles the Windows one. The engine's WebAssembly
+Note: The desktop engine has no macOS support at the moment (Windows only), so there is no engine launcher for macOS. The engine
+build scripts (run.bat, the Qt download) only handle Windows. The engine's WebAssembly
 renderer (engine/build-web.sh) still builds, so the web app's 3D viewer works on macOS.
 
 To run (For Linux):
 packages/start-linux.sh: Open a terminal in the packages folder and run "./start-linux.sh" to start the web application. The first run
 installs COLMAP via apt, so it will ask for your sudo password. Building the WebAssembly renderer needs cmake, git and python3
 (sudo apt install cmake git python3).
-Note: The desktop engine has no Linux support at the moment (Windows only), for the same FMOD reason as macOS.
+Note: The desktop engine has no Linux support at the moment (Windows only), for the same reason as macOS.
 
 
 Testing the Website:
@@ -324,21 +323,10 @@ Account:
 3) Enter your account and password from the web app. "Remember me on this PC" keeps you signed in for 7 days.
 4) Account > Sign Out signs out and deletes that account's downloaded models from the PC.
 
-Play/Stop sounds (Audio panel):
-1) Left-click one or more sounds in the list (Ctrl / Shift to select several), then press "Play Selected", or double-click a single sound.
-   Several sounds can play at once; the live count shows next to the buttons.
-2) Press "Stop All" to stop all currently playing sounds.
-3) "Choose Folder..." picks which folder to list audio files from; the default is engine/assets/audio.
-4) "Play File..." plays a specific audio file that is not in the listed folder.
-5) Clicking any button in the editor (including toolbar buttons and dialog buttons) plays a short UI click sound.
-
 Panels and layout:
-- Scene, Inspector, Assets, My Models, Console and Audio are dockable panels. Open or close them from the Window menu, drag them to
+- Scene, Inspector, Assets, My Models and Console are dockable panels. Open or close them from the Window menu, drag them to
   rearrange, and use Window > Reset Layout to restore the default. The layout is saved between runs.
 - Console panel: shows engine output and Qt logs, colour-coded.
-Loading Audio Files:
-1) You can select which folder to load the audio files from under "Choose folder", the default folder path is under engine/assets/audio
-2) You can load a specific audio file that is not in the selected folder with the "Play File Not Listed" button
 
 Login In to Account:
 1) Open the My Models tab on the bottom row and click Sign In

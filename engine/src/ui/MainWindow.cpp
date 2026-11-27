@@ -25,7 +25,6 @@ responsive; and saves/restores the layout and preferences via QSettings.
 #include "splat/SplatRenderer.h"
 #include "splat/SplatTrimmer.h"
 #include "ui/AssetBrowserPanel.h"
-#include "ui/AudioPanel.h"
 #include "ui/ConsolePanel.h"
 #include "ui/EditCommands.h"
 #include "ui/ExportDialog.h"
@@ -91,7 +90,6 @@ namespace {
     const QString kGeometryKey = QStringLiteral("window/geometry");
     const QString kLayoutKey = QStringLiteral("window/layout");
     const QString kAssetFolderKey = QStringLiteral("assets/folder");
-    const QString kAudioFolderKey = QStringLiteral("audio/folder");
     const QString kRecentFilesKey = QStringLiteral("files/recent");
     const QString kRenderModeKey = QStringLiteral("view/renderMode");
     const QString kStatsOverlayKey = QStringLiteral("view/statsOverlay");
@@ -564,9 +562,6 @@ void MainWindow::createDocks() {
 
     QDockWidget* consoleDock = addPanelDock("Console", "ConsoleDock", m_console, Qt::BottomDockWidgetArea);
 
-    m_audio = new AudioPanel(this);
-    QDockWidget* audioDock = addPanelDock("Audio", "AudioDock", m_audio, Qt::BottomDockWidgetArea);
-
     m_stressTestPanel = new StressTestPanel(this);
     QDockWidget* stressTestDock = addPanelDock("Stress Test", "StressTestDock", m_stressTestPanel, Qt::BottomDockWidgetArea);
     //Lamda function to runner 1 stress test, type is inputted a input variable
@@ -656,8 +651,7 @@ void MainWindow::createDocks() {
 
     tabifyDockWidget(assetsDock, modelsDock);
     tabifyDockWidget(modelsDock, consoleDock);
-    tabifyDockWidget(consoleDock, audioDock);
-    tabifyDockWidget(audioDock, stressTestDock);
+    tabifyDockWidget(consoleDock, stressTestDock);
     assetsDock->raise();
 
     resizeDocks({ sceneDock, inspectorDock }, { 260, 300 }, Qt::Horizontal);
@@ -761,7 +755,6 @@ void MainWindow::restoreSettings() {
     restoreState(settings.value(kLayoutKey).toByteArray(), kLayoutVersion);
 
     m_assets->setFolder(settings.value(kAssetFolderKey).toString());
-    m_audio->setFolder(settings.value(kAudioFolderKey).toString());
 
     const bool gaussian = settings.value(kRenderModeKey).toInt() ==
                           static_cast<int>(SplatRenderer::RenderMode::GaussianSplat);
@@ -784,7 +777,6 @@ void MainWindow::saveSettings() const {
     settings.setValue(kGeometryKey, saveGeometry());
     settings.setValue(kLayoutKey, saveState(kLayoutVersion));
     settings.setValue(kAssetFolderKey, m_assets->folder());
-    settings.setValue(kAudioFolderKey, m_audio->folder());
     settings.setValue(kRenderModeKey, m_gaussianAction->isChecked()
                                           ? static_cast<int>(SplatRenderer::RenderMode::GaussianSplat)
                                           : static_cast<int>(SplatRenderer::RenderMode::PointCloud));
@@ -1921,6 +1913,6 @@ void MainWindow::showAbout() {
                                "<p>Real-world object scanning to 3D: a viewer and editor for "
                                "Gaussian-splat reconstructions.</p>"
                                "<p>Team CoDefine &mdash; GAM300/350<br>"
-                               "Built with Qt %2, OpenGL, Dear ImGui and FMOD.</p>")
+                               "Built with Qt %2, OpenGL and Dear ImGui.</p>")
                            .arg(kAppTitle, qVersion()));
 }

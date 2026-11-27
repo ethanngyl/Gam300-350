@@ -8,8 +8,8 @@
 \brief
 Declares MainWindow, the editor shell. It hosts the 3D Viewport in the
 centre and arranges the editor around it: menu bar, main toolbar, status
-bar, and the dockable Scene (outliner), Inspector, Assets, My Models,
-Console and Audio panels, plus the Account menu for signing in with a web
+bar, and the dockable Scene (outliner), Inspector, Assets, My Models and
+Console panels, plus the Account menu for signing in with a web
 app account. It owns the scene-editing commands (import, select, rename,
 delete, render mode, export), builds new models from photos or videos on
 this PC (Generate Model, no server), loads .ply files and writes exports on
@@ -48,7 +48,6 @@ class QPushButton;
 class SplatModel;
 
 class AssetBrowserPanel;
-class AudioPanel;
 class BackendClient;
 class ConsolePanel;
 class InspectorPanel;
@@ -171,7 +170,6 @@ private:
     InspectorPanel* m_inspector = nullptr;
     AssetBrowserPanel* m_assets = nullptr;
     ConsolePanel* m_console = nullptr;
-    AudioPanel* m_audio = nullptr;
     RemoteModelsPanel* m_remoteModels = nullptr;
     StressTestPanel* m_stressTestPanel = nullptr; //Dev mode only, its dock is shown/hidden by updateDevModeAction
     QList<QDockWidget*> m_docks;

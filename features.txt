@@ -211,7 +211,6 @@ Panels (dockable; the layout is saved and can be reset)
   changes.
 - My Models: your web-app models, downloaded to a per-user cache.
 - Console: captures stdout, stderr and Qt logs, colour-coded.
-- Audio: an FMOD player that can play several files at once.
 
 Account
 -------

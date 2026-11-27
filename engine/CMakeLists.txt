@@ -84,7 +84,6 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     happly
     Freetype::Freetype
     lua_static
-    fmod
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
@@ -116,17 +115,6 @@ if(WIN32)
             $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/tls
         COMMAND_EXPAND_LISTS
         COMMENT "Copying Qt runtime next to ${CMAKE_PROJECT_NAME}"
-    )
-
-    # FMOD links against an import lib, so its DLL is not picked up by
-    # TARGET_RUNTIME_DLLS above. Copy the matching variant (fmodL.dll for Debug,
-    # fmod.dll otherwise) next to the exe or the engine fails to start.
-    set(FMOD_DLL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Library/FMOD Studio API Windows/api/core/lib/x64")
-    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<IF:$<CONFIG:Debug>,${FMOD_DLL_DIR}/fmodL.dll,${FMOD_DLL_DIR}/fmod.dll>"
-            $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>
-        COMMENT "Copying FMOD runtime DLL next to ${CMAKE_PROJECT_NAME}"
     )
 endif()
 
@@ -208,13 +196,6 @@ install(TARGETS ${CMAKE_PROJECT_NAME}
 )
 
 if(WIN32)
-    # FMOD is an import lib, so the Qt deploy step below does not find its DLL.
-    install(FILES
-        "$<IF:$<CONFIG:Debug>,${FMOD_DLL_DIR}/fmodL.dll,${FMOD_DLL_DIR}/fmod.dll>"
-        DESTINATION ${CMAKE_INSTALL_BINDIR}
-        COMPONENT ${CODEFINE_COMPONENT}
-    )
-
     # MSVC runtime (msvcp140.dll, vcruntime140*.dll), deployed app-local so
     # users do not need the VC++ Redistributable installed.
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -248,10 +229,6 @@ install(CODE "
 " COMPONENT ${CODEFINE_COMPONENT})
 install(SCRIPT ${CODEFINE_DEPLOY_SCRIPT} COMPONENT ${CODEFINE_COMPONENT})
 
-install(DIRECTORY assets/audio
-    DESTINATION ${CMAKE_INSTALL_BINDIR}/assets
-    COMPONENT ${CODEFINE_COMPONENT}
-)
 if(CODEFINE_PACKAGE_SAMPLES)
     install(DIRECTORY assets/samples
         DESTINATION ${CMAKE_INSTALL_BINDIR}/assets
