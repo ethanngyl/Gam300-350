@@ -16,19 +16,92 @@ any couldn't be).
 Used by the Photo Editor, Camera Capture and the New model dialog. Laid
 out like the Figma's "Add photos from library": a title with an X, each
 photo with its file name, then Cancel and "Add selected photos".
+A large library holds thousands of photos, so each tile (PhotoTile) shows its
+picture only while it is near the visible part of the list (one
+IntersectionObserver, PHOTO_LOAD_MARGIN), and drops it once scrolled well
+past; it comes back from the browser cache when scrolled to again.
 **************************************************************************/
 
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icons.jsx';
 import { downloadLibraryPhoto, fetchLibraryBatches, smallPhotoUrl } from './LibraryPhotos.js';
 import { playSound } from '../audio/Audio.js';
 import './LibraryPhotoPicker.css';
 
+// How far outside the visible part of the list a photo is still kept loaded:
+// about two rows, so scrolling at a normal pace never shows empty tiles.
+const PHOTO_LOAD_MARGIN = '300px 0px';
+
 function photoKey(jobId, imageName) {
     return `${jobId}/${imageName}`;
 }
 
+// One photo of a batch. Its picture is only in the page while the tile is
+// near the visible part of the list (observe); scrolled well past, the <img>
+// is removed so the browser can free the decoded picture, and it comes back
+// (from the browser cache) when the tile scrolls into view again. memo: picking
+// a photo redraws that tile only, not every photo in the library.
+const PhotoTile = memo(function PhotoTile({ itemKey, image, isSelected, disabled, onToggle, observe }) {
+    const frameRef = useRef(null);
+    const [isNearView, setIsNearView] = useState(false);
+
+    useEffect(() => observe(frameRef.current, setIsNearView), [observe]);
+
+    return (
+        <button
+            type="button"
+            className={isSelected ? 'library-picker-photo is-selected' : 'library-picker-photo'}
+            onClick={() => onToggle(itemKey)}
+            disabled={disabled}
+            aria-pressed={isSelected}
+            aria-label={image.name}
+        >
+            <span className="library-picker-photo-frame" ref={frameRef}>
+                {isNearView && <img src={smallPhotoUrl(image.url)} alt="" decoding="async" />}
+                <span className="library-picker-tick">
+                    {isSelected && <Icon name="check" size={13} />}
+                </span>
+            </span>
+            <span className="library-picker-photo-name">{image.name}</span>
+        </button>
+    );
+});
+
 function LibraryPhotoPicker({ onAddFiles, onClose }) {
+    // The scrolling list, and one IntersectionObserver for every photo tile in it.
+    const bodyRef = useRef(null);
+    const observerRef = useRef(null);
+    const visibilityCallbacksRef = useRef(new Map()); // tile element -> setIsNearView
+
+    // Calls onChange(true / false) as element comes near / goes out of view;
+    // returns the function that stops watching it. Made on first use: the
+    // tiles' effects run before this component's, but bodyRef is already set.
+    const observe = useCallback((element, onChange) => {
+        if (!element) return undefined;
+        if (!observerRef.current) {
+            if (typeof IntersectionObserver === 'undefined') {
+                onChange(true); // very old browser: just show every photo
+                return undefined;
+            }
+            observerRef.current = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    visibilityCallbacksRef.current.get(entry.target)?.(entry.isIntersecting);
+                });
+            }, { root: bodyRef.current, rootMargin: PHOTO_LOAD_MARGIN });
+        }
+        visibilityCallbacksRef.current.set(element, onChange);
+        observerRef.current.observe(element);
+        return () => {
+            visibilityCallbacksRef.current.delete(element);
+            observerRef.current?.unobserve(element);
+        };
+    }, []);
+
+    useEffect(() => () => {
+        observerRef.current?.disconnect();
+        observerRef.current = null;
+    }, []);
+
     const [batches, setBatches] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
@@ -66,7 +139,8 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
     const isDownloading = downloadedCount !== null;
     const selectedCount = selectedKeys.size;
 
-    function togglePhoto(key) {
+    // useCallback: the same function every render, so PhotoTile's memo holds.
+    const togglePhoto = useCallback((key) => {
         setSelectedKeys((currentKeys) => {
             const nextKeys = new Set(currentKeys);
             if (nextKeys.has(key)) {
@@ -76,7 +150,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
             }
             return nextKeys;
         });
-    }
+    }, []);
 
     function toggleBatch(job) {
         const batchKeys = job.images.map((image) => photoKey(job.id, image.name));
@@ -162,7 +236,7 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                     </button>
                 </div>
 
-                <div className="library-picker-body">
+                <div className="library-picker-body" ref={bodyRef}>
                     {isLoading && <p className="library-picker-note">Loading...</p>}
                     {loadError && (
                         <p className="library-picker-note library-picker-error">Couldn't load the library: {loadError}</p>
@@ -196,26 +270,16 @@ function LibraryPhotoPicker({ onAddFiles, onClose }) {
                                 <div className="library-picker-grid">
                                     {job.images.map((image) => {
                                         const key = photoKey(job.id, image.name);
-                                        const isSelected = selectedKeys.has(key);
-
                                         return (
-                                            <button
+                                            <PhotoTile
                                                 key={key}
-                                                type="button"
-                                                className={isSelected ? 'library-picker-photo is-selected' : 'library-picker-photo'}
-                                                onClick={() => togglePhoto(key)}
+                                                itemKey={key}
+                                                image={image}
+                                                isSelected={selectedKeys.has(key)}
                                                 disabled={isDownloading}
-                                                aria-pressed={isSelected}
-                                                aria-label={image.name}
-                                            >
-                                                <span className="library-picker-photo-frame">
-                                                    <img src={smallPhotoUrl(image.url)} alt="" loading="lazy" decoding="async" />
-                                                    <span className="library-picker-tick">
-                                                        {isSelected && <Icon name="check" size={13} />}
-                                                    </span>
-                                                </span>
-                                                <span className="library-picker-photo-name">{image.name}</span>
-                                            </button>
+                                                onToggle={togglePhoto}
+                                                observe={observe}
+                                            />
                                         );
                                     })}
                                 </div>
