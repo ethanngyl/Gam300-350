@@ -3369,7 +3369,7 @@ html {
 /* ============================================================
    Dock layout (Genesis second layout)
    No top nav or sidebar: the page fills the screen and a floating
-   dock sits at the bottom centre (Dock.jsx). Items are icons whose
+   dock sits at the bottom centre. Items are icons whose
    labels slide out on hover / focus. On mouse devices the dock fades
    and slides mostly out of view when idle (.is-idle) and comes back
    when the pointer reaches the bottom edge (.genesis-dock-reveal).
@@ -3850,7 +3850,7 @@ html {
 
 /* ---------- Mobile view: five labelled tabs at a time, with an arrow ---------- */
 
-/* Full-width bar (Dock.jsx renders it only at 760px wide or less). */
+/* Full-width bar, only at 760px wide or less. */
 .genesis-dock.genesis-dock-mobile {
     left: 8px;
     right: 8px;
