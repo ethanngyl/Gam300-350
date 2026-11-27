@@ -396,6 +396,7 @@ void MainWindow::createActions() {
     //QUndoStack::indexChanged is the signal thats emmited if the undo stack pos moves
     //this is reciever
     connect(&m_undo, &QUndoStack::indexChanged, this, [this] {
+        setSceneModified(true); //Every edit, undo and redo is a change since the last save
         //0ms delay -> run on next event loop
         //this -> reciever
         QTimer::singleShot(0, this, [this] { 
@@ -1377,6 +1378,7 @@ void MainWindow::toggleModelHidden(int index) {
         return;
     }
     renderer->SetModelHidden(index, !model->GetIsHidden());
+    setSceneModified(true); //Visibility is saved in the scene but isn't an undo step
     // Deferred: this can be reached from the outliner's context menu, and
     // rebuilding the tree in the middle of that is unsafe.
     QTimer::singleShot(0, this, [this] { refreshScenePanels(); });
@@ -1650,6 +1652,12 @@ void MainWindow::exportModels() {
 // Scene files (.gscene, see scene/SceneFile.h)
 // ===========================================================================
 
+void MainWindow::setSceneModified(bool dirty) {
+    m_sceneModified = dirty;
+    if (m_saveSceneAction)
+        m_saveSceneAction->setText(dirty ? "&Save Scene*" : "&Save Scene");
+}
+
 void MainWindow::updateWindowTitle() {
     setWindowTitle(m_scenePath.isEmpty()
                        ? kAppTitle
@@ -1700,6 +1708,7 @@ void MainWindow::newScene() {
     }
     clearScene();
     m_scenePath.clear();
+    setSceneModified(false);
     updateWindowTitle();
     qInfo("Started a new scene.");
     statusBar()->showMessage("New scene", kStatusMessageMs);
@@ -1770,6 +1779,7 @@ void MainWindow::saveScene(bool saveAs) {
             return;
         }
         m_scenePath = path;
+        setSceneModified(false);
         updateWindowTitle();
         const QString summary = QString("%1 model%2").arg(modelCount).arg(modelCount == 1 ? "" : "s");
         qInfo("Saved scene %s (%s).", qPrintable(QDir::toNativeSeparators(path)), qPrintable(summary));
@@ -1875,6 +1885,7 @@ void MainWindow::openScenePath(const QString& path) {
         selectModel(-1);
         refreshScenePanels();
         m_scenePath = path;
+        setSceneModified(false);
         updateWindowTitle();
 
         const size_t count = renderer->ModelCount();
@@ -2127,6 +2138,12 @@ void MainWindow::refreshScenePanels() {
     m_outliner->rebuild(*renderer);
     selectModel(renderer->GetSelectedModel());
     m_exportAction->setEnabled(renderer->ModelCount() > 0 && !m_exportThread);
+
+    //Imports, generated models and deletes change the count without going through the modified triggers above
+    if (renderer->ModelCount() != m_lastModelCount) {
+        m_lastModelCount = renderer->ModelCount();
+        setSceneModified(true);
+    }
 
     const bool sceneIdle = !m_sceneThread;
     m_saveSceneAction->setEnabled(renderer->ModelCount() > 0 && sceneIdle);
