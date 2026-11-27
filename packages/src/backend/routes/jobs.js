@@ -343,6 +343,9 @@ router.get(['/jobs/:id/result.ply', '/library/jobs/:id/result.ply'], requireJobA
 /************************************************************************/
 router.get(['/jobs/:id/cover.webp', '/library/jobs/:id/cover.webp'], requireJobAccess, async (req, res) => {
     if (req.remoteJob) return proxyToVm(req, res, `/library${req.path}`)
+    // Same id check as the other job routes, so the path stays inside jobs/.
+    if (!JOB_ID_RE.test(req.params.id) || req.params.id.endsWith('_out'))
+        return res.status(404).json({ error: 'no cover' })
     try {
         const coverPath = await ensureCover(req.params.id)
         res.setHeader('Cache-Control', 'private, max-age=86400')

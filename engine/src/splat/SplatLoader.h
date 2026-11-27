@@ -14,6 +14,7 @@
 #include "SplatData.h"
 
 #include <cstddef>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,12 @@
 // should treat "no splats" as a valid, non-fatal state (e.g. a missing
 // sample asset shouldn't crash the engine).
 std::vector<SplatVertex> LoadSplatPly(const std::string& path);
+
+// Same, from a std::filesystem::path. On Windows this opens the file by its
+// wide (UTF-16) name, so folders with any characters work; a std::string path
+// only reaches files whose names fit the system code page. From a QString:
+// std::filesystem::path(qstring.toStdWString()).
+std::vector<SplatVertex> LoadSplatPly(const std::filesystem::path& path);
 
 // Same as above, but parses a .ply already held in memory (used by the web build,
 // where the file arrives as fetched bytes). `label` is only used in error logs.

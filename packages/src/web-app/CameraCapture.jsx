@@ -75,7 +75,7 @@ const ISSUE_SUMMARY_PHRASES = {
 function readFocusSupport(track) {
     const capabilities = track.getCapabilities?.() ?? {};
     const focusModes = capabilities.focusMode ?? [];
-    const canFocusOnPoint = Boolean(navigator.mediaDevices.getSupportedConstraints?.().pointsOfInterest);
+    const canFocusOnPoint = Boolean(navigator.mediaDevices?.getSupportedConstraints?.().pointsOfInterest);
     return {
         autoMode: focusModes.includes('continuous') ? 'continuous' : focusModes.includes('single-shot') ? 'single-shot' : null,
         canTapFocus: canFocusOnPoint && (focusModes.includes('continuous') || focusModes.includes('single-shot')),
@@ -199,6 +199,15 @@ function CameraCapture({
         let cancelled = false;
 
         async function startCamera() {
+            // Browsers only offer the camera on HTTPS (or localhost). Opened over
+            // plain http, e.g. a phone on the LAN, there is no camera API at all.
+            if (!navigator.mediaDevices?.getUserMedia) {
+                setError(window.isSecureContext
+                    ? 'Camera unavailable: this browser does not support camera access.'
+                    : 'Camera unavailable: the camera only works when the site is opened over HTTPS (or on localhost). ' +
+                      'Upload photos instead, or open the site with an https:// address.');
+                return;
+            }
             try {
                 const mediaStream = await navigator.mediaDevices.getUserMedia({
                     video: {

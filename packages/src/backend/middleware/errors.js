@@ -129,6 +129,18 @@ export function jsonErrorHandler(err, req, res, _next) {
         }
     }
 
+    // A client error the error already names (malformed JSON from the body
+    // parser: 400; a file sendFile couldn't find: 404). Not a server fault,
+    // so no error log.
+    const status = err.status ?? err.statusCode
+    if (Number.isInteger(status) && status >= 400 && status < 500) {
+        if (err.type === 'entity.parse.failed')
+            return res.status(400).json({ error: 'The request body is not valid JSON.' })
+        if (status === 404)
+            return res.status(404).json({ error: 'Not found.' })
+        return res.status(status).json({ error: err.expose && err.message ? err.message : 'The request was rejected.' })
+    }
+
     // Anything else (e.g. onlyImages' fs failure) is a real server-side fault.
     console.error('[backend] request error:', err)
     res.status(500).json({ error: 'Something went wrong on the server. Please try again.' })

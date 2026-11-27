@@ -761,6 +761,8 @@ export async function runPipeline(job) {
             normalized = true
         } catch (err) {
             // Best-effort: if normalization fails, still hand back the (cropped) export.
+            // Cancelled while normalizing: the fallback must not finish the job.
+            if (job.cancelled) return
             appendLog(job, `\nNormalization failed (${err.message}); serving raw export.`)
             job.resultPath = plyToNormalize
         }
@@ -790,6 +792,8 @@ export async function runPipeline(job) {
             appendLog(job, `Could not copy to engine samples (${err.message}); use Download .ply instead.`)
         }
 
+    // Cancelled during the last steps: cancelJob already set status / error.
+    if (job.cancelled) return
     job.phase = 'done'
     job.progress = 1
     job.status = 'done'

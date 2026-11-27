@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include <memory>
+#include <new>
 #include <vector>
 
 namespace {
@@ -76,12 +77,19 @@ EMSCRIPTEN_KEEPALIVE int cf_load_ply(const unsigned char* data, size_t size, con
         return -1;
     }
 
-    std::vector<SplatVertex> splats = LoadSplatPlyFromMemory(data, size, name);
-    if (splats.empty()) return 0;
+    //-2 = out of memory. The loader already returns no splats when happly runs out,
+    //but adding them to the renderer (its combined buffer) can run out too.
+    try {
+        std::vector<SplatVertex> splats = LoadSplatPlyFromMemory(data, size, name);
+        if (splats.empty()) return 0;
 
-    const int count = static_cast<int>(splats.size());
-    g_renderer->SetSplats(splats, name);
-    return count;
+        const int count = static_cast<int>(splats.size());
+        g_renderer->SetSplats(splats, name);
+        return count;
+    } catch (const std::bad_alloc&) {
+        std::cerr << "[Engine] out of memory loading " << name << std::endl;
+        return -2;
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE void cf_clear() {
@@ -116,8 +124,17 @@ EMSCRIPTEN_KEEPALIVE void cf_render(int width, int height) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
-    g_renderer->Draw(g_camera->getView(), g_camera->getProjection(aspect),
-                     static_cast<float>(width), static_cast<float>(height), g_camera->getPosition());
+    //Sorting allocates (keys, order); out of memory skips the frame instead of aborting the engine
+    try {
+        g_renderer->Draw(g_camera->getView(), g_camera->getProjection(aspect),
+                         static_cast<float>(width), static_cast<float>(height), g_camera->getPosition());
+    } catch (const std::bad_alloc&) {
+        static bool reported = false;
+        if (!reported) {
+            reported = true;
+            std::cerr << "[Engine] out of memory while drawing; frames are skipped" << std::endl;
+        }
+    }
 }
 
 //Frees GPU resources and the context. cf_init may be called again afterwards.

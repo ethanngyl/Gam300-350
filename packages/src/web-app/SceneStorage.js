@@ -62,7 +62,10 @@ const LOCAL_STORAGE_KEY = 'genesis.scenes';
 function readLocalScenes() {
     try {
         const saved = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-        return saved ? JSON.parse(saved) : [];
+        const scenes = saved ? JSON.parse(saved) : [];
+        // Anything but a list of scene objects (edited by hand, an older
+        // format) is ignored rather than breaking the Scene Builder.
+        return Array.isArray(scenes) ? scenes.filter((scene) => scene && typeof scene === 'object') : [];
     } catch {
         return [];
     }

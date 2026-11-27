@@ -225,9 +225,11 @@ const execFileAsync = promisify(execFile)
 // Covers being made right now, by job id, so cards asking at the same
 // time share one run of make_cover.py.
 const coversInProgress = new Map()
-// Jobs whose cover couldn't be made, so it isn't retried on every visit
-// (until the next restart).
-const coversFailed = new Set()
+// When each job's cover last failed, so a cover that can't be made isn't
+// retried on every visit, but a passing problem (a timeout on a busy
+// machine) doesn't keep the job without one until the next restart.
+const coversFailed = new Map()
+const COVER_RETRY_MS = 10 * 60_000
 
 /************************************************************************/
 /*!
@@ -243,7 +245,8 @@ const coversFailed = new Set()
 export function ensureCover(jobId) {
     const coverPath = path.join(config.jobsDir, `${jobId}_out`, 'cover.webp')
     if (fs.existsSync(coverPath)) return Promise.resolve(coverPath)
-    if (coversFailed.has(jobId)) return Promise.reject(new Error('cover failed earlier'))
+    const failedAt = coversFailed.get(jobId)
+    if (failedAt && Date.now() - failedAt < COVER_RETRY_MS) return Promise.reject(new Error('cover failed earlier'))
     if (coversInProgress.has(jobId)) return coversInProgress.get(jobId)
 
     const jobDir = path.join(config.jobsDir, jobId)
@@ -257,7 +260,9 @@ export function ensureCover(jobId) {
         )
         return coverPath
     })()
-    making.catch(() => coversFailed.add(jobId)).finally(() => coversInProgress.delete(jobId))
+    making
+        .then(() => coversFailed.delete(jobId), () => coversFailed.set(jobId, Date.now()))
+        .finally(() => coversInProgress.delete(jobId))
     coversInProgress.set(jobId, making)
     return making
 }

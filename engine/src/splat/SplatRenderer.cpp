@@ -23,7 +23,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
+#include <limits>
 #include <filesystem>
 #include <numeric>
 #include <iostream>
@@ -778,23 +780,38 @@ void SplatRenderer::BuildSortOrder() {
 
     //Skip if no splats somehow
     if (m_totalSplatCount > 0) {
-        //Returns min and max values
-        auto [minIt, maxIt] = std::minmax_element(m_sortKeys.begin(), m_sortKeys.end());
-        //Min value
-        const float minKey = *minIt;
+        //Min and max of the finite keys only: a NaN or infinite key (bad data, or a
+        //transform scaled out of range) would make the range NaN / inf and put every splat in one bucket
+        float minKey = std::numeric_limits<float>::max();
+        float maxKey = std::numeric_limits<float>::lowest();
+        for (float key : m_sortKeys) {
+            if (!std::isfinite(key)) continue;
+            minKey = std::min(minKey, key);
+            maxKey = std::max(maxKey, key);
+        }
+        if (minKey > maxKey) minKey = maxKey = 0.0f; //No finite key at all
         //Range of min to max value
-        const float range = *maxIt - minKey;
+        float range = maxKey - minKey;
+        if (!std::isfinite(range)) range = std::numeric_limits<float>::max(); //Overflowed: keys far apart
         m_pendingRange = range;
         //Number of buckets (1u bitshifted 16 = 16bits = 65536)
         constexpr unsigned int kBuckets = 1u << 16;
         //Scale factor, convert depth into nunmber, if range is 0, move to bucket 1 (do not divide by 0)
         const float toBucket = range > 0.0f ? (kBuckets - 1) / range : 0.0f;
+        //Bucket of a key, always in [0, kBuckets - 1]: a non-finite key goes to the nearest end
+        //(NaN to the far end). Converting NaN or an out-of-range float to unsigned is undefined.
+        const auto bucketOf = [minKey, toBucket](float key) -> unsigned int {
+            const float t = (key - minKey) * toBucket;
+            if (!(t > 0.0f)) return 0u; //Also NaN
+            if (t >= static_cast<float>(kBuckets - 1)) return kBuckets - 1;
+            return static_cast<unsigned int>(t);
+        };
 
         //Pass 1: Count
         m_sortBucketCounts.assign(kBuckets + 1, 0u);
         //Interation 1, compute bucket sizes
         for (float key : m_sortKeys)
-            ++m_sortBucketCounts[static_cast<unsigned int>((key - minKey) * toBucket) + 1];
+            ++m_sortBucketCounts[bucketOf(key) + 1];
 
         //Pass 2: Prefix
         //Shift by +1, each slot is the sum of the slost behind and itself
@@ -805,7 +822,7 @@ void SplatRenderer::BuildSortOrder() {
         //Pass 3: Scatter
         //Put each splat into their next open bucket slot sequentalldept
         for (size_t i = 0; i < m_totalSplatCount; ++i) {
-            unsigned int bucket = static_cast<unsigned int>((m_sortKeys[i] - minKey) * toBucket); //Calculate bucket
+            unsigned int bucket = bucketOf(m_sortKeys[i]); //Calculate bucket
             m_pendingOrder[m_sortBucketCounts[bucket]++] = static_cast<unsigned int>(i); //Add into bucket slot
         }
     }

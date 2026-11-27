@@ -15,6 +15,8 @@
 
 #include <happly.h>
 
+#include <cmath>
+#include <fstream>
 #include <iostream>
 #include <istream>
 #include <streambuf>
@@ -56,6 +58,7 @@ std::vector<SplatVertex> DecodeSplats(happly::PLYData& ply) {
     size_t count = x.size();
     std::vector<SplatVertex> result;
     result.reserve(count);
+    size_t skipped = 0;
 
     for (size_t i = 0; i < count; ++i) {
         SplatVertex v{};
@@ -79,9 +82,20 @@ std::vector<SplatVertex> DecodeSplats(happly::PLYData& ply) {
         v.color = splat_decode::decodeColor(fDc0[i], fDc1[i], fDc2[i]);
         v.alpha = splat_decode::decodeOpacity(opacity[i]);
         v.position = glm::vec3(x[i], -y[i], z[i]); //Upside down fix
+
+        //Skip splats with NaN / infinite values (a diverged training run can write some).
+        //One of them makes the depth sort's range NaN and the whole model draws out of order.
+        if (!std::isfinite(v.position.x) || !std::isfinite(v.position.y) || !std::isfinite(v.position.z) ||
+            !std::isfinite(v.pointSize) || !std::isfinite(v.alpha)) {
+            ++skipped;
+            continue;
+        }
         result.push_back(v);
     }
 
+    if (skipped > 0) {
+        std::cerr << "[SplatLoader] skipped " << skipped << " splat(s) with NaN or infinite values" << std::endl;
+    }
     return result;
 }
 
@@ -93,6 +107,27 @@ std::vector<SplatVertex> LoadSplatPly(const std::string& path) {
         return DecodeSplats(ply);
     } catch (const std::exception& e) {
         std::cerr << "[SplatLoader] failed to load '" << path << "': " << e.what() << std::endl;
+        return {};
+    }
+}
+
+std::vector<SplatVertex> LoadSplatPly(const std::filesystem::path& path) {
+    //UTF-8 for the log (path::string() can throw on Windows for names outside the code page).
+    //Copied through iterators: u8string() is std::string in C++17 but std::u8string in C++20.
+    const auto utf8 = path.u8string();
+    const std::string label(utf8.begin(), utf8.end());
+    try {
+        //Opened here (binary, wide name on Windows) and parsed from the stream, so happly
+        //never sees a narrow path it can't open
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream) {
+            std::cerr << "[SplatLoader] failed to load '" << label << "': could not open the file" << std::endl;
+            return {};
+        }
+        happly::PLYData ply(stream);
+        return DecodeSplats(ply);
+    } catch (const std::exception& e) {
+        std::cerr << "[SplatLoader] failed to load '" << label << "': " << e.what() << std::endl;
         return {};
     }
 }

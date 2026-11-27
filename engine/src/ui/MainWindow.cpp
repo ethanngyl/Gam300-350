@@ -952,24 +952,39 @@ void MainWindow::startNextImport() {
     // Parse on a worker thread: large scans take seconds and must not freeze
     // the editor. The renderer is only touched back on the GUI thread.
     auto splats = std::make_shared<std::vector<SplatVertex>>();
-    const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
+    // Wide path: folder names with any characters open (see LoadSplatPly).
+    const std::filesystem::path nativePath = QDir::toNativeSeparators(path).toStdWString();
     auto original = std::make_shared<std::vector<SplatVertex>>(); // filled only when trimmed
     const bool trim = m_trimOnImportAction->isChecked();
     const TrimData trimSettings = m_trimSettings;
     m_loadThread = QThread::create([splats, original, nativePath, trim, trimSettings] {
-        *splats = LoadSplatPly(nativePath);
+        *splats = LoadSplatPly(nativePath); // returns nothing (logged) if it runs out of memory
         if (trim && !splats->empty()) {
-            std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
-            if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
-                *original = std::move(*splats);
-                *splats = std::move(trimmed);
+            try {
+                std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
+                if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
+                    *original = std::move(*splats);
+                    *splats = std::move(trimmed);
+                }
+            } catch (const std::bad_alloc&) {
+                // An exception leaving a QThread ends the program: import it untrimmed instead
+                qWarning("Not enough memory to trim on import; the model is imported untrimmed.");
             }
         }
     });
     connect(m_loadThread, &QThread::finished, this, [this, splats, original, path, trimSettings] {
         m_loadThread->deleteLater();
         m_loadThread = nullptr;
-        finishImport(path, *splats, *original, trimSettings);
+        try {
+            finishImport(path, *splats, *original, trimSettings);
+        } catch (const std::bad_alloc&) {
+            // Caught here (not only in EditorApplication::notify) so the files still waiting get imported
+            qWarning("Out of memory importing %s.", qPrintable(QDir::toNativeSeparators(path)));
+            QMessageBox::warning(this, "Import Failed",
+                                 QString("There isn't enough memory to add %1 to the scene.\n\n"
+                                         "Remove some models or close other programs, then try again.")
+                                     .arg(QFileInfo(path).fileName()));
+        }
         startNextImport();
     });
     m_loadThread->start();
@@ -1607,11 +1622,20 @@ void MainWindow::exportModels() {
     // Snapshot the splats: the user can delete or move models while the export runs.
     auto splatData = std::make_shared<std::vector<std::vector<SplatVertex>>>();
     auto transforms = std::make_shared<std::vector<glm::mat4>>();
-    for (int i = 0; i < static_cast<int>(renderer->ModelCount()); ++i) {
-        if (!wholeScene && i != selected) continue;
-        const SplatModel* model = renderer->GetModel(i);
-        splatData->push_back(model->splats());
-        transforms->push_back(model->GetTransform());
+    try {
+        for (int i = 0; i < static_cast<int>(renderer->ModelCount()); ++i) {
+            if (!wholeScene && i != selected) continue;
+            const SplatModel* model = renderer->GetModel(i);
+            splatData->push_back(model->splats());
+            transforms->push_back(model->GetTransform());
+        }
+    } catch (const std::bad_alloc&) {
+        // The snapshot is a full copy of the splats; a big scene can need more memory than is free
+        qWarning("Not enough memory to copy the scene for export.");
+        QMessageBox::warning(this, "Export Failed",
+                             "There isn't enough memory to export this.\n\n"
+                             "Export one model at a time, or close other programs and try again.");
+        return;
     }
 
     const QString fileName = QFileInfo(path).fileName();
@@ -1758,19 +1782,28 @@ void MainWindow::saveScene(bool saveAs) {
     // Snapshot the scene: the user can keep editing while it is written.
     auto scene = std::make_shared<Scene>();
     scene->gaussianMode = m_gaussianAction->isChecked();
-    for (int i = 0; i < static_cast<int>(renderer->ModelCount()); ++i) {
-        const SplatModel* model = renderer->GetModel(i);
-        SceneModel entry;
-        entry.name = model->GetName();
-        entry.splats = model->splats();
-        entry.transform = model->GetTransform();
-        entry.hidden = model->GetIsHidden();
-        entry.trim = model->GetTrimData();
-        entry.trimmed = model->IsTrimmed();
-        if (entry.trimmed) {
-            entry.original = model->SourceSplats(); // the untrimmed splats, so the trim can still be undone
+    try {
+        for (int i = 0; i < static_cast<int>(renderer->ModelCount()); ++i) {
+            const SplatModel* model = renderer->GetModel(i);
+            SceneModel entry;
+            entry.name = model->GetName();
+            entry.splats = model->splats();
+            entry.transform = model->GetTransform();
+            entry.hidden = model->GetIsHidden();
+            entry.trim = model->GetTrimData();
+            entry.trimmed = model->IsTrimmed();
+            if (entry.trimmed) {
+                entry.original = model->SourceSplats(); // the untrimmed splats, so the trim can still be undone
+            }
+            scene->models.push_back(std::move(entry));
         }
-        scene->models.push_back(std::move(entry));
+    } catch (const std::bad_alloc&) {
+        // The snapshot is a full copy of every model; the scene itself is untouched
+        qWarning("Not enough memory to copy the scene for saving.");
+        QMessageBox::warning(this, "Save Failed",
+                             "There isn't enough memory to save the scene right now. Nothing was changed.\n\n"
+                             "Close other programs and try again, or export the models one at a time.");
+        return;
     }
 
     const QString fileName = QFileInfo(path).fileName();
@@ -1780,7 +1813,15 @@ void MainWindow::saveScene(bool saveAs) {
     statusBar()->showMessage(QString("Saving %1...").arg(fileName));
 
     auto result = std::make_shared<SceneResult>();
-    m_sceneThread = QThread::create([scene, result, path] { *result = SaveScene(*scene, path); });
+    m_sceneThread = QThread::create([scene, result, path] {
+        // An exception leaving a QThread ends the program
+        try {
+            *result = SaveScene(*scene, path);
+        } catch (const std::bad_alloc&) {
+            *result = SceneResult();
+            result->error = "There isn't enough memory to save the scene. The previous save, if any, is unchanged.";
+        }
+    });
     connect(m_sceneThread, &QThread::finished, this, [this, result, path, fileName, modelCount, savedAtModifyCount] {
         m_sceneThread->deleteLater();
         m_sceneThread = nullptr;
@@ -1853,7 +1894,16 @@ void MainWindow::openScenePath(const QString& path) {
     // Read every .ply on a worker thread; the current scene stays untouched until it has loaded.
     auto scene = std::make_shared<Scene>();
     auto result = std::make_shared<SceneResult>();
-    m_sceneThread = QThread::create([scene, result, path] { *result = LoadScene(path, *scene); });
+    m_sceneThread = QThread::create([scene, result, path] {
+        // An exception leaving a QThread ends the program
+        try {
+            *result = LoadScene(path, *scene);
+        } catch (const std::bad_alloc&) {
+            *scene = Scene(); // free what was read so far
+            *result = SceneResult();
+            result->error = "There isn't enough memory to open this scene. Close other programs and try again.";
+        }
+    });
     connect(m_sceneThread, &QThread::finished, this, [this, scene, result, path, fileName] {
         m_sceneThread->deleteLater();
         m_sceneThread = nullptr;
@@ -2051,7 +2101,7 @@ void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollow
 
     qInfo("Converting the new model to %s...", qPrintable(QDir::toNativeSeparators(dest)));
     auto result = std::make_shared<ExportResult>();
-    const std::string source = QDir::toNativeSeparators(plyPath).toLocal8Bit().toStdString();
+    const std::filesystem::path source = QDir::toNativeSeparators(plyPath).toStdWString();
     const std::filesystem::path nativeDest = dest.toStdWString();
     // Import the splats read for the copy rather than reading the .ply a second time.
     const bool importAfter = followUp.importIntoScene;
@@ -2070,10 +2120,15 @@ void MainWindow::saveGeneratedObj(const QString& plyPath, const GenerationFollow
         *result = ExportSplats({ ExportSource{ splats.get(), glm::mat4(1.0f) } }, nativeDest, options);
         // Trimmed after the export, so the .obj holds every splat, as File > Export of the .ply would.
         if (importAfter && trim) {
-            std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
-            if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
-                *original = std::move(*splats);
-                *splats = std::move(trimmed);
+            try {
+                std::vector<SplatVertex> trimmed = TrimSplats(*splats, trimSettings);
+                if (!trimmed.empty() && trimmed.size() < splats->size()) { // never trim a scene down to nothing
+                    *original = std::move(*splats);
+                    *splats = std::move(trimmed);
+                }
+            } catch (const std::bad_alloc&) {
+                // An exception leaving a QThread ends the program: import it untrimmed instead
+                qWarning("Not enough memory to trim the new model; it is imported untrimmed.");
             }
         }
     });

@@ -230,6 +230,19 @@ export async function onlyImages(req, res, next) {
                     detected: type ? type.mime : 'unknown',
                 })
             }
+
+            // The saved name keeps the browser's extension (storage above), which
+            // can be wrong: a real JPEG sent as photo.heic. Name it after what it
+            // really is, so listings, thumbnails and COLMAP all see a photo.
+            const rightExt = type.mime === 'image/png' ? '.png' : '.jpg'
+            const ext = path.extname(file.path).toLowerCase()
+            const fits = rightExt === '.png' ? ext === '.png' : ext === '.jpg' || ext === '.jpeg'
+            if (!fits) {
+                const renamed = path.join(path.dirname(file.path), `${path.basename(file.path, path.extname(file.path))}${rightExt}`)
+                await fs.promises.rename(file.path, renamed)
+                file.path = renamed
+                file.filename = path.basename(renamed)
+            }
         }
 
         next()

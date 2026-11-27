@@ -107,6 +107,7 @@ function loadPlyInto(engine, data, name)
     }
     const count = engine.ccall('cf_load_ply', 'number', ['number', 'number', 'string'], [ptr, size, name])
     if (count === -1) throw new Error('The engine is not ready, or already holds as many models as it can.')
+    if (count === -2) throw new Error('Not enough memory to load this model in the browser.')
     if (count <= 0) throw new Error('The engine could not read this .ply (see the browser console).')
     return count
   }

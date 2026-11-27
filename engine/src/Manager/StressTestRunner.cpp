@@ -113,7 +113,7 @@ std::vector<StressResult> StressTestRunner::LoadThroughDisk(std::vector<SplatVer
 	//Same call an import makes
 	Report("Load: reading the file from disk");
 	std::vector<SplatVertex> splats;
-	const std::string nativePath = QDir::toNativeSeparators(path).toLocal8Bit().toStdString();
+	const std::filesystem::path nativePath = QDir::toNativeSeparators(path).toStdWString();
 	const double readMs = MeasureMs([&] { splats = LoadSplatPly(nativePath); });
 	if (splats.empty()) {
 		qWarning("Load test: the saved test file could not be read back.");

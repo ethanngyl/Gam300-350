@@ -51,7 +51,7 @@ namespace {
     }
 
     std::vector<SplatVertex> ReadPly(const QString& path) {
-        return LoadSplatPly(QDir::toNativeSeparators(path).toLocal8Bit().toStdString());
+        return LoadSplatPly(std::filesystem::path(QDir::toNativeSeparators(path).toStdWString()));
     }
 
     QJsonArray MatrixToJson(const glm::mat4& m) {

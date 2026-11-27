@@ -15,6 +15,15 @@ change is marked **Breaking** below.
 Bump `version` in `package.json` and add an entry here in the same commit as
 the change.
 
+## 0.1.1 - 2026-11-28
+
+- Splats with NaN or infinite values are skipped on load; one of them used to
+  break the depth sort of the whole model.
+- `loadPly` throws "Not enough memory to load this model in the browser."
+  when decoding runs out of memory, instead of the engine aborting.
+- A frame that runs out of memory while sorting is skipped instead of
+  aborting the engine.
+
 ## 0.1.0 - 2026-11-08
 
 First packaged release.

@@ -1,6 +1,6 @@
 {
   "name": "@codefine/splat-renderer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Codefine engine's Gaussian splat renderer (engine/src/splat, engine/src/gfx) compiled to WebAssembly, with a small JavaScript API for drawing a .ply into a WebGL2 canvas.",
   "type": "module",
   "main": "./index.js",
