@@ -13,14 +13,13 @@ trim, isHidden }. The models themselves stay in /jobs.
 createSceneObject(model, objects) makes a new object for a model (used by
 the Scene Builder's Add model and the model page's Add to scene).
 
-PLACEHOLDER: the backend has no /scenes endpoints yet, so with
-SCENES_API_READY = false scenes are kept in this browser's localStorage.
-Once the server adds them, set SCENES_API_READY = true; the endpoints this
-expects are GET /scenes, POST /scenes, GET/PUT/DELETE /scenes/:id.
+Scenes are saved to the signed-in account through the backend's /scenes
+routes (GET /scenes, POST /scenes, GET/PUT/DELETE /scenes/:id), so each
+account sees only its own. With SCENES_API_READY = false they are kept in
+this browser's localStorage instead.
 **************************************************************************/
 
-// TODO(backend): flip to true once /scenes exists on the server.
-const SCENES_API_READY = false;
+const SCENES_API_READY = true;
 
 // Lets the screen say where a save went.
 export const SCENES_SAVED_ON_SERVER = SCENES_API_READY;
@@ -87,7 +86,11 @@ async function requestJson(url, options) {
         headers: { 'Content-Type': 'application/json' },
         ...options,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (res.status === 401) throw new Error('Sign in to save scenes.');
+    if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+    }
     return res.status === 204 ? null : res.json();
 }
 
