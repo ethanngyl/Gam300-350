@@ -13,9 +13,11 @@ card and Upload photos button. Laid out like the Figma, in two steps:
    uploaded, and "Capture with camera" (not in the Figma; it keeps the
    camera reachable from New). Choosing photos moves on at once.
 2. "Photos added": the first photo with the count, a quick check of the
-   photos (the Photo Editor's checks, PhotoChecks.js), Auto-fix, Remove
-   background (on, as recommended), then Edit manually (opens the Photo
-   Editor) or Render now (starts the build in the background).
+   photos (the Photo Editor's checks, PhotoChecks.js), Auto-fix, the same
+   build settings as Camera Capture (Remove background - on, as
+   recommended - Keep only the main object, and the Model detail slider),
+   then Edit manually (opens the Photo Editor, which keeps the settings) or
+   Render now (starts the build in the background).
 Auto-fix leaves out blurry and near-duplicate photos (unless that would
 leave too few) and evens out the brightness of too-dark and too-bright
 ones, using the Photo Editor's Auto fix brightness, worked out for each of
@@ -23,7 +25,7 @@ the two groups on its own.
 Escape, the X and a click outside close it.
 - AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
 React component. onEditManually(files, settings) and onRenderNow(files,
-settings) get the photos and { removeBackground }.
+settings) get the photos and { removeBackground, autoCrop, trainIters }.
 **************************************************************************/
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -32,6 +34,8 @@ import LibraryPhotoPicker from './LibraryPhotoPicker.jsx';
 import { analyzePhoto, findPhotoIssues } from './PhotoChecks.js';
 import { computeAutoFix, exportEditedFile, DEFAULT_EDITS } from './PhotoEdits.js';
 import { catalog } from './catalog.js';
+import TrainingQualitySlider from './TrainingQualitySlider.jsx';
+import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import './AddPhotosDialog.css';
 
 const MIN_PHOTOS = catalog.minPhotos;
@@ -55,6 +59,10 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
     // The photos to build from: [{ id, file, analysisStatus, analysis }].
     const [photos, setPhotos] = useState([]);
     const [removeBackground, setRemoveBackground] = useState(true);
+    // The same build settings as Camera Capture: keep only the main object
+    // (walk-around captures) and model detail (training iteration cap).
+    const [autoCrop, setAutoCrop] = useState(false);
+    const [trainIters, setTrainIters] = useState(DEFAULT_TRAINING_ITERATIONS);
     // null, 'working', or { fixedCount } once Auto-fix has run.
     const [autoFixState, setAutoFixState] = useState(null);
     const fileInputRef = useRef(null);
@@ -166,7 +174,7 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
     }
 
     const files = photos.map((photo) => photo.file);
-    const settings = { removeBackground };
+    const settings = { removeBackground, autoCrop, trainIters };
 
     let statusText;
     if (isChecking) statusText = 'Checking your photos...';
@@ -290,6 +298,23 @@ function AddPhotosDialog({ onEditManually, onRenderNow, onOpenCamera, onClose })
                                 <Icon name="help" size={13} />
                                 We recommend keeping this on to render better quality models.
                             </p>
+
+                            <label className="add-photos-check">
+                                <input
+                                    type="checkbox"
+                                    checked={autoCrop}
+                                    onChange={(event) => {
+                                        setAutoCrop(event.target.checked);
+                                    }}
+                                />
+                                <span>Keep only the main object</span>
+                            </label>
+                            <p className="add-photos-tip">
+                                <Icon name="help" size={13} />
+                                When you walk around an object, removes everything outside the path you took. Turn off for rooms and scenery.
+                            </p>
+
+                            <TrainingQualitySlider iterations={trainIters} onChange={setTrainIters} />
 
                             <div className="add-photos-review-actions">
                                 <button

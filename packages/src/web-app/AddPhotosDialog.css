@@ -124,13 +124,15 @@
 
 /* ---------- Step 2: "Photos added" ---------- */
 
+/* Wide enough that the side column's settings (Remove background, Keep
+   only the main object, Model detail) fit without scrolling. */
 .add-photos-dialog.is-review {
-    width: min(640px, 100%);
+    width: min(820px, 100%);
 }
 
 .add-photos-review {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 176px;
+    grid-template-columns: minmax(0, 1fr) 240px;
     gap: 18px;
     overflow-y: auto;
     padding: 20px;
