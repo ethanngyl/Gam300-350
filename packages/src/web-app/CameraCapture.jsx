@@ -26,7 +26,7 @@ the Model detail slider (training iteration cap) are here and in the Photo
 Editor; coming back from there ("Back to camera"), initialPhotos brings
 the batch and those choices back with it.
 On phones the page is JM's mobile Figma's full-screen camera instead:
-close at the top left, the shot count, and flash at the top right (only
+close at the top left, "Take at least 8 photos" (the shot count in Auto mode), and flash at the top right (only
 where the browser can turn the torch on, mostly Android Chrome); Manual /
 Auto above the shutter; the gallery button (showing the last photo) and
 Done beside it. The gallery button asks where to add from: the phone's
@@ -34,7 +34,9 @@ own picker (photos go to the Photo Editor with the shots taken so far, and
 a video opens the Video Extractor with it, onPickVideos, which asks first
 if there are shots; photos and videos picked together are refused) or the
 Media Library (LibraryPhotoPicker.jsx; its photos go to the Photo Editor
-the same way, or join the shots if some couldn't be downloaded). Done opens the batch in the Photo Editor. Auto-capture uses its default interval and cap.
+the same way, or join the shots if some couldn't be downloaded). Done opens the batch in the Photo Editor. In Auto mode, "every" and "max"
+pickers under Manual / Auto set the interval and cap as on desktop, and the
+shot count reads against the cap.
 **************************************************************************/
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -50,8 +52,12 @@ import { DEFAULT_TRAINING_ITERATIONS } from './TrainingPresets.js';
 import { useMobileView } from './useMobileView.js';
 
 const HARD_CAP = 200;
-// Phones: the shot count reads "12 / 40 shots" (the fewest photos we suggest).
-const SUGGESTED_PHOTO_COUNT = 40;
+// Phones, Manual mode: the top label asks for at least this many photos,
+// the backend's minimum for a reconstruction (catalog.minPhotos).
+const MIN_PHOTO_COUNT = 8;
+// Auto-capture choices, shared by the desktop and phone layouts.
+const INTERVAL_OPTIONS = [0.5, 1, 2, 3, 5];
+const MAX_CAPTURE_OPTIONS = [10, 25, 50, 100, HARD_CAP];
 
 // Space is the capture shortcut, except while typing or on a focused
 // control outside the camera panel, where it keeps its normal job (e.g.
@@ -656,7 +662,12 @@ function CameraCapture({
                     >
                         <Icon name="close" size={18} />
                     </button>
-                    <span className="capture-phone-count">{photos.length} / {SUGGESTED_PHOTO_COUNT} shots</span>
+                    {/* Auto mode counts toward its cap; Manual says how many photos to take. */}
+                    <span className="capture-phone-count">
+                        {captureMode === 'auto'
+                            ? `${photos.length} / ${maxCaptures} shots`
+                            : `Take at least ${MIN_PHOTO_COUNT} photos`}
+                    </span>
                     {canUseTorch ? (
                         <button
                             type="button"
@@ -698,6 +709,36 @@ function CameraCapture({
                             Auto
                         </button>
                     </div>
+
+                    {/* Auto-capture interval and cap, same choices as on desktop. */}
+                    {captureMode === 'auto' && (
+                        <div className="capture-phone-auto-settings">
+                            <label>
+                                every
+                                <select
+                                    value={intervalSeconds}
+                                    onChange={(e) => setIntervalSeconds(Number(e.target.value))}
+                                    disabled={isAutoCapturing}
+                                >
+                                    {INTERVAL_OPTIONS.map((seconds) => (
+                                        <option key={seconds} value={seconds}>{seconds}s</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label>
+                                max
+                                <select
+                                    value={maxCaptures}
+                                    onChange={(e) => setMaxCaptures(Number(e.target.value))}
+                                    disabled={isAutoCapturing}
+                                >
+                                    {MAX_CAPTURE_OPTIONS.map((count) => (
+                                        <option key={count} value={count}>{count}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+                    )}
 
                     <div className="capture-phone-controls">
                         <button
@@ -912,11 +953,9 @@ function CameraCapture({
                                         onChange={(e) => setIntervalSeconds(Number(e.target.value))}
                                         disabled={isAutoCapturing}
                                     >
-                                        <option value={0.5}>0.5s</option>
-                                        <option value={1}>1s</option>
-                                        <option value={2}>2s</option>
-                                        <option value={3}>3s</option>
-                                        <option value={5}>5s</option>
+                                        {INTERVAL_OPTIONS.map((seconds) => (
+                                            <option key={seconds} value={seconds}>{seconds}s</option>
+                                        ))}
                                     </select>
                                 </label>
 
@@ -927,11 +966,9 @@ function CameraCapture({
                                         onChange={(e) => setMaxCaptures(Number(e.target.value))}
                                         disabled={isAutoCapturing}
                                     >
-                                        <option value={10}>10</option>
-                                        <option value={25}>25</option>
-                                        <option value={50}>50</option>
-                                        <option value={100}>100</option>
-                                        <option value={HARD_CAP}>{HARD_CAP}</option>
+                                        {MAX_CAPTURE_OPTIONS.map((count) => (
+                                            <option key={count} value={count}>{count}</option>
+                                        ))}
                                     </select>
                                 </label>
 

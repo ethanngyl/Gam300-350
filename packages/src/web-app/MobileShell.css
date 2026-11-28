@@ -780,6 +780,43 @@
                 color: var(--forma-on-accent);
             }
 
+    .capture-phone-auto-settings {
+        display: flex;
+        gap: 10px;
+        margin-top: -6px;
+    }
+
+        .capture-phone-auto-settings label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 4px 3px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 999px;
+            background: rgba(20, 20, 24, 0.6);
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 0.82rem;
+        }
+
+        /* 16px keeps iOS Safari from zooming in when the picker opens. */
+        .capture-phone-auto-settings select {
+            padding: 4px 8px;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            font: inherit;
+            font-size: 16px;
+        }
+
+            .capture-phone-auto-settings select:disabled {
+                opacity: 0.55;
+            }
+
+            .capture-phone-auto-settings option {
+                color: #000;
+            }
+
     .capture-phone-controls {
         width: 100%;
         display: grid;
