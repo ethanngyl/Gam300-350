@@ -1,0 +1,69 @@
+/* OfflineNotice.jsx: a small pill at the bottom centre of every screen. */
+
+.offline-notice {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 95; /* above the build panel (85) and dialogs (90), under the tour (200) */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: calc(100% - 32px);
+    padding: 10px 16px;
+    border: 1px solid var(--forma-border-strong);
+    border-radius: 999px;
+    background: var(--forma-panel-raised);
+    color: var(--forma-text);
+    font-family: var(--forma-font);
+    font-size: 14px;
+    line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    animation: offline-notice-in 160ms ease-out;
+}
+
+.offline-notice strong {
+    font-weight: 600;
+}
+
+/* Red while offline, green once the connection is back. */
+.offline-notice-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--forma-red);
+}
+
+.offline-notice.is-back .offline-notice-dot {
+    background: var(--forma-green);
+}
+
+@keyframes offline-notice-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 8px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .offline-notice {
+        animation: none;
+    }
+}
+
+/* Phones: above the camera button and the pages' bottom bars, and a
+   rounded box rather than a pill when the text wraps. */
+@media (max-width: 760px) {
+    .offline-notice {
+        bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+        border-radius: 14px;
+        font-size: 13px;
+    }
+}
